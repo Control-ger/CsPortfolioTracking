@@ -1,16 +1,28 @@
-# React + Vite
+# 📈 CS Investor Hub
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Ein modernes, interaktives Dashboard zur Verfolgung von Counter-Strike Investments, spezialisiert auf Cases und Sticker. Entwickelt mit **React**, **Tailwind CSS v4** und **shadcn/ui**.
 
-Currently, two official plugins are available:
+## ✨ Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Portfolio-Übersicht**: Live-Berechnung des Gesamtwerts und der Performance in Prozent.
+- **Interaktive Charts**:
+    - Portfolio-Wertverlauf mit dynamischer Farbanpassung (Grün bei Gewinn, Rot bei Verlust).
+    - Markt-Trends für einzelne Items (Angebot vs. Nachfrage / Drops vs. Openings).
+- **Inventar-Management**: Übersichtliche Liste aller Investments mit ROI-Anzeige.
+- **Detail-Ansicht**: Spezifische Statistiken für Cases (Öffnungsraten) und Sticker (Klebe-Raten).
+- **Modernes UI**: Voller Dark-Mode Support und Responsive Design dank shadcn/ui.
 
-## React Compiler
+## 🛠️ Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Framework**: [React](https://react.dev/) (Vite)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **UI Komponenten**: [shadcn/ui](https://ui.shadcn.com/)
+- **Charts**: [Recharts](https://recharts.org/)
+- **Icons**: [Lucide React](https://lucide.dev/)
 
-## Expanding the ESLint configuration
+## 🚀 Installation & Start
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. **Repository klonen** (oder herunterladen):
+   ```bash
+   git clone [https://github.com/DEIN_NUTZERNAME/DEIN_PROJEKTNAME.git](https://github.com/DEIN_NUTZERNAME/DEIN_PROJEKTNAME.git)
+   cd mein-projekt
