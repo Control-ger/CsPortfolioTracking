@@ -6,11 +6,29 @@ import {
   CardDescription,
 } from "./ui/card";
 import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
+import { useEffect, useState } from "react";
+import { getLivePrice } from "@/components/csfloatService.js";
 
 export const ItemDetailPanel = ({ item }) => {
+  const [livePrice, setLivePrice] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (item) {
+      setLivePrice(null); // Reset bei Item-Wechsel
+      setIsLoading(true);
+
+      // Live-Preis abrufen
+      getLivePrice(item.name).then((price) => {
+        setLivePrice(price);
+        setIsLoading(false);
+      });
+    }
+  }, [item]);
+
   if (!item)
     return (
-      <div className="h-[400px] flex items-center justify-center border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground">
+      <div className="h-100 flex items-center justify-center border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground">
         Wähle ein Item aus der Liste,
         <br />
         um Details zu sehen.
@@ -35,10 +53,14 @@ export const ItemDetailPanel = ({ item }) => {
           </div>
           <div className="bg-muted/40 p-3 rounded-md border">
             <p className="text-[10px] text-muted-foreground uppercase">
-              Aktuell
+              Live (CSFloat)
             </p>
             <p className="text-sm font-bold text-primary">
-              {item.currentPrice.toFixed(2)}€
+              {isLoading
+                ? "Lädt..."
+                : livePrice
+                  ? `${livePrice.toFixed(2)}€`
+                  : "N/A"}
             </p>
           </div>
         </div>
@@ -46,9 +68,9 @@ export const ItemDetailPanel = ({ item }) => {
         {item.details?.stats6m && (
           <div className="pt-4 border-t text-center">
             <h4 className="text-xs font-bold uppercase mb-4 text-muted-foreground">
-              Trends (6 Monate)
+              Trends (6 Monate) (Work in Progress)
             </h4>
-            <div className="h-[180px] w-full">
+            <div className="h-45 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={item.details.stats6m}>
                   <XAxis dataKey="month" hide />

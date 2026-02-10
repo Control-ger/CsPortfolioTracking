@@ -3,42 +3,34 @@
     {
       "id": 1,
       "type": "case",
-      "name": "Revolution Case",
+      "name": "Fever Case",
       "quantity": 250,
-      "buyPrice": 0.35,
-      "currentPrice": 0.58,
-      "performance": { "sinceBuy": 65.7 },
+      "buyPrice": 0.57,
       "details": {
         "marketVolume": "High",
         "stats6m": [
           { "month": "Sep", "opened": 120000, "dropped": 150000 },
-          { "month": "Okt", "opened": 140000, "dropped": 145000 },
-          { "month": "Nov", "opened": 180000, "dropped": 130000 },
-          { "month": "Dez", "opened": 250000, "dropped": 120000 },
-          { "month": "Jan", "opened": 210000, "dropped": 115000 },
-          { "month": "Feb", "opened": 230000, "dropped": 110000 }
+          { "month": "Okt", "opened": 140000, "dropped": 145000 }
         ]
       }
     },
     {
       "id": 2,
-      "type": "sticker",
-      "name": "Sticker | Vitality (Holo) | Paris 2023",
-      "quantity": 100,
-      "buyPrice": 1.2,
-      "currentPrice": 0.85,
-      "performance": { "sinceBuy": -29.1 },
-      "details": {
-        "appliedLast6m": 12400,
-        "supplyChange": "Decreasing",
-        "marketVolume": "Medium"
-      }
+      "type": "case",
+      "name": "Gallery Case",
+      "quantity": 50,
+      "buyPrice": 0.8
+    },
+    {
+      "id": 3,
+      "type": "case",
+      "name": "Dreams & Nightmares Case",
+      "quantity": 50,
+      "buyPrice": 0.98
     }
   ],
   "***REMOVED***History": [
-    { "date": "2026-01", "wert": 0 },
-    { "date": "2026-02", "wert": 67 },
-    { "date": "2026-03", "wert": 89 },
-    { "date": "2026-04", "wert": 363.42 }
+    { "date": "2026-01-01", "wert": 67 },
+    { "date": "2026-02-10", "wert": 232.42 }
   ]
 }
