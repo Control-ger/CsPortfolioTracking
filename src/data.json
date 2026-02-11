@@ -27,6 +27,20 @@
       "name": "Dreams & Nightmares Case",
       "quantity": 50,
       "buyPrice": 0.98
+    },
+    {
+      "id": 4,
+      "type": "case",
+      "name": "Snakebite Case",
+      "quantity": 50,
+      "buyPrice": 0.4
+    },
+    {
+      "id": 5,
+      "type": "case",
+      "name": "Recoil Case",
+      "quantity": 100,
+      "buyPrice": 0.1949
     }
   ],
   "***REMOVED***History": [
