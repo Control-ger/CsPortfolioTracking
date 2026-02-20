@@ -4,6 +4,8 @@ import { StatCard } from "./components/StatsCards";
 import { InventoryTable } from "./components/InventoryTable";
 import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { PortfolioChart } from "./components/PortfolioChart";
+import { Watchlist } from "./components/Watchlist";
+import { WatchlistOverview } from "./components/WatchlistOverview";
 import { usePortfolio } from "./hooks/usePortfolio";
 
 export default function Dashboard() {
@@ -28,9 +30,10 @@ export default function Dashboard() {
         </header>
 
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full max-w-100 grid-cols-2">
+          <TabsList className="grid w-full max-w-100 grid-cols-3">
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
             <TabsTrigger value="inventory">Inventar & Details</TabsTrigger>
+            <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -53,10 +56,13 @@ export default function Dashboard() {
               />
             </div>
 
-            <PortfolioChart
-              history={***REMOVED***History}
-              color={stats.chartColor}
-            />
+            <div className="grid gap-6 md:grid-cols-2">
+              <PortfolioChart
+                history={***REMOVED***History}
+                color={stats.chartColor}
+              />
+              <WatchlistOverview maxItems={5} />
+            </div>
           </TabsContent>
 
           <TabsContent
@@ -70,6 +76,10 @@ export default function Dashboard() {
               />
             </div>
             <ItemDetailPanel item={selectedItemWithLive} />
+          </TabsContent>
+
+          <TabsContent value="watchlist" className="space-y-6">
+            <Watchlist />
           </TabsContent>
         </Tabs>
       </div>
