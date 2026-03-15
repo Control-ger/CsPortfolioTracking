@@ -10,13 +10,13 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
     const loadWatchlistData = async () => {
       try {
         setLoading(true);
-        
+
         // Tabellen initialisieren
-        await fetch("http://localhost/cs-api/initWatchlistTables.php");
-        
+        await fetch("/api/initWatchlistTables.php");
+
         // Watchlist-Daten abrufen
-        const response = await fetch("http://localhost/cs-api/get_watchlist_data.php");
-        
+        const response = await fetch("/api/get_watchlist_data.php");
+
         if (response.ok) {
           const data = await response.json();
           setWatchlistItems((data || []).slice(0, maxItems));
@@ -95,7 +95,7 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
           {watchlistItems.map((item) => {
             const priceInfo = formatPriceChange(
               item.price_change,
-              item.price_change_percent
+              item.price_change_percent,
             );
             const Icon = priceInfo.icon;
 

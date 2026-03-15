@@ -1,34 +1,32 @@
-// Ein einfaches Objekt außerhalb der Funktion dient als Speicher
 const priceCache = {};
 
 export const getLivePrice = async (marketHashName) => {
-  // 1. Prüfen, ob wir den Preis schon im Speicher haben
   if (priceCache[marketHashName]) {
-    console.log(`Cache-Hit für: ${marketHashName}`);
     return priceCache[marketHashName];
   }
 
   try {
-    console.log(`API-Abfrage für: ${marketHashName}`);
     const encodedName = encodeURIComponent(marketHashName);
-    const url = `/api/csfloat/listings?market_hash_name=${encodedName}&type=buy_now&sort_by=lowest_price&limit=1`;
+
+    // WICHTIG: Wir rufen jetzt deinen eigenen Server-Proxy auf!
+    // Da deine App auf :***REMOVED*** läuft, ist der Pfad /api/...
+    const url = `/api/csfloat_proxy.php?market_hash_name=${encodedName}`;
 
     const response = await fetch(url);
     if (!response.ok) return null;
 
     const json = await response.json();
 
+    // Achtung: Prüfe ob CSFloat "data" oder "listings" zurückgibt.
+    // Im PHP Proxy oben ist es die Original-Struktur von CSFloat.
     if (json.data && json.data.length > 0) {
       const price = json.data[0].price / 100;
-
-      // 2. Preis im Cache speichern für das nächste Mal
       priceCache[marketHashName] = price;
-
       return price;
     }
     return null;
   } catch (error) {
-    console.error("Fehler beim Abrufen des Preises:", error);
+    console.error("Proxy-Fehler:", error);
     return null;
   }
 };

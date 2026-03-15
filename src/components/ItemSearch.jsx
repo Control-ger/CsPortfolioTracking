@@ -49,32 +49,37 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     }
 
     const filtered = COMMON_ITEMS.filter((item) =>
-      item.toLowerCase().includes(value.toLowerCase())
+      item.toLowerCase().includes(value.toLowerCase()),
     );
     setSuggestions(filtered.slice(0, 5)); // Maximal 5 Vorschläge
   };
 
-  // Validiere Item über CSFloat API
+  // Validiere Item über den PHP-Proxy (statt direkt CSFloat)
   const validateItem = async (itemName) => {
     setIsValidating(true);
     setError("");
 
     try {
       const encodedName = encodeURIComponent(itemName);
-      const url = `/api/csfloat/listings?market_hash_name=${encodedName}&type=buy_now&sort_by=lowest_price&limit=1`;
+
+      // NEU: Nutze den PHP-Proxy
+      const url = `/api/csfloat_proxy.php?market_hash_name=${encodedName}`;
 
       const response = await fetch(url);
-      
+
       if (!response.ok) {
-        throw new Error("Item nicht gefunden oder API-Fehler");
+        // Falls der Proxy einen 403 oder 500 wirft
+        throw new Error("Item konnte nicht validiert werden (API-Fehler)");
       }
 
       const json = await response.json();
 
+      // WICHTIG: CSFloat liefert die Ergebnisse im Feld "listings"
+      // In deinem alten Code stand dort "json.data"
       if (json.data && json.data.length > 0) {
-        return true; // Item existiert
+        return true; // Item existiert und hat Angebote
       } else {
-        throw new Error("Keine Listings für dieses Item gefunden");
+        throw new Error("Keine Angebote für dieses Item auf CSFloat gefunden");
       }
     } catch (err) {
       setError(err.message);
@@ -109,7 +114,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
     // Zur Watchlist hinzufügen
     try {
-      const response = await fetch("http://localhost/cs-api/manage_watchlist.php", {
+      const response = await fetch("/api/manage_watchlist.php", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -178,7 +183,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                     <div className="flex items-center justify-between">
                       <span className="text-sm">{suggestion}</span>
                       {isAlreadyInWatchlist(suggestion) && (
-                        <span className="text-xs text-muted-foreground">Bereits hinzugefügt</span>
+                        <span className="text-xs text-muted-foreground">
+                          Bereits hinzugefügt
+                        </span>
                       )}
                     </div>
                   </button>

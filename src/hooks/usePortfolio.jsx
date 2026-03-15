@@ -10,7 +10,7 @@ export function usePortfolio() {
 
   // 1. Daten aus der PHP-API laden
   useEffect(() => {
-    fetch("http://localhost/cs-api/getPortfolioData.php")
+    fetch("/api/getPortfolioData.php")
       .then((res) => res.json())
       // In deinem useEffect im usePortfolio Hook
       .then((***REMOVED***Data) => {
@@ -28,17 +28,19 @@ export function usePortfolio() {
   // Portfolio-Historie laden
   useEffect(() => {
     // Zuerst sicherstellen, dass die Tabelle existiert
-    fetch("http://localhost/cs-api/initPortfolioHistory.php")
+    fetch("/api/initPortfolioHistory.php")
       .then((res) => res.json())
       .then(() => {
         // Dann die Historie-Daten laden
-        return fetch("http://localhost/cs-api/getPortfolioHistory.php");
+        return fetch("/api/getPortfolioHistory.php");
       })
       .then((res) => res.json())
       .then((history) => {
         setPortfolioHistory(history || []);
       })
-      .catch((err) => console.error("Fehler beim Laden der Portfolio-Historie:", err));
+      .catch((err) =>
+        console.error("Fehler beim Laden der Portfolio-Historie:", err),
+      );
   }, []);
 
   // 2. Live-Preise abrufen (angepasst auf investments-State)
@@ -111,7 +113,7 @@ export function usePortfolio() {
       const formData = new FormData();
       formData.append("total_value", stats.totalValue.toString());
 
-      fetch("http://localhost/cs-api/savePortfolioValue.php", {
+      fetch("/api/savePortfolioValue.php", {
         method: "POST",
         body: formData,
       })
@@ -119,7 +121,7 @@ export function usePortfolio() {
         .then((result) => {
           if (result.success) {
             // Nach dem Speichern die Historie neu laden
-            return fetch("http://localhost/cs-api/getPortfolioHistory.php");
+            return fetch("/api/getPortfolioHistory.php");
           }
         })
         .then((res) => res && res.json())
@@ -128,7 +130,9 @@ export function usePortfolio() {
             setPortfolioHistory(history || []);
           }
         })
-        .catch((err) => console.error("Fehler beim Speichern des Portfolio-Werts:", err));
+        .catch((err) =>
+          console.error("Fehler beim Speichern des Portfolio-Werts:", err),
+        );
     }
   }, [stats.totalValue]);
 

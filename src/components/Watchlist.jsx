@@ -17,11 +17,11 @@ export const Watchlist = () => {
       setError("");
 
       // Zuerst Tabellen initialisieren
-      await fetch("http://localhost/cs-api/initWatchlistTables.php");
+      await fetch("/api/initWatchlistTables.php");
 
       // Watchlist-Daten mit Preisänderungen abrufen
-      const response = await fetch("http://localhost/cs-api/get_watchlist_data.php");
-      
+      const response = await fetch("/api/get_watchlist_data.php");
+
       if (!response.ok) {
         throw new Error("Fehler beim Laden der Watchlist-Daten");
       }
@@ -42,7 +42,7 @@ export const Watchlist = () => {
   // Item aus Watchlist entfernen
   const handleRemoveItem = async (id) => {
     try {
-      const response = await fetch("http://localhost/cs-api/manage_watchlist.php", {
+      const response = await fetch("/api/manage_watchlist.php", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -118,7 +118,10 @@ export const Watchlist = () => {
       {watchlistItems.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
-            <p>Keine Items in der Watchlist. Füge Items hinzu, um ihre Preise zu verfolgen.</p>
+            <p>
+              Keine Items in der Watchlist. Füge Items hinzu, um ihre Preise zu
+              verfolgen.
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -134,7 +137,7 @@ export const Watchlist = () => {
                   {watchlistItems.map((item) => {
                     const priceInfo = formatPriceChange(
                       item.price_change,
-                      item.price_change_percent
+                      item.price_change_percent,
                     );
                     const Icon = priceInfo.icon;
 
@@ -150,9 +153,15 @@ export const Watchlist = () => {
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <h3 className="font-semibold text-sm">{item.name}</h3>
+                            <h3 className="font-semibold text-sm">
+                              {item.name}
+                            </h3>
                             <div className="mt-2 flex items-center gap-2">
-                              {Icon && <Icon className={`h-4 w-4 ${priceInfo.color}`} />}
+                              {Icon && (
+                                <Icon
+                                  className={`h-4 w-4 ${priceInfo.color}`}
+                                />
+                              )}
                               <span className={`text-sm ${priceInfo.color}`}>
                                 {priceInfo.text}
                               </span>
@@ -203,11 +212,14 @@ export const Watchlist = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {selectedItem.price_history && selectedItem.price_history.length > 0 ? (
+                  {selectedItem.price_history &&
+                  selectedItem.price_history.length > 0 ? (
                     <PortfolioChart
                       history={selectedItem.price_history}
                       color={
-                        selectedItem.price_change_percent >= 0 ? "#22c55e" : "#ef4444"
+                        selectedItem.price_change_percent >= 0
+                          ? "#22c55e"
+                          : "#ef4444"
                       }
                     />
                   ) : (
