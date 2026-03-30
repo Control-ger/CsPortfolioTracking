@@ -7,10 +7,9 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json");
 
-$host = 'localhost';
-$***REMOVED***   = 'cs_***REMOVED***_tracker';
-$user = '***REMOVED***';
-$pass = '';
+$host = '***REMOVED***'; $***REMOVED***   = '***REMOVED***';
+ $user = '***REMOVED***'; $pass = '***REMOVED***123';
+
 
 try {
     $pdo = new PDO("mysql:host=$host;***REMOVED***name=$***REMOVED***;charset=utf8", $user, $pass);

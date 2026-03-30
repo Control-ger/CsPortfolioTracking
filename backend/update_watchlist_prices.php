@@ -7,10 +7,9 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json");
 
-$host = 'localhost';
-$***REMOVED***   = 'cs_***REMOVED***_tracker';
-$user = '***REMOVED***';
-$pass = '';
+$host = '***REMOVED***'; $***REMOVED***   = '***REMOVED***';
+ $user = '***REMOVED***'; $pass = '***REMOVED***123';
+
 
 // Funktion zum Abrufen des Preises von CSFloat
 function getCSFloatPrice($marketHashName) {
