@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
 import { TrendingUp, TrendingDown, Trash2, X } from "lucide-react";
+import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
 
 export const Watchlist = () => {
   const [watchlistItems, setWatchlistItems] = useState([]);
@@ -16,17 +17,7 @@ export const Watchlist = () => {
       setLoading(true);
       setError("");
 
-      // Zuerst Tabellen initialisieren
-      await fetch("http://localhost/cs-api/initWatchlistTables.php");
-
-      // Watchlist-Daten mit Preisänderungen abrufen
-      const response = await fetch("http://localhost/cs-api/get_watchlist_data.php");
-      
-      if (!response.ok) {
-        throw new Error("Fehler beim Laden der Watchlist-Daten");
-      }
-
-      const data = await response.json();
+      const data = await fetchWatchlist();
       setWatchlistItems(data || []);
     } catch (err) {
       setError(err.message || "Fehler beim Laden der Watchlist");
@@ -42,47 +33,14 @@ export const Watchlist = () => {
   // Item aus Watchlist entfernen
   const handleRemoveItem = async (id) => {
     try {
-      const response = await fetch("http://localhost/cs-api/manage_watchlist.php", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Watchlist neu laden
-        loadWatchlistData();
-        // Wenn das gelöschte Item ausgewählt war, Auswahl zurücksetzen
-        if (selectedItem && selectedItem.id === id) {
-          setSelectedItem(null);
-        }
-      } else {
-        setError(result.error || "Fehler beim Entfernen des Items");
+      await deleteWatchlistItem(id);
+      loadWatchlistData();
+      if (selectedItem && selectedItem.id === id) {
+        setSelectedItem(null);
       }
     } catch (err) {
-      setError("Fehler beim Entfernen des Items");
+      setError(err.message || "Fehler beim Entfernen des Items");
     }
-  };
-
-  // Formatierung für Preisänderung
-  const formatPriceChange = (change, percent) => {
-    if (change === null || percent === null) {
-      return { text: "N/A", color: "text-muted-foreground", icon: null };
-    }
-
-    const isPositive = change >= 0;
-    const sign = isPositive ? "+" : "";
-    const color = isPositive ? "text-green-600" : "text-red-600";
-    const Icon = isPositive ? TrendingUp : TrendingDown;
-
-    return {
-      text: `${sign}${change.toFixed(2)}€ (${sign}${percent.toFixed(2)}%)`,
-      color,
-      icon: Icon,
-    };
   };
 
   if (loading) {
@@ -132,11 +90,14 @@ export const Watchlist = () => {
               <CardContent>
                 <div className="space-y-3">
                   {watchlistItems.map((item) => {
-                    const priceInfo = formatPriceChange(
-                      item.price_change,
-                      item.price_change_percent
-                    );
-                    const Icon = priceInfo.icon;
+                    const isUp = item.trend === "up";
+                    const isDown = item.trend === "down";
+                    const Icon = isUp ? TrendingUp : isDown ? TrendingDown : null;
+                    const colorClass = isUp
+                      ? "text-green-600"
+                      : isDown
+                        ? "text-red-600"
+                        : "text-muted-foreground";
 
                     return (
                       <div
@@ -152,14 +113,14 @@ export const Watchlist = () => {
                           <div className="flex-1">
                             <h3 className="font-semibold text-sm">{item.name}</h3>
                             <div className="mt-2 flex items-center gap-2">
-                              {Icon && <Icon className={`h-4 w-4 ${priceInfo.color}`} />}
-                              <span className={`text-sm ${priceInfo.color}`}>
-                                {priceInfo.text}
+                              {Icon && <Icon className={`h-4 w-4 ${colorClass}`} />}
+                              <span className={`text-sm ${colorClass}`}>
+                                {item.changeLabel}
                               </span>
                             </div>
-                            {item.current_price !== null && (
+                            {item.currentPrice !== null && (
                               <p className="text-xs text-muted-foreground mt-1">
-                                Aktuell: {item.current_price.toFixed(2)}€
+                                Aktuell: {item.currentPrice.toFixed(2)}€
                               </p>
                             )}
                           </div>
@@ -203,19 +164,17 @@ export const Watchlist = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {selectedItem.price_history && selectedItem.price_history.length > 0 ? (
+                  {selectedItem.priceHistory && selectedItem.priceHistory.length > 0 ? (
                     <PortfolioChart
-                      history={selectedItem.price_history}
-                      color={
-                        selectedItem.price_change_percent >= 0 ? "#22c55e" : "#ef4444"
-                      }
+                      history={selectedItem.priceHistory}
+                      color={selectedItem.trend === "down" ? "#ef4444" : "#22c55e"}
                     />
                   ) : (
                     <div className="h-80 flex items-center justify-center text-muted-foreground">
                       <p>Noch keine Preis-Historie verfügbar</p>
                     </div>
                   )}
-                  {selectedItem.price_change !== null && (
+                  {selectedItem.changeLabel !== "N/A" && (
                     <div className="mt-4 p-4 bg-muted rounded-lg">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">
@@ -223,15 +182,12 @@ export const Watchlist = () => {
                         </span>
                         <span
                           className={`font-semibold ${
-                            selectedItem.price_change_percent >= 0
-                              ? "text-green-600"
-                              : "text-red-600"
+                            selectedItem.trend === "down"
+                              ? "text-red-600"
+                              : "text-green-600"
                           }`}
                         >
-                          {selectedItem.price_change >= 0 ? "+" : ""}
-                          {selectedItem.price_change.toFixed(2)}€ (
-                          {selectedItem.price_change_percent >= 0 ? "+" : ""}
-                          {selectedItem.price_change_percent.toFixed(2)}%)
+                          {selectedItem.changeLabel}
                         </span>
                       </div>
                     </div>

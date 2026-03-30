@@ -6,26 +6,8 @@ import {
   CardDescription,
 } from "./ui/card";
 import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
-import { useEffect, useState } from "react";
-import { getLivePrice } from "@/components/csfloatService.js";
 
 export const ItemDetailPanel = ({ item }) => {
-  const [livePrice, setLivePrice] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (item) {
-      setLivePrice(null); // Reset bei Item-Wechsel
-      setIsLoading(true);
-
-      // Live-Preis abrufen
-      getLivePrice(item.name).then((price) => {
-        setLivePrice(price);
-        setIsLoading(false);
-      });
-    }
-  }, [item]);
-
   if (!item)
     return (
       <div className="h-100 flex items-center justify-center border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground">
@@ -56,11 +38,7 @@ export const ItemDetailPanel = ({ item }) => {
               Live (CSFloat)
             </p>
             <p className="text-sm font-bold text-primary">
-              {isLoading
-                ? "Lädt..."
-                : livePrice
-                  ? `${livePrice.toFixed(2)}€`
-                  : "N/A"}
+              {item.livePrice ? `${item.livePrice.toFixed(2)}€` : "N/A"}
             </p>
           </div>
         </div>

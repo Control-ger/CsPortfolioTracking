@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { TrendingUp, TrendingDown, Eye } from "lucide-react";
+import { fetchWatchlist } from "@/lib/apiClient.js";
 
 export const WatchlistOverview = ({ maxItems = 5 }) => {
   const [watchlistItems, setWatchlistItems] = useState([]);
@@ -10,17 +11,8 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
     const loadWatchlistData = async () => {
       try {
         setLoading(true);
-        
-        // Tabellen initialisieren
-        await fetch("http://localhost/cs-api/initWatchlistTables.php");
-        
-        // Watchlist-Daten abrufen
-        const response = await fetch("http://localhost/cs-api/get_watchlist_data.php");
-        
-        if (response.ok) {
-          const data = await response.json();
-          setWatchlistItems((data || []).slice(0, maxItems));
-        }
+        const data = await fetchWatchlist();
+        setWatchlistItems((data || []).slice(0, maxItems));
       } catch (err) {
         console.error("Fehler beim Laden der Watchlist:", err);
       } finally {
@@ -30,23 +22,6 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
 
     loadWatchlistData();
   }, [maxItems]);
-
-  const formatPriceChange = (change, percent) => {
-    if (change === null || percent === null) {
-      return { text: "N/A", color: "text-muted-foreground", icon: null };
-    }
-
-    const isPositive = change >= 0;
-    const sign = isPositive ? "+" : "";
-    const color = isPositive ? "text-green-600" : "text-red-600";
-    const Icon = isPositive ? TrendingUp : TrendingDown;
-
-    return {
-      text: `${sign}${percent.toFixed(2)}%`,
-      color,
-      icon: Icon,
-    };
-  };
 
   if (loading) {
     return (
@@ -93,11 +68,14 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
       <CardContent>
         <div className="space-y-3">
           {watchlistItems.map((item) => {
-            const priceInfo = formatPriceChange(
-              item.price_change,
-              item.price_change_percent
-            );
-            const Icon = priceInfo.icon;
+            const isUp = item.trend === "up";
+            const isDown = item.trend === "down";
+            const Icon = isUp ? TrendingUp : isDown ? TrendingDown : null;
+            const colorClass = isUp
+              ? "text-green-600"
+              : isDown
+                ? "text-red-600"
+                : "text-muted-foreground";
 
             return (
               <div
@@ -106,16 +84,16 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
               >
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-sm truncate">{item.name}</h4>
-                  {item.current_price !== null && (
+                  {item.currentPrice !== null && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      {item.current_price.toFixed(2)}€
+                      {item.currentPrice.toFixed(2)}€
                     </p>
                   )}
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  {Icon && <Icon className={`h-4 w-4 ${priceInfo.color}`} />}
-                  <span className={`text-sm font-semibold ${priceInfo.color}`}>
-                    {priceInfo.text}
+                  {Icon && <Icon className={`h-4 w-4 ${colorClass}`} />}
+                  <span className={`text-sm font-semibold ${colorClass}`}>
+                    {item.changeLabel}
                   </span>
                 </div>
               </div>

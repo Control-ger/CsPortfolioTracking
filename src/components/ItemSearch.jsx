@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Search, Plus } from "lucide-react";
+import { createWatchlistItem } from "@/lib/apiClient.js";
 
 // Liste mit gängigen CS2 Item-Namen für Vorschläge
 const COMMON_ITEMS = [
@@ -35,7 +36,7 @@ const COMMON_ITEMS = [
 export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [suggestions, setSuggestions] = useState([]);
-  const [isValidating, setIsValidating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   // Filtere Vorschläge basierend auf Suchbegriff
@@ -54,42 +55,10 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     setSuggestions(filtered.slice(0, 5)); // Maximal 5 Vorschläge
   };
 
-  // Validiere Item über CSFloat API
-  const validateItem = async (itemName) => {
-    setIsValidating(true);
-    setError("");
-
-    try {
-      const encodedName = encodeURIComponent(itemName);
-      const url = `/api/csfloat/listings?market_hash_name=${encodedName}&type=buy_now&sort_by=lowest_price&limit=1`;
-
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error("Item nicht gefunden oder API-Fehler");
-      }
-
-      const json = await response.json();
-
-      if (json.data && json.data.length > 0) {
-        return true; // Item existiert
-      } else {
-        throw new Error("Keine Listings für dieses Item gefunden");
-      }
-    } catch (err) {
-      setError(err.message);
-      return false;
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  // Prüfe, ob Item bereits in Watchlist ist
   const isAlreadyInWatchlist = (itemName) => {
     return existingItems.some((item) => item.name === itemName);
   };
 
-  // Item zur Watchlist hinzufügen
   const handleAddItem = async (itemName) => {
     if (!itemName.trim()) {
       setError("Bitte geben Sie einen Item-Namen ein.");
@@ -101,39 +70,19 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       return;
     }
 
-    // Validiere Item
-    const isValid = await validateItem(itemName);
-    if (!isValid) {
-      return;
-    }
-
-    // Zur Watchlist hinzufügen
     try {
-      const response = await fetch("http://localhost/cs-api/manage_watchlist.php", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: itemName,
-          type: "skin",
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setSearchTerm("");
-        setSuggestions([]);
-        setError("");
-        if (onAddToWatchlist) {
-          onAddToWatchlist();
-        }
-      } else {
-        setError(result.error || "Fehler beim Hinzufügen zur Watchlist.");
+      setIsSubmitting(true);
+      await createWatchlistItem(itemName, "skin");
+      setSearchTerm("");
+      setSuggestions([]);
+      setError("");
+      if (onAddToWatchlist) {
+        onAddToWatchlist();
       }
     } catch (err) {
-      setError("Fehler beim Hinzufügen zur Watchlist.");
+      setError(err.message || "Fehler beim Hinzufügen zur Watchlist.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -163,7 +112,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Item-Name eingeben (z.B. AK-47 | Redline)"
               className="w-full px-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={isValidating}
+              disabled={isSubmitting}
             />
             {suggestions.length > 0 && (
               <div className="absolute z-10 w-full mt-1 bg-card border rounded-lg shadow-lg max-h-60 overflow-y-auto">
@@ -195,11 +144,11 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
           <button
             type="submit"
-            disabled={isValidating || !searchTerm.trim()}
+            disabled={isSubmitting || !searchTerm.trim()}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {isValidating ? (
-              "Validiere..."
+            {isSubmitting ? (
+              "Speichere..."
             ) : (
               <>
                 <Plus className="h-4 w-4" />

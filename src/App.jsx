@@ -9,7 +9,7 @@ import { WatchlistOverview } from "./components/WatchlistOverview";
 import { usePortfolio } from "./hooks/usePortfolio";
 
 export default function Dashboard() {
-  const { enrichedInvestments, stats, ***REMOVED***History } = usePortfolio();
+  const { enrichedInvestments, stats, ***REMOVED***History, error } = usePortfolio();
   const [selectedItem, setSelectedItem] = useState(null);
 
   const selectedItemWithLive = useMemo(() => {
@@ -30,6 +30,11 @@ export default function Dashboard() {
         </header>
 
         <Tabs defaultValue="overview" className="w-full">
+          {error && (
+            <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
           <TabsList className="grid w-full max-w-100 grid-cols-3">
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
             <TabsTrigger value="inventory">Inventar & Details</TabsTrigger>
