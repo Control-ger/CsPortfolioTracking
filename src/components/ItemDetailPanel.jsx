@@ -7,11 +7,13 @@ import {
 } from "./ui/card";
 import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 
+const formatPrice = (value) => `${value.toFixed(2)} EUR`;
+
 export const ItemDetailPanel = ({ item }) => {
   if (!item)
     return (
       <div className="h-100 flex items-center justify-center border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground">
-        Wähle ein Item aus der Liste,
+        Waehle ein Item aus der Liste,
         <br />
         um Details zu sehen.
       </div>
@@ -22,7 +24,7 @@ export const ItemDetailPanel = ({ item }) => {
       <CardHeader>
         <CardTitle className="text-lg">{item.name}</CardTitle>
         <CardDescription className="uppercase text-[10px] font-bold tracking-widest">
-          {item.type === "case" ? "Behälter" : "Aufkleber"}
+          {item.type === "case" ? "Behaelter" : "Aufkleber"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -31,14 +33,55 @@ export const ItemDetailPanel = ({ item }) => {
             <p className="text-[10px] text-muted-foreground uppercase">
               Einkauf
             </p>
-            <p className="text-sm font-bold">{item.buyPrice.toFixed(2)}€</p>
+            <p className="text-sm font-bold">{formatPrice(item.buyPrice)}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {item.quantity}x {formatPrice(item.buyPrice)}
+            </p>
           </div>
           <div className="bg-muted/40 p-3 rounded-md border">
             <p className="text-[10px] text-muted-foreground uppercase">
               Live (CSFloat)
             </p>
-            <p className="text-sm font-bold text-primary">
-              {item.livePrice ? `${item.livePrice.toFixed(2)}€` : "N/A"}
+            <p
+              className={`text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
+            >
+              {item.livePrice !== null
+                ? formatPrice(item.livePrice)
+                : "Nicht verfuegbar"}
+            </p>
+            <p className="mt-1 text-[10px] uppercase text-muted-foreground">
+              {item.pricingStatus === "live"
+                ? "Livepreis aktiv"
+                : "Fallback auf Einkaufspreis"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-muted/40 p-3 rounded-md border">
+            <p className="text-[10px] text-muted-foreground uppercase">
+              Positionswert
+            </p>
+            <p className="text-sm font-bold">{formatPrice(item.currentValue)}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {item.quantity}x {formatPrice(item.displayPrice)}
+            </p>
+          </div>
+          <div className="bg-muted/40 p-3 rounded-md border">
+            <p className="text-[10px] text-muted-foreground uppercase">
+              Gewinn / Verlust
+            </p>
+            <p
+              className={`text-sm font-bold ${item.isProfitPositive ? "text-green-600" : "text-red-600"}`}
+            >
+              {item.isProfitPositive ? "+" : ""}
+              {formatPrice(item.profitEuro)}
+            </p>
+            <p
+              className={`mt-1 text-[10px] uppercase ${item.roi >= 0 ? "text-green-600" : "text-red-600"}`}
+            >
+              {item.roi >= 0 ? "+" : ""}
+              {item.roi.toFixed(2)}%
             </p>
           </div>
         </div>

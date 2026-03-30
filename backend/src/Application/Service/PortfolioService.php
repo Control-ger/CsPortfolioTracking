@@ -28,6 +28,9 @@ final class PortfolioService
             $displayPrice = $livePrice ?? $buyPrice;
             $isLive = $livePrice !== null;
             $roi = $buyPrice > 0 ? (($displayPrice - $buyPrice) / $buyPrice) * 100 : 0.0;
+            $totalInvested = $buyPrice * $quantity;
+            $currentValue = $displayPrice * $quantity;
+            $profitEuro = $currentValue - $totalInvested;
 
             $rows[] = [
                 'id' => (int) $investment['id'],
@@ -39,6 +42,11 @@ final class PortfolioService
                 'displayPrice' => $displayPrice,
                 'roi' => $roi,
                 'isLive' => $isLive,
+                'pricingStatus' => $isLive ? 'live' : 'fallback',
+                'totalInvested' => $totalInvested,
+                'currentValue' => $currentValue,
+                'profitEuro' => $profitEuro,
+                'isProfitPositive' => $profitEuro >= 0,
             ];
         }
 
