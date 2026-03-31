@@ -33,9 +33,10 @@ final class WatchlistController
             $page = (int) ($request->query['page'] ?? 1);
             $itemType = (string) ($request->query['itemType'] ?? '');
             $wear = (string) ($request->query['wear'] ?? '');
+            $sortBy = (string) ($request->query['sortBy'] ?? '');
 
             JsonResponseFactory::success(
-                $this->watchlistService->searchAvailableItems($query, $limit, $itemType, $wear, $page)
+                $this->watchlistService->searchAvailableItems($query, $limit, $itemType, $wear, $page, $sortBy)
             );
         } catch (Throwable $exception) {
             JsonResponseFactory::error('WATCHLIST_SEARCH_FAILED', $exception->getMessage(), [], 500);

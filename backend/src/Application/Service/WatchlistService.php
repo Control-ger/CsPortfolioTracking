@@ -70,19 +70,22 @@ final class WatchlistService
         int $limit = 6,
         ?string $itemTypeFilter = null,
         ?string $wearFilter = null,
-        int $page = 1
+        int $page = 1,
+        ?string $sortBy = null
     ): array
     {
         $normalizedQuery = trim($query);
         $normalizedItemType = trim((string) $itemTypeFilter);
-        $canBrowseByFilter = $normalizedItemType !== '' && $normalizedItemType !== 'all';
+        $canBrowseByFilter = $this->canBrowseByFilter($normalizedItemType);
 
         if ($normalizedQuery === '' && !$canBrowseByFilter) {
             return [
                 'items' => [],
                 'page' => max(1, $page),
                 'limit' => max(1, min($limit, 12)),
-                'hasMore' => false,
+                'totalItems' => 0,
+                'totalPages' => 0,
+                'sortBy' => trim((string) $sortBy) !== '' ? trim((string) $sortBy) : 'relevance',
                 'browseMode' => false,
             ];
         }
@@ -92,7 +95,9 @@ final class WatchlistService
                 'items' => [],
                 'page' => max(1, $page),
                 'limit' => max(1, min($limit, 12)),
-                'hasMore' => false,
+                'totalItems' => 0,
+                'totalPages' => 0,
+                'sortBy' => trim((string) $sortBy) !== '' ? trim((string) $sortBy) : 'relevance',
                 'browseMode' => false,
             ];
         }
@@ -102,7 +107,31 @@ final class WatchlistService
             $limit,
             $itemTypeFilter,
             $wearFilter,
-            $page
+            $page,
+            $sortBy
+        );
+    }
+
+    private function canBrowseByFilter(string $itemTypeFilter): bool
+    {
+        return in_array(
+            $itemTypeFilter,
+            [
+                'skin',
+                'case',
+                'souvenir_package',
+                'sticker_capsule',
+                'sticker',
+                'patch',
+                'music_kit',
+                'agent',
+                'key',
+                'terminal',
+                'charm',
+                'graffiti',
+                'tool',
+            ],
+            true
         );
     }
 

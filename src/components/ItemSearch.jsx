@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import {
+  ChevronsLeft,
+  ChevronsRight,
   ChevronLeft,
   ChevronRight,
   LoaderCircle,
@@ -53,14 +55,23 @@ const BROWSABLE_ITEM_TYPES = new Set([
   "graffiti",
   "tool",
 ]);
+const SORT_OPTIONS = [
+  { value: "relevance", label: "Relevanz" },
+  { value: "name_asc", label: "Name A-Z" },
+  { value: "name_desc", label: "Name Z-A" },
+  { value: "price_asc", label: "Preis aufsteigend" },
+  { value: "price_desc", label: "Preis absteigend" },
+];
 
 export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [itemType, setItemType] = useState("all");
   const [wear, setWear] = useState("all");
+  const [sortBy, setSortBy] = useState("relevance");
   const [page, setPage] = useState(1);
   const [results, setResults] = useState([]);
-  const [hasMore, setHasMore] = useState(false);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [browseMode, setBrowseMode] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [submittingItem, setSubmittingItem] = useState("");
@@ -74,14 +85,15 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, itemType, wear]);
+  }, [searchTerm, itemType, wear, sortBy]);
 
   useEffect(() => {
     const activeWear = wearEnabled ? wear : "all";
 
     if (!shouldSearch) {
       setResults([]);
-      setHasMore(false);
+      setTotalItems(0);
+      setTotalPages(0);
       setBrowseMode(false);
       setIsSearching(false);
       return undefined;
@@ -98,6 +110,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
           {
             itemType,
             wear: activeWear,
+            sortBy,
           },
           PAGE_SIZE,
           page
@@ -105,13 +118,18 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
         if (!cancelled) {
           setResults(data?.items || []);
-          setHasMore(Boolean(data?.hasMore));
+          setTotalItems(Number(data?.totalItems || 0));
+          setTotalPages(Number(data?.totalPages || 0));
           setBrowseMode(Boolean(data?.browseMode));
+          if (typeof data?.page === "number" && data.page !== page) {
+            setPage(data.page);
+          }
         }
       } catch (requestError) {
         if (!cancelled) {
           setResults([]);
-          setHasMore(false);
+          setTotalItems(0);
+          setTotalPages(0);
           setBrowseMode(false);
           setError(requestError.message || "Fehler bei der Item-Suche.");
         }
@@ -126,7 +144,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [itemType, normalizedTerm, page, shouldSearch, wear, wearEnabled]);
+  }, [itemType, normalizedTerm, page, shouldSearch, sortBy, wear, wearEnabled]);
 
   const isAlreadyInWatchlist = (itemName) =>
     existingItems.some((item) => item.name === itemName);
@@ -158,7 +176,8 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       await createWatchlistItem(marketHashName, candidate.itemType || "other");
       setSearchTerm("");
       setResults([]);
-      setHasMore(false);
+      setTotalItems(0);
+      setTotalPages(0);
       setBrowseMode(false);
       setPage(1);
 
@@ -175,80 +194,98 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   };
 
   const renderPagination = () => {
-    if (results.length === 0) {
+    if (totalPages === 0) {
       return null;
     }
 
-    const lastKnownPage = hasMore ? page + 1 : page;
-    const startPage = Math.max(1, page - 2);
-    const endPage = Math.max(lastKnownPage, Math.min(lastKnownPage, page + 2));
-    const pageNumbers = [];
+    const paginationItems = [];
 
-    for (let nextPage = startPage; nextPage <= endPage; nextPage += 1) {
-      pageNumbers.push(nextPage);
+    for (let nextPage = 1; nextPage <= totalPages; nextPage += 1) {
+      const isBoundaryPage = nextPage === 1 || nextPage === totalPages;
+      const isNearbyPage = Math.abs(nextPage - page) <= 1;
+
+      if (isBoundaryPage || isNearbyPage) {
+        paginationItems.push(nextPage);
+        continue;
+      }
+
+      if (paginationItems[paginationItems.length - 1] !== "...") {
+        paginationItems.push("...");
+      }
     }
 
     return (
-      <div className="flex items-center justify-between rounded-lg border p-3">
-        <div className="text-sm text-muted-foreground">
-          Seite {page}
+      <div className="flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-xs text-muted-foreground">
+          {totalItems} Treffer | Seite {page} von {totalPages}
           {browseMode ? " | Browse-Modus" : ""}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setPage(1)}
+            disabled={page === 1 || isSearching}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Erste Seite"
+          >
+            <ChevronsLeft className="h-4 w-4" />
+          </button>
           <button
             type="button"
             onClick={() =>
               setPage((currentPage) => Math.max(1, currentPage - 1))
             }
             disabled={page === 1 || isSearching}
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Vorherige Seite"
           >
             <ChevronLeft className="h-4 w-4" />
-            Zurueck
           </button>
-          <div className="flex items-center gap-1">
-            {startPage > 1 && (
-              <>
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {paginationItems.map((paginationItem, index) =>
+              paginationItem === "..." ? (
+                <span
+                  key={`ellipsis-${index}`}
+                  className="inline-flex h-8 min-w-8 items-center justify-center px-1 text-xs text-muted-foreground"
+                >
+                  ...
+                </span>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setPage(1)}
-                  disabled={isSearching}
-                  className="inline-flex h-9 min-w-9 items-center justify-center rounded-lg border px-3 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  key={paginationItem}
+                  onClick={() => setPage(paginationItem)}
+                  disabled={isSearching || paginationItem === page}
+                  className={`inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    paginationItem === page
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  }`}
                 >
-                  1
+                  {paginationItem}
                 </button>
-                {startPage > 2 && (
-                  <span className="px-1 text-sm text-muted-foreground">...</span>
-                )}
-              </>
-            )}
-            {pageNumbers.map((pageNumber) => (
-              <button
-                key={pageNumber}
-                type="button"
-                onClick={() => setPage(pageNumber)}
-                disabled={isSearching || pageNumber === page}
-                className={`inline-flex h-9 min-w-9 items-center justify-center rounded-lg border px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                  pageNumber === page
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
-              >
-                {pageNumber}
-              </button>
-            ))}
-            {hasMore && endPage < page + 1 && (
-              <span className="px-1 text-sm text-muted-foreground">...</span>
+              )
             )}
           </div>
           <button
             type="button"
-            onClick={() => setPage((currentPage) => currentPage + 1)}
-            disabled={!hasMore || isSearching}
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() =>
+              setPage((currentPage) => Math.min(totalPages, currentPage + 1))
+            }
+            disabled={page >= totalPages || isSearching}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Naechste Seite"
           >
-            Weiter
             <ChevronRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage(totalPages)}
+            disabled={page >= totalPages || isSearching}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Letzte Seite"
+          >
+            <ChevronsRight className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -286,7 +323,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     }
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {results.map((candidate) => {
           const alreadyAdded = isAlreadyInWatchlist(candidate.marketHashName);
           const isSubmitting = submittingItem === candidate.marketHashName;
@@ -294,9 +331,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
           return (
             <div
               key={candidate.marketHashName}
-              className="flex items-center gap-4 rounded-lg border p-4"
+              className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
             >
-              <div className="h-14 w-14 overflow-hidden rounded-md bg-muted">
+              <div className="h-12 w-12 overflow-hidden rounded-md bg-muted">
                 {candidate.iconUrl ? (
                   <img
                     src={candidate.iconUrl}
@@ -311,21 +348,21 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{candidate.displayName}</p>
-                <div className="mt-1 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                <p className="truncate text-sm font-medium">{candidate.displayName}</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                     {candidate.itemTypeLabel}
                   </span>
                   {candidate.wearLabel && (
-                    <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                       {candidate.wearLabel}
                     </span>
                   )}
-                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                     {candidate.marketTypeLabel}
                   </span>
                 </div>
-                <p className="mt-2 text-sm font-semibold text-primary">
+                <p className="mt-1.5 text-sm font-semibold text-primary">
                   {candidate.livePriceEur.toFixed(2)} EUR
                 </p>
               </div>
@@ -334,7 +371,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                 type="button"
                 onClick={() => handleAddItem(candidate)}
                 disabled={alreadyAdded || isSubmitting || submittingItem !== ""}
-                className="inline-flex min-w-28 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>
@@ -353,21 +390,19 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             </div>
           );
         })}
-
-        {renderPagination()}
       </div>
     );
   };
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Search className="h-5 w-5" />
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Search className="h-4 w-4" />
           Search-to-Add
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -375,18 +410,18 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="Zum Beispiel: Kilowatt Case, AK-47 Redline oder Music Kit"
-            className="w-full rounded-lg border bg-background py-2 pl-10 pr-4 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="h-10 w-full rounded-lg border bg-background py-2 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             disabled={submittingItem !== ""}
           />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           <label className="space-y-2 text-sm">
             <span className="font-medium">Item Type</span>
             <select
               value={itemType}
               onChange={(event) => handleTypeChange(event.target.value)}
-              className="w-full rounded-lg border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               disabled={submittingItem !== ""}
             >
               {ITEM_TYPE_OPTIONS.map((option) => (
@@ -402,7 +437,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             <select
               value={wear}
               onChange={(event) => setWear(event.target.value)}
-              className="w-full rounded-lg border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!wearEnabled || submittingItem !== ""}
             >
               {WEAR_OPTIONS.map((option) => (
@@ -417,6 +452,21 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               </p>
             )}
           </label>
+          <label className="space-y-2 text-sm">
+            <span className="font-medium">Sortierung</span>
+            <select
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+              className="h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={submittingItem !== ""}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {error && (
@@ -426,6 +476,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
         )}
 
         {renderState()}
+        {renderPagination()}
       </CardContent>
     </Card>
   );

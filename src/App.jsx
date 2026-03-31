@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { StatCard } from "./components/StatsCards";
 import { InventoryTable } from "./components/InventoryTable";
@@ -13,6 +13,8 @@ export default function Dashboard() {
   const { enrichedInvestments, stats, ***REMOVED***History, error } = usePortfolio();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
 
   const selectedItemWithLive = useMemo(() => {
     if (!selectedItem) return null;
@@ -40,6 +42,18 @@ export default function Dashboard() {
     loadItemHistory();
   }, [selectedItemWithLive]);
 
+  const handleOpenWatchlistItem = (item) => {
+    if (!item?.id) {
+      return;
+    }
+
+    setWatchlistFocusTarget({
+      id: item.id,
+      requestedAt: Date.now(),
+    });
+    setActiveTab("watchlist");
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -52,7 +66,7 @@ export default function Dashboard() {
           </p>
         </header>
 
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {error && (
             <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
               {error}
@@ -89,7 +103,10 @@ export default function Dashboard() {
                 history={***REMOVED***History}
                 color={stats.chartColor}
               />
-              <WatchlistOverview maxItems={5} />
+              <WatchlistOverview
+                maxItems={5}
+                onOpenItem={handleOpenWatchlistItem}
+              />
             </div>
           </TabsContent>
 
@@ -110,7 +127,7 @@ export default function Dashboard() {
           </TabsContent>
 
           <TabsContent value="watchlist" className="space-y-6">
-            <Watchlist />
+            <Watchlist focusTarget={watchlistFocusTarget} />
           </TabsContent>
         </Tabs>
       </div>

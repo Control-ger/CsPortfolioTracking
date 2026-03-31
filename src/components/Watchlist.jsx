@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
 import { Trash2, TrendingDown, TrendingUp, X } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
 
-export const Watchlist = () => {
+export const Watchlist = ({ focusTarget = null }) => {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
   const [error, setError] = useState("");
+  const itemRefs = useRef(new Map());
 
   const loadWatchlistData = async () => {
     try {
@@ -39,6 +40,31 @@ export const Watchlist = () => {
   useEffect(() => {
     loadWatchlistData();
   }, []);
+
+  useEffect(() => {
+    if (!focusTarget?.id || watchlistItems.length === 0) {
+      return;
+    }
+
+    const matchingItem = watchlistItems.find((item) => item.id === focusTarget.id);
+    if (!matchingItem) {
+      return;
+    }
+
+    setSelectedItem(matchingItem);
+
+    const nextFrame = window.requestAnimationFrame(() => {
+      const itemNode = itemRefs.current.get(matchingItem.id);
+      itemNode?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(nextFrame);
+    };
+  }, [focusTarget, watchlistItems]);
 
   const handleRemoveItem = async (id) => {
     try {
@@ -118,6 +144,14 @@ export const Watchlist = () => {
                     return (
                       <div
                         key={item.id}
+                        ref={(node) => {
+                          if (node) {
+                            itemRefs.current.set(item.id, node);
+                            return;
+                          }
+
+                          itemRefs.current.delete(item.id);
+                        }}
                         className={`cursor-pointer rounded-lg border p-4 transition-colors ${
                           selectedItem?.id === item.id
                             ? "border-primary bg-primary/10"

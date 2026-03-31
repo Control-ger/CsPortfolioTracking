@@ -97,13 +97,14 @@ final class PricingService
         int $limit = 6,
         ?string $itemTypeFilter = null,
         ?string $wearFilter = null,
-        int $page = 1
+        int $page = 1,
+        ?string $sortBy = null
     ): array {
         $this->ensureCacheTables();
 
         $normalizedQuery = trim($query);
         $resolvedLimit = max(1, min($limit, 12));
-        $resolvedPage = max(1, $page);
+        $normalizedSortBy = $this->normalizeSortBy($sortBy);
         $browseMode = $normalizedQuery === '' && $this->canBrowseByFilter($itemTypeFilter);
         $resolvedQuery = $normalizedQuery !== ''
             ? $normalizedQuery
@@ -112,22 +113,21 @@ final class PricingService
         if ($resolvedQuery === '' || ($normalizedQuery === '' && !$browseMode)) {
             return [
                 'items' => [],
-                'page' => $resolvedPage,
+                'page' => 1,
                 'limit' => $resolvedLimit,
-                'hasMore' => false,
+                'totalItems' => 0,
+                'totalPages' => 0,
+                'sortBy' => $normalizedSortBy,
                 'browseMode' => $browseMode,
             ];
         }
 
-        $filteredOffset = ($resolvedPage - 1) * $resolvedLimit;
         $externalStart = 0;
-        $externalBatchSize = max($resolvedLimit * 3, 24);
-        $filteredSeen = 0;
-        $candidates = [];
-        $hasMore = false;
+        $externalBatchSize = max($resolvedLimit * 4, 32);
+        $matchedItems = [];
         $totalCount = null;
 
-        while (count($candidates) <= $resolvedLimit) {
+        while (true) {
             $steamResults = $this->steamMarketClient->searchItems($resolvedQuery, $externalBatchSize, $externalStart);
             $rawItems = $steamResults['items'] ?? [];
             $totalCount = (int) ($steamResults['totalCount'] ?? 0);
@@ -142,52 +142,35 @@ final class PricingService
                     continue;
                 }
 
-                $presentation = $this->getItemPresentation($marketHashName, $result);
-                if (!isset($presentation['priceUsd'], $presentation['priceEur'])) {
-                    continue;
-                }
-
-                $classification = [
-                    'key' => (string) ($presentation['itemType'] ?? 'other'),
-                    'label' => (string) ($presentation['itemTypeLabel'] ?? 'Other'),
-                ];
-                $wear = null;
-                if (($presentation['wear'] ?? null) !== null || ($presentation['wearLabel'] ?? null) !== null) {
-                    $wear = [
-                        'key' => $presentation['wear'] ?? null,
-                        'label' => $presentation['wearLabel'] ?? null,
-                    ];
-                }
-
-                if (!$this->marketItemClassifier->matchesFilters($classification, $wear, $itemTypeFilter, $wearFilter)) {
-                    continue;
-                }
-
-                if ($filteredSeen < $filteredOffset) {
-                    $filteredSeen++;
-                    continue;
-                }
-
-                $dto = new WatchlistSearchCandidateDto(
-                    marketHashName: $marketHashName,
-                    displayName: (string) ($result['displayName'] ?? $marketHashName),
-                    itemType: (string) ($presentation['itemType'] ?? 'other'),
-                    itemTypeLabel: (string) ($presentation['itemTypeLabel'] ?? 'Other'),
-                    marketTypeLabel: (string) ($presentation['marketTypeLabel'] ?? 'CS2 Item'),
-                    wear: isset($presentation['wear']) ? (string) $presentation['wear'] : null,
-                    wearLabel: isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : null,
-                    iconUrl: isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : null,
-                    livePriceEur: (float) $presentation['priceEur'],
-                    livePriceUsd: (float) $presentation['priceUsd']
+                $classification = $this->marketItemClassifier->classify(
+                    $marketHashName,
+                    isset($result['typeLabel']) ? (string) $result['typeLabel'] : null,
+                    null,
+                    isset($result['typeLabel']) ? (string) $result['typeLabel'] : null
                 );
+                $wear = $this->marketItemClassifier->normalizeWear(null, $marketHashName);
+                $normalizedWear = $wear !== null
+                    ? [
+                        'key' => $wear['key'],
+                        'label' => $wear['label'],
+                    ]
+                    : null;
 
-                $candidates[] = $dto->toArray();
-                $filteredSeen++;
-
-                if (count($candidates) > $resolvedLimit) {
-                    $hasMore = true;
-                    break 2;
+                if (!$this->marketItemClassifier->matchesFilters($classification, $normalizedWear, $itemTypeFilter, $wearFilter)) {
+                    continue;
                 }
+
+                $matchedItems[] = [
+                    'marketHashName' => $marketHashName,
+                    'displayName' => (string) ($result['displayName'] ?? $marketHashName),
+                    'itemType' => (string) ($classification['key'] ?? 'other'),
+                    'itemTypeLabel' => (string) ($classification['label'] ?? 'Other'),
+                    'marketTypeLabel' => (string) ($result['typeLabel'] ?? $classification['label'] ?? 'CS2 Item'),
+                    'wear' => $normalizedWear['key'] ?? null,
+                    'wearLabel' => $normalizedWear['label'] ?? null,
+                    'iconUrl' => isset($result['iconUrl']) ? (string) $result['iconUrl'] : null,
+                    'steamHint' => $result,
+                ];
             }
 
             $externalStart += count($rawItems);
@@ -196,11 +179,55 @@ final class PricingService
             }
         }
 
+        $matchedItems = $this->prepareMatchesForSort($matchedItems, $normalizedSortBy);
+        $this->sortSearchMatches($matchedItems, $normalizedSortBy);
+
+        $totalItems = count($matchedItems);
+        $totalPages = $totalItems > 0 ? (int) ceil($totalItems / $resolvedLimit) : 0;
+        $resolvedPage = $totalPages > 0 ? min(max(1, $page), $totalPages) : 1;
+        $pageOffset = ($resolvedPage - 1) * $resolvedLimit;
+        $pageMatches = array_slice($matchedItems, $pageOffset, $resolvedLimit);
+
+        $candidates = [];
+        foreach ($pageMatches as $match) {
+            $marketHashName = (string) ($match['marketHashName'] ?? '');
+            if ($marketHashName === '') {
+                continue;
+            }
+
+            $presentation = is_array($match['presentation'] ?? null)
+                ? $match['presentation']
+                : $this->getItemPresentation(
+                    $marketHashName,
+                    is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null
+                );
+            if (!isset($presentation['priceUsd'], $presentation['priceEur'])) {
+                continue;
+            }
+
+            $dto = new WatchlistSearchCandidateDto(
+                marketHashName: $marketHashName,
+                displayName: (string) ($match['displayName'] ?? $marketHashName),
+                itemType: (string) ($presentation['itemType'] ?? $match['itemType'] ?? 'other'),
+                itemTypeLabel: (string) ($presentation['itemTypeLabel'] ?? $match['itemTypeLabel'] ?? 'Other'),
+                marketTypeLabel: (string) ($presentation['marketTypeLabel'] ?? $match['marketTypeLabel'] ?? 'CS2 Item'),
+                wear: isset($presentation['wear']) ? (string) $presentation['wear'] : ($match['wear'] ?? null),
+                wearLabel: isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : ($match['wearLabel'] ?? null),
+                iconUrl: isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : ($match['iconUrl'] ?? null),
+                livePriceEur: (float) $presentation['priceEur'],
+                livePriceUsd: (float) $presentation['priceUsd']
+            );
+
+            $candidates[] = $dto->toArray();
+        }
+
         return [
-            'items' => array_slice($candidates, 0, $resolvedLimit),
+            'items' => $candidates,
             'page' => $resolvedPage,
             'limit' => $resolvedLimit,
-            'hasMore' => $hasMore,
+            'totalItems' => $totalItems,
+            'totalPages' => $totalPages,
+            'sortBy' => $normalizedSortBy,
             'browseMode' => $browseMode,
         ];
     }
@@ -404,5 +431,74 @@ final class PricingService
             'skin' => 'ak-47',
             default => '',
         };
+    }
+
+    private function normalizeSortBy(?string $sortBy): string
+    {
+        return match (trim((string) $sortBy)) {
+            'name_asc', 'name_desc', 'price_asc', 'price_desc' => trim((string) $sortBy),
+            default => 'relevance',
+        };
+    }
+
+    private function prepareMatchesForSort(array $matchedItems, string $sortBy): array
+    {
+        if (!in_array($sortBy, ['price_asc', 'price_desc'], true)) {
+            return $matchedItems;
+        }
+
+        $preparedMatches = [];
+
+        foreach ($matchedItems as $match) {
+            $marketHashName = (string) ($match['marketHashName'] ?? '');
+            if ($marketHashName === '') {
+                continue;
+            }
+
+            $presentation = $this->getItemPresentation(
+                $marketHashName,
+                is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null
+            );
+            if (!isset($presentation['priceEur'], $presentation['priceUsd'])) {
+                continue;
+            }
+
+            $match['presentation'] = $presentation;
+            $match['sortPriceEur'] = (float) $presentation['priceEur'];
+            $preparedMatches[] = $match;
+        }
+
+        return $preparedMatches;
+    }
+
+    private function sortSearchMatches(array &$matchedItems, string $sortBy): void
+    {
+        if ($sortBy === 'relevance') {
+            return;
+        }
+
+        usort(
+            $matchedItems,
+            static function (array $left, array $right) use ($sortBy): int {
+                if ($sortBy === 'price_asc' || $sortBy === 'price_desc') {
+                    $leftPrice = isset($left['sortPriceEur']) ? (float) $left['sortPriceEur'] : INF;
+                    $rightPrice = isset($right['sortPriceEur']) ? (float) $right['sortPriceEur'] : INF;
+
+                    if ($leftPrice !== $rightPrice) {
+                        $comparison = $leftPrice <=> $rightPrice;
+                        return $sortBy === 'price_desc' ? -$comparison : $comparison;
+                    }
+                }
+
+                $comparison = strcasecmp(
+                    (string) ($left['displayName'] ?? ''),
+                    (string) ($right['displayName'] ?? '')
+                );
+
+                return in_array($sortBy, ['name_desc', 'price_desc'], true)
+                    ? -$comparison
+                    : $comparison;
+            }
+        );
     }
 }

@@ -88,6 +88,7 @@ export async function searchWatchlistItems(
       query,
       itemType: filters.itemType,
       wear: filters.wear,
+      sortBy: filters.sortBy,
       limit,
       page,
     })

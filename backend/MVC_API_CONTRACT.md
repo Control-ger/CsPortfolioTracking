@@ -72,6 +72,7 @@
   - `query?: string` (min. 2 chars when provided)
   - `limit?: int` (default `6`, max `12`)
   - `page?: int` (default `1`)
+  - `sortBy?: string` (`relevance`, `name_asc`, `name_desc`, `price_asc`, `price_desc`)
   - `itemType?: string` (`all`, `skin`, `case`, `souvenir_package`, `sticker_capsule`, `sticker`, `patch`, `music_kit`, `agent`, `key`, `terminal`, `charm`, `graffiti`, `tool`, `container`, `other`)
   - `wear?: string` (`all`, `factory_new`, `minimal_wear`, `field_tested`, `well_worn`, `battle_scarred`) only effective for `itemType=skin`
 - Backend flow:
@@ -84,7 +85,9 @@
   - `items: []`
   - `page: int`
   - `limit: int`
-  - `hasMore: bool`
+  - `totalItems: int`
+  - `totalPages: int`
+  - `sortBy: string`
   - `browseMode: bool`
 - `data.items[]` fields:
   - `marketHashName: string`

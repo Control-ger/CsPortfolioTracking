@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Eye, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, Eye, TrendingDown, TrendingUp } from "lucide-react";
 import { fetchWatchlist } from "@/lib/apiClient.js";
 
-export const WatchlistOverview = ({ maxItems = 5 }) => {
+export const WatchlistOverview = ({ maxItems = 5, onOpenItem }) => {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,9 +78,11 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
                 : "text-muted-foreground";
 
             return (
-              <div
+              <button
+                type="button"
                 key={item.id}
-                className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted"
+                onClick={() => onOpenItem?.(item)}
+                className="flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors hover:bg-muted"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted">
@@ -111,8 +113,9 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
                   <span className={`text-sm font-semibold ${colorClass}`}>
                     {item.changeLabel}
                   </span>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
