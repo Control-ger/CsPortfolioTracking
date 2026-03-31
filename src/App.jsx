@@ -6,11 +6,13 @@ import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { PortfolioChart } from "./components/PortfolioChart";
 import { Watchlist } from "./components/Watchlist";
 import { WatchlistOverview } from "./components/WatchlistOverview";
+import { ApiWarnings } from "./components/ApiWarnings";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { fetchPortfolioInvestmentHistory } from "./lib/apiClient";
 
 export default function Dashboard() {
-  const { enrichedInvestments, stats, ***REMOVED***History, error } = usePortfolio();
+  const { enrichedInvestments, stats, ***REMOVED***History, error, warnings } =
+    usePortfolio();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("overview");
@@ -65,6 +67,8 @@ export default function Dashboard() {
             Live Tracking via CSFloat & Currency API
           </p>
         </header>
+
+        <ApiWarnings warnings={warnings} />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {error && (

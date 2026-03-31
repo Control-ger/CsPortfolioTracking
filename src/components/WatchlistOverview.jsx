@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { ApiWarnings } from "./ApiWarnings";
+import { PriceSourceBadge } from "./PriceSourceBadge";
 import { ArrowRight, Eye, TrendingDown, TrendingUp } from "lucide-react";
 import { fetchWatchlist } from "@/lib/apiClient.js";
 
 export const WatchlistOverview = ({ maxItems = 5, onOpenItem }) => {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [warnings, setWarnings] = useState([]);
 
   useEffect(() => {
     const loadWatchlistData = async () => {
       try {
         setLoading(true);
-        const data = await fetchWatchlist();
-        setWatchlistItems((data || []).slice(0, maxItems));
+        const response = await fetchWatchlist();
+        setWatchlistItems((response?.data || []).slice(0, maxItems));
+        setWarnings(response?.meta?.warnings || []);
       } catch (err) {
         console.error("Fehler beim Laden der Watchlist:", err);
+        setWarnings([]);
       } finally {
         setLoading(false);
       }
@@ -66,6 +71,7 @@ export const WatchlistOverview = ({ maxItems = 5, onOpenItem }) => {
         </CardTitle>
       </CardHeader>
       <CardContent>
+        <ApiWarnings warnings={warnings} className="mb-3" />
         <div className="space-y-3">
           {watchlistItems.map((item) => {
             const isUp = item.trend === "up";
@@ -102,9 +108,13 @@ export const WatchlistOverview = ({ maxItems = 5, onOpenItem }) => {
                   <div className="min-w-0 flex-1">
                     <h4 className="truncate text-sm font-medium">{item.name}</h4>
                     {item.currentPrice !== null && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {item.currentPrice.toFixed(2)} EUR
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <p>{item.currentPrice.toFixed(2)} EUR</p>
+                        <PriceSourceBadge
+                          priceSource={item.priceSource}
+                          compact
+                        />
+                      </div>
                     )}
                   </div>
                 </div>

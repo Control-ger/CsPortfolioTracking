@@ -14,9 +14,24 @@ use App\Shared\Dto\WatchlistSearchCandidateDto;
 final class PricingService
 {
     private const LIVE_CACHE_TTL_SECONDS = 600;
+    private const PRICE_SOURCE_CSFLOAT = 'csfloat';
+    private const PRICE_SOURCE_STEAM = 'steam';
+    private const CSFLOAT_CIRCUIT_BREAKER_STATUSES = [401, 403, 405, 406, 418, 429, 500, 503];
+    private const CSFLOAT_BACKOFF_SECONDS = [
+        401 => 300,
+        403 => 300,
+        405 => 300,
+        406 => 300,
+        418 => 120,
+        429 => 120,
+        500 => 60,
+        503 => 120,
+    ];
 
     private bool $cacheTablesReady = false;
     private ?float $exchangeRateCache = null;
+    private array $warnings = [];
+    private ?array $csFloatCircuitBreakerWarning = null;
 
     public function __construct(
         private readonly CsFloatClient $csFloatClient,
@@ -55,6 +70,7 @@ final class PricingService
             'priceUsd' => (float) $presentation['priceUsd'],
             'priceEur' => (float) $presentation['priceEur'],
             'exchangeRate' => (float) $presentation['exchangeRate'],
+            'priceSource' => $presentation['priceSource'] ?? null,
             'itemType' => $presentation['itemType'] ?? null,
             'itemTypeLabel' => $presentation['itemTypeLabel'] ?? null,
             'wearName' => $presentation['wearLabel'] ?? null,
@@ -66,6 +82,13 @@ final class PricingService
     {
         $catalog = $this->getCatalogEntry($itemName);
         return $catalog['imageUrl'] ?? null;
+    }
+
+    public function consumeWarnings(): array
+    {
+        $warnings = array_values($this->warnings);
+        $this->warnings = [];
+        return $warnings;
     }
 
     public function getItemPresentation(string $itemName, ?array $steamHint = null): array
@@ -81,15 +104,59 @@ final class PricingService
             return $this->buildPresentation($catalog, $cachedLive);
         }
 
-        $listing = $this->csFloatClient->fetchLowestListingSnapshot($itemName);
-        if ($listing === null) {
-            return $this->buildPresentation($catalog, $cachedLive);
+        if ($this->csFloatCircuitBreakerWarning === null) {
+            $this->csFloatCircuitBreakerWarning = $this->loadActiveCsFloatBackoff();
         }
 
-        $catalog = $this->persistCatalogEntry($itemName, $catalog, $steamHint, $listing);
-        $liveCache = $this->persistLiveCacheEntry($itemName, (float) $listing['priceUsd']);
+        $listing = null;
+        if ($this->csFloatCircuitBreakerWarning === null) {
+            $listingResult = $this->csFloatClient->fetchLowestListingResult($itemName);
+            $csFloatError = is_array($listingResult['error'] ?? null) ? $listingResult['error'] : null;
+            if ($csFloatError !== null) {
+                $this->registerWarning($csFloatError, $itemName);
+                if ($this->shouldTripCsFloatCircuitBreaker($csFloatError)) {
+                    $this->csFloatCircuitBreakerWarning = $csFloatError;
+                    $this->activateCsFloatBackoff($csFloatError);
+                }
+            }
 
-        return $this->buildPresentation($catalog, $liveCache);
+            $listing = is_array($listingResult['snapshot'] ?? null) ? $listingResult['snapshot'] : null;
+        } elseif (($cachedLive['priceSource'] ?? null) === self::PRICE_SOURCE_STEAM) {
+            $this->registerWarning($this->csFloatCircuitBreakerWarning, $itemName);
+            return $this->buildPresentation($catalog, $cachedLive);
+        } else {
+            $this->registerWarning($this->csFloatCircuitBreakerWarning, $itemName);
+        }
+
+        if ($listing !== null) {
+            $catalog = $this->persistCatalogEntry($itemName, $catalog, $steamHint, $listing);
+            $liveCache = $this->persistLiveCacheEntry(
+                $itemName,
+                (float) $listing['priceUsd'],
+                self::PRICE_SOURCE_CSFLOAT
+            );
+
+            return $this->buildPresentation($catalog, $liveCache);
+        }
+
+        $steamPriceSnapshot = $this->resolveSteamPriceSnapshot($itemName, $steamHint);
+        if ($steamPriceSnapshot !== null) {
+            $catalog = $this->persistCatalogEntry(
+                $itemName,
+                $catalog,
+                $steamPriceSnapshot['steamHint'],
+                null
+            );
+            $liveCache = $this->persistLiveCacheEntry(
+                $itemName,
+                $steamPriceSnapshot['priceUsd'],
+                self::PRICE_SOURCE_STEAM
+            );
+
+            return $this->buildPresentation($catalog, $liveCache);
+        }
+
+        return $this->buildPresentation($catalog, $cachedLive);
     }
 
     public function searchWatchlistCandidates(
@@ -126,6 +193,7 @@ final class PricingService
         $externalBatchSize = max($resolvedLimit * 4, 32);
         $matchedItems = [];
         $totalCount = null;
+        $seenMarketHashNames = [];
 
         while (true) {
             $steamResults = $this->steamMarketClient->searchItems($resolvedQuery, $externalBatchSize, $externalStart);
@@ -141,6 +209,12 @@ final class PricingService
                 if ($marketHashName === '') {
                     continue;
                 }
+
+                if (isset($seenMarketHashNames[$marketHashName])) {
+                    continue;
+                }
+
+                $seenMarketHashNames[$marketHashName] = true;
 
                 $classification = $this->marketItemClassifier->classify(
                     $marketHashName,
@@ -179,7 +253,7 @@ final class PricingService
             }
         }
 
-        $matchedItems = $this->prepareMatchesForSort($matchedItems, $normalizedSortBy);
+        $matchedItems = $this->prepareSearchMatches($matchedItems);
         $this->sortSearchMatches($matchedItems, $normalizedSortBy);
 
         $totalItems = count($matchedItems);
@@ -195,27 +269,18 @@ final class PricingService
                 continue;
             }
 
-            $presentation = is_array($match['presentation'] ?? null)
-                ? $match['presentation']
-                : $this->getItemPresentation(
-                    $marketHashName,
-                    is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null
-                );
-            if (!isset($presentation['priceUsd'], $presentation['priceEur'])) {
-                continue;
-            }
-
             $dto = new WatchlistSearchCandidateDto(
                 marketHashName: $marketHashName,
                 displayName: (string) ($match['displayName'] ?? $marketHashName),
-                itemType: (string) ($presentation['itemType'] ?? $match['itemType'] ?? 'other'),
-                itemTypeLabel: (string) ($presentation['itemTypeLabel'] ?? $match['itemTypeLabel'] ?? 'Other'),
-                marketTypeLabel: (string) ($presentation['marketTypeLabel'] ?? $match['marketTypeLabel'] ?? 'CS2 Item'),
-                wear: isset($presentation['wear']) ? (string) $presentation['wear'] : ($match['wear'] ?? null),
-                wearLabel: isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : ($match['wearLabel'] ?? null),
-                iconUrl: isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : ($match['iconUrl'] ?? null),
-                livePriceEur: (float) $presentation['priceEur'],
-                livePriceUsd: (float) $presentation['priceUsd']
+                itemType: (string) ($match['itemType'] ?? 'other'),
+                itemTypeLabel: (string) ($match['itemTypeLabel'] ?? 'Other'),
+                marketTypeLabel: (string) ($match['marketTypeLabel'] ?? 'CS2 Item'),
+                wear: isset($match['wear']) ? (string) $match['wear'] : null,
+                wearLabel: isset($match['wearLabel']) ? (string) $match['wearLabel'] : null,
+                iconUrl: isset($match['iconUrl']) ? (string) $match['iconUrl'] : null,
+                priceSource: isset($match['priceSource']) ? (string) $match['priceSource'] : null,
+                livePriceEur: (float) $match['livePriceEur'],
+                livePriceUsd: (float) $match['livePriceUsd']
             );
 
             $candidates[] = $dto->toArray();
@@ -315,7 +380,7 @@ final class PricingService
         return $catalog;
     }
 
-    private function persistLiveCacheEntry(string $itemName, float $priceUsd): array
+    private function persistLiveCacheEntry(string $itemName, float $priceUsd, string $priceSource): array
     {
         $exchangeRate = $this->getUsdToEurRate();
         $priceEur = round($priceUsd * $exchangeRate, 2);
@@ -326,6 +391,7 @@ final class PricingService
             round($priceUsd, 2),
             $priceEur,
             $exchangeRate,
+            $priceSource,
             $fetchedAt
         );
 
@@ -334,6 +400,7 @@ final class PricingService
             'priceUsd' => round($priceUsd, 2),
             'priceEur' => $priceEur,
             'exchangeRate' => $exchangeRate,
+            'priceSource' => $priceSource,
             'fetchedAt' => $fetchedAt,
         ];
     }
@@ -344,6 +411,7 @@ final class PricingService
             'priceUsd' => $liveCache['priceUsd'] ?? null,
             'priceEur' => $liveCache['priceEur'] ?? null,
             'exchangeRate' => $liveCache['exchangeRate'] ?? null,
+            'priceSource' => $liveCache['priceSource'] ?? null,
             'itemType' => $catalog['itemType'] ?? null,
             'itemTypeLabel' => $catalog['itemTypeLabel'] ?? null,
             'marketTypeLabel' => $catalog['marketTypeLabel'] ?? null,
@@ -382,6 +450,7 @@ final class PricingService
             'priceUsd' => isset($row['price_usd']) ? (float) $row['price_usd'] : null,
             'priceEur' => isset($row['price_eur']) ? (float) $row['price_eur'] : null,
             'exchangeRate' => isset($row['exchange_rate']) ? (float) $row['exchange_rate'] : null,
+            'priceSource' => isset($row['price_source']) ? (string) $row['price_source'] : null,
             'fetchedAt' => isset($row['fetched_at']) ? (string) $row['fetched_at'] : null,
         ];
     }
@@ -395,7 +464,11 @@ final class PricingService
 
     private function isFreshLiveCache(?array $liveCache): bool
     {
-        if ($liveCache === null || !isset($liveCache['fetchedAt'])) {
+        if (
+            $liveCache === null ||
+            !isset($liveCache['fetchedAt']) ||
+            ($liveCache['priceSource'] ?? null) !== self::PRICE_SOURCE_CSFLOAT
+        ) {
             return false;
         }
 
@@ -405,6 +478,135 @@ final class PricingService
         }
 
         return (time() - $fetchedAt) < self::LIVE_CACHE_TTL_SECONDS;
+    }
+
+    private function registerWarning(array $warning, string $itemName): void
+    {
+        $warningKey = sprintf(
+            '%s:%s',
+            (string) ($warning['code'] ?? 'UNKNOWN_WARNING'),
+            (string) ($warning['statusCode'] ?? 'na')
+        );
+
+        if (!isset($this->warnings[$warningKey])) {
+            $this->warnings[$warningKey] = [
+                'source' => (string) ($warning['source'] ?? 'system'),
+                'code' => (string) ($warning['code'] ?? 'UNKNOWN_WARNING'),
+                'statusCode' => isset($warning['statusCode']) ? (int) $warning['statusCode'] : null,
+                'label' => (string) ($warning['label'] ?? 'Warning'),
+                'message' => (string) ($warning['message'] ?? 'Ein externer Preisdienst hat eine Warnung geliefert.'),
+                'occurrences' => 0,
+                'items' => [],
+            ];
+        }
+
+        $this->warnings[$warningKey]['occurrences']++;
+        if (
+            $itemName !== '' &&
+            !in_array($itemName, $this->warnings[$warningKey]['items'], true) &&
+            count($this->warnings[$warningKey]['items']) < 3
+        ) {
+            $this->warnings[$warningKey]['items'][] = $itemName;
+        }
+    }
+
+    private function shouldTripCsFloatCircuitBreaker(array $warning): bool
+    {
+        $statusCode = isset($warning['statusCode']) ? (int) $warning['statusCode'] : null;
+        if ($statusCode !== null && in_array($statusCode, self::CSFLOAT_CIRCUIT_BREAKER_STATUSES, true)) {
+            return true;
+        }
+
+        return in_array(
+            (string) ($warning['code'] ?? ''),
+            ['CSFLOAT_REQUEST_FAILED', 'CSFLOAT_INVALID_RESPONSE', 'CSFLOAT_EMPTY_RESPONSE'],
+            true
+        );
+    }
+
+    private function loadActiveCsFloatBackoff(): ?array
+    {
+        $path = $this->getCsFloatBackoffPath();
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $content = @file_get_contents($path);
+        $payload = is_string($content) ? json_decode($content, true) : null;
+        if (!is_array($payload)) {
+            @unlink($path);
+            return null;
+        }
+
+        $expiresAt = isset($payload['expiresAt']) ? (int) $payload['expiresAt'] : 0;
+        if ($expiresAt <= time()) {
+            @unlink($path);
+            return null;
+        }
+
+        $warning = is_array($payload['warning'] ?? null) ? $payload['warning'] : null;
+        return $warning;
+    }
+
+    private function activateCsFloatBackoff(array $warning): void
+    {
+        $statusCode = isset($warning['statusCode']) ? (int) $warning['statusCode'] : null;
+        $duration = $statusCode !== null
+            ? (self::CSFLOAT_BACKOFF_SECONDS[$statusCode] ?? null)
+            : null;
+
+        if ($duration === null && !in_array(
+            (string) ($warning['code'] ?? ''),
+            ['CSFLOAT_REQUEST_FAILED', 'CSFLOAT_INVALID_RESPONSE', 'CSFLOAT_EMPTY_RESPONSE'],
+            true
+        )) {
+            return;
+        }
+
+        $payload = [
+            'expiresAt' => time() + ($duration ?? 60),
+            'warning' => $warning,
+        ];
+
+        @file_put_contents($this->getCsFloatBackoffPath(), json_encode($payload));
+    }
+
+    private function getCsFloatBackoffPath(): string
+    {
+        return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cs***REMOVED***_csfloat_backoff.json';
+    }
+
+    private function resolveSteamPriceSnapshot(string $itemName, ?array $steamHint = null): ?array
+    {
+        $resolvedSteamHint = $this->isExactSteamHint($itemName, $steamHint)
+            ? $steamHint
+            : $this->steamMarketClient->findExactItem($itemName);
+
+        if (!$this->isExactSteamHint($itemName, $resolvedSteamHint)) {
+            return null;
+        }
+
+        $priceUsd = isset($resolvedSteamHint['sellPriceUsd'])
+            ? (float) $resolvedSteamHint['sellPriceUsd']
+            : null;
+
+        if ($priceUsd === null || $priceUsd <= 0) {
+            return null;
+        }
+
+        return [
+            'priceUsd' => round($priceUsd, 2),
+            'steamHint' => $resolvedSteamHint,
+        ];
+    }
+
+    private function isExactSteamHint(string $itemName, ?array $steamHint): bool
+    {
+        if (!is_array($steamHint)) {
+            return false;
+        }
+
+        return trim((string) ($steamHint['marketHashName'] ?? '')) === trim($itemName);
     }
 
     private function canBrowseByFilter(?string $itemTypeFilter): bool
@@ -441,13 +643,10 @@ final class PricingService
         };
     }
 
-    private function prepareMatchesForSort(array $matchedItems, string $sortBy): array
+    private function prepareSearchMatches(array $matchedItems): array
     {
-        if (!in_array($sortBy, ['price_asc', 'price_desc'], true)) {
-            return $matchedItems;
-        }
-
         $preparedMatches = [];
+        $presentationCache = [];
 
         foreach ($matchedItems as $match) {
             $marketHashName = (string) ($match['marketHashName'] ?? '');
@@ -455,16 +654,31 @@ final class PricingService
                 continue;
             }
 
-            $presentation = $this->getItemPresentation(
-                $marketHashName,
-                is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null
-            );
+            if (isset($presentationCache[$marketHashName])) {
+                $presentation = $presentationCache[$marketHashName];
+            } else {
+                $presentation = $this->getItemPresentation(
+                    $marketHashName,
+                    is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null
+                );
+                $presentationCache[$marketHashName] = $presentation;
+            }
+
             if (!isset($presentation['priceEur'], $presentation['priceUsd'])) {
                 continue;
             }
 
-            $match['presentation'] = $presentation;
             $match['sortPriceEur'] = (float) $presentation['priceEur'];
+            $match['displayName'] = (string) ($match['displayName'] ?? $marketHashName);
+            $match['itemType'] = (string) ($presentation['itemType'] ?? $match['itemType'] ?? 'other');
+            $match['itemTypeLabel'] = (string) ($presentation['itemTypeLabel'] ?? $match['itemTypeLabel'] ?? 'Other');
+            $match['marketTypeLabel'] = (string) ($presentation['marketTypeLabel'] ?? $match['marketTypeLabel'] ?? 'CS2 Item');
+            $match['wear'] = isset($presentation['wear']) ? (string) $presentation['wear'] : ($match['wear'] ?? null);
+            $match['wearLabel'] = isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : ($match['wearLabel'] ?? null);
+            $match['iconUrl'] = isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : ($match['iconUrl'] ?? null);
+            $match['priceSource'] = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
+            $match['livePriceEur'] = (float) $presentation['priceEur'];
+            $match['livePriceUsd'] = (float) $presentation['priceUsd'];
             $preparedMatches[] = $match;
         }
 

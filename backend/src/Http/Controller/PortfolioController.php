@@ -17,7 +17,11 @@ final class PortfolioController
     public function investments(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->***REMOVED***Service->getEnrichedInvestments());
+            $rows = $this->***REMOVED***Service->getEnrichedInvestments();
+            JsonResponseFactory::success(
+                $rows,
+                ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()]
+            );
         } catch (Throwable $exception) {
             JsonResponseFactory::error('PORTFOLIO_INVESTMENTS_FAILED', $exception->getMessage(), [], 500);
         }
@@ -27,7 +31,10 @@ final class PortfolioController
     {
         try {
             $rows = $this->***REMOVED***Service->getEnrichedInvestments();
-            JsonResponseFactory::success($this->***REMOVED***Service->getSummary($rows)->toArray());
+            JsonResponseFactory::success(
+                $this->***REMOVED***Service->getSummary($rows)->toArray(),
+                ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()]
+            );
         } catch (Throwable $exception) {
             JsonResponseFactory::error('PORTFOLIO_SUMMARY_FAILED', $exception->getMessage(), [], 500);
         }
@@ -56,7 +63,11 @@ final class PortfolioController
         try {
             $inputValue = $request->body['totalValue'] ?? $request->body['total_value'] ?? null;
             $value = is_numeric($inputValue) ? (float) $inputValue : null;
-            JsonResponseFactory::success($this->***REMOVED***Service->saveDailyValue($value), statusCode: 200);
+            JsonResponseFactory::success(
+                $this->***REMOVED***Service->saveDailyValue($value),
+                ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()],
+                200
+            );
         } catch (Throwable $exception) {
             JsonResponseFactory::error('PORTFOLIO_SAVE_FAILED', $exception->getMessage(), [], 500);
         }

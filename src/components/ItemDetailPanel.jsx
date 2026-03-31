@@ -6,6 +6,7 @@ import {
   CardDescription,
 } from "./ui/card";
 import { PortfolioChart } from "./PortfolioChart";
+import { PriceSourceBadge } from "./PriceSourceBadge";
 import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 
 const formatPrice = (value) => `${value.toFixed(2)} EUR`;
@@ -58,7 +59,7 @@ export const ItemDetailPanel = ({ item, history = [] }) => {
           </div>
           <div className="bg-muted/40 p-3 rounded-md border">
             <p className="text-[10px] text-muted-foreground uppercase">
-              Live (CSFloat)
+              Live
             </p>
             <p
               className={`text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
@@ -67,11 +68,16 @@ export const ItemDetailPanel = ({ item, history = [] }) => {
                 ? formatPrice(item.livePrice)
                 : "Nicht verfuegbar"}
             </p>
-            <p className="mt-1 text-[10px] uppercase text-muted-foreground">
-              {item.pricingStatus === "live"
-                ? "Livepreis aktiv"
-                : "Fallback auf Einkaufspreis"}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <PriceSourceBadge priceSource={item.priceSource} />
+              <p className="text-[10px] uppercase text-muted-foreground">
+                {item.pricingStatus === "csfloat"
+                  ? "Quelle: CSFloat"
+                  : item.pricingStatus === "steam"
+                    ? "Quelle: Steam Fallback"
+                    : "Fallback auf Einkaufspreis"}
+              </p>
+            </div>
           </div>
         </div>
 

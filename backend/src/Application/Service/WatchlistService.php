@@ -38,7 +38,9 @@ final class WatchlistService
 
             $imageUrl = $this->pricingService->getItemImageUrl($name);
 
-            $currentPrice = $this->priceHistoryRepository->findLatestPriceByItem($name, $today);
+            $currentSnapshot = $this->priceHistoryRepository->findLatestPriceSnapshotByItem($name, $today);
+            $currentPrice = $currentSnapshot['priceEur'] ?? null;
+            $priceSource = $currentSnapshot['priceSource'] ?? null;
             $oldPrice = $this->priceHistoryRepository->findLatestPriceByItem($name, $sevenDaysAgo);
             $priceChange = null;
             $priceChangePercent = null;
@@ -54,6 +56,7 @@ final class WatchlistService
                 type: (string) ($item['type'] ?? 'skin'),
                 imageUrl: $imageUrl,
                 currentPrice: $currentPrice,
+                priceSource: is_string($priceSource) ? $priceSource : null,
                 priceChange: $priceChange,
                 priceChangePercent: $priceChangePercent,
                 priceHistory: $this->priceHistoryRepository->findHistoryByItem($name, $sevenDaysAgo)
@@ -135,6 +138,11 @@ final class WatchlistService
         );
     }
 
+    public function consumePricingWarnings(): array
+    {
+        return $this->pricingService->consumeWarnings();
+    }
+
     public function addItem(string $name, string $type = 'skin'): array
     {
         $trimmedName = trim($name);
@@ -206,7 +214,8 @@ final class WatchlistService
             date('Y-m-d'),
             (float) $snapshot['priceUsd'],
             (float) $snapshot['priceEur'],
-            (float) $snapshot['exchangeRate']
+            (float) $snapshot['exchangeRate'],
+            isset($snapshot['priceSource']) ? (string) $snapshot['priceSource'] : null
         );
 
         return $snapshot;

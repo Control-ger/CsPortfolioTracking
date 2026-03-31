@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { ApiWarnings } from "./ApiWarnings";
+import { PriceSourceBadge } from "./PriceSourceBadge";
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -76,6 +78,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [submittingItem, setSubmittingItem] = useState("");
   const [error, setError] = useState("");
+  const [warnings, setWarnings] = useState([]);
 
   const wearEnabled = itemType === "skin";
   const normalizedTerm = searchTerm.trim();
@@ -96,6 +99,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       setTotalPages(0);
       setBrowseMode(false);
       setIsSearching(false);
+      setWarnings([]);
       return undefined;
     }
 
@@ -105,7 +109,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
         setIsSearching(true);
         setError("");
 
-        const data = await searchWatchlistItems(
+        const response = await searchWatchlistItems(
           normalizedTerm,
           {
             itemType,
@@ -117,10 +121,12 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
         );
 
         if (!cancelled) {
+          const data = response?.data;
           setResults(data?.items || []);
           setTotalItems(Number(data?.totalItems || 0));
           setTotalPages(Number(data?.totalPages || 0));
           setBrowseMode(Boolean(data?.browseMode));
+          setWarnings(response?.meta?.warnings || []);
           if (typeof data?.page === "number" && data.page !== page) {
             setPage(data.page);
           }
@@ -131,6 +137,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
           setTotalItems(0);
           setTotalPages(0);
           setBrowseMode(false);
+          setWarnings([]);
           setError(requestError.message || "Fehler bei der Item-Suche.");
         }
       } finally {
@@ -180,6 +187,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       setTotalPages(0);
       setBrowseMode(false);
       setPage(1);
+      setWarnings([]);
 
       if (onAddToWatchlist) {
         await onAddToWatchlist();
@@ -362,9 +370,15 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                     {candidate.marketTypeLabel}
                   </span>
                 </div>
-                <p className="mt-1.5 text-sm font-semibold text-primary">
-                  {candidate.livePriceEur.toFixed(2)} EUR
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-primary">
+                    {candidate.livePriceEur.toFixed(2)} EUR
+                  </p>
+                  <PriceSourceBadge
+                    priceSource={candidate.priceSource}
+                    compact
+                  />
+                </div>
               </div>
 
               <button
@@ -474,6 +488,8 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             {error}
           </div>
         )}
+
+        <ApiWarnings warnings={warnings} />
 
         {renderState()}
         {renderPagination()}

@@ -19,7 +19,11 @@ final class WatchlistController
     {
         try {
             $syncLive = filter_var($request->query['syncLive'] ?? false, FILTER_VALIDATE_BOOL);
-            JsonResponseFactory::success($this->watchlistService->listWithMetrics($syncLive));
+            $items = $this->watchlistService->listWithMetrics($syncLive);
+            JsonResponseFactory::success(
+                $items,
+                ['warnings' => $this->watchlistService->consumePricingWarnings()]
+            );
         } catch (Throwable $exception) {
             JsonResponseFactory::error('WATCHLIST_LIST_FAILED', $exception->getMessage(), [], 500);
         }
@@ -35,8 +39,10 @@ final class WatchlistController
             $wear = (string) ($request->query['wear'] ?? '');
             $sortBy = (string) ($request->query['sortBy'] ?? '');
 
+            $results = $this->watchlistService->searchAvailableItems($query, $limit, $itemType, $wear, $page, $sortBy);
             JsonResponseFactory::success(
-                $this->watchlistService->searchAvailableItems($query, $limit, $itemType, $wear, $page, $sortBy)
+                $results,
+                ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
             JsonResponseFactory::error('WATCHLIST_SEARCH_FAILED', $exception->getMessage(), [], 500);
@@ -48,7 +54,11 @@ final class WatchlistController
         try {
             $name = (string) ($request->body['name'] ?? '');
             $type = (string) ($request->body['type'] ?? 'skin');
-            JsonResponseFactory::success($this->watchlistService->addItem($name, $type), statusCode: 201);
+            JsonResponseFactory::success(
+                $this->watchlistService->addItem($name, $type),
+                ['warnings' => $this->watchlistService->consumePricingWarnings()],
+                201
+            );
         } catch (RuntimeException $exception) {
             JsonResponseFactory::error('WATCHLIST_CONFLICT', $exception->getMessage(), [], 409);
         } catch (Throwable $exception) {
@@ -72,7 +82,10 @@ final class WatchlistController
     public function refresh(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->watchlistService->refreshPrices());
+            JsonResponseFactory::success(
+                $this->watchlistService->refreshPrices(),
+                ['warnings' => $this->watchlistService->consumePricingWarnings()]
+            );
         } catch (Throwable $exception) {
             JsonResponseFactory::error('WATCHLIST_REFRESH_FAILED', $exception->getMessage(), [], 500);
         }

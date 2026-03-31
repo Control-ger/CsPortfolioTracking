@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
+import { ApiWarnings } from "./ApiWarnings";
+import { PriceSourceBadge } from "./PriceSourceBadge";
 import { Trash2, TrendingDown, TrendingUp, X } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
 
@@ -10,6 +12,7 @@ export const Watchlist = ({ focusTarget = null }) => {
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
   const [error, setError] = useState("");
+  const [warnings, setWarnings] = useState([]);
   const itemRefs = useRef(new Map());
 
   const loadWatchlistData = async () => {
@@ -17,10 +20,11 @@ export const Watchlist = ({ focusTarget = null }) => {
       setLoading(true);
       setError("");
 
-      const data = await fetchWatchlist({ syncLive: true });
-      const nextItems = data || [];
+      const response = await fetchWatchlist({ syncLive: true });
+      const nextItems = response?.data || [];
 
       setWatchlistItems(nextItems);
+      setWarnings(response?.meta?.warnings || []);
       setSelectedItem((currentSelection) => {
         if (!currentSelection) {
           return null;
@@ -32,6 +36,7 @@ export const Watchlist = ({ focusTarget = null }) => {
       });
     } catch (requestError) {
       setError(requestError.message || "Fehler beim Laden der Watchlist.");
+      setWarnings([]);
     } finally {
       setLoading(false);
     }
@@ -103,6 +108,8 @@ export const Watchlist = ({ focusTarget = null }) => {
           {error}
         </div>
       )}
+
+      <ApiWarnings warnings={warnings} />
 
       <ItemSearch
         onAddToWatchlist={loadWatchlistData}
@@ -188,9 +195,13 @@ export const Watchlist = ({ focusTarget = null }) => {
                                 </span>
                               </div>
                               {item.currentPrice !== null && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Aktuell: {item.currentPrice.toFixed(2)} EUR
-                                </p>
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <p>Aktuell: {item.currentPrice.toFixed(2)} EUR</p>
+                                  <PriceSourceBadge
+                                    priceSource={item.priceSource}
+                                    compact
+                                  />
+                                </div>
                               )}
                             </div>
                           </div>
@@ -239,6 +250,16 @@ export const Watchlist = ({ focusTarget = null }) => {
                         <p className="mt-1 text-sm text-muted-foreground">
                           Preisverlauf der letzten 7 Tage
                         </p>
+                        {selectedItem.currentPrice !== null && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                            <span>
+                              Aktuell: {selectedItem.currentPrice.toFixed(2)} EUR
+                            </span>
+                            <PriceSourceBadge
+                              priceSource={selectedItem.priceSource}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button

@@ -6,6 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "./ui/table";
+import { PriceSourceBadge } from "./PriceSourceBadge";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
   <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted">
@@ -31,7 +32,7 @@ export const InventoryTable = ({ investments, onSelectItem }) => (
         <TableHead>Item</TableHead>
         <TableHead className="text-right">Menge</TableHead>
         <TableHead className="text-right">Einkauf</TableHead>
-        <TableHead className="text-right">Live (CSFloat)</TableHead>
+        <TableHead className="text-right">Live</TableHead>
         <TableHead className="text-right">ROI %</TableHead>
       </TableRow>
     </TableHeader>
@@ -65,7 +66,10 @@ export const InventoryTable = ({ investments, onSelectItem }) => (
             className={`text-right text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
           >
             {item.isLive ? (
-              `${item.livePrice.toFixed(2)} EUR`
+              <div className="flex flex-col items-end gap-1">
+                <span>{item.livePrice.toFixed(2)} EUR</span>
+                <PriceSourceBadge priceSource={item.priceSource} compact />
+              </div>
             ) : (
               <div className="flex flex-col items-end">
                 <span className="text-xs">{item.buyPrice.toFixed(2)} EUR</span>

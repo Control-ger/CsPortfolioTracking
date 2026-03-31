@@ -28,6 +28,7 @@ final class PortfolioService
             $quantity = (int) ($investment['quantity'] ?? 0);
             $presentation = $this->pricingService->getItemPresentation((string) $investment['name']);
             $livePrice = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
+            $priceSource = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
             $displayPrice = $livePrice ?? $buyPrice;
             $isLive = $livePrice !== null;
             $roi = $buyPrice > 0 ? (($displayPrice - $buyPrice) / $buyPrice) * 100 : 0.0;
@@ -43,10 +44,11 @@ final class PortfolioService
                 'buyPrice' => $buyPrice,
                 'quantity' => $quantity,
                 'livePrice' => $livePrice,
+                'priceSource' => $priceSource,
                 'displayPrice' => $displayPrice,
                 'roi' => $roi,
                 'isLive' => $isLive,
-                'pricingStatus' => $isLive ? 'live' : 'fallback',
+                'pricingStatus' => $isLive ? ($priceSource ?? 'live') : 'fallback',
                 'totalInvested' => $totalInvested,
                 'currentValue' => $currentValue,
                 'profitEuro' => $profitEuro,
@@ -108,6 +110,11 @@ final class PortfolioService
             ],
             $rows
         );
+    }
+
+    public function consumePricingWarnings(): array
+    {
+        return $this->pricingService->consumeWarnings();
     }
 
     public function saveDailyValue(?float $value = null): array

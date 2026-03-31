@@ -6,6 +6,42 @@ import {
   savePortfolioDailyValue,
 } from "@/lib/apiClient.js";
 
+function mergeWarnings(...warningGroups) {
+  const warningsByKey = new Map();
+
+  warningGroups.flat().forEach((warning) => {
+    if (!warning) {
+      return;
+    }
+
+    const key = `${warning.code || "warning"}-${warning.statusCode || "na"}`;
+    if (!warningsByKey.has(key)) {
+      warningsByKey.set(key, {
+        ...warning,
+        occurrences: Number(warning.occurrences || 0),
+        items: Array.isArray(warning.items) ? [...warning.items] : [],
+      });
+      return;
+    }
+
+    const existingWarning = warningsByKey.get(key);
+    existingWarning.occurrences += Number(warning.occurrences || 0);
+    if (Array.isArray(warning.items)) {
+      warning.items.forEach((itemName) => {
+        if (
+          itemName &&
+          !existingWarning.items.includes(itemName) &&
+          existingWarning.items.length < 3
+        ) {
+          existingWarning.items.push(itemName);
+        }
+      });
+    }
+  });
+
+  return Array.from(warningsByKey.values());
+}
+
 export function usePortfolio() {
   const [investments, setInvestments] = useState([]);
   const [stats, setStats] = useState({
@@ -19,26 +55,34 @@ export function usePortfolio() {
   });
   const [***REMOVED***History, setPortfolioHistory] = useState([]);
   const [error, setError] = useState("");
+  const [warnings, setWarnings] = useState([]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [rows, summary, history] = await Promise.all([
+        const [rowsResponse, summaryResponse, history] = await Promise.all([
           fetchPortfolioInvestments(),
           fetchPortfolioSummary(),
           fetchPortfolioHistory(),
         ]);
 
-        setInvestments(rows || []);
-        setStats(summary || {});
+        setInvestments(rowsResponse?.data || []);
+        setStats(summaryResponse?.data || {});
         setPortfolioHistory(history || []);
+        setWarnings(
+          mergeWarnings(
+            rowsResponse?.meta?.warnings || [],
+            summaryResponse?.meta?.warnings || []
+          )
+        );
         setError("");
 
-        if ((summary?.totalValue || 0) > 0) {
-          await savePortfolioDailyValue(summary.totalValue);
+        if ((summaryResponse?.data?.totalValue || 0) > 0) {
+          await savePortfolioDailyValue(summaryResponse.data.totalValue);
         }
       } catch (err) {
         setError(err.message || "Fehler beim Laden der Portfolio-Daten.");
+        setWarnings([]);
       }
     };
 
@@ -50,5 +94,6 @@ export function usePortfolio() {
     stats,
     ***REMOVED***History,
     error,
+    warnings,
   };
 }

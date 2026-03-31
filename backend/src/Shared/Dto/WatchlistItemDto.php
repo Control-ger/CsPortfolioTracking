@@ -11,6 +11,7 @@ final class WatchlistItemDto
         public readonly string $type,
         public readonly ?string $imageUrl,
         public readonly ?float $currentPrice,
+        public readonly ?string $priceSource,
         public readonly ?float $priceChange,
         public readonly ?float $priceChangePercent,
         public readonly array $priceHistory
@@ -34,6 +35,7 @@ final class WatchlistItemDto
             'type' => $this->type,
             'imageUrl' => $this->imageUrl,
             'currentPrice' => $this->currentPrice,
+            'priceSource' => $this->priceSource,
             'priceChange' => $this->priceChange,
             'priceChangePercent' => $this->priceChangePercent,
             'priceHistory' => $this->priceHistory,

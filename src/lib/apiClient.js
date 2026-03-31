@@ -16,7 +16,18 @@ function buildPath(path, query = {}) {
   return queryString ? `${path}?${queryString}` : path;
 }
 
-async function request(path, options = {}) {
+function buildApiError(path, response, payload) {
+  const message =
+    payload?.error?.message ||
+    `API-Fehler (${response.status}) fuer ${API_BASE}${path}`;
+  const error = new Error(message);
+  error.status = response.status;
+  error.code = payload?.error?.code || "API_REQUEST_FAILED";
+  error.details = payload?.error?.details || {};
+  return error;
+}
+
+async function requestPayload(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, options);
   const contentType = response.headers.get("content-type") || "";
   const payload = contentType.includes("application/json")
@@ -24,17 +35,27 @@ async function request(path, options = {}) {
     : null;
 
   if (!response.ok) {
-    const message =
-      payload?.error?.message ||
-      `API-Fehler (${response.status}) fuer ${API_BASE}${path}`;
-    throw new Error(message);
+    throw buildApiError(path, response, payload);
   }
 
+  return payload || { data: null, meta: {} };
+}
+
+async function request(path, options = {}) {
+  const payload = await requestPayload(path, options);
   return payload?.data;
 }
 
+async function requestWithMeta(path, options = {}) {
+  const payload = await requestPayload(path, options);
+  return {
+    data: payload?.data,
+    meta: payload?.meta || {},
+  };
+}
+
 export async function fetchPortfolioInvestments() {
-  return request("/***REMOVED***/investments");
+  return requestWithMeta("/***REMOVED***/investments");
 }
 
 export async function fetchPortfolioInvestmentHistory(id) {
@@ -42,7 +63,7 @@ export async function fetchPortfolioInvestmentHistory(id) {
 }
 
 export async function fetchPortfolioSummary() {
-  return request("/***REMOVED***/summary");
+  return requestWithMeta("/***REMOVED***/summary");
 }
 
 export async function fetchPortfolioHistory() {
@@ -58,7 +79,7 @@ export async function savePortfolioDailyValue(totalValue) {
 }
 
 export async function fetchWatchlist(options = {}) {
-  return request(
+  return requestWithMeta(
     buildPath("/watchlist", {
       syncLive: options.syncLive ? 1 : undefined,
     })
@@ -83,7 +104,7 @@ export async function searchWatchlistItems(
   limit = 6,
   page = 1
 ) {
-  return request(
+  return requestWithMeta(
     buildPath("/watchlist/search", {
       query,
       itemType: filters.itemType,

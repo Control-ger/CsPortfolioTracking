@@ -14,6 +14,7 @@ final class WatchlistSearchCandidateDto
         public readonly ?string $wear,
         public readonly ?string $wearLabel,
         public readonly ?string $iconUrl,
+        public readonly ?string $priceSource,
         public readonly float $livePriceEur,
         public readonly float $livePriceUsd
     ) {
@@ -30,6 +31,7 @@ final class WatchlistSearchCandidateDto
             'wear' => $this->wear,
             'wearLabel' => $this->wearLabel,
             'iconUrl' => $this->iconUrl,
+            'priceSource' => $this->priceSource,
             'livePriceEur' => $this->livePriceEur,
             'livePriceUsd' => $this->livePriceUsd,
         ];

@@ -6,6 +6,7 @@
 ## Response Schema
 - Success: `{ "data": ..., "meta": ... }`
 - Error: `{ "error": { "code": "STRING_CODE", "message": "Human readable", "details": {} } }`
+- `meta.warnings[]` can contain external API warnings, e.g. CSFloat HTTP errors with fallback usage
 
 ## Portfolio Endpoints
 
@@ -19,9 +20,11 @@
   - `buyPrice: float`
   - `quantity: int`
   - `livePrice: float|null`
+  - `priceSource: "csfloat"|"steam"|null`
   - `displayPrice: float`
   - `roi: float`
   - `isLive: bool`
+  - `pricingStatus: "csfloat"|"steam"|"fallback"`
 
 ### `GET /***REMOVED***/summary`
 - Returns aggregate KPIs for cards/charts.
@@ -61,6 +64,7 @@
   - `type: string`
   - `imageUrl: string|null`
   - `currentPrice: float|null`
+  - `priceSource: "csfloat"|"steam"|null`
   - `priceChange: float|null`
   - `priceChangePercent: float|null`
   - `priceHistory: { date: YYYY-MM-DD, wert: float }[]`
@@ -78,6 +82,7 @@
 - Backend flow:
   - candidate lookup via Steam Market search
   - exact live-price validation via CSFloat
+  - Steam fallback if CSFloat is unavailable or returns an API error
   - backend classification for all supported CS item categories
 - Special behavior:
   - with empty `query` and a concrete `itemType`, endpoint switches to browse mode
@@ -98,6 +103,7 @@
   - `wear: string|null`
   - `wearLabel: string|null`
   - `iconUrl: string|null`
+  - `priceSource: "csfloat"|"steam"|null`
   - `livePriceEur: float`
   - `livePriceUsd: float`
 

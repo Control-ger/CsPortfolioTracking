@@ -11,7 +11,7 @@ final class SteamMarketClient
 
         $fetchLimit = max(1, min($limit * 4, 40));
         $url = sprintf(
-            'https://steamcommunity.com/market/search/render/?query=%s&start=%d&count=%d&search_descriptions=0&sort_column=popular&sort_dir=desc&appid=730&norender=1',
+            'https://steamcommunity.com/market/search/render/?query=%s&start=%d&count=%d&search_descriptions=0&sort_column=popular&sort_dir=desc&appid=730&currency=1&norender=1',
             rawurlencode($normalizedQuery),
             max(0, $start),
             $fetchLimit
@@ -41,11 +41,15 @@ final class SteamMarketClient
             }
 
             $iconPath = (string) ($assetDescription['icon_url'] ?? '');
+            $sellPriceUsd = isset($row['sell_price']) && is_numeric($row['sell_price'])
+                ? round(((float) $row['sell_price']) / 100.0, 2)
+                : null;
             $items[$marketHashName] = [
                 'marketHashName' => $marketHashName,
                 'displayName' => (string) ($row['name'] ?? $marketHashName),
                 'typeLabel' => (string) ($assetDescription['type'] ?? 'CS2 Item'),
                 'isCommodity' => ((int) ($assetDescription['commodity'] ?? 0)) === 1,
+                'sellPriceUsd' => $sellPriceUsd,
                 'iconUrl' => $iconPath !== ''
                     ? sprintf('https://community.akamai.steamstatic.com/economy/image/%s/96fx96f', $iconPath)
                     : null,
