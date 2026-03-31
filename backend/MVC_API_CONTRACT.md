@@ -69,15 +69,24 @@
 
 ### `GET /watchlist/search`
 - Query:
-  - `query: string` (required, min. 2 chars)
-  - `limit?: int` (default `6`, max `10`)
+  - `query?: string` (min. 2 chars when provided)
+  - `limit?: int` (default `6`, max `12`)
+  - `page?: int` (default `1`)
   - `itemType?: string` (`all`, `skin`, `case`, `souvenir_package`, `sticker_capsule`, `sticker`, `patch`, `music_kit`, `agent`, `key`, `terminal`, `charm`, `graffiti`, `tool`, `container`, `other`)
   - `wear?: string` (`all`, `factory_new`, `minimal_wear`, `field_tested`, `well_worn`, `battle_scarred`) only effective for `itemType=skin`
 - Backend flow:
   - candidate lookup via Steam Market search
   - exact live-price validation via CSFloat
   - backend classification for all supported CS item categories
-- `data[]` fields:
+- Special behavior:
+  - with empty `query` and a concrete `itemType`, endpoint switches to browse mode
+- `data` fields:
+  - `items: []`
+  - `page: int`
+  - `limit: int`
+  - `hasMore: bool`
+  - `browseMode: bool`
+- `data.items[]` fields:
   - `marketHashName: string`
   - `displayName: string`
   - `itemType: string`

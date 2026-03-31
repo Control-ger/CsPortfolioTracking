@@ -69,19 +69,40 @@ final class WatchlistService
         string $query,
         int $limit = 6,
         ?string $itemTypeFilter = null,
-        ?string $wearFilter = null
+        ?string $wearFilter = null,
+        int $page = 1
     ): array
     {
         $normalizedQuery = trim($query);
-        if (strlen($normalizedQuery) < 2) {
-            return [];
+        $normalizedItemType = trim((string) $itemTypeFilter);
+        $canBrowseByFilter = $normalizedItemType !== '' && $normalizedItemType !== 'all';
+
+        if ($normalizedQuery === '' && !$canBrowseByFilter) {
+            return [
+                'items' => [],
+                'page' => max(1, $page),
+                'limit' => max(1, min($limit, 12)),
+                'hasMore' => false,
+                'browseMode' => false,
+            ];
+        }
+
+        if ($normalizedQuery !== '' && strlen($normalizedQuery) < 2) {
+            return [
+                'items' => [],
+                'page' => max(1, $page),
+                'limit' => max(1, min($limit, 12)),
+                'hasMore' => false,
+                'browseMode' => false,
+            ];
         }
 
         return $this->pricingService->searchWatchlistCandidates(
             $normalizedQuery,
             $limit,
             $itemTypeFilter,
-            $wearFilter
+            $wearFilter,
+            $page
         );
     }
 

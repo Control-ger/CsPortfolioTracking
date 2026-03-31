@@ -26,7 +26,7 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const message =
       payload?.error?.message ||
-      `API-Fehler (${response.status}) für ${API_BASE}${path}`;
+      `API-Fehler (${response.status}) fuer ${API_BASE}${path}`;
     throw new Error(message);
   }
 
@@ -77,13 +77,19 @@ export async function deleteWatchlistItem(id) {
   return request(`/watchlist/${id}`, { method: "DELETE" });
 }
 
-export async function searchWatchlistItems(query, filters = {}, limit = 6) {
+export async function searchWatchlistItems(
+  query,
+  filters = {},
+  limit = 6,
+  page = 1
+) {
   return request(
     buildPath("/watchlist/search", {
       query,
       itemType: filters.itemType,
       wear: filters.wear,
       limit,
+      page,
     })
   );
 }

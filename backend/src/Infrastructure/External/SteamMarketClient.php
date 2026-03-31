@@ -5,24 +5,22 @@ namespace App\Infrastructure\External;
 
 final class SteamMarketClient
 {
-    public function searchItems(string $query, int $limit = 8): array
+    public function searchItems(string $query, int $limit = 8, int $start = 0): array
     {
         $normalizedQuery = trim($query);
-        if ($normalizedQuery === '') {
-            return [];
-        }
 
         $fetchLimit = max(1, min($limit * 4, 40));
         $url = sprintf(
-            'https://steamcommunity.com/market/search/render/?query=%s&start=0&count=%d&search_descriptions=0&sort_column=popular&sort_dir=desc&appid=730&norender=1',
+            'https://steamcommunity.com/market/search/render/?query=%s&start=%d&count=%d&search_descriptions=0&sort_column=popular&sort_dir=desc&appid=730&norender=1',
             rawurlencode($normalizedQuery),
+            max(0, $start),
             $fetchLimit
         );
 
         $response = $this->fetchJson($url);
         $results = $response['results'] ?? null;
         if (!is_array($results)) {
-            return [];
+            return ['items' => [], 'totalCount' => 0];
         }
 
         $items = [];
@@ -58,7 +56,10 @@ final class SteamMarketClient
             }
         }
 
-        return array_values($items);
+        return [
+            'items' => array_values($items),
+            'totalCount' => (int) ($response['total_count'] ?? count($items)),
+        ];
     }
 
     public function findExactItem(string $marketHashName): ?array
@@ -69,13 +70,13 @@ final class SteamMarketClient
         }
 
         $results = $this->searchItems($normalizedTarget, 8);
-        foreach ($results as $result) {
+        foreach (($results['items'] ?? []) as $result) {
             if (($result['marketHashName'] ?? '') === $normalizedTarget) {
                 return $result;
             }
         }
 
-        return $results[0] ?? null;
+        return $results['items'][0] ?? null;
     }
 
     private function fetchJson(string $url): ?array

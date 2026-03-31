@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { LoaderCircle, Plus, Search } from "lucide-react";
 import {
-  createWatchlistItem,
-  searchWatchlistItems,
-} from "@/lib/apiClient.js";
+  ChevronLeft,
+  ChevronRight,
+  LoaderCircle,
+  Plus,
+  Search,
+} from "lucide-react";
+import { createWatchlistItem, searchWatchlistItems } from "@/lib/apiClient.js";
 
 const ITEM_TYPE_OPTIONS = [
   { value: "all", label: "Alle Typen" },
@@ -34,23 +37,52 @@ const WEAR_OPTIONS = [
   { value: "battle_scarred", label: "Battle-Scarred" },
 ];
 
+const PAGE_SIZE = 8;
+const BROWSABLE_ITEM_TYPES = new Set([
+  "skin",
+  "case",
+  "souvenir_package",
+  "sticker_capsule",
+  "sticker",
+  "patch",
+  "music_kit",
+  "agent",
+  "key",
+  "terminal",
+  "charm",
+  "graffiti",
+  "tool",
+]);
+
 export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [itemType, setItemType] = useState("all");
   const [wear, setWear] = useState("all");
+  const [page, setPage] = useState(1);
   const [results, setResults] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [browseMode, setBrowseMode] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [submittingItem, setSubmittingItem] = useState("");
   const [error, setError] = useState("");
 
   const wearEnabled = itemType === "skin";
+  const normalizedTerm = searchTerm.trim();
+  const canBrowseWithoutQuery = BROWSABLE_ITEM_TYPES.has(itemType);
+  const isBrowseRequest = normalizedTerm.length === 0 && canBrowseWithoutQuery;
+  const shouldSearch = normalizedTerm.length >= 2 || isBrowseRequest;
 
   useEffect(() => {
-    const normalizedTerm = searchTerm.trim();
+    setPage(1);
+  }, [searchTerm, itemType, wear]);
+
+  useEffect(() => {
     const activeWear = wearEnabled ? wear : "all";
 
-    if (normalizedTerm.length < 2) {
+    if (!shouldSearch) {
       setResults([]);
+      setHasMore(false);
+      setBrowseMode(false);
       setIsSearching(false);
       return undefined;
     }
@@ -67,15 +99,20 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             itemType,
             wear: activeWear,
           },
-          8
+          PAGE_SIZE,
+          page
         );
 
         if (!cancelled) {
-          setResults(data || []);
+          setResults(data?.items || []);
+          setHasMore(Boolean(data?.hasMore));
+          setBrowseMode(Boolean(data?.browseMode));
         }
       } catch (requestError) {
         if (!cancelled) {
           setResults([]);
+          setHasMore(false);
+          setBrowseMode(false);
           setError(requestError.message || "Fehler bei der Item-Suche.");
         }
       } finally {
@@ -89,7 +126,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [itemType, searchTerm, wear, wearEnabled]);
+  }, [itemType, normalizedTerm, page, shouldSearch, wear, wearEnabled]);
 
   const isAlreadyInWatchlist = (itemName) =>
     existingItems.some((item) => item.name === itemName);
@@ -121,6 +158,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       await createWatchlistItem(marketHashName, candidate.itemType || "other");
       setSearchTerm("");
       setResults([]);
+      setHasMore(false);
+      setBrowseMode(false);
+      setPage(1);
 
       if (onAddToWatchlist) {
         await onAddToWatchlist();
@@ -134,14 +174,93 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     }
   };
 
-  const renderState = () => {
-    const normalizedTerm = searchTerm.trim();
+  const renderPagination = () => {
+    if (results.length === 0) {
+      return null;
+    }
 
-    if (normalizedTerm.length < 2) {
+    const lastKnownPage = hasMore ? page + 1 : page;
+    const startPage = Math.max(1, page - 2);
+    const endPage = Math.max(lastKnownPage, Math.min(lastKnownPage, page + 2));
+    const pageNumbers = [];
+
+    for (let nextPage = startPage; nextPage <= endPage; nextPage += 1) {
+      pageNumbers.push(nextPage);
+    }
+
+    return (
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div className="text-sm text-muted-foreground">
+          Seite {page}
+          {browseMode ? " | Browse-Modus" : ""}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setPage((currentPage) => Math.max(1, currentPage - 1))
+            }
+            disabled={page === 1 || isSearching}
+            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Zurueck
+          </button>
+          <div className="flex items-center gap-1">
+            {startPage > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPage(1)}
+                  disabled={isSearching}
+                  className="inline-flex h-9 min-w-9 items-center justify-center rounded-lg border px-3 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  1
+                </button>
+                {startPage > 2 && (
+                  <span className="px-1 text-sm text-muted-foreground">...</span>
+                )}
+              </>
+            )}
+            {pageNumbers.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                type="button"
+                onClick={() => setPage(pageNumber)}
+                disabled={isSearching || pageNumber === page}
+                className={`inline-flex h-9 min-w-9 items-center justify-center rounded-lg border px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  pageNumber === page
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                {pageNumber}
+              </button>
+            ))}
+            {hasMore && endPage < page + 1 && (
+              <span className="px-1 text-sm text-muted-foreground">...</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPage((currentPage) => currentPage + 1)}
+            disabled={!hasMore || isSearching}
+            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Weiter
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderState = () => {
+    if (!shouldSearch) {
       return (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          Suche nach mindestens 2 Zeichen. Alle CS-Item-Typen werden unterstuetzt
-          und mit Live-Preisen von CSFloat validiert.
+          Suche nach mindestens 2 Zeichen oder waehle einen browsebaren
+          Item-Typ wie Case, Sticker oder Agent.
         </div>
       );
     }
@@ -150,7 +269,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       return (
         <div className="flex items-center gap-2 rounded-lg border p-4 text-sm text-muted-foreground">
           <LoaderCircle className="h-4 w-4 animate-spin" />
-          Suche passende Items und gleiche Live-Preise ab...
+          {isBrowseRequest
+            ? "Lade weitere Browse-Ergebnisse..."
+            : "Suche passende Items und gleiche Live-Preise ab..."}
         </div>
       );
     }
@@ -158,7 +279,8 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     if (results.length === 0) {
       return (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          Keine passenden Items fuer die aktuelle Such- und Filterkombination gefunden.
+          Keine passenden Items fuer die aktuelle Such- und Filterkombination
+          gefunden.
         </div>
       );
     }
@@ -231,6 +353,8 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             </div>
           );
         })}
+
+        {renderPagination()}
       </div>
     );
   };

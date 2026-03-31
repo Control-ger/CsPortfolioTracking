@@ -96,71 +96,113 @@ final class PricingService
         string $query,
         int $limit = 6,
         ?string $itemTypeFilter = null,
-        ?string $wearFilter = null
+        ?string $wearFilter = null,
+        int $page = 1
     ): array {
         $this->ensureCacheTables();
 
         $normalizedQuery = trim($query);
-        if ($normalizedQuery === '') {
-            return [];
-        }
+        $resolvedLimit = max(1, min($limit, 12));
+        $resolvedPage = max(1, $page);
+        $browseMode = $normalizedQuery === '' && $this->canBrowseByFilter($itemTypeFilter);
+        $resolvedQuery = $normalizedQuery !== ''
+            ? $normalizedQuery
+            : $this->resolveBrowseQuery($itemTypeFilter);
 
-        $resolvedLimit = max(1, min($limit, 10));
-        $steamResults = $this->steamMarketClient->searchItems($normalizedQuery, $resolvedLimit);
-        if ($steamResults === []) {
-            return [];
-        }
-
-        $candidates = [];
-
-        foreach ($steamResults as $result) {
-            $marketHashName = (string) ($result['marketHashName'] ?? '');
-            if ($marketHashName === '') {
-                continue;
-            }
-
-            $presentation = $this->getItemPresentation($marketHashName, $result);
-            if (!isset($presentation['priceUsd'], $presentation['priceEur'])) {
-                continue;
-            }
-
-            $classification = [
-                'key' => (string) ($presentation['itemType'] ?? 'other'),
-                'label' => (string) ($presentation['itemTypeLabel'] ?? 'Other'),
+        if ($resolvedQuery === '' || ($normalizedQuery === '' && !$browseMode)) {
+            return [
+                'items' => [],
+                'page' => $resolvedPage,
+                'limit' => $resolvedLimit,
+                'hasMore' => false,
+                'browseMode' => $browseMode,
             ];
-            $wear = null;
-            if (($presentation['wear'] ?? null) !== null || ($presentation['wearLabel'] ?? null) !== null) {
-                $wear = [
-                    'key' => $presentation['wear'] ?? null,
-                    'label' => $presentation['wearLabel'] ?? null,
+        }
+
+        $filteredOffset = ($resolvedPage - 1) * $resolvedLimit;
+        $externalStart = 0;
+        $externalBatchSize = max($resolvedLimit * 3, 24);
+        $filteredSeen = 0;
+        $candidates = [];
+        $hasMore = false;
+        $totalCount = null;
+
+        while (count($candidates) <= $resolvedLimit) {
+            $steamResults = $this->steamMarketClient->searchItems($resolvedQuery, $externalBatchSize, $externalStart);
+            $rawItems = $steamResults['items'] ?? [];
+            $totalCount = (int) ($steamResults['totalCount'] ?? 0);
+
+            if ($rawItems === []) {
+                break;
+            }
+
+            foreach ($rawItems as $result) {
+                $marketHashName = (string) ($result['marketHashName'] ?? '');
+                if ($marketHashName === '') {
+                    continue;
+                }
+
+                $presentation = $this->getItemPresentation($marketHashName, $result);
+                if (!isset($presentation['priceUsd'], $presentation['priceEur'])) {
+                    continue;
+                }
+
+                $classification = [
+                    'key' => (string) ($presentation['itemType'] ?? 'other'),
+                    'label' => (string) ($presentation['itemTypeLabel'] ?? 'Other'),
                 ];
+                $wear = null;
+                if (($presentation['wear'] ?? null) !== null || ($presentation['wearLabel'] ?? null) !== null) {
+                    $wear = [
+                        'key' => $presentation['wear'] ?? null,
+                        'label' => $presentation['wearLabel'] ?? null,
+                    ];
+                }
+
+                if (!$this->marketItemClassifier->matchesFilters($classification, $wear, $itemTypeFilter, $wearFilter)) {
+                    continue;
+                }
+
+                if ($filteredSeen < $filteredOffset) {
+                    $filteredSeen++;
+                    continue;
+                }
+
+                $dto = new WatchlistSearchCandidateDto(
+                    marketHashName: $marketHashName,
+                    displayName: (string) ($result['displayName'] ?? $marketHashName),
+                    itemType: (string) ($presentation['itemType'] ?? 'other'),
+                    itemTypeLabel: (string) ($presentation['itemTypeLabel'] ?? 'Other'),
+                    marketTypeLabel: (string) ($presentation['marketTypeLabel'] ?? 'CS2 Item'),
+                    wear: isset($presentation['wear']) ? (string) $presentation['wear'] : null,
+                    wearLabel: isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : null,
+                    iconUrl: isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : null,
+                    livePriceEur: (float) $presentation['priceEur'],
+                    livePriceUsd: (float) $presentation['priceUsd']
+                );
+
+                $candidates[] = $dto->toArray();
+                $filteredSeen++;
+
+                if (count($candidates) > $resolvedLimit) {
+                    $hasMore = true;
+                    break 2;
+                }
             }
 
-            if (!$this->marketItemClassifier->matchesFilters($classification, $wear, $itemTypeFilter, $wearFilter)) {
-                continue;
-            }
-
-            $dto = new WatchlistSearchCandidateDto(
-                marketHashName: $marketHashName,
-                displayName: (string) ($result['displayName'] ?? $marketHashName),
-                itemType: (string) ($presentation['itemType'] ?? 'other'),
-                itemTypeLabel: (string) ($presentation['itemTypeLabel'] ?? 'Other'),
-                marketTypeLabel: (string) ($presentation['marketTypeLabel'] ?? 'CS2 Item'),
-                wear: isset($presentation['wear']) ? (string) $presentation['wear'] : null,
-                wearLabel: isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : null,
-                iconUrl: isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : null,
-                livePriceEur: (float) $presentation['priceEur'],
-                livePriceUsd: (float) $presentation['priceUsd']
-            );
-
-            $candidates[] = $dto->toArray();
-
-            if (count($candidates) >= $resolvedLimit) {
+            $externalStart += count($rawItems);
+            if ($totalCount !== null && $externalStart >= $totalCount) {
                 break;
             }
         }
 
-        return $candidates;
+        return [
+            'items' => array_slice($candidates, 0, $resolvedLimit),
+            'page' => $resolvedPage,
+            'limit' => $resolvedLimit,
+            'hasMore' => $hasMore,
+            'browseMode' => $browseMode,
+        ];
     }
 
     private function ensureCacheTables(): void
@@ -336,5 +378,31 @@ final class PricingService
         }
 
         return (time() - $fetchedAt) < self::LIVE_CACHE_TTL_SECONDS;
+    }
+
+    private function canBrowseByFilter(?string $itemTypeFilter): bool
+    {
+        return $this->resolveBrowseQuery($itemTypeFilter) !== '';
+    }
+
+    private function resolveBrowseQuery(?string $itemTypeFilter): string
+    {
+        return match (trim((string) $itemTypeFilter)) {
+            'case' => 'case',
+            'souvenir_package' => 'souvenir package',
+            'sticker_capsule' => 'sticker capsule',
+            'sticker' => 'sticker',
+            'patch' => 'patch',
+            'music_kit' => 'music kit',
+            'agent' => 'agent',
+            'key' => 'key',
+            'terminal' => 'terminal',
+            'charm' => 'charm',
+            'graffiti' => 'graffiti',
+            'tool' => 'tool',
+            'container' => '',
+            'skin' => 'ak-47',
+            default => '',
+        };
     }
 }
