@@ -42,6 +42,15 @@ final class PortfolioController
         }
     }
 
+    public function investmentHistory(Request $request, int $id): void
+    {
+        try {
+            JsonResponseFactory::success($this->***REMOVED***Service->getInvestmentHistory($id));
+        } catch (Throwable $exception) {
+            JsonResponseFactory::error('PORTFOLIO_POSITION_HISTORY_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
     public function saveDailyValue(Request $request): void
     {
         try {

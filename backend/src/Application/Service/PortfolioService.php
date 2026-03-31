@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Application\Service;
 
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
+use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Shared\Dto\PortfolioSummaryDto;
 
@@ -11,6 +12,7 @@ final class PortfolioService
 {
     public function __construct(
         private readonly InvestmentRepository $investmentRepository,
+        private readonly PositionHistoryRepository $positionHistoryRepository,
         private readonly PortfolioHistoryRepository $***REMOVED***HistoryRepository,
         private readonly PricingService $pricingService
     ) {
@@ -90,14 +92,40 @@ final class PortfolioService
         );
     }
 
+    public function getInvestmentHistory(int $investmentId): array
+    {
+        $this->positionHistoryRepository->ensureTable();
+        $rows = $this->positionHistoryRepository->findHistoryByInvestmentId($investmentId);
+
+        return array_map(
+            static fn(array $row): array => [
+                'date' => $row['date'],
+                'wert' => (float) $row['total_value'],
+                'quantity' => (int) $row['quantity'],
+                'unitPrice' => (float) $row['unit_price'],
+            ],
+            $rows
+        );
+    }
+
     public function saveDailyValue(?float $value = null): array
     {
         $this->***REMOVED***HistoryRepository->ensureTable();
+        $this->positionHistoryRepository->ensureTable();
         $rows = $this->getEnrichedInvestments();
         $summary = $this->getSummary($rows);
         $totalValue = $value ?? $summary->totalValue;
         $today = date('Y-m-d');
         $this->***REMOVED***HistoryRepository->upsertForDate($today, $totalValue);
+        foreach ($rows as $row) {
+            $this->positionHistoryRepository->upsertSnapshot(
+                investmentId: (int) $row['id'],
+                date: $today,
+                quantity: (int) $row['quantity'],
+                unitPrice: (float) $row['displayPrice'],
+                totalValue: (float) $row['currentValue']
+            );
+        }
         return ['date' => $today, 'totalValue' => $totalValue];
     }
 }

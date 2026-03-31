@@ -9,20 +9,21 @@ import {
   Tooltip,
 } from "recharts";
 
-// Formatierungsfunktion für Datum
 const formatDate = (dateString) => {
   if (!dateString) return "";
   const date = new Date(dateString);
   return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
 };
 
-// Formatierungsfunktion für Tooltip
-const formatTooltipValue = (value) => {
-  return `${parseFloat(value).toFixed(2)}€`;
-};
+const formatTooltipValue = (value) => `${parseFloat(value).toFixed(2)} EUR`;
 
-export const PortfolioChart = ({ history, color }) => {
-  // Daten für Chart formatieren
+export const PortfolioChart = ({
+  history,
+  color,
+  title = "Portfolio Entwicklung",
+  emptyLabel = "Noch keine Historie-Daten verfuegbar",
+  valueLabel = "Wert",
+}) => {
   const chartData = (history || []).map((item) => ({
     ...item,
     dateFormatted: formatDate(item.date),
@@ -31,12 +32,12 @@ export const PortfolioChart = ({ history, color }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Portfolio Entwicklung</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="h-80 w-full">
         {chartData.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
-            <p>Noch keine Historie-Daten verfügbar</p>
+            <p>{emptyLabel}</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -57,7 +58,7 @@ export const PortfolioChart = ({ history, color }) => {
               <YAxis
                 stroke="hsl(var(--muted-foreground))"
                 style={{ fontSize: "12px" }}
-                tickFormatter={(value) => `${value.toFixed(0)}€`}
+                tickFormatter={(value) => `${value.toFixed(0)} EUR`}
               />
               <Tooltip
                 contentStyle={{
@@ -65,7 +66,7 @@ export const PortfolioChart = ({ history, color }) => {
                   borderColor: "hsl(var(--border))",
                 }}
                 labelStyle={{ color: "hsl(var(--foreground))" }}
-                formatter={(value) => [formatTooltipValue(value), "Wert"]}
+                formatter={(value) => [formatTooltipValue(value), valueLabel]}
                 labelFormatter={(label) => `Datum: ${label}`}
               />
               <Line

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { StatCard } from "./components/StatsCards";
 import { InventoryTable } from "./components/InventoryTable";
@@ -7,15 +7,38 @@ import { PortfolioChart } from "./components/PortfolioChart";
 import { Watchlist } from "./components/Watchlist";
 import { WatchlistOverview } from "./components/WatchlistOverview";
 import { usePortfolio } from "./hooks/usePortfolio";
+import { fetchPortfolioInvestmentHistory } from "./lib/apiClient";
 
 export default function Dashboard() {
   const { enrichedInvestments, stats, ***REMOVED***History, error } = usePortfolio();
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedItemHistory, setSelectedItemHistory] = useState([]);
 
   const selectedItemWithLive = useMemo(() => {
     if (!selectedItem) return null;
     return enrichedInvestments.find((i) => i.id === selectedItem.id);
   }, [selectedItem, enrichedInvestments]);
+
+  useEffect(() => {
+    const loadItemHistory = async () => {
+      if (!selectedItemWithLive) {
+        setSelectedItemHistory([]);
+        return;
+      }
+
+      try {
+        const history = await fetchPortfolioInvestmentHistory(
+          selectedItemWithLive.id
+        );
+        setSelectedItemHistory(history || []);
+      } catch (historyError) {
+        console.error("Fehler beim Laden der Positionshistorie:", historyError);
+        setSelectedItemHistory([]);
+      }
+    };
+
+    loadItemHistory();
+  }, [selectedItemWithLive]);
 
   return (
     <div className="min-h-screen bg-background text-foreground p-8 font-sans">
@@ -80,7 +103,10 @@ export default function Dashboard() {
                 onSelectItem={setSelectedItem}
               />
             </div>
-            <ItemDetailPanel item={selectedItemWithLive} />
+            <ItemDetailPanel
+              item={selectedItemWithLive}
+              history={selectedItemHistory}
+            />
           </TabsContent>
 
           <TabsContent value="watchlist" className="space-y-6">

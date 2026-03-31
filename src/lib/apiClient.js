@@ -22,6 +22,10 @@ export async function fetchPortfolioInvestments() {
   return request("/***REMOVED***/investments");
 }
 
+export async function fetchPortfolioInvestmentHistory(id) {
+  return request(`/***REMOVED***/investments/${id}/history`);
+}
+
 export async function fetchPortfolioSummary() {
   return request("/***REMOVED***/summary");
 }

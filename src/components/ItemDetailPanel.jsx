@@ -5,11 +5,12 @@ import {
   CardTitle,
   CardDescription,
 } from "./ui/card";
+import { PortfolioChart } from "./PortfolioChart";
 import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 
 const formatPrice = (value) => `${value.toFixed(2)} EUR`;
 
-export const ItemDetailPanel = ({ item }) => {
+export const ItemDetailPanel = ({ item, history = [] }) => {
   if (!item)
     return (
       <div className="h-100 flex items-center justify-center border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground">
@@ -85,6 +86,14 @@ export const ItemDetailPanel = ({ item }) => {
             </p>
           </div>
         </div>
+
+        <PortfolioChart
+          history={history}
+          color={item.isProfitPositive ? "#22c55e" : "#ef4444"}
+          title="Positionsentwicklung"
+          emptyLabel="Noch keine Positionshistorie verfuegbar"
+          valueLabel="Positionswert"
+        />
 
         {item.details?.stats6m && (
           <div className="pt-4 border-t text-center">
