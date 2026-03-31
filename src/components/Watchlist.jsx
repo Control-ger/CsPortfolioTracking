@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
-import { TrendingUp, TrendingDown, Trash2, X } from "lucide-react";
+import { Trash2, TrendingDown, TrendingUp, X } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
 
 export const Watchlist = () => {
@@ -11,16 +11,26 @@ export const Watchlist = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [error, setError] = useState("");
 
-  // Watchlist-Daten laden
   const loadWatchlistData = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const data = await fetchWatchlist();
-      setWatchlistItems(data || []);
-    } catch (err) {
-      setError(err.message || "Fehler beim Laden der Watchlist");
+      const data = await fetchWatchlist({ syncLive: true });
+      const nextItems = data || [];
+
+      setWatchlistItems(nextItems);
+      setSelectedItem((currentSelection) => {
+        if (!currentSelection) {
+          return null;
+        }
+
+        return (
+          nextItems.find((item) => item.id === currentSelection.id) || null
+        );
+      });
+    } catch (requestError) {
+      setError(requestError.message || "Fehler beim Laden der Watchlist.");
     } finally {
       setLoading(false);
     }
@@ -30,23 +40,23 @@ export const Watchlist = () => {
     loadWatchlistData();
   }, []);
 
-  // Item aus Watchlist entfernen
   const handleRemoveItem = async (id) => {
     try {
       await deleteWatchlistItem(id);
-      loadWatchlistData();
-      if (selectedItem && selectedItem.id === id) {
-        setSelectedItem(null);
-      }
-    } catch (err) {
-      setError(err.message || "Fehler beim Entfernen des Items");
+      await loadWatchlistData();
+    } catch (requestError) {
+      setError(
+        requestError.message || "Fehler beim Entfernen des Watchlist-Items."
+      );
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground">Lade Watchlist...</p>
+        <p className="text-muted-foreground">
+          Lade Watchlist und gleiche Live-Preise ab...
+        </p>
       </div>
     );
   }
@@ -57,13 +67,13 @@ export const Watchlist = () => {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Watchlist</h2>
           <p className="text-muted-foreground">
-            Verfolge Preise von CS2 Items über die Zeit
+            Gefuehrte Suche mit Live-Preisdaten aus dem Backend
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive p-4 rounded-lg">
+        <div className="rounded-lg bg-destructive/10 p-4 text-destructive">
           {error}
         </div>
       )}
@@ -76,12 +86,14 @@ export const Watchlist = () => {
       {watchlistItems.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
-            <p>Keine Items in der Watchlist. Füge Items hinzu, um ihre Preise zu verfolgen.</p>
+            <p>
+              Keine Items in der Watchlist. Suche ein Item aus und fuege es per
+              Auswahl hinzu.
+            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Watchlist-Übersicht */}
           <div className="space-y-4">
             <Card>
               <CardHeader>
@@ -92,7 +104,11 @@ export const Watchlist = () => {
                   {watchlistItems.map((item) => {
                     const isUp = item.trend === "up";
                     const isDown = item.trend === "down";
-                    const Icon = isUp ? TrendingUp : isDown ? TrendingDown : null;
+                    const Icon = isUp
+                      ? TrendingUp
+                      : isDown
+                        ? TrendingDown
+                        : null;
                     const colorClass = isUp
                       ? "text-green-600"
                       : isDown
@@ -102,34 +118,56 @@ export const Watchlist = () => {
                     return (
                       <div
                         key={item.id}
-                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                        className={`cursor-pointer rounded-lg border p-4 transition-colors ${
                           selectedItem?.id === item.id
-                            ? "bg-primary/10 border-primary"
+                            ? "border-primary bg-primary/10"
                             : "hover:bg-muted"
                         }`}
                         onClick={() => setSelectedItem(item)}
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-sm">{item.name}</h3>
-                            <div className="mt-2 flex items-center gap-2">
-                              {Icon && <Icon className={`h-4 w-4 ${colorClass}`} />}
-                              <span className={`text-sm ${colorClass}`}>
-                                {item.changeLabel}
-                              </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 flex-1 gap-3">
+                            <div className="h-14 w-14 overflow-hidden rounded-md border bg-muted">
+                              {item.imageUrl ? (
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.name}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                                  N/A
+                                </div>
+                              )}
                             </div>
-                            {item.currentPrice !== null && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Aktuell: {item.currentPrice.toFixed(2)}€
-                              </p>
-                            )}
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-semibold">
+                                {item.name}
+                              </h3>
+                              <div className="mt-2 flex items-center gap-2">
+                                {Icon && (
+                                  <Icon className={`h-4 w-4 ${colorClass}`} />
+                                )}
+                                <span className={`text-sm ${colorClass}`}>
+                                  {item.changeLabel}
+                                </span>
+                              </div>
+                              {item.currentPrice !== null && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Aktuell: {item.currentPrice.toFixed(2)} EUR
+                                </p>
+                              )}
+                            </div>
                           </div>
+
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
                               handleRemoveItem(item.id);
                             }}
-                            className="ml-2 p-1 text-muted-foreground hover:text-destructive transition-colors"
+                            className="p-1 text-muted-foreground transition-colors hover:text-destructive"
                             title="Aus Watchlist entfernen"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -143,19 +181,34 @@ export const Watchlist = () => {
             </Card>
           </div>
 
-          {/* Detail-Ansicht mit Chart */}
           <div>
             {selectedItem ? (
               <Card>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle>{selectedItem.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Preisverlauf der letzten 7 Tage
-                      </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 gap-4">
+                      <div className="h-20 w-20 overflow-hidden rounded-lg border bg-muted">
+                        {selectedItem.imageUrl ? (
+                          <img
+                            src={selectedItem.imageUrl}
+                            alt={selectedItem.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                            N/A
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <CardTitle>{selectedItem.name}</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Preisverlauf der letzten 7 Tage
+                        </p>
+                      </div>
                     </div>
                     <button
+                      type="button"
                       onClick={() => setSelectedItem(null)}
                       className="text-muted-foreground hover:text-foreground"
                     >
@@ -164,21 +217,25 @@ export const Watchlist = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {selectedItem.priceHistory && selectedItem.priceHistory.length > 0 ? (
+                  {selectedItem.priceHistory &&
+                  selectedItem.priceHistory.length > 0 ? (
                     <PortfolioChart
                       history={selectedItem.priceHistory}
-                      color={selectedItem.trend === "down" ? "#ef4444" : "#22c55e"}
+                      color={
+                        selectedItem.trend === "down" ? "#ef4444" : "#22c55e"
+                      }
                     />
                   ) : (
-                    <div className="h-80 flex items-center justify-center text-muted-foreground">
-                      <p>Noch keine Preis-Historie verfügbar</p>
+                    <div className="flex h-80 items-center justify-center text-muted-foreground">
+                      <p>Noch keine Preis-Historie verfuegbar.</p>
                     </div>
                   )}
+
                   {selectedItem.changeLabel !== "N/A" && (
-                    <div className="mt-4 p-4 bg-muted rounded-lg">
-                      <div className="flex items-center justify-between">
+                    <div className="mt-4 rounded-lg bg-muted p-4">
+                      <div className="flex items-center justify-between gap-3">
                         <span className="text-sm text-muted-foreground">
-                          Preisänderung (7 Tage)
+                          Preisveraenderung (7 Tage)
                         </span>
                         <span
                           className={`font-semibold ${
@@ -197,7 +254,7 @@ export const Watchlist = () => {
             ) : (
               <Card>
                 <CardContent className="p-8 text-center text-muted-foreground">
-                  <p>Wähle ein Item aus, um den Preisverlauf anzuzeigen</p>
+                  <p>Waehle ein Item aus, um den Preisverlauf anzuzeigen.</p>
                 </CardContent>
               </Card>
             )}

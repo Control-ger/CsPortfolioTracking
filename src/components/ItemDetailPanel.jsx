@@ -23,10 +23,27 @@ export const ItemDetailPanel = ({ item, history = [] }) => {
   return (
     <Card className="border-primary/20 shadow-lg">
       <CardHeader>
-        <CardTitle className="text-lg">{item.name}</CardTitle>
-        <CardDescription className="uppercase text-[10px] font-bold tracking-widest">
-          {item.type === "case" ? "Behaelter" : "Aufkleber"}
-        </CardDescription>
+        <div className="flex items-start gap-4">
+          <div className="h-24 w-24 overflow-hidden rounded-lg border bg-muted">
+            {item.imageUrl ? (
+              <img
+                src={item.imageUrl}
+                alt={item.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                N/A
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <CardTitle className="text-lg">{item.name}</CardTitle>
+            <CardDescription className="text-[10px] font-bold uppercase tracking-widest">
+              {item.type}
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-4">

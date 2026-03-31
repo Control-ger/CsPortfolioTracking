@@ -26,7 +26,8 @@ final class PortfolioService
         foreach ($investments as $investment) {
             $buyPrice = (float) ($investment['buy_price'] ?? 0);
             $quantity = (int) ($investment['quantity'] ?? 0);
-            $livePrice = $this->pricingService->getLivePriceEur((string) $investment['name']);
+            $presentation = $this->pricingService->getItemPresentation((string) $investment['name']);
+            $livePrice = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
             $displayPrice = $livePrice ?? $buyPrice;
             $isLive = $livePrice !== null;
             $roi = $buyPrice > 0 ? (($displayPrice - $buyPrice) / $buyPrice) * 100 : 0.0;
@@ -38,6 +39,7 @@ final class PortfolioService
                 'id' => (int) $investment['id'],
                 'name' => (string) $investment['name'],
                 'type' => (string) $investment['type'],
+                'imageUrl' => $presentation['iconUrl'] ?? null,
                 'buyPrice' => $buyPrice,
                 'quantity' => $quantity,
                 'livePrice' => $livePrice,

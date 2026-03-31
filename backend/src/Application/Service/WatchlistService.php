@@ -16,10 +16,14 @@ final class WatchlistService
     ) {
     }
 
-    public function listWithMetrics(): array
+    public function listWithMetrics(bool $syncLive = false): array
     {
         $this->watchlistRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
+
+        if ($syncLive) {
+            $this->syncLivePrices();
+        }
 
         $items = $this->watchlistRepository->findAll();
         $today = date('Y-m-d');
@@ -27,7 +31,13 @@ final class WatchlistService
         $result = [];
 
         foreach ($items as $item) {
-            $name = (string) $item['name'];
+            $name = (string) ($item['name'] ?? '');
+            if ($name === '') {
+                continue;
+            }
+
+            $imageUrl = $this->pricingService->getItemImageUrl($name);
+
             $currentPrice = $this->priceHistoryRepository->findLatestPriceByItem($name, $today);
             $oldPrice = $this->priceHistoryRepository->findLatestPriceByItem($name, $sevenDaysAgo);
             $priceChange = null;
@@ -41,28 +51,62 @@ final class WatchlistService
             $dto = new WatchlistItemDto(
                 id: (int) $item['id'],
                 name: $name,
-                type: (string) $item['type'],
+                type: (string) ($item['type'] ?? 'skin'),
+                imageUrl: $imageUrl,
                 currentPrice: $currentPrice,
                 priceChange: $priceChange,
                 priceChangePercent: $priceChangePercent,
                 priceHistory: $this->priceHistoryRepository->findHistoryByItem($name, $sevenDaysAgo)
             );
+
             $result[] = $dto->toArray();
         }
 
         return $result;
     }
 
-    public function addItem(string $name, string $type = 'skin'): int
+    public function searchAvailableItems(
+        string $query,
+        int $limit = 6,
+        ?string $itemTypeFilter = null,
+        ?string $wearFilter = null
+    ): array
+    {
+        $normalizedQuery = trim($query);
+        if (strlen($normalizedQuery) < 2) {
+            return [];
+        }
+
+        return $this->pricingService->searchWatchlistCandidates(
+            $normalizedQuery,
+            $limit,
+            $itemTypeFilter,
+            $wearFilter
+        );
+    }
+
+    public function addItem(string $name, string $type = 'skin'): array
     {
         $trimmedName = trim($name);
         if ($trimmedName === '') {
             throw new \InvalidArgumentException('Name ist erforderlich.');
         }
+
+        $this->watchlistRepository->ensureTable();
+        $this->priceHistoryRepository->ensureTable();
+
         if ($this->watchlistRepository->existsByName($trimmedName)) {
             throw new \RuntimeException('Item ist bereits in der Watchlist vorhanden.');
         }
-        return $this->watchlistRepository->insert($trimmedName, $type);
+
+        $id = $this->watchlistRepository->insert($trimmedName, $type);
+        $liveSnapshot = $this->syncSingleItemPrice($trimmedName);
+
+        return [
+            'id' => $id,
+            'currentPrice' => $liveSnapshot['priceEur'] ?? null,
+            'isLiveSynced' => $liveSnapshot !== null,
+        ];
     }
 
     public function deleteItem(int $id): bool
@@ -74,25 +118,47 @@ final class WatchlistService
     {
         $this->watchlistRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
+
+        return $this->syncLivePrices();
+    }
+
+    private function syncLivePrices(): array
+    {
         $items = $this->watchlistRepository->findAll();
-        $today = date('Y-m-d');
-        $rate = $this->pricingService->getUsdToEurRate();
         $updated = 0;
 
         foreach ($items as $item) {
-            $name = (string) $item['name'];
-            $usd = $this->pricingService->getLivePriceEur($name);
-            if ($usd === null) {
+            $name = (string) ($item['name'] ?? '');
+            if ($name === '') {
                 continue;
             }
-            // pricingService gibt bereits EUR zurück. Für historische Spalten halten wir USD approximiert.
-            $priceEur = $usd;
-            $priceUsd = $rate > 0 ? ($priceEur / $rate) : $priceEur;
-            $this->priceHistoryRepository->upsertPrice($name, $today, $priceUsd, $priceEur, $rate);
+
+            if ($this->syncSingleItemPrice($name) === null) {
+                continue;
+            }
+
             $updated++;
             usleep(200000);
         }
 
         return ['updated' => $updated, 'totalItems' => count($items)];
+    }
+
+    private function syncSingleItemPrice(string $itemName): ?array
+    {
+        $snapshot = $this->pricingService->getLivePriceSnapshot($itemName);
+        if ($snapshot === null) {
+            return null;
+        }
+
+        $this->priceHistoryRepository->upsertPrice(
+            $itemName,
+            date('Y-m-d'),
+            (float) $snapshot['priceUsd'],
+            (float) $snapshot['priceEur'],
+            (float) $snapshot['exchangeRate']
+        );
+
+        return $snapshot;
     }
 }

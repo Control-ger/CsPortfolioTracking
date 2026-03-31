@@ -4,13 +4,17 @@ declare(strict_types=1);
 use App\Application\Service\PortfolioService;
 use App\Application\Service\PricingService;
 use App\Application\Service\WatchlistService;
+use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
 use App\Http\Controller\PortfolioController;
 use App\Http\Controller\WatchlistController;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\ExchangeRateClient;
+use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
+use App\Infrastructure\Persistence\Repository\ItemCatalogRepository;
+use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
@@ -32,12 +36,21 @@ require_once __DIR__ . '/../src/bootstrap.php';
 $pdo = (new DatabaseConnectionFactory(new DatabaseConfig()))->create();
 
 $investmentRepository = new InvestmentRepository($pdo);
+$itemCatalogRepository = new ItemCatalogRepository($pdo);
+$itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
 $positionHistoryRepository = new PositionHistoryRepository($pdo);
 $***REMOVED***HistoryRepository = new PortfolioHistoryRepository($pdo);
 $watchlistRepository = new WatchlistRepository($pdo);
 $priceHistoryRepository = new PriceHistoryRepository($pdo);
 
-$pricingService = new PricingService(new CsFloatClient(), new ExchangeRateClient());
+$pricingService = new PricingService(
+    new CsFloatClient(),
+    new ExchangeRateClient(),
+    new SteamMarketClient(),
+    new MarketItemClassifier(),
+    $itemCatalogRepository,
+    $itemLiveCacheRepository
+);
 $***REMOVED***Service = new PortfolioService($investmentRepository, $positionHistoryRepository, $***REMOVED***HistoryRepository, $pricingService);
 $watchlistService = new WatchlistService($watchlistRepository, $priceHistoryRepository, $pricingService);
 
@@ -52,6 +65,7 @@ $router->register('GET', '/api/v1/***REMOVED***/history', [$***REMOVED***Control
 $router->register('PUT', '/api/v1/***REMOVED***/daily-value', [$***REMOVED***Controller, 'saveDailyValue']);
 
 $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
+$router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);
 $router->register('POST', '/api/v1/watchlist', [$watchlistController, 'create']);
 $router->register('DELETE', '/api/v1/watchlist/{id}', [$watchlistController, 'delete']);
 $router->register('POST', '/api/v1/watchlist/prices/refresh', [$watchlistController, 'refresh']);

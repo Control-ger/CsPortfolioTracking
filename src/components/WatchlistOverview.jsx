@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { TrendingUp, TrendingDown, Eye } from "lucide-react";
+import { Eye, TrendingDown, TrendingUp } from "lucide-react";
 import { fetchWatchlist } from "@/lib/apiClient.js";
 
 export const WatchlistOverview = ({ maxItems = 5 }) => {
@@ -80,17 +80,33 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
             return (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted transition-colors"
+                className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted"
               >
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-sm truncate">{item.name}</h4>
-                  {item.currentPrice !== null && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {item.currentPrice.toFixed(2)}€
-                    </p>
-                  )}
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                        N/A
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="truncate text-sm font-medium">{item.name}</h4>
+                    {item.currentPrice !== null && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.currentPrice.toFixed(2)} EUR
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 ml-4">
+                <div className="ml-4 flex items-center gap-2">
                   {Icon && <Icon className={`h-4 w-4 ${colorClass}`} />}
                   <span className={`text-sm font-semibold ${colorClass}`}>
                     {item.changeLabel}
@@ -101,7 +117,7 @@ export const WatchlistOverview = ({ maxItems = 5 }) => {
           })}
         </div>
         {watchlistItems.length >= maxItems && (
-          <p className="text-xs text-muted-foreground mt-3 text-center">
+          <p className="mt-3 text-center text-xs text-muted-foreground">
             Zeige {maxItems} von {watchlistItems.length} Items
           </p>
         )}

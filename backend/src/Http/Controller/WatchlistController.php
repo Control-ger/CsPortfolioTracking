@@ -18,9 +18,26 @@ final class WatchlistController
     public function list(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->watchlistService->listWithMetrics());
+            $syncLive = filter_var($request->query['syncLive'] ?? false, FILTER_VALIDATE_BOOL);
+            JsonResponseFactory::success($this->watchlistService->listWithMetrics($syncLive));
         } catch (Throwable $exception) {
             JsonResponseFactory::error('WATCHLIST_LIST_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function search(Request $request): void
+    {
+        try {
+            $query = (string) ($request->query['query'] ?? '');
+            $limit = (int) ($request->query['limit'] ?? 6);
+            $itemType = (string) ($request->query['itemType'] ?? '');
+            $wear = (string) ($request->query['wear'] ?? '');
+
+            JsonResponseFactory::success(
+                $this->watchlistService->searchAvailableItems($query, $limit, $itemType, $wear)
+            );
+        } catch (Throwable $exception) {
+            JsonResponseFactory::error('WATCHLIST_SEARCH_FAILED', $exception->getMessage(), [], 500);
         }
     }
 
@@ -29,8 +46,7 @@ final class WatchlistController
         try {
             $name = (string) ($request->body['name'] ?? '');
             $type = (string) ($request->body['type'] ?? 'skin');
-            $id = $this->watchlistService->addItem($name, $type);
-            JsonResponseFactory::success(['id' => $id], statusCode: 201);
+            JsonResponseFactory::success($this->watchlistService->addItem($name, $type), statusCode: 201);
         } catch (RuntimeException $exception) {
             JsonResponseFactory::error('WATCHLIST_CONFLICT', $exception->getMessage(), [], 409);
         } catch (Throwable $exception) {
