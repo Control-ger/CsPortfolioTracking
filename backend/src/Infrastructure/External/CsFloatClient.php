@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\External;
 
+use App\Shared\Logger;
+
 final class CsFloatClient
 {
     private const ERROR_MAP = [
@@ -35,22 +37,46 @@ final class CsFloatClient
     {
         $encodedName = urlencode($marketHashName);
         $url = "https://csfloat.com/api/v1/listings?market_hash_name={$encodedName}&type=buy_now&sort_by=lowest_price&limit=1";
-        $apiKey = getenv('CSFLOAT_API_KEY') ?: null;
+        $apiKey = getenv('CSFLOAT_API_KEY') ?: $_ENV['CSFLOAT_API_KEY'] ?? null;
+
+        Logger::debug('CSFloat API Request', [
+            'url' => $url,
+            'itemName' => $marketHashName,
+            'apiKeyProvided' => $apiKey !== null && $apiKey !== '',
+            'apiKeyLength' => $apiKey ? strlen($apiKey) : 0,
+            'apiKeyPrefix' => $apiKey ? substr($apiKey, 0, 8) . '***' : 'NONE',
+        ]);
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_USERAGENT, 'CsPortfolioTracking/1.0');
+        
+        $headers = ['Accept: application/json'];
         if ($apiKey !== null && $apiKey !== '') {
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: {$apiKey}"]);
+            $headers[] = "Authorization: {$apiKey}";
         }
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
+        $headersList = curl_getinfo($ch, CURLINFO_HEADER_OUT);
         curl_close($ch);
 
+        Logger::debug('CSFloat API Response', [
+            'httpCode' => $httpCode,
+            'curlError' => $curlError ?: 'NONE',
+            'responseLength' => $response ? strlen($response) : 0,
+            'headersSent' => $headersList ?: 'NONE',
+        ]);
+
         if ($response === false) {
+            Logger::error('CSFloat Request Failed', [
+                'itemName' => $marketHashName,
+                'error' => $curlError,
+            ]);
             return [
                 'snapshot' => null,
                 'error' => [
@@ -64,6 +90,11 @@ final class CsFloatClient
         }
 
         if ($httpCode !== 200) {
+            Logger::warning('CSFloat HTTP Error', [
+                'itemName' => $marketHashName,
+                'httpCode' => $httpCode,
+                'response' => $response ? substr($response, 0, 500) : 'EMPTY',
+            ]);
             return [
                 'snapshot' => null,
                 'error' => $this->buildHttpError($httpCode),
@@ -71,6 +102,7 @@ final class CsFloatClient
         }
 
         if ($response === '') {
+            Logger::warning('CSFloat Empty Response', ['itemName' => $marketHashName]);
             return [
                 'snapshot' => null,
                 'error' => [
@@ -85,6 +117,10 @@ final class CsFloatClient
 
         $json = json_decode($response, true);
         if (!is_array($json)) {
+            Logger::error('CSFloat Invalid JSON Response', [
+                'itemName' => $marketHashName,
+                'response' => substr($response, 0, 500),
+            ]);
             return [
                 'snapshot' => null,
                 'error' => [
@@ -105,8 +141,14 @@ final class CsFloatClient
         }
 
         if ($listing === null || !isset($listing['price'])) {
+            Logger::debug('CSFloat No Listing Found', ['itemName' => $marketHashName]);
             return ['snapshot' => null, 'error' => null];
         }
+
+        Logger::debug('CSFloat Success', [
+            'itemName' => $marketHashName,
+            'priceUsd' => $listing['price'] ?? null,
+        ]);
 
         $item = $listing['item'] ?? [];
         if (!is_array($item)) {

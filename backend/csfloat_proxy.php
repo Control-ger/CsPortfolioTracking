@@ -8,7 +8,7 @@ header("Content-Type: application/json");
 function getEnvKey($key, $default = null) {
     // Pfad zur .env Datei (Anpassen, falls die .env woanders liegt)
     // Wir schauen im aktuellen Ordner und im Ordner darüber nach
-    $paths = ['./.env', '../.env', '../../.env'];
+$paths = ['./.env', '../.env', '../../.env', '/var/www/html/.env', '/var/www/html/api/.env'];
     foreach ($paths as $path) {
         if (file_exists($path)) {
             $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -53,7 +53,18 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlError = curl_error($ch);
 curl_close($ch);
+
+// Log response
+$logDir = '/var/www/html/logs';
+if (!is_dir($logDir)) {
+    @mkdir($logDir, 0755, true);
+}
+$logFile = $logDir . '/csfloat_proxy.log';
+$timestamp = date('Y-m-d H:i:s');
+$logLine = "[{$timestamp}] CSFloat Response | httpCode={$httpCode} | error=" . strlen($curlError) . " | response=" . strlen($response) . "\n";
+@file_put_contents($logFile, $logLine, FILE_APPEND);
 
 http_response_code($httpCode);
 echo $response;

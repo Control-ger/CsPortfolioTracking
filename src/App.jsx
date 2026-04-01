@@ -7,6 +7,7 @@ import { PortfolioChart } from "./components/PortfolioChart";
 import { Watchlist } from "./components/Watchlist";
 import { WatchlistOverview } from "./components/WatchlistOverview";
 import { ApiWarnings } from "./components/ApiWarnings";
+import { DebugPanel } from "./components/DebugPanel";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { fetchPortfolioInvestmentHistory } from "./lib/apiClient";
 
@@ -76,24 +77,25 @@ export default function Dashboard() {
               {error}
             </div>
           )}
-          <TabsList className="grid w-full max-w-100 grid-cols-3">
+          <TabsList className="grid w-full max-w-100 grid-cols-4">
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
             <TabsTrigger value="inventory">Inventar & Details</TabsTrigger>
             <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+            <TabsTrigger value="debug">🔧 Debug</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <StatCard
                 title="Portfolio Wert (Live)"
-                value={`${stats.totalValue.toFixed(2)}€`}
-                subValue={`Einsatz: ${stats.totalInvested.toFixed(2)}€`}
+                value={`${(stats.totalValue || 0).toFixed(2)}€`}
+                subValue={`Einsatz: ${(stats.totalInvested || 0).toFixed(2)}€`}
                 isPositive={stats.isPositive}
               />
               <StatCard
                 title="Gesamt Profit/Loss"
-                value={`${stats.isPositive ? "+" : ""}${stats.totalProfitEuro.toFixed(2)}€`}
-                subValue={`${stats.isPositive ? "+" : ""}${stats.totalRoiPercent.toFixed(2)}%`}
+                value={`${stats.isPositive ? "+" : ""}${(stats.totalProfitEuro || 0).toFixed(2)}€`}
+                subValue={`${stats.isPositive ? "+" : ""}${(stats.totalRoiPercent || 0).toFixed(2)}%`}
                 isPositive={stats.isPositive}
               />
               <StatCard
@@ -132,6 +134,13 @@ export default function Dashboard() {
 
           <TabsContent value="watchlist" className="space-y-6">
             <Watchlist focusTarget={watchlistFocusTarget} />
+          </TabsContent>
+
+          <TabsContent value="debug" className="space-y-6">
+            <div className="max-w-4xl">
+              <h2 className="text-xl font-bold mb-4">Debug Panel</h2>
+              <DebugPanel />
+            </div>
           </TabsContent>
         </Tabs>
       </div>

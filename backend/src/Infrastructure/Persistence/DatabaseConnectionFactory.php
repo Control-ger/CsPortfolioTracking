@@ -3,13 +3,16 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Persistence;
 
-use App\Config\DatabaseConfig;
 use PDO;
+use App\Config\DatabaseConfig;
 
 final class DatabaseConnectionFactory
 {
-    public function __construct(private readonly DatabaseConfig $config)
+    private DatabaseConfig $config;
+
+    public function __construct(DatabaseConfig $config)
     {
+        $this->config = $config;
     }
 
     public function create(): PDO
@@ -21,8 +24,14 @@ final class DatabaseConnectionFactory
             $this->config->charset
         );
 
-        $pdo = new PDO($dsn, $this->config->username, $this->config->password);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        return $pdo;
+        return new PDO(
+            $dsn,
+            $this->config->username,
+            $this->config->password,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]
+        );
     }
 }
