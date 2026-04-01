@@ -1,4 +1,6 @@
-const DEFAULT_API_BASE = `${window.location.origin}/api/index.php/api/v1`;
+import { errorToContext, sendFrontendTelemetryEvent } from "./frontendTelemetry";
+
+const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`;
 const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
 
 function buildPath(path, query = {}) {
@@ -28,14 +30,63 @@ function buildApiError(path, response, payload) {
 }
 
 async function requestPayload(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, options);
+  const method = String(options?.method || "GET").toUpperCase();
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE}${path}`, options);
+  } catch (fetchError) {
+    void sendFrontendTelemetryEvent({
+      level: "error",
+      event: "frontend.fetch_error",
+      message: "Fetch request failed",
+      context: {
+        method,
+        path,
+        apiBase: API_BASE,
+        ...errorToContext(fetchError),
+      },
+    });
+    throw fetchError;
+  }
+
   const contentType = response.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json")
-    ? await response.json()
-    : null;
+  let payload = null;
+
+  if (contentType.includes("application/json")) {
+    try {
+      payload = await response.json();
+    } catch (jsonError) {
+      void sendFrontendTelemetryEvent({
+        level: "error",
+        event: "frontend.fetch_error",
+        message: "API response JSON parsing failed",
+        context: {
+          method,
+          path,
+          statusCode: response.status,
+          ...errorToContext(jsonError),
+        },
+      });
+      throw jsonError;
+    }
+  }
 
   if (!response.ok) {
-    throw buildApiError(path, response, payload);
+    const apiError = buildApiError(path, response, payload);
+    void sendFrontendTelemetryEvent({
+      level: "error",
+      event: "frontend.fetch_error",
+      message: "API request returned an error response",
+      context: {
+        method,
+        path,
+        statusCode: response.status,
+        errorCode: apiError.code || "API_REQUEST_FAILED",
+        requestId: response.headers.get("x-request-id") || undefined,
+      },
+    });
+    throw apiError;
   }
 
   return payload || { data: null, meta: {} };
@@ -55,23 +106,27 @@ async function requestWithMeta(path, options = {}) {
 }
 
 export async function fetchPortfolioInvestments() {
-  return requestWithMeta("/***REMOVED***/investments");
+  return requestWithMeta("/api/v1/***REMOVED***/investments");
 }
 
 export async function fetchPortfolioInvestmentHistory(id) {
-  return request(`/***REMOVED***/investments/${id}/history`);
+  return request(`/api/v1/***REMOVED***/investments/${id}/history`);
 }
 
 export async function fetchPortfolioSummary() {
-  return requestWithMeta("/***REMOVED***/summary");
+  return requestWithMeta("/api/v1/***REMOVED***/summary");
 }
 
 export async function fetchPortfolioHistory() {
-  return request("/***REMOVED***/history");
+  return request("/api/v1/***REMOVED***/history");
+}
+
+export async function fetchPortfolioComposition() {
+  return request("/api/v1/***REMOVED***/composition");
 }
 
 export async function savePortfolioDailyValue(totalValue) {
-  return request("/***REMOVED***/daily-value", {
+  return request("/api/v1/***REMOVED***/daily-value", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ totalValue }),
@@ -80,14 +135,14 @@ export async function savePortfolioDailyValue(totalValue) {
 
 export async function fetchWatchlist(options = {}) {
   return requestWithMeta(
-    buildPath("/watchlist", {
+    buildPath("/api/v1/watchlist", {
       syncLive: options.syncLive ? 1 : undefined,
     })
   );
 }
 
 export async function createWatchlistItem(name, type = "skin") {
-  return request("/watchlist", {
+  return request("/api/v1/watchlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, type }),
@@ -95,7 +150,7 @@ export async function createWatchlistItem(name, type = "skin") {
 }
 
 export async function deleteWatchlistItem(id) {
-  return request(`/watchlist/${id}`, { method: "DELETE" });
+  return request(`/api/v1/watchlist/${id}`, { method: "DELETE" });
 }
 
 export async function searchWatchlistItems(
@@ -105,13 +160,25 @@ export async function searchWatchlistItems(
   page = 1
 ) {
   return requestWithMeta(
-    buildPath("/watchlist/search", {
+    buildPath("/api/v1/watchlist/search", {
       query,
       itemType: filters.itemType,
       wear: filters.wear,
       sortBy: filters.sortBy,
       limit,
       page,
+    })
+  );
+}
+
+export async function fetchDebugLogs(options = {}) {
+  return request(
+    buildPath("/api/v1/debug/logs", {
+      type: options.type || "app",
+      limit: options.limit || 100,
+      event: options.event,
+      level: options.level,
+      requestId: options.requestId,
     })
   );
 }

@@ -1,13 +1,20 @@
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+"use client"
+
+import { TrendingUp } from "lucide-react"
+import { CartesianGrid, Dot, Line, LineChart, XAxis, YAxis } from "recharts"
+
 import {
-  Line,
-  LineChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from "recharts";
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "./ui/card"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "./ui/chart"
 
 const formatDate = (dateString) => {
   if (!dateString) return "";
@@ -15,72 +22,107 @@ const formatDate = (dateString) => {
   return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
 };
 
-const formatTooltipValue = (value) => `${parseFloat(value).toFixed(2)} EUR`;
+const chartConfig = {
+  wert: {
+    label: "Portfolio Wert",
+  },
+};
 
 export const PortfolioChart = ({
   history,
-  color,
   title = "Portfolio Entwicklung",
   emptyLabel = "Noch keine Historie-Daten verfuegbar",
   valueLabel = "Wert",
 }) => {
+  // Determine if it's profit or loss
+  const isProfit = history && history.length > 1 
+    ? history[history.length - 1].wert >= history[0].wert
+    : true;
+
   const chartData = (history || []).map((item) => ({
     ...item,
     dateFormatted: formatDate(item.date),
+    fill: isProfit ? "#22c55e" : "#ef4444",
   }));
+
+  const lineColor = isProfit ? "#22c55e" : "#ef4444";
+
+  const trendingText = isProfit ? "Trending up" : "Trending down";
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="h-80 w-full">
+      <CardContent>
         {chartData.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
+          <div className="flex h-80 items-center justify-center text-muted-foreground">
             <p>{emptyLabel}</p>
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                vertical={false}
-                stroke="hsl(var(--border))"
-              />
-              <XAxis
+          <ChartContainer config={chartConfig}>
+            <LineChart
+              accessibilityLayer
+              data={chartData}
+              margin={{
+                top: 24,
+                left: 24,
+                right: 24,
+                bottom: 24,
+              }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis 
                 dataKey="dateFormatted"
-                stroke="hsl(var(--muted-foreground))"
-                style={{ fontSize: "12px" }}
-                angle={-45}
-                textAnchor="end"
-                height={60}
+                stroke="currentColor"
+                className="text-muted-foreground text-xs"
               />
-              <YAxis
-                stroke="hsl(var(--muted-foreground))"
-                style={{ fontSize: "12px" }}
-                tickFormatter={(value) => `${value.toFixed(0)} EUR`}
+              <YAxis 
+                stroke="currentColor"
+                className="text-muted-foreground text-xs"
+                tickFormatter={(value) => `€${value}`}
               />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  borderColor: "hsl(var(--border))",
-                }}
-                labelStyle={{ color: "hsl(var(--foreground))" }}
-                formatter={(value) => [formatTooltipValue(value), valueLabel]}
-                labelFormatter={(label) => `Datum: ${label}`}
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    indicator="line"
+                    nameKey="wert"
+                    hideLabel
+                    formatter={(value) => `€${parseFloat(value).toFixed(2)}`}
+                  />
+                }
               />
               <Line
-                type="monotone"
                 dataKey="wert"
-                stroke={color}
+                type="natural"
+                stroke={lineColor}
                 strokeWidth={2}
-                dot={{ r: 4, fill: color }}
-                activeDot={{ r: 6 }}
+                dot={({ payload, ...props }) => {
+                  return (
+                    <Dot
+                      key={payload.dateFormatted}
+                      r={5}
+                      cx={props.cx}
+                      cy={props.cy}
+                      fill={payload.fill}
+                      stroke={payload.fill}
+                    />
+                  );
+                }}
               />
             </LineChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         )}
       </CardContent>
+      <CardFooter className="flex-col items-start gap-2 text-sm">
+        <div className="flex gap-2 leading-none font-medium">
+          {trendingText} {isProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingUp className="h-4 w-4 rotate-180" />}
+        </div>
+        <div className="leading-none text-muted-foreground">
+          {valueLabel}
+        </div>
+      </CardFooter>
     </Card>
   );
 };

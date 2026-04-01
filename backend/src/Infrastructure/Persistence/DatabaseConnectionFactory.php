@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Persistence;
 
-use PDO;
 use App\Config\DatabaseConfig;
+use App\Shared\Logger;
+use PDO;
+use Throwable;
 
 final class DatabaseConnectionFactory
 {
@@ -24,14 +26,45 @@ final class DatabaseConnectionFactory
             $this->config->charset
         );
 
-        return new PDO(
-            $dsn,
-            $this->config->username,
-            $this->config->password,
-            [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]
-        );
+        try {
+            $pdo = new PDO(
+                $dsn,
+                $this->config->username,
+                $this->config->password,
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                ]
+            );
+            Logger::event(
+                'info',
+                '***REMOVED***',
+                '***REMOVED***.connection.success',
+                'Database connection established',
+                [
+                    'driver' => 'mysql',
+                    'host' => $this->config->host,
+                    'database' => $this->config->database,
+                    'charset' => $this->config->charset,
+                ]
+            );
+
+            return $pdo;
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                '***REMOVED***',
+                '***REMOVED***.connection.failed',
+                'Database connection failed',
+                [
+                    'driver' => 'mysql',
+                    'host' => $this->config->host,
+                    'database' => $this->config->database,
+                    'charset' => $this->config->charset,
+                    'exception' => $exception,
+                ]
+            );
+            throw $exception;
+        }
     }
 }

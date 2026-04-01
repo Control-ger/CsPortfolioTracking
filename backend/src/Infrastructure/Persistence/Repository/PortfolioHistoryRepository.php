@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence\Repository;
 
 use PDO;
+use Throwable;
 
 final class PortfolioHistoryRepository
 {
@@ -20,21 +21,57 @@ final class PortfolioHistoryRepository
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_date (date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        $this->pdo->exec($sql);
+
+        try {
+            $this->pdo->exec($sql);
+            RepositoryObservability::schemaEnsured(self::class, '***REMOVED***_history');
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['table' => '***REMOVED***_history']
+            );
+            throw $exception;
+        }
     }
 
     public function findAll(): array
     {
-        $stmt = $this->pdo->query('SELECT id, date, total_value FROM ***REMOVED***_history ORDER BY date ASC');
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $sql = 'SELECT id, date, total_value FROM ***REMOVED***_history ORDER BY date ASC';
+
+        try {
+            $stmt = $this->pdo->query($sql);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception
+            );
+            throw $exception;
+        }
     }
 
     public function upsertForDate(string $date, float $totalValue): void
     {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO ***REMOVED***_history (date, total_value) VALUES (?, ?)
-             ON DUPLICATE KEY UPDATE total_value = VALUES(total_value)'
-        );
-        $stmt->execute([$date, $totalValue]);
+        $sql = 'INSERT INTO ***REMOVED***_history (date, total_value) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE total_value = VALUES(total_value)';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$date, $totalValue]);
+        } catch (Throwable $exception) {
+            RepositoryObservability::upsertFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['date' => $date]
+            );
+            throw $exception;
+        }
     }
 }

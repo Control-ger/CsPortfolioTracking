@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence\Repository;
 
 use PDO;
+use Throwable;
 
 final class ItemLiveCacheRepository
 {
@@ -24,20 +25,45 @@ final class ItemLiveCacheRepository
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_fetched_at (fetched_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        $this->pdo->exec($sql);
+
+        try {
+            $this->pdo->exec($sql);
+            RepositoryObservability::schemaEnsured(self::class, 'item_live_cache');
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['table' => 'item_live_cache']
+            );
+            throw $exception;
+        }
+
         $this->ensurePriceSourceColumn();
     }
 
     public function findByMarketHashName(string $marketHashName): ?array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT market_hash_name, price_usd, price_eur, exchange_rate, price_source, fetched_at
+        $sql = 'SELECT market_hash_name, price_usd, price_eur, exchange_rate, price_source, fetched_at
              FROM item_live_cache
-             WHERE market_hash_name = ?'
-        );
-        $stmt->execute([$marketHashName]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+             WHERE market_hash_name = ?';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$marketHashName]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $row ?: null;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['marketHashName' => $marketHashName]
+            );
+            throw $exception;
+        }
     }
 
     public function upsert(
@@ -48,8 +74,7 @@ final class ItemLiveCacheRepository
         string $priceSource,
         string $fetchedAt
     ): void {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO item_live_cache (
+        $sql = 'INSERT INTO item_live_cache (
                 market_hash_name, price_usd, price_eur, exchange_rate, price_source, fetched_at
              ) VALUES (?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
@@ -58,21 +83,61 @@ final class ItemLiveCacheRepository
                 exchange_rate = VALUES(exchange_rate),
                 price_source = VALUES(price_source),
                 fetched_at = VALUES(fetched_at),
-                updated_at = CURRENT_TIMESTAMP'
-        );
-        $stmt->execute([$marketHashName, $priceUsd, $priceEur, $exchangeRate, $priceSource, $fetchedAt]);
+                updated_at = CURRENT_TIMESTAMP';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$marketHashName, $priceUsd, $priceEur, $exchangeRate, $priceSource, $fetchedAt]);
+        } catch (Throwable $exception) {
+            RepositoryObservability::upsertFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['marketHashName' => $marketHashName]
+            );
+            throw $exception;
+        }
     }
 
     private function ensurePriceSourceColumn(): void
     {
-        $stmt = $this->pdo->query("SHOW COLUMNS FROM item_live_cache LIKE 'price_source'");
-        $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+        $checkSql = "SHOW COLUMNS FROM item_live_cache LIKE 'price_source'";
+        try {
+            $stmt = $this->pdo->query($checkSql);
+            $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $checkSql,
+                $exception,
+                ['table' => 'item_live_cache', 'column' => 'price_source']
+            );
+            throw $exception;
+        }
+
         if ($row !== false && $row !== null) {
             return;
         }
 
-        $this->pdo->exec(
-            'ALTER TABLE item_live_cache ADD COLUMN price_source VARCHAR(16) DEFAULT NULL AFTER exchange_rate'
-        );
+        $alterSql = 'ALTER TABLE item_live_cache ADD COLUMN price_source VARCHAR(16) DEFAULT NULL AFTER exchange_rate';
+        try {
+            $this->pdo->exec($alterSql);
+            RepositoryObservability::migrationColumnAdded(
+                self::class,
+                'item_live_cache',
+                'price_source'
+            );
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $alterSql,
+                $exception,
+                ['table' => 'item_live_cache', 'column' => 'price_source']
+            );
+            throw $exception;
+        }
     }
 }

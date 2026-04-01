@@ -44,14 +44,17 @@ $envPaths = [
 ];
 
 $envLoaded = false;
+$loadedEnvPath = null;
 foreach ($envPaths as $envPath) {
     if (loadEnvFile($envPath)) {
         $envLoaded = true;
+        $loadedEnvPath = $envPath;
         break;
     }
 }
 
 // Der Autoloader nutzt __DIR__, was in diesem Fall /var/www/html/api/src ist.
+$autoloadReady = false;
 spl_autoload_register(static function (string $class): void {
     $prefix = 'App\\';
     $baseDir = __DIR__ . DIRECTORY_SEPARATOR;
@@ -67,3 +70,30 @@ spl_autoload_register(static function (string $class): void {
         require_once $file;
     }
 });
+$autoloadReady = true;
+
+$GLOBALS['APP_BOOTSTRAP_DIAGNOSTICS'] = [
+    'envLoaded' => $envLoaded,
+    'envPath' => $loadedEnvPath,
+    'autoloadReady' => $autoloadReady,
+];
+
+if (!function_exists('app_bootstrap_diagnostics')) {
+    function app_bootstrap_diagnostics(): array
+    {
+        $diagnostics = $GLOBALS['APP_BOOTSTRAP_DIAGNOSTICS'] ?? null;
+        if (!is_array($diagnostics)) {
+            return [
+                'envLoaded' => false,
+                'envPath' => null,
+                'autoloadReady' => false,
+            ];
+        }
+
+        return [
+            'envLoaded' => (bool) ($diagnostics['envLoaded'] ?? false),
+            'envPath' => isset($diagnostics['envPath']) ? (string) $diagnostics['envPath'] : null,
+            'autoloadReady' => (bool) ($diagnostics['autoloadReady'] ?? false),
+        ];
+    }
+}

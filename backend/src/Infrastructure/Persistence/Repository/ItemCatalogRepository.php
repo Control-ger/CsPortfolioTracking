@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence\Repository;
 
 use PDO;
+use Throwable;
 
 final class ItemCatalogRepository
 {
@@ -26,19 +27,43 @@ final class ItemCatalogRepository
             INDEX idx_item_type (item_type),
             INDEX idx_updated_at (updated_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        $this->pdo->exec($sql);
+
+        try {
+            $this->pdo->exec($sql);
+            RepositoryObservability::schemaEnsured(self::class, 'item_catalog');
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['table' => 'item_catalog']
+            );
+            throw $exception;
+        }
     }
 
     public function findByMarketHashName(string $marketHashName): ?array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT market_hash_name, image_url, item_type, item_type_label, market_type_label, wear_key, wear_label, updated_at
+        $sql = 'SELECT market_hash_name, image_url, item_type, item_type_label, market_type_label, wear_key, wear_label, updated_at
              FROM item_catalog
-             WHERE market_hash_name = ?'
-        );
-        $stmt->execute([$marketHashName]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+             WHERE market_hash_name = ?';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$marketHashName]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $row ?: null;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['marketHashName' => $marketHashName]
+            );
+            throw $exception;
+        }
     }
 
     public function upsert(
@@ -50,8 +75,7 @@ final class ItemCatalogRepository
         ?string $wearKey,
         ?string $wearLabel
     ): void {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO item_catalog (
+        $sql = 'INSERT INTO item_catalog (
                 market_hash_name, image_url, item_type, item_type_label, market_type_label, wear_key, wear_label
              ) VALUES (?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
@@ -61,16 +85,28 @@ final class ItemCatalogRepository
                 market_type_label = VALUES(market_type_label),
                 wear_key = VALUES(wear_key),
                 wear_label = VALUES(wear_label),
-                updated_at = CURRENT_TIMESTAMP'
-        );
-        $stmt->execute([
-            $marketHashName,
-            $imageUrl,
-            $itemType,
-            $itemTypeLabel,
-            $marketTypeLabel,
-            $wearKey,
-            $wearLabel,
-        ]);
+                updated_at = CURRENT_TIMESTAMP';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([
+                $marketHashName,
+                $imageUrl,
+                $itemType,
+                $itemTypeLabel,
+                $marketTypeLabel,
+                $wearKey,
+                $wearLabel,
+            ]);
+        } catch (Throwable $exception) {
+            RepositoryObservability::upsertFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['marketHashName' => $marketHashName]
+            );
+            throw $exception;
+        }
     }
 }

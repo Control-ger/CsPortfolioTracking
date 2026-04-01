@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence\Repository;
 
 use PDO;
+use Throwable;
 
 final class PositionHistoryRepository
 {
@@ -24,7 +25,20 @@ final class PositionHistoryRepository
             UNIQUE KEY unique_investment_date (investment_id, date),
             INDEX idx_investment_date (investment_id, date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        $this->pdo->exec($sql);
+
+        try {
+            $this->pdo->exec($sql);
+            RepositoryObservability::schemaEnsured(self::class, 'position_history');
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['table' => 'position_history']
+            );
+            throw $exception;
+        }
     }
 
     public function upsertSnapshot(
@@ -34,26 +48,57 @@ final class PositionHistoryRepository
         float $unitPrice,
         float $totalValue
     ): void {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO position_history (investment_id, date, quantity, unit_price, total_value)
+        $sql = 'INSERT INTO position_history (investment_id, date, quantity, unit_price, total_value)
              VALUES (?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                  quantity = VALUES(quantity),
                  unit_price = VALUES(unit_price),
-                 total_value = VALUES(total_value)'
-        );
-        $stmt->execute([$investmentId, $date, $quantity, $unitPrice, $totalValue]);
+                 total_value = VALUES(total_value)';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$investmentId, $date, $quantity, $unitPrice, $totalValue]);
+        } catch (Throwable $exception) {
+            RepositoryObservability::upsertFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['investmentId' => $investmentId, 'date' => $date]
+            );
+            throw $exception;
+        }
     }
 
     public function findHistoryByInvestmentId(int $investmentId): array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT date, quantity, unit_price, total_value
+        $sql = 'SELECT date, quantity, unit_price, total_value
              FROM position_history
              WHERE investment_id = ?
-             ORDER BY date ASC'
-        );
-        $stmt->execute([$investmentId]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+             ORDER BY date ASC';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$investmentId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if ($rows === []) {
+                RepositoryObservability::resultEmptyUnexpected(
+                    self::class,
+                    __FUNCTION__,
+                    ['investmentId' => $investmentId]
+                );
+            }
+
+            return $rows;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['investmentId' => $investmentId]
+            );
+            throw $exception;
+        }
     }
 }

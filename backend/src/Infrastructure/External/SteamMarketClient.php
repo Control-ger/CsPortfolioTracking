@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\External;
 
+use App\Shared\Logger;
+
 final class SteamMarketClient
 {
     public function searchItems(string $query, int $limit = 8, int $start = 0): array
@@ -85,6 +87,18 @@ final class SteamMarketClient
 
     private function fetchJson(string $url): ?array
     {
+        $start = microtime(true);
+        Logger::event(
+            'info',
+            'external',
+            'external.steam.request',
+            'Steam request started',
+            [
+                'provider' => 'steam',
+                'url' => $url,
+            ]
+        );
+
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -93,13 +107,100 @@ final class SteamMarketClient
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
+        $durationMs = (int) round((microtime(true) - $start) * 1000);
+
+        if ($response === false) {
+            Logger::event(
+                'error',
+                'error',
+                'error.curl',
+                'Steam curl error',
+                [
+                    'provider' => 'steam',
+                    'durationMs' => $durationMs,
+                    'statusCode' => $httpCode > 0 ? $httpCode : null,
+                    'errorCode' => 'STEAM_REQUEST_FAILED',
+                    'curlError' => $curlError,
+                ]
+            );
+            Logger::event(
+                'error',
+                'external',
+                'external.steam.response',
+                'Steam request failed',
+                [
+                    'provider' => 'steam',
+                    'httpCode' => $httpCode > 0 ? $httpCode : null,
+                    'durationMs' => $durationMs,
+                    'success' => false,
+                    'errorCode' => 'STEAM_REQUEST_FAILED',
+                ]
+            );
+            return null;
+        }
 
         if ($httpCode !== 200 || !is_string($response) || $response === '') {
+            Logger::event(
+                'warning',
+                'external',
+                'external.steam.response',
+                'Steam HTTP response not usable',
+                [
+                    'provider' => 'steam',
+                    'httpCode' => $httpCode > 0 ? $httpCode : null,
+                    'durationMs' => $durationMs,
+                    'success' => false,
+                    'errorCode' => 'STEAM_HTTP_ERROR',
+                ]
+            );
             return null;
         }
 
         $decoded = json_decode($response, true);
-        return is_array($decoded) ? $decoded : null;
+        if (!is_array($decoded)) {
+            Logger::event(
+                'error',
+                'error',
+                'error.json_decode',
+                'Steam JSON decode failed',
+                [
+                    'provider' => 'steam',
+                    'statusCode' => $httpCode,
+                    'durationMs' => $durationMs,
+                    'errorCode' => 'STEAM_INVALID_RESPONSE',
+                ]
+            );
+            Logger::event(
+                'error',
+                'external',
+                'external.steam.response',
+                'Steam invalid JSON response',
+                [
+                    'provider' => 'steam',
+                    'httpCode' => $httpCode,
+                    'durationMs' => $durationMs,
+                    'success' => false,
+                    'errorCode' => 'STEAM_INVALID_RESPONSE',
+                ]
+            );
+            return null;
+        }
+
+        Logger::event(
+            'info',
+            'external',
+            'external.steam.response',
+            'Steam response received',
+            [
+                'provider' => 'steam',
+                'httpCode' => $httpCode,
+                'durationMs' => $durationMs,
+                'success' => true,
+            ]
+        );
+
+        return $decoded;
     }
 }

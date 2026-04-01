@@ -12,7 +12,12 @@ final class PortfolioSummaryDto
         public readonly float $totalProfitEuro,
         public readonly float $totalRoiPercent,
         public readonly bool $isPositive,
-        public readonly string $chartColor
+        public readonly string $chartColor,
+        public readonly int $liveItemsCount,
+        public readonly int $staleLiveItemsCount,
+        public readonly float $staleLiveItemsRatioPercent,
+        public readonly ?int $freshestDataAgeSeconds,
+        public readonly ?int $oldestDataAgeSeconds
     ) {
     }
 
@@ -26,6 +31,11 @@ final class PortfolioSummaryDto
             'totalRoiPercent' => $this->totalRoiPercent,
             'isPositive' => $this->isPositive,
             'chartColor' => $this->chartColor,
+            'liveItemsCount' => $this->liveItemsCount,
+            'staleLiveItemsCount' => $this->staleLiveItemsCount,
+            'staleLiveItemsRatioPercent' => $this->staleLiveItemsRatioPercent,
+            'freshestDataAgeSeconds' => $this->freshestDataAgeSeconds,
+            'oldestDataAgeSeconds' => $this->oldestDataAgeSeconds,
         ];
     }
 }

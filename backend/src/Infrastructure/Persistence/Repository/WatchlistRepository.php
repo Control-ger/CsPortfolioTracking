@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence\Repository;
 
 use PDO;
+use Throwable;
 
 final class WatchlistRepository
 {
@@ -21,33 +22,97 @@ final class WatchlistRepository
             UNIQUE KEY unique_name (name),
             INDEX idx_added_at (added_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        $this->pdo->exec($sql);
+
+        try {
+            $this->pdo->exec($sql);
+            RepositoryObservability::schemaEnsured(self::class, 'watchlist');
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['table' => 'watchlist']
+            );
+            throw $exception;
+        }
     }
 
     public function findAll(): array
     {
-        $stmt = $this->pdo->query('SELECT id, name, type, added_at FROM watchlist ORDER BY added_at DESC');
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $sql = 'SELECT id, name, type, added_at FROM watchlist ORDER BY added_at DESC';
+
+        try {
+            $stmt = $this->pdo->query($sql);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception
+            );
+            throw $exception;
+        }
     }
 
     public function existsByName(string $name): bool
     {
-        $stmt = $this->pdo->prepare('SELECT id FROM watchlist WHERE name = ?');
-        $stmt->execute([$name]);
-        return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+        $sql = 'SELECT id FROM watchlist WHERE name = ?';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$name]);
+            return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['name' => $name]
+            );
+            throw $exception;
+        }
     }
 
     public function insert(string $name, string $type): int
     {
-        $stmt = $this->pdo->prepare('INSERT INTO watchlist (name, type) VALUES (?, ?)');
-        $stmt->execute([$name, $type]);
-        return (int) $this->pdo->lastInsertId();
+        $sql = 'INSERT INTO watchlist (name, type) VALUES (?, ?)';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$name, $type]);
+            return (int) $this->pdo->lastInsertId();
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['name' => $name, 'type' => $type]
+            );
+            throw $exception;
+        }
     }
 
     public function deleteById(int $id): bool
     {
-        $stmt = $this->pdo->prepare('DELETE FROM watchlist WHERE id = ?');
-        $stmt->execute([$id]);
-        return $stmt->rowCount() > 0;
+        $sql = 'DELETE FROM watchlist WHERE id = ?';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$id]);
+            return $stmt->rowCount() > 0;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['id' => $id]
+            );
+            throw $exception;
+        }
     }
 }

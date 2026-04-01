@@ -52,6 +52,11 @@ export function usePortfolio() {
     totalRoiPercent: 0,
     isPositive: true,
     chartColor: "#22c55e",
+    liveItemsCount: 0,
+    staleLiveItemsCount: 0,
+    staleLiveItemsRatioPercent: 0,
+    freshestDataAgeSeconds: null,
+    oldestDataAgeSeconds: null,
   });
   const [***REMOVED***History, setPortfolioHistory] = useState([]);
   const [error, setError] = useState("");

@@ -6,6 +6,8 @@ namespace App\Http\Controller;
 use App\Application\Service\WatchlistService;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Logger;
+use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 
@@ -25,6 +27,13 @@ final class WatchlistController
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Watchlist list request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('WATCHLIST_LIST_FAILED', $exception->getMessage(), [], 500);
         }
     }
@@ -45,6 +54,13 @@ final class WatchlistController
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Watchlist search request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('WATCHLIST_SEARCH_FAILED', $exception->getMessage(), [], 500);
         }
     }
@@ -60,9 +76,32 @@ final class WatchlistController
                 201
             );
         } catch (RuntimeException $exception) {
+            Logger::event(
+                'warning',
+                'error',
+                'error.conflict',
+                'Watchlist conflict',
+                ['statusCode' => 409, 'exception' => $exception]
+            );
             JsonResponseFactory::error('WATCHLIST_CONFLICT', $exception->getMessage(), [], 409);
-        } catch (Throwable $exception) {
+        } catch (InvalidArgumentException $exception) {
+            Logger::event(
+                'warning',
+                'error',
+                'error.validation',
+                'Watchlist validation failed',
+                ['statusCode' => 400, 'exception' => $exception]
+            );
             JsonResponseFactory::error('WATCHLIST_CREATE_FAILED', $exception->getMessage(), [], 400);
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Watchlist create request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('WATCHLIST_CREATE_FAILED', $exception->getMessage(), [], 500);
         }
     }
 
@@ -75,6 +114,13 @@ final class WatchlistController
             }
             JsonResponseFactory::success(['deleted' => true], statusCode: 200);
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Watchlist delete request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('WATCHLIST_DELETE_FAILED', $exception->getMessage(), [], 500);
         }
     }
@@ -87,6 +133,13 @@ final class WatchlistController
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Watchlist refresh request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('WATCHLIST_REFRESH_FAILED', $exception->getMessage(), [], 500);
         }
     }

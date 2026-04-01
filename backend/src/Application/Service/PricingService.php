@@ -10,6 +10,7 @@ use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\Repository\ItemCatalogRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Shared\Dto\WatchlistSearchCandidateDto;
+use App\Shared\Logger;
 
 final class PricingService
 {
@@ -101,8 +102,31 @@ final class PricingService
         );
 
         if ($this->isFreshLiveCache($cachedLive)) {
+            Logger::event(
+                'info',
+                'external',
+                'external.pricing.cache_hit',
+                'Pricing cache hit',
+                [
+                    'provider' => (string) ($cachedLive['priceSource'] ?? self::PRICE_SOURCE_CSFLOAT),
+                    'cacheHit' => true,
+                    'itemName' => $itemName,
+                ]
+            );
             return $this->buildPresentation($catalog, $cachedLive);
         }
+
+        Logger::event(
+            'info',
+            'external',
+            'external.pricing.cache_miss',
+            'Pricing cache miss',
+            [
+                'provider' => 'pricing',
+                'cacheMiss' => true,
+                'itemName' => $itemName,
+            ]
+        );
 
         if ($this->csFloatCircuitBreakerWarning === null) {
             $this->csFloatCircuitBreakerWarning = $this->loadActiveCsFloatBackoff();
@@ -141,6 +165,17 @@ final class PricingService
 
         $steamPriceSnapshot = $this->resolveSteamPriceSnapshot($itemName, $steamHint);
         if ($steamPriceSnapshot !== null) {
+            Logger::event(
+                'warning',
+                'external',
+                'external.pricing.fallback_to_steam',
+                'Pricing fallback to Steam',
+                [
+                    'provider' => 'steam',
+                    'fallbackUsed' => true,
+                    'itemName' => $itemName,
+                ]
+            );
             $catalog = $this->persistCatalogEntry(
                 $itemName,
                 $catalog,

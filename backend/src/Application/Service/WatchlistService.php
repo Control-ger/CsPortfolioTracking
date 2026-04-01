@@ -6,6 +6,7 @@ namespace App\Application\Service;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Shared\Dto\WatchlistItemDto;
+use App\Shared\Logger;
 
 final class WatchlistService
 {
@@ -160,6 +161,19 @@ final class WatchlistService
         $id = $this->watchlistRepository->insert($trimmedName, $type);
         $liveSnapshot = $this->syncSingleItemPrice($trimmedName);
 
+        Logger::event(
+            'info',
+            'domain',
+            'domain.watchlist.item_created',
+            'Watchlist item created',
+            [
+                'itemId' => $id,
+                'itemName' => $trimmedName,
+                'itemType' => $type,
+                'isLiveSynced' => $liveSnapshot !== null,
+            ]
+        );
+
         return [
             'id' => $id,
             'currentPrice' => $liveSnapshot['priceEur'] ?? null,
@@ -169,7 +183,19 @@ final class WatchlistService
 
     public function deleteItem(int $id): bool
     {
-        return $this->watchlistRepository->deleteById($id);
+        $deleted = $this->watchlistRepository->deleteById($id);
+        Logger::event(
+            'info',
+            'domain',
+            'domain.watchlist.item_deleted',
+            'Watchlist item deleted',
+            [
+                'itemId' => $id,
+                'deleted' => $deleted,
+            ]
+        );
+
+        return $deleted;
     }
 
     public function refreshPrices(): array
@@ -177,7 +203,25 @@ final class WatchlistService
         $this->watchlistRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
 
-        return $this->syncLivePrices();
+        Logger::event(
+            'info',
+            'domain',
+            'domain.watchlist.price_refresh_started',
+            'Watchlist price refresh started'
+        );
+        $result = $this->syncLivePrices();
+        Logger::event(
+            'info',
+            'domain',
+            'domain.watchlist.price_refresh_completed',
+            'Watchlist price refresh completed',
+            [
+                'updated' => $result['updated'] ?? null,
+                'totalItems' => $result['totalItems'] ?? null,
+            ]
+        );
+
+        return $result;
     }
 
     private function syncLivePrices(): array

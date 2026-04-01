@@ -6,6 +6,7 @@ namespace App\Http\Controller;
 use App\Application\Service\PortfolioService;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Logger;
 use Throwable;
 
 final class PortfolioController
@@ -23,6 +24,13 @@ final class PortfolioController
                 ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio investments request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('PORTFOLIO_INVESTMENTS_FAILED', $exception->getMessage(), [], 500);
         }
     }
@@ -36,6 +44,13 @@ final class PortfolioController
                 ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio summary request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('PORTFOLIO_SUMMARY_FAILED', $exception->getMessage(), [], 500);
         }
     }
@@ -45,6 +60,13 @@ final class PortfolioController
         try {
             JsonResponseFactory::success($this->***REMOVED***Service->getHistory());
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio history request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('PORTFOLIO_HISTORY_FAILED', $exception->getMessage(), [], 500);
         }
     }
@@ -54,6 +76,13 @@ final class PortfolioController
         try {
             JsonResponseFactory::success($this->***REMOVED***Service->getInvestmentHistory($id));
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio position history request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('PORTFOLIO_POSITION_HISTORY_FAILED', $exception->getMessage(), [], 500);
         }
     }
@@ -69,7 +98,30 @@ final class PortfolioController
                 200
             );
         } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio save daily value request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
             JsonResponseFactory::error('PORTFOLIO_SAVE_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function composition(Request $request): void
+    {
+        try {
+            JsonResponseFactory::success($this->***REMOVED***Service->getComposition());
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio composition request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('PORTFOLIO_COMPOSITION_FAILED', $exception->getMessage(), [], 500);
         }
     }
 }

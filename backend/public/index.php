@@ -1,32 +1,6 @@
 <?php
 declare(strict_types=1);
 
-// Da die Datei in /api/public/index.php liegt:
-// __DIR__ ist /var/www/html/api/public
-// dirname(__DIR__) ist /var/www/html/api
-$backendRoot = dirname(__DIR__); 
-$bootstrapPath = $backendRoot . '/src/bootstrap.php';
-
-require_once $bootstrapPath;
-
-// Fallback: Lade .env direkt falls nicht im bootstrap geladen
-$envFile = '/var/www/html/.env';
-if (is_file($envFile)) {
-    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    foreach ($lines as $line) {
-        if (str_starts_with(trim($line), '#') || strpos($line, '=') === false) {
-            continue;
-        }
-        [$key, $value] = explode('=', $line, 2);
-        $key = trim($key);
-        $value = trim($value, " \t\n\r\0\x0B\"'");
-        if (!getenv($key)) {
-            $_ENV[$key] = $value;
-            putenv("{$key}={$value}");
-        }
-    }
-}
-
 use App\Application\Service\PortfolioService;
 use App\Application\Service\PricingService;
 use App\Application\Service\WatchlistService;
@@ -46,65 +20,435 @@ use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
+use App\Observability\Application\ObservabilityService;
+use App\Observability\Context\RequestContext;
+use App\Observability\Context\RequestContextStore;
+use App\Observability\Http\Controller\FrontendTelemetryController;
+use App\Observability\Http\Controller\ObservabilityController;
+use App\Observability\Infrastructure\Persistence\ObservabilityEventRepository;
+use App\Observability\Infrastructure\Sink\FileSink;
+use App\Observability\Sanitization\ContextSanitizer;
+use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Http\Router;
+use App\Shared\Logger;
 
-// CORS Header
+$backendRoot = dirname(__DIR__);
+$bootstrapPath = $backendRoot . '/src/bootstrap.php';
+
+require_once $bootstrapPath;
+
+// Fallback: lade .env direkt, falls bootstrap die Datei nicht gefunden hat.
+$envFile = '/var/www/html/.env';
+if (is_file($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (str_starts_with(trim($line), '#') || strpos($line, '=') === false) {
+            continue;
+        }
+        [$key, $value] = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value, " \t\n\r\0\x0B\"'");
+        if (!getenv($key)) {
+            $_ENV[$key] = $value;
+            putenv("{$key}={$value}");
+        }
+    }
+}
+
+function obs_env_flag(string $key, bool $default = false): bool
+{
+    $value = getenv($key);
+    if ($value === false && isset($_ENV[$key])) {
+        $value = $_ENV[$key];
+    }
+
+    if ($value === false || $value === null || trim((string) $value) === '') {
+        return $default;
+    }
+
+    return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+}
+
+function obs_env_int(string $key, int $default): int
+{
+    $value = getenv($key);
+    if ($value === false && isset($_ENV[$key])) {
+        $value = $_ENV[$key];
+    }
+
+    if (!is_numeric($value)) {
+        return $default;
+    }
+
+    return (int) $value;
+}
+
+function obs_collect_headers(): array
+{
+    $headers = [];
+
+    if (function_exists('getallheaders')) {
+        $rawHeaders = getallheaders();
+        if (is_array($rawHeaders)) {
+            foreach ($rawHeaders as $key => $value) {
+                $headers[strtolower((string) $key)] = (string) $value;
+            }
+        }
+    }
+
+    foreach ($_SERVER as $key => $value) {
+        if (!is_string($value)) {
+            continue;
+        }
+
+        if (str_starts_with($key, 'HTTP_')) {
+            $headerName = strtolower(str_replace('_', '-', substr($key, 5)));
+            $headers[$headerName] = $value;
+            continue;
+        }
+
+        if (in_array($key, ['CONTENT_TYPE', 'CONTENT_LENGTH'], true)) {
+            $headerName = strtolower(str_replace('_', '-', $key));
+            $headers[$headerName] = $value;
+        }
+    }
+
+    return $headers;
+}
+
+function obs_generate_request_id(): string
+{
+    try {
+        return 'req_' . bin2hex(random_bytes(12));
+    } catch (\Throwable) {
+        return 'req_' . str_replace('.', '', uniqid('', true));
+    }
+}
+
+function obs_validate_request_id(?string $value): bool
+{
+    if (!is_string($value)) {
+        return false;
+    }
+
+    $candidate = trim($value);
+    if ($candidate === '' || strlen($candidate) > 64) {
+        return false;
+    }
+
+    return preg_match('/^[A-Za-z0-9._:-]+$/', $candidate) === 1;
+}
+
+function obs_resolve_request_id(array $headers): string
+{
+    $incoming = $headers['x-request-id'] ?? null;
+    if (obs_validate_request_id($incoming)) {
+        return trim((string) $incoming);
+    }
+
+    return obs_generate_request_id();
+}
+
+function obs_bootstrap_diagnostics(): array
+{
+    if (function_exists('app_bootstrap_diagnostics')) {
+        $diagnostics = app_bootstrap_diagnostics();
+        if (is_array($diagnostics)) {
+            return [
+                'envLoaded' => (bool) ($diagnostics['envLoaded'] ?? false),
+                'envPath' => isset($diagnostics['envPath']) ? (string) $diagnostics['envPath'] : null,
+                'autoloadReady' => (bool) ($diagnostics['autoloadReady'] ?? false),
+            ];
+        }
+    }
+
+    return [
+        'envLoaded' => false,
+        'envPath' => null,
+        'autoloadReady' => false,
+    ];
+}
+
+function obs_startup_marker_path(): string
+{
+    $pid = getmypid();
+    $pidString = is_int($pid) && $pid > 0 ? (string) $pid : 'unknown';
+
+    return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+        . DIRECTORY_SEPARATOR
+        . 'cs***REMOVED***_startup_logged_'
+        . $pidString
+        . '.flag';
+}
+
+function obs_should_emit_startup_events(): bool
+{
+    $path = obs_startup_marker_path();
+    if (is_file($path)) {
+        return false;
+    }
+
+    $written = @file_put_contents($path, (string) time());
+    if ($written === false) {
+        // Fallback: emit startup events even if marker cannot be written.
+        return true;
+    }
+
+    return true;
+}
+
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Request-Id');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
-// Initialisierung der App
-$pdo = (new DatabaseConnectionFactory(new DatabaseConfig()))->create();
+$requestHeaders = obs_collect_headers();
+$requestId = obs_resolve_request_id($requestHeaders);
+header('X-Request-Id: ' . $requestId);
 
-$investmentRepository = new InvestmentRepository($pdo);
-$positionHistoryRepository = new PositionHistoryRepository($pdo);
-$***REMOVED***HistoryRepository = new PortfolioHistoryRepository($pdo);
-$watchlistRepository = new WatchlistRepository($pdo);
-$priceHistoryRepository = new PriceHistoryRepository($pdo);
-$itemCatalogRepository = new ItemCatalogRepository($pdo);
-$itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
-
-$pricingService = new PricingService(
-    new CsFloatClient(),
-    new ExchangeRateClient(),
-    new SteamMarketClient(),
-    new MarketItemClassifier(),
-    $itemCatalogRepository,
-    $itemLiveCacheRepository
+$request = Request::fromGlobals($requestId, $requestHeaders);
+$requestStartedAt = microtime(true);
+RequestContextStore::set(
+    new RequestContext(
+        requestId: $requestId,
+        method: $request->method,
+        path: $request->path,
+        userAgent: $request->headers['user-agent'] ?? null,
+        ip: $_SERVER['REMOTE_ADDR'] ?? null
+    )
 );
-$***REMOVED***Service = new PortfolioService(
-    $investmentRepository,
-    $positionHistoryRepository,
-    $***REMOVED***HistoryRepository,
-    $pricingService
+
+$observabilityService = new ObservabilityService(
+    eventRepository: null,
+    fileSink: new FileSink(),
+    contextSanitizer: new ContextSanitizer(),
+    ***REMOVED***WriteEnabled: obs_env_flag('OBSERVABILITY_ENABLED', true)
 );
-$watchlistService = new WatchlistService($watchlistRepository, $priceHistoryRepository, $pricingService);
+Logger::setObservabilityService($observabilityService);
 
-$***REMOVED***Controller = new PortfolioController($***REMOVED***Service);
-$watchlistController = new WatchlistController($watchlistService);
-$debugController = new DebugController();
+$bootstrapDiagnostics = obs_bootstrap_diagnostics();
+$emitStartupEvents = obs_should_emit_startup_events();
+if ($emitStartupEvents) {
+    Logger::event(
+        'info',
+        'system',
+        'system.bootstrap.completed',
+        'System bootstrap completed',
+        [
+            'envLoaded' => $bootstrapDiagnostics['envLoaded'],
+            'envPath' => $bootstrapDiagnostics['envPath'],
+            'autoloadReady' => $bootstrapDiagnostics['autoloadReady'],
+            'pid' => getmypid(),
+        ]
+    );
+    Logger::event(
+        'info',
+        'system',
+        'system.config.active',
+        'Active system configuration loaded',
+        [
+            'debug' => obs_env_flag('DEBUG', false),
+            'observabilityEnabled' => obs_env_flag('OBSERVABILITY_ENABLED', true),
+            'observabilityEventsApiEnabled' => obs_env_flag('OBSERVABILITY_EVENTS_API_ENABLED', false),
+            'observabilityFrontendTelemetryEnabled' => obs_env_flag('OBSERVABILITY_FRONTEND_TELEMETRY_ENABLED', false),
+            'observabilityRetentionDays' => obs_env_int('OBSERVABILITY_RETENTION_DAYS', 30),
+        ]
+    );
+}
 
-// Router Setup
-$router = new Router();
-$router->register('GET', '/api/v1/***REMOVED***/investments', [$***REMOVED***Controller, 'investments']);
-$router->register('GET', '/api/v1/***REMOVED***/investments/{id}/history', [$***REMOVED***Controller, 'investmentHistory']);
-$router->register('GET', '/api/v1/***REMOVED***/summary', [$***REMOVED***Controller, 'summary']);
-$router->register('GET', '/api/v1/***REMOVED***/history', [$***REMOVED***Controller, 'history']);
-$router->register('PUT', '/api/v1/***REMOVED***/daily-value', [$***REMOVED***Controller, 'saveDailyValue']);
+Logger::event(
+    'debug',
+    'http',
+    'http.request.started',
+    'HTTP request started',
+    [
+        'method' => $request->method,
+        'route' => $request->path,
+        'requestId' => $requestId,
+    ]
+);
 
-$router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
-$router->register('POST', '/api/v1/watchlist', [$watchlistController, 'create']);
-$router->register('DELETE', '/api/v1/watchlist/{id}', [$watchlistController, 'delete']);
-$router->register('POST', '/api/v1/watchlist/prices/refresh', [$watchlistController, 'refresh']);
+if ($request->jsonDecodeError !== null) {
+    Logger::event(
+        'warning',
+        'error',
+        'error.json_decode',
+        'Request JSON decode failed',
+        [
+            'method' => $request->method,
+            'route' => $request->path,
+            'error' => $request->jsonDecodeError,
+        ]
+    );
+}
 
-// Debug Routes
-$router->register('GET', '/api/v1/debug/logs', [$debugController, 'logs']);
-$router->register('GET', '/api/v1/debug/csfloat', [$debugController, 'csfloatDebug']);
+$databaseConfig = new DatabaseConfig();
 
-$router->dispatch(Request::fromGlobals());
+try {
+    try {
+        $pdo = (new DatabaseConnectionFactory($databaseConfig))->create();
+        if ($emitStartupEvents) {
+            Logger::event(
+                'info',
+                'system',
+                'system.***REMOVED***.ready',
+                'Database is ready',
+                [
+                    'ready' => true,
+                    'host' => $databaseConfig->host,
+                    'database' => $databaseConfig->database,
+                ]
+            );
+        }
+    } catch (\Throwable $***REMOVED***Exception) {
+        if ($emitStartupEvents) {
+            Logger::event(
+                'error',
+                'system',
+                'system.***REMOVED***.ready',
+                'Database is not ready',
+                [
+                    'ready' => false,
+                    'host' => $databaseConfig->host,
+                    'database' => $databaseConfig->database,
+                    'exception' => $***REMOVED***Exception,
+                ]
+            );
+        }
+        throw $***REMOVED***Exception;
+    }
+
+    $observabilityRepository = new ObservabilityEventRepository(
+        $pdo,
+        obs_env_int('OBSERVABILITY_RETENTION_DAYS', 30)
+    );
+    $observabilityService->setRepository($observabilityRepository);
+
+    $investmentRepository = new InvestmentRepository($pdo);
+    $positionHistoryRepository = new PositionHistoryRepository($pdo);
+    $***REMOVED***HistoryRepository = new PortfolioHistoryRepository($pdo);
+    $watchlistRepository = new WatchlistRepository($pdo);
+    $priceHistoryRepository = new PriceHistoryRepository($pdo);
+    $itemCatalogRepository = new ItemCatalogRepository($pdo);
+    $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
+
+    $pricingService = new PricingService(
+        new CsFloatClient(),
+        new ExchangeRateClient(),
+        new SteamMarketClient(),
+        new MarketItemClassifier(),
+        $itemCatalogRepository,
+        $itemLiveCacheRepository
+    );
+    $***REMOVED***Service = new PortfolioService(
+        $investmentRepository,
+        $positionHistoryRepository,
+        $***REMOVED***HistoryRepository,
+        $priceHistoryRepository,
+        $pricingService
+    );
+    $watchlistService = new WatchlistService($watchlistRepository, $priceHistoryRepository, $pricingService);
+
+    $***REMOVED***Controller = new PortfolioController($***REMOVED***Service);
+    $watchlistController = new WatchlistController($watchlistService);
+    $debugController = new DebugController($observabilityRepository);
+    $observabilityController = new ObservabilityController($observabilityRepository);
+    $frontendTelemetryController = new FrontendTelemetryController();
+
+    $router = new Router();
+    $router->register('GET', '/api/v1/***REMOVED***/investments', [$***REMOVED***Controller, 'investments']);
+    $router->register('GET', '/api/v1/***REMOVED***/investments/{id}/history', [$***REMOVED***Controller, 'investmentHistory']);
+    $router->register('GET', '/api/v1/***REMOVED***/summary', [$***REMOVED***Controller, 'summary']);
+    $router->register('GET', '/api/v1/***REMOVED***/history', [$***REMOVED***Controller, 'history']);
+    $router->register('GET', '/api/v1/***REMOVED***/composition', [$***REMOVED***Controller, 'composition']);
+    $router->register('PUT', '/api/v1/***REMOVED***/daily-value', [$***REMOVED***Controller, 'saveDailyValue']);
+
+    $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
+    $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);
+    $router->register('POST', '/api/v1/watchlist', [$watchlistController, 'create']);
+    $router->register('DELETE', '/api/v1/watchlist/{id}', [$watchlistController, 'delete']);
+    $router->register('POST', '/api/v1/watchlist/prices/refresh', [$watchlistController, 'refresh']);
+
+    $router->register('GET', '/api/v1/debug/logs', [$debugController, 'logs']);
+    $router->register('GET', '/api/v1/debug/csfloat', [$debugController, 'csfloatDebug']);
+    $router->register('GET', '/api/v1/observability/events', [$observabilityController, 'events']);
+    $router->register('POST', '/api/v1/observability/frontend-events', [$frontendTelemetryController, 'ingest']);
+
+    $router->dispatch($request);
+
+    $statusCode = http_response_code();
+    if (!is_int($statusCode) || $statusCode <= 0) {
+        $statusCode = 200;
+    }
+
+    Logger::event(
+        'info',
+        'http',
+        'http.request.completed',
+        'HTTP request completed',
+        [
+            'method' => $request->method,
+            'route' => $request->path,
+            'statusCode' => $statusCode,
+            'durationMs' => (int) round((microtime(true) - $requestStartedAt) * 1000),
+        ]
+    );
+} catch (\Throwable $exception) {
+    $durationMs = (int) round((microtime(true) - $requestStartedAt) * 1000);
+    Logger::event(
+        'error',
+        'error',
+        'error.http_5xx',
+        'Unhandled 5xx error',
+        [
+            'statusCode' => 500,
+            'durationMs' => $durationMs,
+            'exception' => $exception,
+        ]
+    );
+    Logger::event(
+        'error',
+        'http',
+        'http.request.failed',
+        'HTTP request failed',
+        [
+            'method' => $request->method,
+            'route' => $request->path,
+            'statusCode' => 500,
+            'durationMs' => $durationMs,
+            'exception' => $exception,
+        ]
+    );
+    Logger::event(
+        'info',
+        'http',
+        'http.request.completed',
+        'HTTP request completed with server error',
+        [
+            'method' => $request->method,
+            'route' => $request->path,
+            'statusCode' => 500,
+            'durationMs' => $durationMs,
+        ]
+    );
+    Logger::event(
+        'error',
+        'error',
+        'error.unhandled_exception',
+        'Unhandled exception',
+        [
+            'statusCode' => 500,
+            'durationMs' => $durationMs,
+            'exception' => $exception,
+        ]
+    );
+
+    JsonResponseFactory::error('INTERNAL_SERVER_ERROR', 'Interner Serverfehler.', [], 500);
+} finally {
+    RequestContextStore::clear();
+}

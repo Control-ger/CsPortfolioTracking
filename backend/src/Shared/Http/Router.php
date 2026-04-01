@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Shared\Http;
 
+use App\Shared\Logger;
+
 final class Router
 {
     /** @var array<string, callable> */
@@ -37,6 +39,17 @@ final class Router
             }
         }
 
+        Logger::event(
+            'warning',
+            'error',
+            'error.route_not_found',
+            'Route not found',
+            [
+                'method' => $request->method,
+                'route' => $request->path,
+                'statusCode' => 404,
+            ]
+        );
         JsonResponseFactory::error('ROUTE_NOT_FOUND', 'Route nicht gefunden.', ['path' => $request->path], 404);
     }
 }
