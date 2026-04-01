@@ -2,18 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { StatCard } from "./components/StatsCards";
 import { InventoryTable } from "./components/InventoryTable";
-import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { PortfolioChart } from "./components/PortfolioChart";
+import { PortfolioCompositionChart } from "./components/PortfolioCompositionChart";
+import { ItemDetailModal } from "./components/ItemDetailModal";
 import { Watchlist } from "./components/Watchlist";
 import { WatchlistOverview } from "./components/WatchlistOverview";
 import { ApiWarnings } from "./components/ApiWarnings";
 import { DebugPanel } from "./components/DebugPanel";
+import { ThemeToggle } from "./components/ThemeToggle";
+import { useModal } from "./ModalContext";
 import { usePortfolio } from "./hooks/usePortfolio";
+import { usePortfolioComposition } from "./hooks/usePortfolioComposition";
 import { fetchPortfolioInvestmentHistory } from "./lib/apiClient";
 
 export default function Dashboard() {
   const { enrichedInvestments, stats, ***REMOVED***History, error, warnings } =
     usePortfolio();
+  const { data: compositionData } = usePortfolioComposition();
+  const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("overview");
@@ -60,13 +66,16 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">
-            CS Investor Hub
-          </h1>
-          <p className="text-muted-foreground">
-            Live Tracking via CSFloat & Currency API
-          </p>
+        <header className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-primary">
+              CS Investor Hub
+            </h1>
+            <p className="text-muted-foreground">
+              Live Tracking via CSFloat & Currency API
+            </p>
+          </div>
+          <ThemeToggle />
         </header>
 
         <ApiWarnings warnings={warnings} />
@@ -114,22 +123,41 @@ export default function Dashboard() {
                 onOpenItem={handleOpenWatchlistItem}
               />
             </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="bg-card rounded-lg border p-6">
+                <h3 className="text-lg font-semibold mb-4">Portfolio Zusammensetzung</h3>
+                <PortfolioCompositionChart data={compositionData} />
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent
             value="inventory"
             className="grid grid-cols-1 md:grid-cols-3 gap-6"
           >
-            <div className="md:col-span-2 bg-card rounded-lg border">
+            <div className="md:col-span-3 bg-card rounded-lg border">
               <InventoryTable
                 investments={enrichedInvestments}
-                onSelectItem={setSelectedItem}
+                onSelectItem={(item) => {
+                  setSelectedItem(item);
+                  openModal('itemDetail', { item, history: selectedItemHistory });
+                }}
               />
             </div>
-            <ItemDetailPanel
-              item={selectedItemWithLive}
-              history={selectedItemHistory}
-            />
+
+            {/* Modals */}
+            {modals.map(modal => 
+              modal.type === 'itemDetail' ? (
+                <ItemDetailModal
+                  key={modal.id}
+                  isOpen={true}
+                  onClose={() => closeModal(modal.id)}
+                  item={modal.data.item}
+                  history={selectedItemHistory}
+                />
+              ) : null
+            )}
           </TabsContent>
 
           <TabsContent value="watchlist" className="space-y-6">

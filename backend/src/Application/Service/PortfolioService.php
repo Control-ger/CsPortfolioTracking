@@ -137,4 +137,83 @@ final class PortfolioService
         }
         return ['date' => $today, 'totalValue' => $totalValue];
     }
+
+    public function getComposition(): array
+    {
+        $investments = $this->getEnrichedInvestments();
+        $composition = [];
+        $totalValue = 0.0;
+
+        // Group by name (individual item) instead of type
+        foreach ($investments as $investment) {
+            $name = (string) $investment['name'];
+            $type = (string) $investment['type'];
+            $currentValue = (float) $investment['currentValue'];
+            $totalValue += $currentValue;
+
+            if (!isset($composition[$name])) {
+                $composition[$name] = [
+                    'count' => 0,
+                    'value' => 0.0,
+                    'type' => $type,
+                ];
+            }
+
+            $composition[$name]['count'] += (int) $investment['quantity'];
+            $composition[$name]['value'] += $currentValue;
+        }
+
+        // Calculate percentages and format
+        $result = [];
+        foreach ($composition as $name => $data) {
+            $percentage = $totalValue > 0 ? ($data['value'] / $totalValue) * 100 : 0;
+            $result[] = [
+                'name' => $name,
+                'type' => $data['type'],
+                'count' => $data['count'],
+                'value' => round($data['value'], 2),
+                'percentage' => round($percentage, 1),
+                'color' => $this->getTypeColor($data['type']),
+            ];
+        }
+
+        // Sort by value descending
+        usort($result, fn($a, $b) => $b['value'] <=> $a['value']);
+
+        return $result;
+    }
+
+    private function formatTypeLabel(string $type): string
+    {
+        $labels = [
+            'weapon_skin' => 'Weapon Skins',
+            'sticker' => 'Stickers',
+            'patch' => 'Patches',
+            'agent' => 'Agents',
+            'glove' => 'Gloves',
+            'case' => 'Cases',
+            'container' => 'Containers',
+            'key' => 'Keys',
+            'souvenir' => 'Souvenirs',
+        ];
+
+        return $labels[$type] ?? ucfirst(str_replace('_', ' ', $type));
+    }
+
+    private function getTypeColor(string $type): string
+    {
+        $colors = [
+            'weapon_skin' => '#3b82f6',
+            'sticker' => '#ec4899',
+            'patch' => '#f59e0b',
+            'agent' => '#10b981',
+            'glove' => '#8b5cf6',
+            'case' => '#06b6d4',
+            'container' => '#6366f1',
+            'key' => '#f97316',
+            'souvenir' => '#a855f7',
+        ];
+
+        return $colors[$type] ?? '#6b7280';
+    }
 }

@@ -72,4 +72,13 @@ final class PortfolioController
             JsonResponseFactory::error('PORTFOLIO_SAVE_FAILED', $exception->getMessage(), [], 500);
         }
     }
+
+    public function composition(Request $request): void
+    {
+        try {
+            JsonResponseFactory::success($this->***REMOVED***Service->getComposition());
+        } catch (Throwable $exception) {
+            JsonResponseFactory::error('PORTFOLIO_COMPOSITION_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
 }

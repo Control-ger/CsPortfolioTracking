@@ -42,7 +42,7 @@ export function DebugPanel() {
 
       {environment && (
         <>
-          <Card className="border-yellow-500/50 bg-yellow-50/50">
+          <Card className="border-amber-200/50 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20">
             <CardHeader>
               <CardTitle className="text-sm">CSFloat Konfiguration</CardTitle>
             </CardHeader>
@@ -60,9 +60,9 @@ export function DebugPanel() {
           </Card>
 
           {debug && (
-            <Card className="border-red-500/50 bg-red-50/50">
+            <Card className="border-red-200/50 dark:border-red-800/50 bg-red-50/50 dark:bg-red-950/20">
               <CardHeader>
-                <CardTitle className="text-sm">Debug Info (warum kein API-Key?)</CardTitle>
+                <CardTitle className="text-sm">Debug Info</CardTitle>
               </CardHeader>
               <CardContent className="text-xs space-y-2 font-mono">
                 <p>
@@ -72,7 +72,7 @@ export function DebugPanel() {
                   <strong>$_ENV:</strong> {debug.ENV}
                 </p>
                 
-                <div className="mt-3 pt-3 border-t">
+                <div className="mt-3 pt-3 border-t dark:border-muted">
                   <p className="font-bold mb-1">.env Datei Standorte:</p>
                   {debug.env_locations && Object.entries(debug.env_locations).map(([path, exists]) => (
                     <p key={path}>
@@ -81,15 +81,15 @@ export function DebugPanel() {
                   ))}
                 </div>
 
-                <div className="mt-3 pt-3 border-t">
+                <div className="mt-3 pt-3 border-t dark:border-muted">
                   <p className="font-bold mb-1">System Info:</p>
                   <p>SAPI: {debug.php_sapi_name}</p>
                   <p>CWD: {debug.getcwd}</p>
                 </div>
 
-                <div className="mt-3 pt-3 border-t">
+                <div className="mt-3 pt-3 border-t dark:border-muted">
                   <p className="font-bold mb-1">Alle Env-Keys ({debug.all_env_keys?.length || 0}):</p>
-                  <div className="max-h-40 overflow-auto bg-white p-2 rounded text-[10px]">
+                  <div className="max-h-40 overflow-auto bg-background dark:bg-slate-900 p-2 rounded text-[10px] border dark:border-muted">
                     {debug.all_env_keys?.map(key => (
                       <p key={key}>{key}</p>
                     ))}
@@ -107,7 +107,7 @@ export function DebugPanel() {
             <CardTitle className="text-sm">App Logs ({logs.app.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="bg-black text-green-400 p-3 rounded font-mono text-xs overflow-auto max-h-96 space-y-1">
+            <div className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-green-400 p-3 rounded font-mono text-xs overflow-auto max-h-96 space-y-1 border dark:border-muted">
               {logs.app.map((line, idx) => (
                 <div key={idx} className="break-words">
                   {line}
@@ -124,7 +124,7 @@ export function DebugPanel() {
             <CardTitle className="text-sm">CSFloat Proxy Logs ({logs.proxy.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="bg-black text-blue-400 p-3 rounded font-mono text-xs overflow-auto max-h-96 space-y-1">
+            <div className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-blue-400 p-3 rounded font-mono text-xs overflow-auto max-h-96 space-y-1 border dark:border-muted">
               {logs.proxy.map((line, idx) => (
                 <div key={idx} className="break-words">
                   {line}

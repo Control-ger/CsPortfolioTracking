@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = `${window.location.origin}/api/index.php/api/v1`;
+const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`;
 const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
 
 function buildPath(path, query = {}) {
@@ -55,23 +55,27 @@ async function requestWithMeta(path, options = {}) {
 }
 
 export async function fetchPortfolioInvestments() {
-  return requestWithMeta("/***REMOVED***/investments");
+  return requestWithMeta("/api/v1/***REMOVED***/investments");
 }
 
 export async function fetchPortfolioInvestmentHistory(id) {
-  return request(`/***REMOVED***/investments/${id}/history`);
+  return request(`/api/v1/***REMOVED***/investments/${id}/history`);
 }
 
 export async function fetchPortfolioSummary() {
-  return requestWithMeta("/***REMOVED***/summary");
+  return requestWithMeta("/api/v1/***REMOVED***/summary");
 }
 
 export async function fetchPortfolioHistory() {
-  return request("/***REMOVED***/history");
+  return request("/api/v1/***REMOVED***/history");
+}
+
+export async function fetchPortfolioComposition() {
+  return request("/api/v1/***REMOVED***/composition");
 }
 
 export async function savePortfolioDailyValue(totalValue) {
-  return request("/***REMOVED***/daily-value", {
+  return request("/api/v1/***REMOVED***/daily-value", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ totalValue }),
@@ -80,14 +84,14 @@ export async function savePortfolioDailyValue(totalValue) {
 
 export async function fetchWatchlist(options = {}) {
   return requestWithMeta(
-    buildPath("/watchlist", {
+    buildPath("/api/v1/watchlist", {
       syncLive: options.syncLive ? 1 : undefined,
     })
   );
 }
 
 export async function createWatchlistItem(name, type = "skin") {
-  return request("/watchlist", {
+  return request("/api/v1/watchlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, type }),
@@ -95,7 +99,7 @@ export async function createWatchlistItem(name, type = "skin") {
 }
 
 export async function deleteWatchlistItem(id) {
-  return request(`/watchlist/${id}`, { method: "DELETE" });
+  return request(`/api/v1/watchlist/${id}`, { method: "DELETE" });
 }
 
 export async function searchWatchlistItems(
@@ -105,7 +109,7 @@ export async function searchWatchlistItems(
   page = 1
 ) {
   return requestWithMeta(
-    buildPath("/watchlist/search", {
+    buildPath("/api/v1/watchlist/search", {
       query,
       itemType: filters.itemType,
       wear: filters.wear,

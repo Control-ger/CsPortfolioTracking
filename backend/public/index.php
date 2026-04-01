@@ -96,6 +96,7 @@ $router->register('GET', '/api/v1/***REMOVED***/investments', [$***REMOVED***Con
 $router->register('GET', '/api/v1/***REMOVED***/investments/{id}/history', [$***REMOVED***Controller, 'investmentHistory']);
 $router->register('GET', '/api/v1/***REMOVED***/summary', [$***REMOVED***Controller, 'summary']);
 $router->register('GET', '/api/v1/***REMOVED***/history', [$***REMOVED***Controller, 'history']);
+$router->register('GET', '/api/v1/***REMOVED***/composition', [$***REMOVED***Controller, 'composition']);
 $router->register('PUT', '/api/v1/***REMOVED***/daily-value', [$***REMOVED***Controller, 'saveDailyValue']);
 
 $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
