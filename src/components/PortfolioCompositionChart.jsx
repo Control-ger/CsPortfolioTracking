@@ -10,8 +10,6 @@ const COLOR_PALETTE = [
   '#ffa600',
 ];
 
-const RADIAN = Math.PI / 180;
-
 export function PortfolioCompositionChart({ data }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 768);
@@ -42,7 +40,7 @@ export function PortfolioCompositionChart({ data }) {
   const totalValue = displayData.reduce((sum, item) => sum + item.value, 0);
 
   // Custom label renderer for donut center
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius }) => {
+  const renderCustomLabel = () => {
     return null; // We'll use custom center text instead
   };
 
