@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useModal } from "@/ModalContext";
 import { ApiWarnings } from "@/components/ApiWarnings";
 import { InventoryTable } from "@/components/InventoryTable";
-import { ItemDetailModal } from "@/components/ItemDetailModal";
+import { ItemDetailsModal } from "@/components/ItemDetailsModal";
+import { ItemDetailPanel } from "@/components/ItemDetailPanel";
 import { PortfolioChart } from "@/components/PortfolioChart";
 import { PortfolioCompositionChart } from "@/components/PortfolioCompositionChart";
 import { StatCard } from "@/components/StatsCards";
@@ -98,6 +99,16 @@ export function PortfolioPage() {
     setActiveTab("watchlist");
   };
 
+  const loadItemHistory = async (itemId) => {
+    try {
+      const history = await fetchPortfolioInvestmentHistory(itemId);
+      setSelectedItemHistory(history || []);
+    } catch (historyError) {
+      console.error("Fehler beim Laden der Positionshistorie:", historyError);
+      setSelectedItemHistory([]);
+    }
+  };
+
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
   const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
@@ -180,20 +191,32 @@ export function PortfolioPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-3">
-            <div className="rounded-lg border bg-card overflow-x-auto md:col-span-3">
+          <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
+            <div className="rounded-lg border bg-card overflow-x-auto md:col-span-1">
               <InventoryTable
                 investments={enrichedInvestments}
                 onSelectItem={(item) => {
                   setSelectedItem(item);
-                  openModal("itemDetail", { item, history: selectedItemHistory });
+                  const historyItem = enrichedInvestments.find((inv) => inv.id === item.id);
+                  if (historyItem) {
+                    loadItemHistory(historyItem.id).then(() => {
+                      // Auf Mobile: Modal öffnen (nach Geschichtsdaten geladen)
+                      if (window.innerWidth < 768) {
+                        openModal("itemDetail", { item });
+                      }
+                    });
+                  }
                 }}
               />
             </div>
 
+            <div className="hidden md:block md:col-span-1">
+              <ItemDetailPanel item={selectedItem} history={selectedItemHistory} />
+            </div>
+
             {modals.map((modal) =>
               modal.type === "itemDetail" ? (
-                <ItemDetailModal
+                <ItemDetailsModal
                   key={modal.id}
                   isOpen={true}
                   onClose={() => closeModal(modal.id)}

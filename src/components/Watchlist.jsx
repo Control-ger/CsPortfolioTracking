@@ -6,11 +6,13 @@ import { ApiWarnings } from "./ApiWarnings";
 import { PriceSourceBadge } from "./PriceSourceBadge";
 import { Trash2, TrendingDown, TrendingUp, X } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
+import { WatchlistItemModal } from "./WatchlistItemModal";
 
 export const Watchlist = ({ focusTarget = null }) => {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
   const itemRefs = useRef(new Map());
@@ -164,7 +166,12 @@ export const Watchlist = ({ focusTarget = null }) => {
                             ? "border-primary bg-primary/10"
                             : "hover:bg-muted"
                         }`}
-                        onClick={() => setSelectedItem(item)}
+                        onClick={() => {
+                          setSelectedItem(item);
+                          if (window.innerWidth < 768) {
+                            setIsModalOpen(true);
+                          }
+                        }}
                       >
                         <div className="flex items-start justify-between gap-2 sm:gap-3">
                           <div className="flex min-w-0 flex-1 gap-2 sm:gap-3">
@@ -226,7 +233,7 @@ export const Watchlist = ({ focusTarget = null }) => {
             </Card>
           </div>
 
-          <div>
+          <div className="hidden md:block">
             {selectedItem ? (
               <Card>
                 <CardHeader className="pb-2 sm:pb-4">
@@ -316,6 +323,12 @@ export const Watchlist = ({ focusTarget = null }) => {
           </div>
         </div>
       )}
+
+      <WatchlistItemModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        item={selectedItem}
+      />
     </div>
   );
 };
