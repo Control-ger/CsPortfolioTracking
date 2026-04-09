@@ -303,8 +303,14 @@ final class PortfolioService
         array $presentation,
         ?string $priceSource
     ): void {
+        $priceEur = $presentation['priceEur'] ?? null;
+        $priceUsd = $presentation['priceUsd'] ?? null;
+        $exchangeRate = $presentation['exchangeRate'] ?? null;
+
         if (
-            !isset($presentation['priceUsd'], $presentation['priceEur'], $presentation['exchangeRate'])
+            $priceEur === null || $priceEur <= 0
+            || $priceUsd === null || $priceUsd <= 0
+            || $exchangeRate === null || $exchangeRate <= 0
             || $itemName === ''
         ) {
             return;
@@ -313,9 +319,9 @@ final class PortfolioService
         $this->priceHistoryRepository->upsertPrice(
             $itemName,
             $date,
-            (float) $presentation['priceUsd'],
-            (float) $presentation['priceEur'],
-            (float) $presentation['exchangeRate'],
+            $priceUsd,
+            $priceEur,
+            $exchangeRate,
             $priceSource
         );
     }

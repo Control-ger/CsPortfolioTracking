@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { TrendingUp } from "lucide-react"
 import { CartesianGrid, Dot, Line, LineChart, XAxis, YAxis } from "recharts"
 
@@ -34,6 +35,17 @@ export const PortfolioChart = ({
   emptyLabel = "Noch keine Historie-Daten verfuegbar",
   valueLabel = "Wert",
 }) => {
+  const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsSmallScreen(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Determine if it's profit or loss
   const isProfit = history && history.length > 1 
     ? history[history.length - 1].wert >= history[0].wert
@@ -51,13 +63,13 @@ export const PortfolioChart = ({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (
-          <div className="flex h-80 items-center justify-center text-muted-foreground">
-            <p>{emptyLabel}</p>
+          <div className="flex h-60 items-center justify-center text-muted-foreground sm:h-80">
+            <p className="text-sm">{emptyLabel}</p>
           </div>
         ) : (
           <ChartContainer config={chartConfig}>
@@ -65,22 +77,26 @@ export const PortfolioChart = ({
               accessibilityLayer
               data={chartData}
               margin={{
-                top: 24,
-                left: 24,
-                right: 24,
-                bottom: 24,
+                top: 12,
+                left: 12,
+                right: 12,
+                bottom: 12,
               }}
+              height={isSmallScreen ? 250 : 320}
             >
               <CartesianGrid vertical={false} />
               <XAxis 
                 dataKey="dateFormatted"
                 stroke="currentColor"
-                className="text-muted-foreground text-xs"
+                className="text-muted-foreground text-[10px] sm:text-xs"
+                tick={{ fontSize: 10 }}
               />
               <YAxis 
                 stroke="currentColor"
-                className="text-muted-foreground text-xs"
+                className="text-muted-foreground text-[10px] sm:text-xs"
+                tick={{ fontSize: 10 }}
                 tickFormatter={(value) => `€${value}`}
+                width={40}
               />
               <ChartTooltip
                 cursor={false}
@@ -115,7 +131,7 @@ export const PortfolioChart = ({
           </ChartContainer>
         )}
       </CardContent>
-      <CardFooter className="flex-col items-start gap-2 text-sm">
+      <CardFooter className="flex-col items-start gap-2 text-xs sm:text-sm">
         <div className="flex gap-2 leading-none font-medium">
           {trendingText} {isProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingUp className="h-4 w-4 rotate-180" />}
         </div>

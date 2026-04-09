@@ -93,18 +93,18 @@ export const Watchlist = ({ focusTarget = null }) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Watchlist</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Watchlist</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Gefuehrte Suche mit Live-Preisdaten aus dem Backend
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg bg-destructive/10 p-4 text-destructive">
+        <div className="rounded-lg bg-destructive/10 p-2 sm:p-4 text-xs sm:text-sm text-destructive">
           {error}
         </div>
       )}
@@ -118,22 +118,22 @@ export const Watchlist = ({ focusTarget = null }) => {
 
       {watchlistItems.length === 0 ? (
         <Card>
-          <CardContent className="p-8 text-center text-muted-foreground">
-            <p>
+          <CardContent className="p-4 sm:p-8 text-center text-muted-foreground">
+            <p className="text-sm">
               Keine Items in der Watchlist. Suche ein Item aus und fuege es per
               Auswahl hinzu.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-4">
+        <div className="grid gap-3 sm:gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
+          <div className="space-y-3 sm:space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Watchlist Items</CardTitle>
+              <CardHeader className="pb-2 sm:pb-4">
+                <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {watchlistItems.map((item) => {
                     const isUp = item.trend === "up";
                     const isDown = item.trend === "down";
@@ -159,16 +159,16 @@ export const Watchlist = ({ focusTarget = null }) => {
 
                           itemRefs.current.delete(item.id);
                         }}
-                        className={`cursor-pointer rounded-lg border p-4 transition-colors ${
+                        className={`cursor-pointer rounded-lg border p-2 sm:p-4 transition-colors ${
                           selectedItem?.id === item.id
                             ? "border-primary bg-primary/10"
                             : "hover:bg-muted"
                         }`}
                         onClick={() => setSelectedItem(item)}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 flex-1 gap-3">
-                            <div className="h-14 w-14 overflow-hidden rounded-md border bg-muted">
+                        <div className="flex items-start justify-between gap-2 sm:gap-3">
+                          <div className="flex min-w-0 flex-1 gap-2 sm:gap-3">
+                            <div className="h-10 w-10 sm:h-14 sm:w-14 overflow-hidden rounded-md border bg-muted flex-shrink-0">
                               {item.imageUrl ? (
                                 <img
                                   src={item.imageUrl}
@@ -183,19 +183,19 @@ export const Watchlist = ({ focusTarget = null }) => {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h3 className="text-sm font-semibold">
+                              <h3 className="text-xs sm:text-sm font-semibold truncate">
                                 {item.name}
                               </h3>
-                              <div className="mt-2 flex items-center gap-2">
+                              <div className="mt-1 sm:mt-2 flex items-center gap-1 sm:gap-2">
                                 {Icon && (
-                                  <Icon className={`h-4 w-4 ${colorClass}`} />
+                                  <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${colorClass}`} />
                                 )}
-                                <span className={`text-sm ${colorClass}`}>
+                                <span className={`text-xs sm:text-sm ${colorClass}`}>
                                   {item.changeLabel}
                                 </span>
                               </div>
                               {item.currentPrice !== null && (
-                                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <div className="mt-1 text-[10px] sm:text-xs text-muted-foreground line-clamp-2">
                                   <p>Aktuell: {item.currentPrice.toFixed(2)} EUR</p>
                                   <PriceSourceBadge
                                     priceSource={item.priceSource}
@@ -212,10 +212,10 @@ export const Watchlist = ({ focusTarget = null }) => {
                               event.stopPropagation();
                               handleRemoveItem(item.id);
                             }}
-                            className="p-1 text-muted-foreground transition-colors hover:text-destructive"
+                            className="p-1 text-muted-foreground transition-colors hover:text-destructive flex-shrink-0"
                             title="Aus Watchlist entfernen"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </button>
                         </div>
                       </div>
@@ -229,10 +229,10 @@ export const Watchlist = ({ focusTarget = null }) => {
           <div>
             {selectedItem ? (
               <Card>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 gap-4">
-                      <div className="h-20 w-20 overflow-hidden rounded-lg border bg-muted">
+                <CardHeader className="pb-2 sm:pb-4">
+                  <div className="flex items-start justify-between gap-2 sm:gap-3">
+                    <div className="flex min-w-0 gap-2 sm:gap-4">
+                      <div className="h-14 w-14 sm:h-20 sm:w-20 overflow-hidden rounded-lg border bg-muted flex-shrink-0">
                         {selectedItem.imageUrl ? (
                           <img
                             src={selectedItem.imageUrl}
@@ -245,16 +245,16 @@ export const Watchlist = ({ focusTarget = null }) => {
                           </div>
                         )}
                       </div>
-                      <div>
-                        <CardTitle>{selectedItem.name}</CardTitle>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="text-base sm:text-lg truncate">{selectedItem.name}</CardTitle>
+                        <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
                           Preisverlauf der letzten 7 Tage
                         </p>
                         {selectedItem.currentPrice !== null && (
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                            <span>
+                          <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-muted-foreground">
+                            <p>
                               Aktuell: {selectedItem.currentPrice.toFixed(2)} EUR
-                            </span>
+                            </p>
                             <PriceSourceBadge
                               priceSource={selectedItem.priceSource}
                             />
@@ -265,9 +265,9 @@ export const Watchlist = ({ focusTarget = null }) => {
                     <button
                       type="button"
                       onClick={() => setSelectedItem(null)}
-                      className="text-muted-foreground hover:text-foreground"
+                      className="text-muted-foreground hover:text-foreground flex-shrink-0"
                     >
-                      <X className="h-5 w-5" />
+                      <X className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
                   </div>
                 </CardHeader>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 import { BaseModal } from "@/components/BaseModal";
@@ -51,15 +52,26 @@ function ChangeMetric({ label, percent, euro }) {
 }
 
 export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
+  const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsSmallScreen(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   if (!item) {
     return null;
   }
 
   return (
-    <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="3xl">
-      <div className="space-y-6">
-        <div className="flex gap-4">
-          <div className="h-32 w-32 shrink-0 overflow-hidden rounded-lg border bg-muted">
+    <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="3xl" className="w-full sm:max-w-2xl md:max-w-4xl">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <div className="h-24 w-24 sm:h-32 sm:w-32 shrink-0 overflow-hidden rounded-lg border bg-muted">
             {item.imageUrl ? (
               <img
                 src={item.imageUrl}
@@ -72,7 +84,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </div>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 flex-1">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               {item.type}
             </p>
@@ -88,9 +100,9 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="space-y-3 lg:col-span-1">
-            <div className="rounded-md border bg-muted/40 p-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:gap-6 lg:grid-cols-3">
+          <div className="space-y-2 sm:space-y-3 lg:col-span-1">
+            <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
               <p className="text-sm font-bold">{formatPrice(item.buyPrice)}</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -98,7 +110,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border bg-muted/40 p-3">
+            <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Break-even</p>
               <p className="text-sm font-bold">
                 {formatPrice(item.breakEvenPrice ?? item.buyPrice)}
@@ -108,7 +120,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border bg-muted/40 p-3">
+            <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Live</p>
               <p
                 className={`text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
@@ -117,7 +129,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border bg-muted/40 p-3">
+            <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Position</p>
               <p className="text-sm font-bold">{formatPrice(item.currentValue)}</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -125,7 +137,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border bg-muted/40 p-3">
+            <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Gewinn/Verlust</p>
               <p
                 className={`text-sm font-bold ${item.isProfitPositive ? "text-green-600" : "text-red-600"}`}
@@ -139,9 +151,9 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border bg-muted/40 p-3">
+            <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
               <p className="mb-2 text-[10px] uppercase text-muted-foreground">Price Change</p>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <ChangeMetric
                   label="24h"
                   percent={item.change24hPercent}
@@ -162,11 +174,11 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
           </div>
 
           {history && history.length > 0 ? (
-            <div className="rounded-lg border bg-muted/20 p-4 lg:col-span-2">
-              <h3 className="mb-4 text-sm font-semibold">Preishistorie</h3>
-              <ResponsiveContainer width="100%" height={250}>
+            <div className="rounded-lg border bg-muted/20 p-3 sm:p-4 lg:col-span-2">
+              <h3 className="mb-3 sm:mb-4 text-sm font-semibold">Preishistorie</h3>
+              <ResponsiveContainer width="100%" height={isSmallScreen ? 200 : 280}>
                 <AreaChart data={history}>
-                  <XAxis dataKey="date" />
+                  <XAxis dataKey="date" fontSize={10} />
                   <Tooltip formatter={(value) => `${Number(value).toFixed(2)} EUR`} />
                   <Area
                     type="monotone"
@@ -179,7 +191,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground lg:col-span-2">
+            <div className="flex items-center justify-center rounded-lg border border-dashed bg-muted/20 p-3 sm:p-4 text-sm text-muted-foreground lg:col-span-2">
               Keine Positionshistorie verfuegbar.
             </div>
           )}

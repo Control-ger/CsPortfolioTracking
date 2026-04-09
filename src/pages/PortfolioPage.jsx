@@ -103,12 +103,12 @@ export function PortfolioPage() {
   const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
 
   return (
-    <div className="min-h-screen bg-background p-8 font-sans text-foreground">
-      <div className="mx-auto max-w-7xl space-y-8">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-primary">CS Investor Hub</h1>
-            <p className="text-muted-foreground">Live Tracking via CSFloat and Currency API</p>
+    <div className="min-h-screen bg-background p-4 font-sans text-foreground sm:p-6 md:p-8">
+      <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
+        <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold tracking-tight text-primary sm:text-3xl">CS Investor Hub</h1>
+            <p className="text-sm text-muted-foreground sm:text-base">Live Tracking via CSFloat and Currency API</p>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -124,14 +124,14 @@ export function PortfolioPage() {
               {error}
             </div>
           )}
-          <TabsList className="grid w-full max-w-[640px] grid-cols-3">
-            <TabsTrigger value="overview">Uebersicht</TabsTrigger>
-            <TabsTrigger value="inventory">Inventar und Details</TabsTrigger>
-            <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 gap-1 sm:max-w-160">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
+            <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
+            <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+            <div className="grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
               <StatCard
                 title="Portfolio Wert (Live)"
                 value={`${(stats.totalValue || 0).toFixed(2)} EUR`}
@@ -167,21 +167,21 @@ export function PortfolioPage() {
               </Card>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
               <PortfolioChart history={***REMOVED***History} color={stats.chartColor} />
               <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="rounded-lg border bg-card p-6">
+            <div className="grid gap-4 sm:gap-6 grid-cols-1">
+              <div className="rounded-lg border bg-card p-4 sm:p-6">
                 <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
                 <PortfolioCompositionChart data={compositionData} />
               </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="inventory" className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="rounded-lg border bg-card md:col-span-3">
+          <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-3">
+            <div className="rounded-lg border bg-card overflow-x-auto md:col-span-3">
               <InventoryTable
                 investments={enrichedInvestments}
                 onSelectItem={(item) => {
@@ -204,7 +204,7 @@ export function PortfolioPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="watchlist" className="space-y-6">
+          <TabsContent value="watchlist" className="space-y-4 sm:space-y-6">
             <Watchlist focusTarget={watchlistFocusTarget} />
           </TabsContent>
         </Tabs>

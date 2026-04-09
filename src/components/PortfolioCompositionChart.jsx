@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 // Neue schöne Farbpalette
@@ -14,6 +14,16 @@ const RADIAN = Math.PI / 180;
 
 export function PortfolioCompositionChart({ data }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsSmallScreen(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   if (!data || data.length === 0) {
     return (
@@ -33,10 +43,6 @@ export function PortfolioCompositionChart({ data }) {
 
   // Custom label renderer for donut center
   const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius }) => {
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
     return null; // We'll use custom center text instead
   };
 
@@ -57,13 +63,13 @@ export function PortfolioCompositionChart({ data }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Donut Chart with Legend Column */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Chart - Left Side (takes 2 columns on large screens) */}
         <div className="lg:col-span-2 flex justify-center">
           <div className="relative w-full max-w-sm">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={isSmallScreen ? 220 : 320}>
               <PieChart>
                 <Pie
                   data={displayData}
@@ -71,8 +77,8 @@ export function PortfolioCompositionChart({ data }) {
                   cy="50%"
                   labelLine={false}
                   label={renderCustomLabel}
-                  outerRadius={100}
-                  innerRadius={60}
+                  outerRadius={isSmallScreen ? 70 : 100}
+                  innerRadius={isSmallScreen ? 45 : 60}
                   fill="#8884d8"
                   dataKey="value"
                   onMouseEnter={(_, index) => setHoveredIndex(index)}
@@ -95,9 +101,9 @@ export function PortfolioCompositionChart({ data }) {
             {/* Center Text */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <div className="text-center">
-                <p className="text-xs font-medium text-muted-foreground uppercase">Portfolio Wert</p>
-                <p className="text-2xl font-bold">€{totalValue.toFixed(0)}</p>
-                <p className="text-xs text-muted-foreground">{displayData.length} Assets</p>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase">Portfolio Wert</p>
+                <p className="text-xl sm:text-2xl font-bold">€{totalValue.toFixed(0)}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">{displayData.length} Assets</p>
               </div>
             </div>
           </div>
@@ -105,11 +111,11 @@ export function PortfolioCompositionChart({ data }) {
 
         {/* Legend - Right Side */}
         <div className="lg:col-span-1 flex flex-col justify-center">
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-80 overflow-y-auto sm:max-h-none">
             {displayData.map((item, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-2 p-2 rounded border bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                className="flex items-center gap-2 p-2 rounded border bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer text-xs sm:text-sm"
                 onMouseEnter={() => setHoveredIndex(idx)}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
@@ -118,7 +124,7 @@ export function PortfolioCompositionChart({ data }) {
                   style={{ backgroundColor: item.displayColor }}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{item.name}</p>
+                  <p className="font-medium truncate">{item.name}</p>
                   <p className="text-xs text-muted-foreground">{item.percentage}%</p>
                 </div>
               </div>
@@ -129,9 +135,9 @@ export function PortfolioCompositionChart({ data }) {
 
       {/* Summary Stats - Only Items */}
       <div className="grid grid-cols-1 gap-2">
-        <div className="bg-muted/40 p-3 rounded-lg text-center border">
+        <div className="bg-muted/40 p-2 sm:p-3 rounded-lg text-center border">
           <p className="text-[9px] text-muted-foreground uppercase font-semibold">Items</p>
-          <p className="text-lg font-bold">
+          <p className="text-base sm:text-lg font-bold">
             {displayData.reduce((sum, item) => sum + item.count, 0)}
           </p>
         </div>

@@ -1,4 +1,7 @@
 import { forwardRef, createContext, useContext, useMemo } from "react"
+import * as RechartsPrimitive from "recharts"
+
+import { cn } from "@/lib/utils"
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = {
@@ -19,8 +22,10 @@ function useChart() {
 }
 
 const ChartContainer = forwardRef(({ id, className, children, config, ...props }, ref) => {
-  const uniqueId = Math.random().toString(36).substr(2, 9);
-  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const chartId = useMemo(() => {
+    const uniqueId = Math.random().toString(36).substr(2, 9);
+    return `chart-${id || uniqueId.replace(/:/g, "")}`;
+  }, [id])
 
   return (
     <ChartContext.Provider value={{ config }}>

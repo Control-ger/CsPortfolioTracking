@@ -16,7 +16,7 @@ import { fetchDebugLogs } from "@/lib/apiClient";
 const DEBUG_LOG_LIMIT = 500;
 const ALL_FILTER_VALUE = "all";
 const LOG_LINE_PATTERN =
-  /^\[([^\]]+)\]\s+([A-Z]+)\s+([a-zA-Z0-9_.-]+):\s*(.*?)(?:\s+\|\s+requestId=([^|]+))?(?:\s+\|\s+status=([^|]+))?(?:\s+\|\s+durationMs=([^|]+))?(?:\s+\|\s+context=(.*))?$/;
+  /^\[([^\]]+)]\s+([A-Z]+)\s+([a-zA-Z0-9_.-]+):\s*(.*?)(?:\s+\|\s+requestId=([^|]+))?(?:\s+\|\s+status=([^|]+))?(?:\s+\|\s+durationMs=([^|]+))?(?:\s+\|\s+context=(.*))?$/;
 const LEVEL_SORT_RANK = {
   DEBUG: 10,
   INFO: 20,
@@ -410,7 +410,7 @@ export function DebugDashboardPage() {
                   <SelectTrigger>
                     <SelectValue placeholder="Alle Events" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[280px] md:max-h-[350px]">
                     <SelectItem value={ALL_FILTER_VALUE}>Alle Events</SelectItem>
                     {eventOptions.map((eventName) => (
                       <SelectItem key={eventName} value={eventName}>
@@ -427,7 +427,7 @@ export function DebugDashboardPage() {
                   <SelectTrigger>
                     <SelectValue placeholder="Alle Items" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[280px] md:max-h-[350px]">
                     <SelectItem value={ALL_FILTER_VALUE}>Alle Items</SelectItem>
                     {itemOptions.map((itemName) => (
                       <SelectItem key={itemName} value={itemName}>

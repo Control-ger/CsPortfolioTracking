@@ -106,105 +106,183 @@ function FreshnessCell({ item }) {
 
 export function InventoryTable({ investments, onSelectItem }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Item</TableHead>
-          <TableHead className="text-right">Menge</TableHead>
-          <TableHead className="text-right">Einkauf</TableHead>
-          <TableHead className="text-right">Break-even</TableHead>
-          <TableHead className="text-right">Live</TableHead>
-          <TableHead className="text-right">24h</TableHead>
-          <TableHead className="text-right">7d</TableHead>
-          <TableHead className="text-right">30d</TableHead>
-          <TableHead className="text-right">Freshness</TableHead>
-          <TableHead className="text-right">ROI %</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      {/* Desktop-View (md und höher) */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Item</TableHead>
+              <TableHead className="text-right">Menge</TableHead>
+              <TableHead className="text-right">Einkauf</TableHead>
+              <TableHead className="text-right">Break-even</TableHead>
+              <TableHead className="text-right">Live</TableHead>
+              <TableHead className="text-right">24h</TableHead>
+              <TableHead className="text-right">7d</TableHead>
+              <TableHead className="text-right">30d</TableHead>
+              <TableHead className="text-right">Freshness</TableHead>
+              <TableHead className="text-right">ROI %</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {investments.map((item) => (
+              <TableRow
+                key={item.id}
+                className="group cursor-pointer transition-colors hover:bg-muted/50"
+                onClick={() => onSelectItem(item)}
+              >
+                <TableCell className="font-medium text-sm">
+                  <div className="flex items-center gap-3">
+                    <ItemThumbnail imageUrl={item.imageUrl} name={item.name} />
+                    <span className="flex flex-col">
+                      <span className="transition-colors group-hover:text-primary">
+                        {item.name}
+                      </span>
+                      <span className="text-[10px] uppercase tracking-tighter text-muted-foreground">
+                        {item.type}
+                      </span>
+                    </span>
+                  </div>
+                </TableCell>
+
+                <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                  {item.quantity}x
+                </TableCell>
+
+                <TableCell className="text-right text-xs">
+                  {formatCurrency(item.buyPrice)}
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-xs font-semibold">
+                      {formatCurrency(item.breakEvenPrice ?? item.buyPrice)}
+                    </span>
+                    <span className={`text-[10px] ${deltaClassName(item.breakEvenDeltaEuro)}`}>
+                      {formatSignedCurrency(item.breakEvenDeltaEuro)}
+                    </span>
+                  </div>
+                </TableCell>
+
+                <TableCell
+                  className={`text-right text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
+                >
+                  {item.isLive ? (
+                    <div className="flex flex-col items-end gap-1">
+                      <span>{formatCurrency(item.livePrice)}</span>
+                      <PriceSourceBadge priceSource={item.priceSource} compact />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs">{formatCurrency(item.buyPrice)}</span>
+                      <span className="animate-pulse text-[9px] uppercase">Warte...</span>
+                    </div>
+                  )}
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <ChangeCell euro={item.change24hEuro} percent={item.change24hPercent} />
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <ChangeCell euro={item.change7dEuro} percent={item.change7dPercent} />
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <ChangeCell euro={item.change30dEuro} percent={item.change30dPercent} />
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <FreshnessCell item={item} />
+                </TableCell>
+
+                <TableCell
+                  className={`text-right text-sm font-bold ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}
+                >
+                  {item.isLive ? (
+                    `${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`
+                  ) : (
+                    <span className="text-muted-foreground opacity-50">0.0%</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile-View (unter md) */}
+      <div className="space-y-3 md:hidden px-2">
         {investments.map((item) => (
-          <TableRow
+          <div
             key={item.id}
-            className="group cursor-pointer transition-colors hover:bg-muted/50"
             onClick={() => onSelectItem(item)}
+            className="cursor-pointer rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
           >
-            <TableCell className="font-medium text-sm">
-              <div className="flex items-center gap-3">
+            {/* Item Header */}
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2 flex-1">
                 <ItemThumbnail imageUrl={item.imageUrl} name={item.name} />
-                <span className="flex flex-col">
-                  <span className="transition-colors group-hover:text-primary">
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-medium truncate transition-colors hover:text-primary">
                     {item.name}
                   </span>
                   <span className="text-[10px] uppercase tracking-tighter text-muted-foreground">
                     {item.type}
                   </span>
+                </div>
+              </div>
+              <div className={`text-sm font-bold whitespace-nowrap ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}>
+                {item.isLive ? `${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%` : "0.0%"}
+              </div>
+            </div>
+
+            {/* Item Details Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+              <div>
+                <span className="text-muted-foreground">Menge:</span>
+                <span className="ml-1 font-mono">{item.quantity}x</span>
+              </div>
+              <div className="text-right">
+                <span className="text-muted-foreground">Einkauf:</span>
+                <span className="ml-1">{formatCurrency(item.buyPrice)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Live:</span>
+                <span className={`ml-1 font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}>
+                  {item.isLive ? formatCurrency(item.livePrice) : formatCurrency(item.buyPrice)}
                 </span>
               </div>
-            </TableCell>
-
-            <TableCell className="text-right font-mono text-xs text-muted-foreground">
-              {item.quantity}x
-            </TableCell>
-
-            <TableCell className="text-right text-xs">
-              {formatCurrency(item.buyPrice)}
-            </TableCell>
-
-            <TableCell className="text-right">
-              <div className="flex flex-col items-end gap-0.5">
-                <span className="text-xs font-semibold">
-                  {formatCurrency(item.breakEvenPrice ?? item.buyPrice)}
-                </span>
-                <span className={`text-[10px] ${deltaClassName(item.breakEvenDeltaEuro)}`}>
-                  {formatSignedCurrency(item.breakEvenDeltaEuro)}
-                </span>
+              <div className="text-right">
+                <span className="text-muted-foreground">Break-even:</span>
+                <span className="ml-1">{formatCurrency(item.breakEvenPrice ?? item.buyPrice)}</span>
               </div>
-            </TableCell>
+            </div>
 
-            <TableCell
-              className={`text-right text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
-            >
-              {item.isLive ? (
-                <div className="flex flex-col items-end gap-1">
-                  <span>{formatCurrency(item.livePrice)}</span>
-                  <PriceSourceBadge priceSource={item.priceSource} compact />
-                </div>
-              ) : (
-                <div className="flex flex-col items-end">
-                  <span className="text-xs">{formatCurrency(item.buyPrice)}</span>
-                  <span className="animate-pulse text-[9px] uppercase">Warte...</span>
-                </div>
-              )}
-            </TableCell>
+            {/* Changes Row */}
+            <div className="flex gap-2 text-xs mb-2">
+              <div className="flex-1">
+                <span className="text-muted-foreground block">24h</span>
+                <ChangeCell euro={item.change24hEuro} percent={item.change24hPercent} />
+              </div>
+              <div className="flex-1">
+                <span className="text-muted-foreground block">7d</span>
+                <ChangeCell euro={item.change7dEuro} percent={item.change7dPercent} />
+              </div>
+              <div className="flex-1">
+                <span className="text-muted-foreground block">30d</span>
+                <ChangeCell euro={item.change30dEuro} percent={item.change30dPercent} />
+              </div>
+            </div>
 
-            <TableCell className="text-right">
-              <ChangeCell euro={item.change24hEuro} percent={item.change24hPercent} />
-            </TableCell>
-
-            <TableCell className="text-right">
-              <ChangeCell euro={item.change7dEuro} percent={item.change7dPercent} />
-            </TableCell>
-
-            <TableCell className="text-right">
-              <ChangeCell euro={item.change30dEuro} percent={item.change30dPercent} />
-            </TableCell>
-
-            <TableCell className="text-right">
+            {/* Freshness */}
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground text-xs">Freshness:</span>
               <FreshnessCell item={item} />
-            </TableCell>
-
-            <TableCell
-              className={`text-right text-sm font-bold ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}
-            >
-              {item.isLive ? (
-                `${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`
-              ) : (
-                <span className="text-muted-foreground opacity-50">0.0%</span>
-              )}
-            </TableCell>
-          </TableRow>
+            </div>
+          </div>
         ))}
-      </TableBody>
-    </Table>
+      </div>
+    </>
   );
 }

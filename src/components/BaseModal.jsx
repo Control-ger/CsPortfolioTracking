@@ -31,7 +31,7 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md' }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-black/50"
@@ -41,19 +41,19 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md' }) {
 
       {/* Modal */}
       <div
-        className={`relative bg-background rounded-lg shadow-lg border ${sizeClasses[size]} mx-4 max-h-[90vh] overflow-y-auto`}
+        className={`relative bg-background rounded-lg shadow-lg border ${sizeClasses[size]} w-full max-h-[90vh] overflow-y-auto`}
         role="dialog"
         aria-modal="true"
         aria-labelle***REMOVED***y="modal-title"
       >
         {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between border-b bg-background p-6">
-          <h2 id="modal-title" className="text-xl font-semibold">
+        <div className="sticky top-0 flex items-center justify-between border-b bg-background p-3 sm:p-6">
+          <h2 id="modal-title" className="text-base sm:text-xl font-semibold truncate">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-muted rounded-md transition-colors"
+            className="p-1 hover:bg-muted rounded-md transition-colors flex-shrink-0 ml-2"
             aria-label="Close"
           >
             <svg
@@ -73,7 +73,7 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md' }) {
         </div>
 
         {/* Content */}
-        <div className="p-6">{children}</div>
+        <div className="p-3 sm:p-6">{children}</div>
       </div>
     </div>
   );
