@@ -107,20 +107,14 @@ function FreshnessCell({ item }) {
 export function InventoryTable({ investments, onSelectItem }) {
   return (
     <>
-      {/* Desktop-View (md und höher) */}
+      {/* Desktop-View (md und höher) - Smart Columns: Item | Menge | Live | ROI% */}
       <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Item</TableHead>
               <TableHead className="text-right">Menge</TableHead>
-              <TableHead className="text-right">Einkauf</TableHead>
-              <TableHead className="text-right">Break-even</TableHead>
-              <TableHead className="text-right">Live</TableHead>
-              <TableHead className="text-right">24h</TableHead>
-              <TableHead className="text-right">7d</TableHead>
-              <TableHead className="text-right">30d</TableHead>
-              <TableHead className="text-right">Freshness</TableHead>
+              <TableHead className="text-right">Live Preis</TableHead>
               <TableHead className="text-right">ROI %</TableHead>
             </TableRow>
           </TableHeader>
@@ -149,21 +143,6 @@ export function InventoryTable({ investments, onSelectItem }) {
                   {item.quantity}x
                 </TableCell>
 
-                <TableCell className="text-right text-xs">
-                  {formatCurrency(item.buyPrice)}
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <div className="flex flex-col items-end gap-0.5">
-                    <span className="text-xs font-semibold">
-                      {formatCurrency(item.breakEvenPrice ?? item.buyPrice)}
-                    </span>
-                    <span className={`text-[10px] ${deltaClassName(item.breakEvenDeltaEuro)}`}>
-                      {formatSignedCurrency(item.breakEvenDeltaEuro)}
-                    </span>
-                  </div>
-                </TableCell>
-
                 <TableCell
                   className={`text-right text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
                 >
@@ -178,22 +157,6 @@ export function InventoryTable({ investments, onSelectItem }) {
                       <span className="animate-pulse text-[9px] uppercase">Warte...</span>
                     </div>
                   )}
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <ChangeCell euro={item.change24hEuro} percent={item.change24hPercent} />
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <ChangeCell euro={item.change7dEuro} percent={item.change7dPercent} />
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <ChangeCell euro={item.change30dEuro} percent={item.change30dPercent} />
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <FreshnessCell item={item} />
                 </TableCell>
 
                 <TableCell

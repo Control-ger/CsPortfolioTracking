@@ -86,6 +86,71 @@ export const ItemDetailPanel = ({ item, history = [] }) => {
         <div className="grid grid-cols-2 gap-2 sm:gap-4">
           <div className="bg-muted/40 p-2 sm:p-3 rounded-md border">
             <p className="text-[10px] text-muted-foreground uppercase">
+              Break-even
+            </p>
+            <p className="text-xs sm:text-sm font-bold">{formatPrice(item.breakEvenPrice ?? item.buyPrice)}</p>
+            {typeof item.breakEvenDeltaEuro === 'number' && (
+              <p className={`mt-1 text-[10px] ${item.breakEvenDeltaEuro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {item.breakEvenDeltaEuro >= 0 ? '+' : ''}{item.breakEvenDeltaEuro.toFixed(2)} EUR
+              </p>
+            )}
+          </div>
+          <div className="bg-muted/40 p-2 sm:p-3 rounded-md border">
+            <p className="text-[10px] text-muted-foreground uppercase">
+              Freshness
+            </p>
+            <p className="text-xs sm:text-sm font-bold">{item.freshnessLabel || "N/A"}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {item.lastPriceUpdateAt || "Unbekannt"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="bg-muted/40 p-2 sm:p-3 rounded-md border">
+            <p className="text-[10px] text-muted-foreground uppercase">
+              24h
+            </p>
+            <p className={`text-xs sm:text-sm font-bold ${typeof item.change24hPercent === 'number' && item.change24hPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {typeof item.change24hPercent === 'number' ? `${item.change24hPercent >= 0 ? '+' : ''}${item.change24hPercent.toFixed(2)}%` : 'N/A'}
+            </p>
+            {typeof item.change24hEuro === 'number' && (
+              <p className={`mt-1 text-[10px] ${item.change24hEuro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {item.change24hEuro >= 0 ? '+' : ''}{item.change24hEuro.toFixed(2)}€
+              </p>
+            )}
+          </div>
+          <div className="bg-muted/40 p-2 sm:p-3 rounded-md border">
+            <p className="text-[10px] text-muted-foreground uppercase">
+              7d
+            </p>
+            <p className={`text-xs sm:text-sm font-bold ${typeof item.change7dPercent === 'number' && item.change7dPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {typeof item.change7dPercent === 'number' ? `${item.change7dPercent >= 0 ? '+' : ''}${item.change7dPercent.toFixed(2)}%` : 'N/A'}
+            </p>
+            {typeof item.change7dEuro === 'number' && (
+              <p className={`mt-1 text-[10px] ${item.change7dEuro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {item.change7dEuro >= 0 ? '+' : ''}{item.change7dEuro.toFixed(2)}€
+              </p>
+            )}
+          </div>
+          <div className="bg-muted/40 p-2 sm:p-3 rounded-md border">
+            <p className="text-[10px] text-muted-foreground uppercase">
+              30d
+            </p>
+            <p className={`text-xs sm:text-sm font-bold ${typeof item.change30dPercent === 'number' && item.change30dPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {typeof item.change30dPercent === 'number' ? `${item.change30dPercent >= 0 ? '+' : ''}${item.change30dPercent.toFixed(2)}%` : 'N/A'}
+            </p>
+            {typeof item.change30dEuro === 'number' && (
+              <p className={`mt-1 text-[10px] ${item.change30dEuro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {item.change30dEuro >= 0 ? '+' : ''}{item.change30dEuro.toFixed(2)}€
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:gap-4">
+          <div className="bg-muted/40 p-2 sm:p-3 rounded-md border">
+            <p className="text-[10px] text-muted-foreground uppercase">
               Positionswert
             </p>
             <p className="text-xs sm:text-sm font-bold">{formatPrice(item.currentValue)}</p>
