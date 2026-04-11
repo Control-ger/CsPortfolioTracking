@@ -1,0 +1,129 @@
+name: code
+services:
+    ***REMOVED***:
+        cpu_shares: 90
+        command: []
+        container_name: cs***REMOVED***-***REMOVED***
+        deploy:
+            resources:
+                limits:
+                    memory: "12273582080"
+        environment:
+            MYSQL_DATABASE: ***REMOVED***
+            MYSQL_PASSWORD: ***REMOVED***123
+            MYSQL_ROOT_PASSWORD: ***REMOVED***
+            MYSQL_USER: ***REMOVED***
+        hostname: cs***REMOVED***-***REMOVED***
+        image: maria***REMOVED***:10.6
+        networks:
+            default: null
+        restart: always
+        volumes:
+            - type: bind
+              source: ***REMOVED***/mysql
+              target: /var/lib/mysql
+              bind:
+                create_host_path: true
+    phpmyadmin:
+        cpu_shares: 90
+        command: []
+        container_name: cs***REMOVED***-pma
+        deploy:
+            resources:
+                limits:
+                    memory: "12273582080"
+        environment:
+            PMA_HOST: ***REMOVED***
+        hostname: cs***REMOVED***-pma
+        image: phpmyadmin/phpmyadmin:latest
+        networks:
+            default: null
+        ports:
+            - mode: ingress
+              target: 80
+              published: "***REMOVED***"
+              protocol: tcp
+        restart: always
+    web:
+        build:
+            context: ***REMOVED***
+            dockerfile: Dockerfile
+        cpu_shares: 90
+        command: []
+        container_name: cs***REMOVED***-web
+        depends_on:
+            ***REMOVED***:
+                condition: service_started
+                required: true
+        deploy:
+            resources:
+                limits:
+                    memory: "12273582080"
+        hostname: cs***REMOVED***-web
+        labels:
+            casaos.icon: http://***REMOVED***:***REMOVED***/icon.png
+            casaos.title: CS2 Portfolio Tracker
+            icon: http://***REMOVED***:***REMOVED***/icon.png
+            title: CS2 Portfolio Tracker
+        networks:
+            default: null
+        ports:
+            - mode: ingress
+              target: 80
+              published: "***REMOVED***"
+              protocol: tcp
+        restart: always
+        volumes:
+            # WICHTIG: .env Datei mounten damit die API-Key geladen wird
+            - type: bind
+              source: ***REMOVED***/.env
+              target: /var/www/html/.env
+              bind:
+                create_host_path: true
+            # Frontend dist
+            - type: bind
+              source: ***REMOVED***/dist
+              target: /var/www/html
+              bind:
+                create_host_path: true
+            # Backend API
+            - type: bind
+              source: ***REMOVED***/backend
+              target: /var/www/html/api
+              bind:
+                create_host_path: true
+networks:
+    default:
+        name: code_default
+x-casaos:
+    author: self
+    category: self
+    hostname: ""
+    icon: ""
+    index: /
+    is_uncontrolled: false
+    port_map: "***REMOVED***"
+    scheme: http
+    tips:
+        custom: |
+            in dist die files löschen, außer das icon und neu einspielen, dannach maik@maiks-homeserver:***REMOVED***$ sudo docker compose up -d
+            Warum? Weil ich kein Bock habe die .htaccess jedesmal neu zu erstellen
+
+            URL: http://***REMOVED***:***REMOVED***
+            Lokaler Pfad: ***REMOVED***/dist (hier liegt dein Frontend)
+            Backend Pfad: ***REMOVED***/backend (wird gemappt auf /api)
+
+            Host (intern im Docker)	***REMOVED***
+            Port (extern)	3306
+            Datenbank Name	***REMOVED***_***REMOVED***
+            User	***REMOVED***_user
+            Passwort	***REMOVED***
+            Root-Passwort	***REMOVED***_password_123
+            phpMyAdmin: http://***REMOVED***:***REMOVED***
+            ***REMOVED***
+            ***REMOVED***
+
+            WICHTIG: Die .env muss im Projekt***REMOVED*** liegen (***REMOVED***/.env)
+            Sie wird jetzt automatisch in den Docker Container gemountet!
+    title:
+        custom: CS2 Portfolio Tracker

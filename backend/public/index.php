@@ -8,6 +8,7 @@ use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
 use App\Http\Controller\DebugController;
 use App\Http\Controller\PortfolioController;
+use App\Http\Controller\SyncStatusController;
 use App\Http\Controller\WatchlistController;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\ExchangeRateClient;
@@ -19,6 +20,7 @@ use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
+use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Observability\Application\ObservabilityService;
 use App\Observability\Context\RequestContext;
@@ -336,6 +338,7 @@ try {
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
     $itemCatalogRepository = new ItemCatalogRepository($pdo);
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
+    $syncStatusRepository = new SyncStatusRepository($pdo);
 
     $pricingService = new PricingService(
         new CsFloatClient(),
@@ -359,6 +362,7 @@ try {
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);
     $frontendTelemetryController = new FrontendTelemetryController();
+    $syncStatusController = new SyncStatusController($syncStatusRepository);
 
     $router = new Router();
     $router->register('GET', '/api/v1/***REMOVED***/investments', [$***REMOVED***Controller, 'investments']);
@@ -367,6 +371,9 @@ try {
     $router->register('GET', '/api/v1/***REMOVED***/history', [$***REMOVED***Controller, 'history']);
     $router->register('GET', '/api/v1/***REMOVED***/composition', [$***REMOVED***Controller, 'composition']);
     $router->register('PUT', '/api/v1/***REMOVED***/daily-value', [$***REMOVED***Controller, 'saveDailyValue']);
+    $router->register('GET', '/api/v1/***REMOVED***/sync-status', [$syncStatusController, 'status']);
+    $router->register('GET', '/api/v1/***REMOVED***/sync-history', [$syncStatusController, 'history']);
+    $router->register('GET', '/api/v1/***REMOVED***/sync-stats', [$syncStatusController, 'stats']);
 
     $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
     $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);

@@ -14,7 +14,8 @@ use App\Shared\Logger;
 
 final class PricingService
 {
-    private const LIVE_CACHE_TTL_SECONDS = 600;
+    private const LIVE_CACHE_TTL_SECONDS = 3600;
+    private const CATALOG_CACHE_TTL_SECONDS = 86400;
     private const PRICE_SOURCE_CSFLOAT = 'csfloat';
     private const PRICE_SOURCE_STEAM = 'steam';
     private const CSFLOAT_CIRCUIT_BREAKER_STATUSES = [401, 403, 405, 406, 418, 429, 500, 503];
@@ -350,7 +351,7 @@ final class PricingService
         $catalog = $this->normalizeCatalogRow(
             $this->itemCatalogRepository->findByMarketHashName($itemName)
         );
-        if ($catalog !== null && $this->hasUsefulCatalogData($catalog)) {
+        if ($catalog !== null && $this->hasUsefulCatalogData($catalog) && $this->isFreshCatalogCache($catalog)) {
             return $catalog;
         }
 
@@ -389,6 +390,7 @@ final class PricingService
 
         $catalog = [
             'marketHashName' => $itemName,
+            'cachedAt' => date('Y-m-d H:i:s'),
             'imageUrl' => $listing['iconUrl']
                 ?? $steamHint['iconUrl']
                 ?? ($resolvedExisting['imageUrl'] ?? null),
@@ -513,6 +515,23 @@ final class PricingService
         }
 
         return (time() - $fetchedAt) < self::LIVE_CACHE_TTL_SECONDS;
+    }
+
+    private function isFreshCatalogCache(?array $catalog): bool
+    {
+        if (
+            $catalog === null ||
+            !isset($catalog['cachedAt'])
+        ) {
+            return false;
+        }
+
+        $cachedAt = strtotime((string) $catalog['cachedAt']);
+        if ($cachedAt === false) {
+            return false;
+        }
+
+        return (time() - $cachedAt) < self::CATALOG_CACHE_TTL_SECONDS;
     }
 
     private function registerWarning(array $warning, string $itemName): void

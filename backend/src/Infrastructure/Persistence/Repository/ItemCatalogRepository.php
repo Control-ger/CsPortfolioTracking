@@ -22,14 +22,18 @@ final class ItemCatalogRepository
             market_type_label VARCHAR(128) DEFAULT NULL,
             wear_key VARCHAR(64) DEFAULT NULL,
             wear_label VARCHAR(64) DEFAULT NULL,
+            cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_item_type (item_type),
-            INDEX idx_updated_at (updated_at)
+            INDEX idx_updated_at (updated_at),
+            INDEX idx_cached_at (cached_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
             $this->pdo->exec($sql);
+            // Verify cached_at column exists (for existing tables)
+            $this->ensureCachedAtColumn();
             RepositoryObservability::schemaEnsured(self::class, 'item_catalog');
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -43,9 +47,31 @@ final class ItemCatalogRepository
         }
     }
 
+    private function ensureCachedAtColumn(): void
+    {
+        try {
+            $checkSql = "SHOW COLUMNS FROM item_catalog WHERE Field = 'cached_at'";
+            $stmt = $this->pdo->prepare($checkSql);
+            $stmt->execute();
+            if ($stmt->rowCount() === 0) {
+                $alterSql = "ALTER TABLE item_catalog ADD COLUMN cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER market_hash_name, ADD INDEX idx_cached_at (cached_at)";
+                $this->pdo->exec($alterSql);
+            }
+        } catch (Throwable $exception) {
+            // Log but don't throw - column might already exist
+            RepositoryObservability::queryFailed(
+                self::class,
+                'ensureCachedAtColumn',
+                'ALTER TABLE item_catalog ADD COLUMN cached_at',
+                $exception,
+                []
+            );
+        }
+    }
+
     public function findByMarketHashName(string $marketHashName): ?array
     {
-        $sql = 'SELECT market_hash_name, image_url, item_type, item_type_label, market_type_label, wear_key, wear_label, updated_at
+        $sql = 'SELECT market_hash_name, image_url, item_type, item_type_label, market_type_label, wear_key, wear_label, cached_at, updated_at
              FROM item_catalog
              WHERE market_hash_name = ?';
 
@@ -76,8 +102,8 @@ final class ItemCatalogRepository
         ?string $wearLabel
     ): void {
         $sql = 'INSERT INTO item_catalog (
-                market_hash_name, image_url, item_type, item_type_label, market_type_label, wear_key, wear_label
-             ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                market_hash_name, image_url, item_type, item_type_label, market_type_label, wear_key, wear_label, cached_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
              ON DUPLICATE KEY UPDATE
                 image_url = VALUES(image_url),
                 item_type = VALUES(item_type),
@@ -85,6 +111,7 @@ final class ItemCatalogRepository
                 market_type_label = VALUES(market_type_label),
                 wear_key = VALUES(wear_key),
                 wear_label = VALUES(wear_label),
+                cached_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP';
 
         try {
