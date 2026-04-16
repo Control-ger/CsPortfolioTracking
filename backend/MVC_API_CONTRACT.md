@@ -25,6 +25,14 @@
   - `roi: float`
   - `isLive: bool`
   - `pricingStatus: "csfloat"|"steam"|"fallback"`
+  - `fundingMode: "cash_in"|"wallet_funded"`
+  - `costBasisTotal: float`
+  - `costBasisUnit: float`
+  - `netPositionValue: float`
+  - `netProfitEuro: float`
+  - `netRoiPercent: float`
+  - `breakEvenPriceNet: float|null`
+  - `appliedFees: { fxFeePercent, sellerFeePercent, withdrawalFeePercent, depositFeePercent, depositFeeFixedEur, acquisitionFees, source }`
 
 ### `GET /***REMOVED***/summary`
 - Returns aggregate KPIs for cards/charts.
@@ -34,8 +42,35 @@
   - `totalQuantity: int`
   - `totalProfitEuro: float`
   - `totalRoiPercent: float`
+  - `totalNetValue: float`
+  - `totalNetProfitEuro: float`
+  - `totalNetRoiPercent: float`
   - `isPositive: bool`
   - `chartColor: string`
+
+## Settings Endpoints
+
+### `GET /settings/fees`
+- Returns fee settings (DB values or defaults).
+- `data` fields:
+  - `fxFeePercent: float`
+  - `sellerFeePercent: float`
+  - `withdrawalFeePercent: float` (default `2.5`)
+  - `depositFeePercent: float`
+  - `depositFeeFixedEur: float`
+  - `source: "***REMOVED***"|"defaults"`
+
+### `PUT /settings/fees`
+- Body fields (camelCase and snake_case are accepted):
+  - `fxFeePercent|fx_fee_percent: float (0..100)`
+  - `sellerFeePercent|seller_fee_percent: float (0..100)`
+  - `withdrawalFeePercent|withdrawal_fee_percent: float (0..100)`
+  - `depositFeePercent|deposit_fee_percent: float (0..100)`
+  - `depositFeeFixedEur|deposit_fee_fixed_eur: float (>=0)`
+- Returns persisted settings in `data`.
+- Errors:
+  - `400 SETTINGS_VALIDATION_FAILED`
+  - `500 SETTINGS_SAVE_FAILED`
 
 ### `GET /***REMOVED***/history`
 - Returns timeline for charting.

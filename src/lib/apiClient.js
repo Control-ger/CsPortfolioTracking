@@ -182,3 +182,16 @@ export async function fetchDebugLogs(options = {}) {
     })
   );
 }
+
+export async function fetchFeeSettings() {
+  return requestWithMeta("/api/v1/settings/fees");
+}
+
+export async function updateFeeSettings(payload) {
+  return requestWithMeta("/api/v1/settings/fees", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+

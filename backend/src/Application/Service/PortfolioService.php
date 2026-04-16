@@ -22,7 +22,8 @@ final class PortfolioService
         private readonly PositionHistoryRepository $positionHistoryRepository,
         private readonly PortfolioHistoryRepository $***REMOVED***HistoryRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
-        private readonly PricingService $pricingService
+        private readonly PricingService $pricingService,
+        private readonly FeeSettingsService $feeSettingsService
     ) {
     }
 
@@ -31,6 +32,7 @@ final class PortfolioService
         $this->ensurePriceHistoryTable();
 
         $investments = $this->investmentRepository->findAll();
+        $feeSettings = $this->feeSettingsService->getSettings();
         $rows = [];
         $today = date('Y-m-d');
 
@@ -44,6 +46,7 @@ final class PortfolioService
             $displayPrice = $livePrice ?? $buyPrice;
             $isLive = $livePrice !== null;
             $roi = $buyPrice > 0 ? (($displayPrice - $buyPrice) / $buyPrice) * 100 : 0.0;
+            $fundingMode = $this->normalizeFundingMode($investment['funding_mode'] ?? null);
             $totalInvested = $buyPrice * $quantity;
             $currentValue = $displayPrice * $quantity;
             $profitEuro = $currentValue - $totalInvested;
@@ -60,6 +63,14 @@ final class PortfolioService
             $fetchedAt = isset($presentation['fetchedAt']) ? (string) $presentation['fetchedAt'] : null;
             $priceAgeSeconds = $this->resolveFreshnessSeconds($fetchedAt);
             $freshnessStatus = $this->resolveFreshnessStatus($priceAgeSeconds, $isLive);
+
+            $acquisitionFees = $this->resolveAcquisitionFees($totalInvested, $fundingMode, $feeSettings);
+            $costBasisTotal = $totalInvested + $acquisitionFees;
+            $costBasisUnit = $quantity > 0 ? ($costBasisTotal / $quantity) : 0.0;
+            $netPositionValue = $this->calculateNetProceeds($currentValue, $feeSettings);
+            $netProfitEuro = $netPositionValue - $costBasisTotal;
+            $netRoiPercent = $costBasisTotal > 0 ? ($netProfitEuro / $costBasisTotal) * 100 : 0.0;
+            $breakEvenPriceNet = $this->calculateBreakEvenNetUnitPrice($costBasisUnit, $feeSettings);
 
             $rows[] = [
                 'id' => (int) $investment['id'],
@@ -83,6 +94,22 @@ final class PortfolioService
                 'breakEvenPrice' => $breakEvenPrice,
                 'breakEvenDeltaEuro' => $breakEvenDeltaEuro,
                 'breakEvenDeltaPercent' => $breakEvenDeltaPercent,
+                'fundingMode' => $fundingMode,
+                'costBasisTotal' => $costBasisTotal,
+                'costBasisUnit' => $costBasisUnit,
+                'netPositionValue' => $netPositionValue,
+                'netProfitEuro' => $netProfitEuro,
+                'netRoiPercent' => $netRoiPercent,
+                'breakEvenPriceNet' => $breakEvenPriceNet,
+                'appliedFees' => [
+                    'fxFeePercent' => (float) $feeSettings['fxFeePercent'],
+                    'sellerFeePercent' => (float) $feeSettings['sellerFeePercent'],
+                    'withdrawalFeePercent' => (float) $feeSettings['withdrawalFeePercent'],
+                    'depositFeePercent' => (float) $feeSettings['depositFeePercent'],
+                    'depositFeeFixedEur' => (float) $feeSettings['depositFeeFixedEur'],
+                    'acquisitionFees' => $acquisitionFees,
+                    'source' => $feeSettings['source'] ?? 'defaults',
+                ],
                 'change24hEuro' => $changeMetrics['24h']['amount'],
                 'change24hPercent' => $changeMetrics['24h']['percent'],
                 'change7dEuro' => $changeMetrics['7d']['amount'],
@@ -104,7 +131,9 @@ final class PortfolioService
     {
         $totalValue = 0.0;
         $totalInvested = 0.0;
+        $totalCostBasis = 0.0;
         $totalQuantity = 0;
+        $totalNetValue = 0.0;
         $liveItemsCount = 0;
         $staleLiveItemsCount = 0;
         $freshestDataAgeSeconds = null;
@@ -113,7 +142,9 @@ final class PortfolioService
         foreach ($rows as $row) {
             $totalValue += ((float) $row['displayPrice']) * ((int) $row['quantity']);
             $totalInvested += ((float) $row['buyPrice']) * ((int) $row['quantity']);
+            $totalCostBasis += (float) ($row['costBasisTotal'] ?? (((float) $row['buyPrice']) * ((int) $row['quantity'])));
             $totalQuantity += (int) $row['quantity'];
+            $totalNetValue += (float) ($row['netPositionValue'] ?? (((float) $row['displayPrice']) * ((int) $row['quantity'])));
 
             if (($row['isLive'] ?? false) !== true) {
                 continue;
@@ -139,6 +170,8 @@ final class PortfolioService
 
         $totalProfitEuro = $totalValue - $totalInvested;
         $totalRoiPercent = $totalInvested > 0 ? ($totalProfitEuro / $totalInvested) * 100 : 0.0;
+        $totalNetProfitEuro = $totalNetValue - $totalCostBasis;
+        $totalNetRoiPercent = $totalCostBasis > 0 ? ($totalNetProfitEuro / $totalCostBasis) * 100 : 0.0;
         $isPositive = $totalProfitEuro >= 0;
         $staleLiveItemsRatioPercent = $liveItemsCount > 0
             ? ($staleLiveItemsCount / $liveItemsCount) * 100
@@ -150,6 +183,9 @@ final class PortfolioService
             totalQuantity: $totalQuantity,
             totalProfitEuro: $totalProfitEuro,
             totalRoiPercent: $totalRoiPercent,
+            totalNetValue: $totalNetValue,
+            totalNetProfitEuro: $totalNetProfitEuro,
+            totalNetRoiPercent: $totalNetRoiPercent,
             isPositive: $isPositive,
             chartColor: $isPositive ? '#22c55e' : '#ef4444',
             liveItemsCount: $liveItemsCount,
@@ -421,5 +457,51 @@ final class PortfolioService
         ];
 
         return $colors[$type] ?? '#6b7280';
+    }
+
+    private function normalizeFundingMode(mixed $value): string
+    {
+        return in_array($value, ['cash_in', 'wallet_funded'], true)
+            ? (string) $value
+            : 'wallet_funded';
+    }
+
+    private function resolveAcquisitionFees(float $totalInvested, string $fundingMode, array $settings): float
+    {
+        if ($fundingMode !== 'cash_in' || $totalInvested <= 0) {
+            return 0.0;
+        }
+
+        $depositPercent = max(0.0, ((float) ($settings['depositFeePercent'] ?? 0.0)) / 100.0);
+        $fxPercent = max(0.0, ((float) ($settings['fxFeePercent'] ?? 0.0)) / 100.0);
+        $depositFixed = max(0.0, (float) ($settings['depositFeeFixedEur'] ?? 0.0));
+
+        return ($totalInvested * $depositPercent) + ($totalInvested * $fxPercent) + $depositFixed;
+    }
+
+    private function calculateNetProceeds(float $grossSell, array $settings): float
+    {
+        $sellerFeeRate = max(0.0, ((float) ($settings['sellerFeePercent'] ?? 0.0)) / 100.0);
+        $withdrawalFeeRate = max(0.0, ((float) ($settings['withdrawalFeePercent'] ?? 0.0)) / 100.0);
+
+        $afterSeller = $grossSell * (1 - $sellerFeeRate);
+        return $afterSeller * (1 - $withdrawalFeeRate);
+    }
+
+    private function calculateBreakEvenNetUnitPrice(float $costBasisUnit, array $settings): ?float
+    {
+        if ($costBasisUnit <= 0) {
+            return null;
+        }
+
+        $sellerFeeRate = max(0.0, ((float) ($settings['sellerFeePercent'] ?? 0.0)) / 100.0);
+        $withdrawalFeeRate = max(0.0, ((float) ($settings['withdrawalFeePercent'] ?? 0.0)) / 100.0);
+        $multiplier = (1 - $sellerFeeRate) * (1 - $withdrawalFeeRate);
+
+        if ($multiplier <= 0) {
+            return null;
+        }
+
+        return $costBasisUnit / $multiplier;
     }
 }

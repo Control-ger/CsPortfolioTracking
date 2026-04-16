@@ -145,14 +145,18 @@ export function PortfolioPage() {
             <div className="grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
               <StatCard
                 title="Portfolio Wert (Live)"
-                value={`${(stats.totalValue || 0).toFixed(2)} EUR`}
-                subValue={`Einsatz: ${(stats.totalInvested || 0).toFixed(2)} EUR`}
+                primaryLabel="Brutto"
+                primaryValue={`${(stats.totalValue || 0).toFixed(2)} EUR`}
+                secondaryLabel="Netto"
+                secondaryValue={`${(stats.totalNetValue || 0).toFixed(2)} EUR`}
                 isPositive={stats.isPositive}
               />
               <StatCard
                 title="Gesamt Profit/Loss"
-                value={`${stats.isPositive ? "+" : ""}${(stats.totalProfitEuro || 0).toFixed(2)} EUR`}
-                subValue={`${stats.isPositive ? "+" : ""}${(stats.totalRoiPercent || 0).toFixed(2)}%`}
+                primaryLabel="Brutto"
+                primaryValue={`${stats.isPositive ? "+" : ""}${(stats.totalProfitEuro || 0).toFixed(2)} EUR`}
+                secondaryLabel="Netto"
+                secondaryValue={`${(stats.totalNetProfitEuro || 0) >= 0 ? "+" : ""}${(stats.totalNetProfitEuro || 0).toFixed(2)} EUR`}
                 isPositive={stats.isPositive}
               />
               <StatCard title="Items im Bestand" value={`${stats.totalQuantity} Stueck`} />

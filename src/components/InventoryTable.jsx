@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 
 import { PriceSourceBadge } from "@/components/PriceSourceBadge";
+import { MetricPairInline } from "@/components/MetricPair";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
   <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted">
@@ -115,7 +116,7 @@ export function InventoryTable({ investments, onSelectItem }) {
               <TableHead>Item</TableHead>
               <TableHead className="text-right">Menge</TableHead>
               <TableHead className="text-right">Live Preis</TableHead>
-              <TableHead className="text-right">ROI %</TableHead>
+              <TableHead className="text-right">ROI Brutto / Netto</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -132,8 +133,11 @@ export function InventoryTable({ investments, onSelectItem }) {
                       <span className="transition-colors group-hover:text-primary">
                         {item.name}
                       </span>
-                      <span className="text-[10px] uppercase tracking-tighter text-muted-foreground">
-                        {item.type}
+                      <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                        <span>{item.type}</span>
+                        <Badge variant="outline" className="text-[9px]">
+                          {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
+                        </Badge>
                       </span>
                     </span>
                   </div>
@@ -159,11 +163,16 @@ export function InventoryTable({ investments, onSelectItem }) {
                   )}
                 </TableCell>
 
-                <TableCell
-                  className={`text-right text-sm font-bold ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}
-                >
+                <TableCell className="text-right">
                   {item.isLive ? (
-                    `${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`
+                    <MetricPairInline
+                      grossLabel="Brutto"
+                      grossValue={`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
+                      grossValueClassName={item.roi >= 0 ? "text-green-500" : "text-red-500"}
+                      netLabel="Netto"
+                      netValue={`${(item.netRoiPercent ?? 0) >= 0 ? "+" : ""}${(item.netRoiPercent ?? 0).toFixed(1)}%`}
+                      netValueClassName={(item.netRoiPercent ?? 0) >= 0 ? "text-green-600" : "text-red-600"}
+                    />
                   ) : (
                     <span className="text-muted-foreground opacity-50">0.0%</span>
                   )}
@@ -190,13 +199,29 @@ export function InventoryTable({ investments, onSelectItem }) {
                   <span className="text-sm font-medium truncate transition-colors hover:text-primary">
                     {item.name}
                   </span>
-                  <span className="text-[10px] uppercase tracking-tighter text-muted-foreground">
-                    {item.type}
+                  <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                    <span>{item.type}</span>
+                    <Badge variant="outline" className="text-[9px]">
+                      {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
+                    </Badge>
                   </span>
                 </div>
               </div>
-              <div className={`text-sm font-bold whitespace-nowrap ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}>
-                {item.isLive ? `${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%` : "0.0%"}
+              <div className="text-right">
+                {item.isLive ? (
+                  <MetricPairInline
+                    grossLabel="Brutto"
+                    grossValue={`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
+                    grossValueClassName={item.roi >= 0 ? "text-green-500" : "text-red-500"}
+                    netLabel="Netto"
+                    netValue={`${(item.netRoiPercent ?? 0) >= 0 ? "+" : ""}${(item.netRoiPercent ?? 0).toFixed(1)}%`}
+                    netValueClassName={(item.netRoiPercent ?? 0) >= 0 ? "text-green-600" : "text-red-600"}
+                  />
+                ) : (
+                  <div className="text-sm font-bold whitespace-nowrap text-muted-foreground opacity-50">
+                    0.0%
+                  </div>
+                )}
               </div>
             </div>
 

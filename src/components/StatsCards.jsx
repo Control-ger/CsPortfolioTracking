@@ -5,10 +5,20 @@ import {
   CardTitle,
 } from "@/components/ui/card.jsx";
 
-export const StatCard = ({ title, value, subValue, isPositive }) => {
-  // Wenn isPositive undefined ist (z.B. bei "Items im Bestand"), nutzen wir neutrale Farben
+export const StatCard = ({
+  title,
+  value,
+  subValue,
+  primaryValue,
+  secondaryValue,
+  primaryLabel = "Brutto",
+  secondaryLabel = "Netto",
+  isPositive,
+}) => {
   const hasStatus = isPositive !== undefined;
   const statusColor = isPositive ? "text-green-600" : "text-red-600";
+  const mainValue = primaryValue ?? value;
+  const sideValue = secondaryValue ?? subValue;
 
   return (
     <Card>
@@ -18,25 +28,27 @@ export const StatCard = ({ title, value, subValue, isPositive }) => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col">
-          {/* Der Hauptwert wird nun auch eingefärbt, wenn ein Status da ist */}
-          <div className={`text-2xl font-bold ${hasStatus ? statusColor : ""}`}>
-            {value}
+        <div className="space-y-2">
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">{primaryLabel}</div>
+            <div className={`text-2xl font-bold ${hasStatus ? statusColor : ""}`}>
+              {mainValue}
+            </div>
           </div>
 
-          {subValue && (
-            <div className="text-xs flex items-center mt-1">
-              {hasStatus && (
-                <span className={`font-bold mr-1 ${statusColor}`}>
-                  {isPositive ? "▲" : "▼"}
-                </span>
-              )}
-              <span className="text-muted-foreground">{subValue}</span>
-              <span className="text-muted-foreground font-normal ml-1">
-                seit Start
-              </span>
+          {sideValue ? (
+            <div className="border-t pt-2">
+              <div className="text-[10px] uppercase text-muted-foreground">{secondaryLabel}</div>
+              <div className="text-xs flex items-center mt-1">
+                {hasStatus && (
+                  <span className={`font-bold mr-1 ${statusColor}`}>
+                    {isPositive ? "▲" : "▼"}
+                  </span>
+                )}
+                <span className="text-muted-foreground">{sideValue}</span>
+              </div>
             </div>
-          )}
+          ) : null}
         </div>
       </CardContent>
     </Card>

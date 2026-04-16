@@ -2,12 +2,14 @@
 declare(strict_types=1);
 
 use App\Application\Service\PortfolioService;
+use App\Application\Service\FeeSettingsService;
 use App\Application\Service\PricingService;
 use App\Application\Service\WatchlistService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
 use App\Http\Controller\DebugController;
 use App\Http\Controller\PortfolioController;
+use App\Http\Controller\SettingsController;
 use App\Http\Controller\SyncStatusController;
 use App\Http\Controller\WatchlistController;
 use App\Infrastructure\External\CsFloatClient;
@@ -21,6 +23,7 @@ use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
+use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Observability\Application\ObservabilityService;
 use App\Observability\Context\RequestContext;
@@ -339,6 +342,8 @@ try {
     $itemCatalogRepository = new ItemCatalogRepository($pdo);
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
+    $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
+    $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
 
     $pricingService = new PricingService(
         new CsFloatClient(),
@@ -353,9 +358,11 @@ try {
         $positionHistoryRepository,
         $***REMOVED***HistoryRepository,
         $priceHistoryRepository,
-        $pricingService
+        $pricingService,
+        $feeSettingsService
     );
     $watchlistService = new WatchlistService($watchlistRepository, $priceHistoryRepository, $pricingService);
+    $settingsController = new SettingsController($feeSettingsService);
 
     $***REMOVED***Controller = new PortfolioController($***REMOVED***Service);
     $watchlistController = new WatchlistController($watchlistService);
@@ -374,6 +381,8 @@ try {
     $router->register('GET', '/api/v1/***REMOVED***/sync-status', [$syncStatusController, 'status']);
     $router->register('GET', '/api/v1/***REMOVED***/sync-history', [$syncStatusController, 'history']);
     $router->register('GET', '/api/v1/***REMOVED***/sync-stats', [$syncStatusController, 'stats']);
+    $router->register('GET', '/api/v1/settings/fees', [$settingsController, 'fees']);
+    $router->register('PUT', '/api/v1/settings/fees', [$settingsController, 'updateFees']);
 
     $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
     $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);
