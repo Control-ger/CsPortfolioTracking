@@ -9,10 +9,10 @@ services:
                 limits:
                     memory: "12273582080"
         environment:
-            MYSQL_DATABASE: ***REMOVED***
-            MYSQL_PASSWORD: ***REMOVED***123
-            MYSQL_ROOT_PASSWORD: ***REMOVED***
-            MYSQL_USER: ***REMOVED***
+            MYSQL_DATABASE: ${DB_NAME}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+            MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+            MYSQL_USER: ${DB_USER}
         hostname: cs***REMOVED***-***REMOVED***
         image: maria***REMOVED***:10.6
         networks:
@@ -20,7 +20,7 @@ services:
         restart: always
         volumes:
             - type: bind
-              source: ***REMOVED***/mysql
+              source: ${PROJECT_ROOT_PATH}/mysql
               target: /var/lib/mysql
               bind:
                 create_host_path: true
@@ -39,14 +39,11 @@ services:
         networks:
             default: null
         ports:
-            - mode: ingress
-              target: 80
-              published: "***REMOVED***"
-              protocol: tcp
+            - "${PMA_PORT}:80"
         restart: always
     web:
         build:
-            context: ***REMOVED***
+            context: ${PROJECT_ROOT_PATH}
             dockerfile: Dockerfile
         cpu_shares: 90
         command: []
@@ -61,34 +58,31 @@ services:
                     memory: "12273582080"
         hostname: cs***REMOVED***-web
         labels:
-            casaos.icon: http://***REMOVED***:***REMOVED***/icon.png
+            casaos.icon: http://${APP_HOST}:${APP_PORT}/icon.png
             casaos.title: CS2 Portfolio Tracker
-            icon: http://***REMOVED***:***REMOVED***/icon.png
+            icon: http://${APP_HOST}:${APP_PORT}/icon.png
             title: CS2 Portfolio Tracker
         networks:
             default: null
         ports:
-            - mode: ingress
-              target: 80
-              published: "***REMOVED***"
-              protocol: tcp
+            - "${APP_PORT}:80"
         restart: always
         volumes:
             # WICHTIG: .env Datei mounten damit die API-Key geladen wird
             - type: bind
-              source: ***REMOVED***/.env
+              source: ${PROJECT_ROOT_PATH}/.env
               target: /var/www/html/.env
               bind:
                 create_host_path: true
             # Frontend dist
             - type: bind
-              source: ***REMOVED***/dist
+              source: ${DIST_PATH}
               target: /var/www/html
               bind:
                 create_host_path: true
             # Backend API
             - type: bind
-              source: ***REMOVED***/backend
+              source: ${BACKEND_PATH}
               target: /var/www/html/api
               bind:
                 create_host_path: true
@@ -102,28 +96,25 @@ x-casaos:
     icon: ""
     index: /
     is_uncontrolled: false
-    port_map: "***REMOVED***"
+    port_map: "${APP_PORT}"
     scheme: http
     tips:
         custom: |
-            in dist die files löschen, außer das icon und neu einspielen, dannach maik@maiks-homeserver:***REMOVED***$ sudo docker compose up -d
-            Warum? Weil ich kein Bock habe die .htaccess jedesmal neu zu erstellen
+           In Dist liegt eine .htaccess, die nicht löschen :)
 
-            URL: http://***REMOVED***:***REMOVED***
-            Lokaler Pfad: ***REMOVED***/dist (hier liegt dein Frontend)
-            Backend Pfad: ***REMOVED***/backend (wird gemappt auf /api)
+            URL: http://${APP_HOST}:${APP_PORT}
+            Lokaler Pfad: ${DIST_PATH} (Frontend)
+            Backend Pfad: ${BACKEND_PATH} (wird gemappt auf /api)
 
-            Host (intern im Docker)	***REMOVED***
+            Host (intern im Docker)	${DB_HOST}
             Port (extern)	3306
-            Datenbank Name	***REMOVED***_***REMOVED***
-            User	***REMOVED***_user
-            Passwort	***REMOVED***
-            Root-Passwort	***REMOVED***_password_123
-            phpMyAdmin: http://***REMOVED***:***REMOVED***
-            ***REMOVED***
-            ***REMOVED***
+            Datenbank Name	${DB_NAME}
+            User	${DB_USER}
+            Passwort	in .env als DB_PASSWORD
+            Root-Passwort	in .env als DB_ROOT_PASSWORD
+            phpMyAdmin: http://${APP_HOST}:${PMA_PORT}
 
-            WICHTIG: Die .env muss im Projekt***REMOVED*** liegen (***REMOVED***/.env)
-            Sie wird jetzt automatisch in den Docker Container gemountet!
+            WICHTIG: Die .env muss im Projekt***REMOVED*** liegen (${PROJECT_ROOT_PATH}/.env)
+            Die wird dann automatisch in den Docker Container gemountet.
     title:
         custom: CS2 Portfolio Tracker
