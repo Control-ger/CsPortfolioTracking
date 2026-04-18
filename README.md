@@ -8,6 +8,30 @@ CS Investor Hub ist ein React + PHP Projekt zum Tracking von CS2 Portfolio- und 
 - Backend: PHP 8.x (MVC-artige Struktur unter `backend/src`)
 - Persistenz: MySQL (PDO)
 
+## Screenshots
+
+Die Screenshots liegen unter `docs/screenshots/` und werden hier mit relativen Pfaden eingebunden.
+
+### Dashboard
+
+![Dashboard (Day)](docs/screenshots/dashboard_day.png)
+
+![Dashboard Mobile (Day)](docs/screenshots/dashboard_mobile_day.png)
+
+### Watchlist
+
+![Watchlist (Night)](docs/screenshots/watchlist_night.png)
+
+### Inventory
+
+![Inventory (Day)](docs/screenshots/inventory_day.png)
+
+![Inventory Mobile (Day)](docs/screenshots/inventory_mobile_day.png)
+
+### Debug
+
+![Debug (Night)](docs/screenshots/debug_night.png)
+
 ## Lokaler Start
 
 1. Abhaengigkeiten installieren:
