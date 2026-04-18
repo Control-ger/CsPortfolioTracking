@@ -61,7 +61,7 @@ export function usePortfolio() {
     freshestDataAgeSeconds: null,
     oldestDataAgeSeconds: null,
   });
-  const [***REMOVED***History, setPortfolioHistory] = useState([]);
+  const [portfolioHistory, setPortfolioHistory] = useState([]);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
 
@@ -100,7 +100,7 @@ export function usePortfolio() {
   return {
     enrichedInvestments: investments,
     stats,
-    ***REMOVED***History,
+    portfolioHistory,
     error,
     warnings,
   };

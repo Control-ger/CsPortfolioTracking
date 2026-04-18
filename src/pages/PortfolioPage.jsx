@@ -68,7 +68,7 @@ function formatRelativeHours(hours) {
 }
 
 export function PortfolioPage() {
-  const { enrichedInvestments, stats, ***REMOVED***History, error, warnings } =
+  const { enrichedInvestments, stats, portfolioHistory, error, warnings } =
     usePortfolio();
   const { latestItem: latestCsUpdate, isLoading: csUpdatesLoading } = useCsUpdatesFeed();
   const { data: compositionData } = usePortfolioComposition();
@@ -213,7 +213,7 @@ export function PortfolioPage() {
             </div>
 
             <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
-              <PortfolioChart history={***REMOVED***History} color={stats.chartColor} />
+              <PortfolioChart history={portfolioHistory} color={stats.chartColor} />
               <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
             </div>
 

@@ -13,11 +13,11 @@ final class DatabaseConfig
 
     public function __construct()
     {
-        $this->host = $this->readEnv('DB_HOST', '***REMOVED***');
-        $this->database = $this->readEnv('DB_NAME', '***REMOVED***', ['MYSQL_DATABASE']);
+        $this->host = $this->readEnv('DB_HOST', 'DB_HOST_NOT_SET');
+        $this->database = $this->readEnv('DB_NAME', 'DB_NAME_NOT_SET', ['MYSQL_DATABASE']);
         $this->charset = $this->readEnv('DB_CHARSET', 'utf8');
-        $this->username = $this->readEnv('DB_USER', '***REMOVED***', ['MYSQL_USER']);
-        $this->password = $this->readEnv('DB_PASSWORD', '***REMOVED***123', ['MYSQL_PASSWORD']);
+        $this->username = $this->readEnv('DB_USER', 'DB_USER_NOT_SET', ['MYSQL_USER']);
+        $this->password = $this->readEnv('DB_PASSWORD', 'DB_PASSWORD_NOT_SET', ['MYSQL_PASSWORD']);
     }
 
     private function readEnv(string $key, string $default, array $aliases = []): string

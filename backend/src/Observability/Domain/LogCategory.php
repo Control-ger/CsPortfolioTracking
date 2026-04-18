@@ -9,7 +9,7 @@ final class LogCategory
     public const DOMAIN = 'domain';
     public const EXTERNAL = 'external';
     public const ERROR = 'error';
-    public const DB = '***REMOVED***';
+    public const DB = 'db';
     public const SYSTEM = 'system';
     public const FRONTEND = 'frontend';
 

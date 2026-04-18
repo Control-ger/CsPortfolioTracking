@@ -18,7 +18,7 @@ final class ObservabilityService
         private ?ObservabilityEventRepository $eventRepository,
         private readonly FileSink $fileSink,
         private readonly ContextSanitizer $contextSanitizer,
-        private readonly bool $***REMOVED***WriteEnabled = true
+        private readonly bool $dbWriteEnabled = true
     ) {
     }
 
@@ -109,7 +109,7 @@ final class ObservabilityService
             context: $sanitizedContext
         );
 
-        if ($this->***REMOVED***WriteEnabled && $this->eventRepository !== null) {
+        if ($this->dbWriteEnabled && $this->eventRepository !== null) {
             try {
                 $this->eventRepository->save($eventModel);
             } catch (Throwable $exception) {

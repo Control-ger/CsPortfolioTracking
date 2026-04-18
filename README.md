@@ -59,7 +59,7 @@ Beim Prozessstart werden einmalig geschrieben:
 
 - `system.bootstrap.completed`
 - `system.config.active`
-- `system.***REMOVED***.ready`
+- `system.db.ready`
 
 ### Frontend Telemetry
 

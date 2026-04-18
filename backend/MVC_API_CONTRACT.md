@@ -10,7 +10,7 @@
 
 ## Portfolio Endpoints
 
-### `GET /***REMOVED***/investments`
+### `GET /portfolio/investments`
 - Returns enriched investments with backend-calculated metrics.
 - `data[]` fields:
   - `id: int`
@@ -34,7 +34,7 @@
   - `breakEvenPriceNet: float|null`
   - `appliedFees: { fxFeePercent, sellerFeePercent, withdrawalFeePercent, depositFeePercent, depositFeeFixedEur, acquisitionFees, source }`
 
-### `GET /***REMOVED***/summary`
+### `GET /portfolio/summary`
 - Returns aggregate KPIs for cards/charts.
 - `data` fields:
   - `totalValue: float`
@@ -58,7 +58,7 @@
   - `withdrawalFeePercent: float` (default `2.5`)
   - `depositFeePercent: float`
   - `depositFeeFixedEur: float`
-  - `source: "***REMOVED***"|"defaults"`
+  - `source: "db"|"defaults"`
 
 ### `PUT /settings/fees`
 - Body fields (camelCase and snake_case are accepted):
@@ -72,14 +72,14 @@
   - `400 SETTINGS_VALIDATION_FAILED`
   - `500 SETTINGS_SAVE_FAILED`
 
-### `GET /***REMOVED***/history`
+### `GET /portfolio/history`
 - Returns timeline for charting.
 - `data[]` fields:
   - `id: int`
   - `date: YYYY-MM-DD`
   - `wert: float`
 
-### `PUT /***REMOVED***/daily-value`
+### `PUT /portfolio/daily-value`
 - Body:
   - `totalValue?: float`
 - Upserts the daily value; if omitted, backend computes from investments.

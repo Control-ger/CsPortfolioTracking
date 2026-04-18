@@ -10,7 +10,7 @@ import { installFrontendTelemetryHandlers } from './lib/frontendTelemetry'
 
 installFrontendTelemetryHandlers()
 
-createRoot(document.getElementById('***REMOVED***')).render(
+createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <ThemeProvider>

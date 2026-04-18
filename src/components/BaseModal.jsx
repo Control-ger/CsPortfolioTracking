@@ -44,7 +44,7 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md', class
         className={`relative bg-background rounded-lg shadow-lg border ${sizeClasses[size]} w-full max-h-[90vh] overflow-y-auto`}
         role="dialog"
         aria-modal="true"
-        aria-labelle***REMOVED***y="modal-title"
+        aria-labelledby="modal-title"
       >
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between border-b bg-background p-3 sm:p-6">

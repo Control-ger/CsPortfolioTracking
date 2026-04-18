@@ -20,7 +20,7 @@ final class PortfolioService
     public function __construct(
         private readonly InvestmentRepository $investmentRepository,
         private readonly PositionHistoryRepository $positionHistoryRepository,
-        private readonly PortfolioHistoryRepository $***REMOVED***HistoryRepository,
+        private readonly PortfolioHistoryRepository $portfolioHistoryRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
         private readonly PricingService $pricingService,
         private readonly FeeSettingsService $feeSettingsService
@@ -198,8 +198,8 @@ final class PortfolioService
 
     public function getHistory(): array
     {
-        $this->***REMOVED***HistoryRepository->ensureTable();
-        $rows = $this->***REMOVED***HistoryRepository->findAll();
+        $this->portfolioHistoryRepository->ensureTable();
+        $rows = $this->portfolioHistoryRepository->findAll();
         return array_map(
             static fn(array $row): array => ['id' => (int) $row['id'], 'date' => $row['date'], 'wert' => (float) $row['total_value']],
             $rows
@@ -229,13 +229,13 @@ final class PortfolioService
 
     public function saveDailyValue(?float $value = null): array
     {
-        $this->***REMOVED***HistoryRepository->ensureTable();
+        $this->portfolioHistoryRepository->ensureTable();
         $this->positionHistoryRepository->ensureTable();
         $rows = $this->getEnrichedInvestments();
         $summary = $this->getSummary($rows);
         $totalValue = $value ?? $summary->totalValue;
         $today = date('Y-m-d');
-        $this->***REMOVED***HistoryRepository->upsertForDate($today, $totalValue);
+        $this->portfolioHistoryRepository->upsertForDate($today, $totalValue);
         foreach ($rows as $row) {
             $this->positionHistoryRepository->upsertSnapshot(
                 investmentId: (int) $row['id'],
@@ -249,7 +249,7 @@ final class PortfolioService
         Logger::event(
             'info',
             'domain',
-            'domain.***REMOVED***.daily_value_saved',
+            'domain.portfolio.daily_value_saved',
             'Portfolio daily value saved',
             [
                 'date' => $today,

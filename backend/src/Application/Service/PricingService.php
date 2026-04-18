@@ -627,7 +627,7 @@ final class PricingService
 
     private function getCsFloatBackoffPath(): string
     {
-        return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cs***REMOVED***_csfloat_backoff.json';
+        return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'csportfolio_csfloat_backoff.json';
     }
 
     private function resolveSteamPriceSnapshot(string $itemName, ?array $steamHint = null): ?array

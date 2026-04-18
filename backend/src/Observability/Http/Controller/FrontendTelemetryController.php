@@ -82,7 +82,7 @@ final class FrontendTelemetryController
 
     private function allowEventForIp(string $ip): bool
     {
-        $bucketFile = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cs***REMOVED***_frontend_telemetry_rate_limit.json';
+        $bucketFile = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'csportfolio_frontend_telemetry_rate_limit.json';
         $now = time();
 
         $payload = [];

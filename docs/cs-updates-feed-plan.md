@@ -47,7 +47,7 @@ Ein Feed-Eintrag soll mindestens folgende Felder besitzen:
 - `details`: laengerer Text oder strukturierte Detailpunkte
 - `publishedAt`: Zeitpunkt der Erstveroefentlichung
 - `updatedAt`: optionaler letzter Aenderungszeitpunkt
-- `source`: Herkunft, z. B. `mock`, `steam***REMOVED***`, `discord`, `backend_aggregated`
+- `source`: Herkunft, z. B. `mock`, `steamdb`, `discord`, `backend_aggregated`
 - `sourceLabel`: lesbarer Anzeigename
 - `url`: optionaler Link zur Quelle
 - `tags`: optionale Schlagworte

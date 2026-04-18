@@ -70,7 +70,7 @@ Antwort:
 }
 ```
 
-`source` ist `defaults` oder `***REMOVED***`.
+`source` ist `defaults` oder `db`.
 
 ### 4.2 PUT `/api/v1/settings/fees`
 Request:
@@ -94,7 +94,7 @@ Fehlercodes:
 - `500 SETTINGS_SAVE_FAILED`
 
 ### 4.3 Erweiterte Portfolio-Responses
-`GET /api/v1/***REMOVED***/investments` liefert additiv:
+`GET /api/v1/portfolio/investments` liefert additiv:
 - `fundingMode`
 - `netProceeds`
 - `netProfitEuro`
@@ -102,7 +102,7 @@ Fehlercodes:
 - `breakEvenPriceNet`
 - `appliedFees`
 
-`GET /api/v1/***REMOVED***/summary` liefert additiv:
+`GET /api/v1/portfolio/summary` liefert additiv:
 - `totalNetValue`
 - `totalNetProfitEuro`
 - `totalNetRoiPercent`

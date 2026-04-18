@@ -1,9 +1,9 @@
 name: code
 services:
-    ***REMOVED***:
+    db:
         cpu_shares: 90
         command: []
-        container_name: cs***REMOVED***-***REMOVED***
+        container_name: csportfolio-db
         deploy:
             resources:
                 limits:
@@ -13,8 +13,8 @@ services:
             MYSQL_PASSWORD: ${DB_PASSWORD}
             MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
             MYSQL_USER: ${DB_USER}
-        hostname: cs***REMOVED***-***REMOVED***
-        image: maria***REMOVED***:10.6
+        hostname: csportfolio-db
+        image: mariadb:10.6
         networks:
             default: null
         restart: always
@@ -27,14 +27,14 @@ services:
     phpmyadmin:
         cpu_shares: 90
         command: []
-        container_name: cs***REMOVED***-pma
+        container_name: csportfolio-pma
         deploy:
             resources:
                 limits:
                     memory: "12273582080"
         environment:
-            PMA_HOST: ***REMOVED***
-        hostname: cs***REMOVED***-pma
+            PMA_HOST: db
+        hostname: csportfolio-pma
         image: phpmyadmin/phpmyadmin:latest
         networks:
             default: null
@@ -47,16 +47,16 @@ services:
             dockerfile: Dockerfile
         cpu_shares: 90
         command: []
-        container_name: cs***REMOVED***-web
+        container_name: csportfolio-web
         depends_on:
-            ***REMOVED***:
+            db:
                 condition: service_started
                 required: true
         deploy:
             resources:
                 limits:
                     memory: "12273582080"
-        hostname: cs***REMOVED***-web
+        hostname: csportfolio-web
         labels:
             casaos.icon: http://${APP_HOST}:${APP_PORT}/icon.png
             casaos.title: CS2 Portfolio Tracker
@@ -114,7 +114,7 @@ x-casaos:
             Root-Passwort	in .env als DB_ROOT_PASSWORD
             phpMyAdmin: http://${APP_HOST}:${PMA_PORT}
 
-            WICHTIG: Die .env muss im Projekt***REMOVED*** liegen (${PROJECT_ROOT_PATH}/.env)
+            WICHTIG: Die .env muss im Projektroot liegen (${PROJECT_ROOT_PATH}/.env)
             Die wird dann automatisch in den Docker Container gemountet.
     title:
         custom: CS2 Portfolio Tracker

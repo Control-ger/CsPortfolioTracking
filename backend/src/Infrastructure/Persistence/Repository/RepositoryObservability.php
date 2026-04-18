@@ -16,8 +16,8 @@ final class RepositoryObservability
     {
         Logger::event(
             'info',
-            '***REMOVED***',
-            '***REMOVED***.schema.ensure_table',
+            'db',
+            'db.schema.ensure_table',
             'Database schema ensured',
             [
                 'repository' => $repository,
@@ -30,8 +30,8 @@ final class RepositoryObservability
     {
         Logger::event(
             'info',
-            '***REMOVED***',
-            '***REMOVED***.schema.migration_column_added',
+            'db',
+            'db.schema.migration_column_added',
             'Database schema column added',
             [
                 'repository' => $repository,
@@ -50,8 +50,8 @@ final class RepositoryObservability
     ): void {
         Logger::event(
             'error',
-            '***REMOVED***',
-            '***REMOVED***.query.failed',
+            'db',
+            'db.query.failed',
             'Database query failed',
             array_merge(
                 [
@@ -74,8 +74,8 @@ final class RepositoryObservability
     ): void {
         Logger::event(
             'error',
-            '***REMOVED***',
-            '***REMOVED***.upsert.failed',
+            'db',
+            'db.upsert.failed',
             'Database upsert failed',
             array_merge(
                 [
@@ -96,8 +96,8 @@ final class RepositoryObservability
     ): void {
         Logger::event(
             'warning',
-            '***REMOVED***',
-            '***REMOVED***.result.empty_unexpected',
+            'db',
+            'db.result.empty_unexpected',
             'Database query returned empty result unexpectedly',
             array_merge(
                 [

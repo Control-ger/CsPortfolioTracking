@@ -77,7 +77,7 @@ final class UserFeeSettingsRepository
                 'withdrawalFeePercent' => (float) $row['withdrawal_fee_percent'],
                 'depositFeePercent' => (float) $row['deposit_fee_percent'],
                 'depositFeeFixedEur' => (float) $row['deposit_fee_fixed_eur'],
-                'source' => '***REMOVED***',
+                'source' => 'db',
             ];
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -121,7 +121,7 @@ final class UserFeeSettingsRepository
             ]);
 
             $stored = $this->findOrDefault();
-            $stored['source'] = '***REMOVED***';
+            $stored['source'] = 'db';
             return $stored;
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(

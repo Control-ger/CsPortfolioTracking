@@ -53,7 +53,7 @@ export function SettingsPage() {
             DEFAULT_FORM.depositFeeFixedEur,
           ),
         });
-        setSource(data.source === "***REMOVED***" ? "***REMOVED***" : "defaults");
+        setSource(data.source === "db" ? "db" : "defaults");
         setError("");
       } catch (loadError) {
         setError(loadError.message || "Fee-Settings konnten nicht geladen werden.");
@@ -96,7 +96,7 @@ export function SettingsPage() {
         depositFeePercent: toInputValue(saved.depositFeePercent, DEFAULT_FORM.depositFeePercent),
         depositFeeFixedEur: toInputValue(saved.depositFeeFixedEur, DEFAULT_FORM.depositFeeFixedEur),
       });
-      setSource("***REMOVED***");
+      setSource("db");
       setSuccess("Fee-Settings gespeichert.");
     } catch (saveError) {
       setError(saveError.message || "Fee-Settings konnten nicht gespeichert werden.");
@@ -126,7 +126,7 @@ export function SettingsPage() {
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
               <CardTitle>Gebuehren</CardTitle>
-              <Badge variant="outline">Quelle: {source === "***REMOVED***" ? "DB" : "Defaults"}</Badge>
+              <Badge variant="outline">Quelle: {source === "db" ? "DB" : "Defaults"}</Badge>
             </div>
             <CardDescription>
               Withdrawal Fee ist standardmaessig auf 2.5% gesetzt und frei anpassbar.

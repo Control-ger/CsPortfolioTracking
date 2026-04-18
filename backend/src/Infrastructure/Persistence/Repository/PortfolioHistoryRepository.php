@@ -14,7 +14,7 @@ final class PortfolioHistoryRepository
 
     public function ensureTable(): void
     {
-        $sql = "CREATE TABLE IF NOT EXISTS ***REMOVED***_history (
+        $sql = "CREATE TABLE IF NOT EXISTS portfolio_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             date DATE NOT NULL UNIQUE,
             total_value DECIMAL(10, 2) NOT NULL,
@@ -24,14 +24,14 @@ final class PortfolioHistoryRepository
 
         try {
             $this->pdo->exec($sql);
-            RepositoryObservability::schemaEnsured(self::class, '***REMOVED***_history');
+            RepositoryObservability::schemaEnsured(self::class, 'portfolio_history');
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
                 self::class,
                 __FUNCTION__,
                 $sql,
                 $exception,
-                ['table' => '***REMOVED***_history']
+                ['table' => 'portfolio_history']
             );
             throw $exception;
         }
@@ -39,7 +39,7 @@ final class PortfolioHistoryRepository
 
     public function findAll(): array
     {
-        $sql = 'SELECT id, date, total_value FROM ***REMOVED***_history ORDER BY date ASC';
+        $sql = 'SELECT id, date, total_value FROM portfolio_history ORDER BY date ASC';
 
         try {
             $stmt = $this->pdo->query($sql);
@@ -57,7 +57,7 @@ final class PortfolioHistoryRepository
 
     public function upsertForDate(string $date, float $totalValue): void
     {
-        $sql = 'INSERT INTO ***REMOVED***_history (date, total_value) VALUES (?, ?)
+        $sql = 'INSERT INTO portfolio_history (date, total_value) VALUES (?, ?)
              ON DUPLICATE KEY UPDATE total_value = VALUES(total_value)';
 
         try {

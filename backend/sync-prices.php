@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * CSFloat Price Sync CLI Script
  * 
- * Syncs all ***REMOVED*** item prices from CSFloat and caches them in the database.
+ * Syncs all portfolio item prices from CSFloat and caches them in the database.
  * Runs hourly via Supervisor to ensure always-fresh cache.
  * Logs all results to sync_status table for monitoring.
  * 
@@ -50,14 +50,14 @@ try {
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Starting CSFloat price sync...\n");
 
     // Initialize database connection
-    $***REMOVED***Config = DatabaseConfig::fromEnv();
-    $pdo = DatabaseConnectionFactory::create($***REMOVED***Config);
+    $dbConfig = DatabaseConfig::fromEnv();
+    $pdo = DatabaseConnectionFactory::create($dbConfig);
 
     // Initialize repositories
     $itemCatalogRepository = new ItemCatalogRepository($pdo);
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $investmentRepository = new InvestmentRepository($pdo);
-    $***REMOVED***HistoryRepository = new PortfolioHistoryRepository($pdo);
+    $portfolioHistoryRepository = new PortfolioHistoryRepository($pdo);
     $positionHistoryRepository = new PositionHistoryRepository($pdo);
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
@@ -85,15 +85,15 @@ try {
         $itemLiveCacheRepository
     );
 
-    // Get all unique item names from ***REMOVED***
+    // Get all unique item names from portfolio
     $sql = 'SELECT DISTINCT market_hash_name FROM investments WHERE market_hash_name IS NOT NULL';
     $stmt = $pdo->query($sql);
     $items = $stmt->fetchAll(\PDO::FETCH_COLUMN, 0);
 
     if (empty($items)) {
-        fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] No items found in ***REMOVED***. Nothing to sync.\n");
+        fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] No items found in portfolio. Nothing to sync.\n");
         $duration = round(microtime(true) - $startTime, 2);
-        $syncStatusRepository->recordSync('success', 0, 0, 0, 'No items in ***REMOVED***', $duration);
+        $syncStatusRepository->recordSync('success', 0, 0, 0, 'No items in portfolio', $duration);
         exit(0);
     }
 

@@ -39,7 +39,7 @@ Unter `backend/src/Observability`:
 
 - `Domain/LogEvent.php` (Event-Modell)
 - `Domain/LogLevel.php` (`debug|info|warning|error`)
-- `Domain/LogCategory.php` (`http|domain|external|error|***REMOVED***|system|frontend`)
+- `Domain/LogCategory.php` (`http|domain|external|error|db|system|frontend`)
 - `Context/RequestContext.php` (`requestId`, `method`, `path`, optional `userAgent`, `ip`)
 - `Context/RequestContextStore.php` (statischer Request-Kontext pro Request)
 - `Sanitization/ContextSanitizer.php` (PII/Secrets entfernen)
@@ -172,7 +172,7 @@ Retention-Task (später cron):
 - `domain.watchlist.item_deleted`
 - `domain.watchlist.price_refresh_started`
 - `domain.watchlist.price_refresh_completed`
-- `domain.***REMOVED***.daily_value_saved`
+- `domain.portfolio.daily_value_saved`
 
 ### Fehler-Events
 - `error.validation` (400)
@@ -223,12 +223,12 @@ Retention-Task (später cron):
 - alle Repository-Dateien unter `backend/src/Infrastructure/Persistence/Repository`
 
 ### Events
-- `***REMOVED***.connection.success|failed`
-- `***REMOVED***.schema.ensure_table`
-- `***REMOVED***.schema.migration_column_added`
-- `***REMOVED***.query.failed`
-- `***REMOVED***.upsert.failed`
-- `***REMOVED***.result.empty_unexpected` (nur auf explizit markierten kritischen Pfaden)
+- `db.connection.success|failed`
+- `db.schema.ensure_table`
+- `db.schema.migration_column_added`
+- `db.query.failed`
+- `db.upsert.failed`
+- `db.result.empty_unexpected` (nur auf explizit markierten kritischen Pfaden)
 
 ### Implementierungsregel
 - `try/catch (\Throwable $e)` um `execute()/exec()/query()` mit `throw` nach dem Log
@@ -250,7 +250,7 @@ Retention-Task (später cron):
 - Nach Logger-Initialisierung in `index.php`:
   - `system.bootstrap.completed`
   - `system.config.active`
-  - `system.***REMOVED***.ready`
+  - `system.db.ready`
 
 ### DoD Phase 6
 - Ein Startup-Log pro Prozessstart enthält `.env` und DB-Status
@@ -335,7 +335,7 @@ Query-Parameter:
 1. Request an `/api/v1/watchlist` erzeugt `http.request.completed` mit Request-ID.
 2. `DELETE` unbekannte ID erzeugt 404 + `error.route_not_found` oder `domain.watchlist.item_deleted` mit `deleted=false`.
 3. CSFloat Fehler (simuliert) erzeugt `external.csfloat.response` mit `success=false` und `fallback_to_steam`.
-4. DB-Verbindungsfehler beim Boot führt zu `***REMOVED***.connection.failed`.
+4. DB-Verbindungsfehler beim Boot führt zu `db.connection.failed`.
 5. `POST /observability/frontend-events` schreibt Event mit `category=frontend`.
 
 ## Frontend Tests
@@ -366,21 +366,21 @@ Query-Parameter:
 ## 11. Mindest-Eventkatalog (muss vorhanden sein)
 
 - `system.bootstrap.completed`
-- `system.***REMOVED***.ready`
+- `system.db.ready`
 - `http.request.completed`
 - `domain.watchlist.item_created`
 - `domain.watchlist.item_deleted`
 - `domain.watchlist.price_refresh_started`
 - `domain.watchlist.price_refresh_completed`
-- `domain.***REMOVED***.daily_value_saved`
+- `domain.portfolio.daily_value_saved`
 - `external.csfloat.response`
 - `external.steam.response`
 - `external.exchange_rate.response`
 - `external.pricing.cache_hit`
 - `external.pricing.cache_miss`
 - `external.pricing.fallback_to_steam`
-- `***REMOVED***.connection.failed`
-- `***REMOVED***.query.failed`
+- `db.connection.failed`
+- `db.query.failed`
 - `error.validation`
 - `error.http_5xx`
 - `frontend.fetch_error`

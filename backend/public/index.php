@@ -182,7 +182,7 @@ function obs_startup_marker_path(): string
 
     return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
         . DIRECTORY_SEPARATOR
-        . 'cs***REMOVED***_startup_logged_'
+        . 'csportfolio_startup_logged_'
         . $pidString
         . '.flag';
 }
@@ -232,7 +232,7 @@ $observabilityService = new ObservabilityService(
     eventRepository: null,
     fileSink: new FileSink(),
     contextSanitizer: new ContextSanitizer(),
-    ***REMOVED***WriteEnabled: obs_env_flag('OBSERVABILITY_ENABLED', true)
+    dbWriteEnabled: obs_env_flag('OBSERVABILITY_ENABLED', true)
 );
 Logger::setObservabilityService($observabilityService);
 
@@ -301,7 +301,7 @@ try {
             Logger::event(
                 'info',
                 'system',
-                'system.***REMOVED***.ready',
+                'system.db.ready',
                 'Database is ready',
                 [
                     'ready' => true,
@@ -310,22 +310,22 @@ try {
                 ]
             );
         }
-    } catch (\Throwable $***REMOVED***Exception) {
+    } catch (\Throwable $dbException) {
         if ($emitStartupEvents) {
             Logger::event(
                 'error',
                 'system',
-                'system.***REMOVED***.ready',
+                'system.db.ready',
                 'Database is not ready',
                 [
                     'ready' => false,
                     'host' => $databaseConfig->host,
                     'database' => $databaseConfig->database,
-                    'exception' => $***REMOVED***Exception,
+                    'exception' => $dbException,
                 ]
             );
         }
-        throw $***REMOVED***Exception;
+        throw $dbException;
     }
 
     $observabilityRepository = new ObservabilityEventRepository(
@@ -336,7 +336,7 @@ try {
 
     $investmentRepository = new InvestmentRepository($pdo);
     $positionHistoryRepository = new PositionHistoryRepository($pdo);
-    $***REMOVED***HistoryRepository = new PortfolioHistoryRepository($pdo);
+    $portfolioHistoryRepository = new PortfolioHistoryRepository($pdo);
     $watchlistRepository = new WatchlistRepository($pdo);
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
     $itemCatalogRepository = new ItemCatalogRepository($pdo);
@@ -353,10 +353,10 @@ try {
         $itemCatalogRepository,
         $itemLiveCacheRepository
     );
-    $***REMOVED***Service = new PortfolioService(
+    $portfolioService = new PortfolioService(
         $investmentRepository,
         $positionHistoryRepository,
-        $***REMOVED***HistoryRepository,
+        $portfolioHistoryRepository,
         $priceHistoryRepository,
         $pricingService,
         $feeSettingsService
@@ -364,7 +364,7 @@ try {
     $watchlistService = new WatchlistService($watchlistRepository, $priceHistoryRepository, $pricingService);
     $settingsController = new SettingsController($feeSettingsService);
 
-    $***REMOVED***Controller = new PortfolioController($***REMOVED***Service);
+    $portfolioController = new PortfolioController($portfolioService);
     $watchlistController = new WatchlistController($watchlistService);
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);
@@ -372,15 +372,15 @@ try {
     $syncStatusController = new SyncStatusController($syncStatusRepository);
 
     $router = new Router();
-    $router->register('GET', '/api/v1/***REMOVED***/investments', [$***REMOVED***Controller, 'investments']);
-    $router->register('GET', '/api/v1/***REMOVED***/investments/{id}/history', [$***REMOVED***Controller, 'investmentHistory']);
-    $router->register('GET', '/api/v1/***REMOVED***/summary', [$***REMOVED***Controller, 'summary']);
-    $router->register('GET', '/api/v1/***REMOVED***/history', [$***REMOVED***Controller, 'history']);
-    $router->register('GET', '/api/v1/***REMOVED***/composition', [$***REMOVED***Controller, 'composition']);
-    $router->register('PUT', '/api/v1/***REMOVED***/daily-value', [$***REMOVED***Controller, 'saveDailyValue']);
-    $router->register('GET', '/api/v1/***REMOVED***/sync-status', [$syncStatusController, 'status']);
-    $router->register('GET', '/api/v1/***REMOVED***/sync-history', [$syncStatusController, 'history']);
-    $router->register('GET', '/api/v1/***REMOVED***/sync-stats', [$syncStatusController, 'stats']);
+    $router->register('GET', '/api/v1/portfolio/investments', [$portfolioController, 'investments']);
+    $router->register('GET', '/api/v1/portfolio/investments/{id}/history', [$portfolioController, 'investmentHistory']);
+    $router->register('GET', '/api/v1/portfolio/summary', [$portfolioController, 'summary']);
+    $router->register('GET', '/api/v1/portfolio/history', [$portfolioController, 'history']);
+    $router->register('GET', '/api/v1/portfolio/composition', [$portfolioController, 'composition']);
+    $router->register('PUT', '/api/v1/portfolio/daily-value', [$portfolioController, 'saveDailyValue']);
+    $router->register('GET', '/api/v1/portfolio/sync-status', [$syncStatusController, 'status']);
+    $router->register('GET', '/api/v1/portfolio/sync-history', [$syncStatusController, 'history']);
+    $router->register('GET', '/api/v1/portfolio/sync-stats', [$syncStatusController, 'stats']);
     $router->register('GET', '/api/v1/settings/fees', [$settingsController, 'fees']);
     $router->register('PUT', '/api/v1/settings/fees', [$settingsController, 'updateFees']);
 

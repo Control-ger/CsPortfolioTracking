@@ -20,7 +20,7 @@ final class DatabaseConnectionFactory
     public function create(): PDO
     {
         $dsn = sprintf(
-            'mysql:host=%s;***REMOVED***name=%s;charset=%s',
+            'mysql:host=%s;dbname=%s;charset=%s',
             $this->config->host,
             $this->config->database,
             $this->config->charset
@@ -38,8 +38,8 @@ final class DatabaseConnectionFactory
             );
             Logger::event(
                 'info',
-                '***REMOVED***',
-                '***REMOVED***.connection.success',
+                'db',
+                'db.connection.success',
                 'Database connection established',
                 [
                     'driver' => 'mysql',
@@ -53,8 +53,8 @@ final class DatabaseConnectionFactory
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
-                '***REMOVED***',
-                '***REMOVED***.connection.failed',
+                'db',
+                'db.connection.failed',
                 'Database connection failed',
                 [
                     'driver' => 'mysql',

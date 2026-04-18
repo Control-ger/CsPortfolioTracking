@@ -106,27 +106,27 @@ async function requestWithMeta(path, options = {}) {
 }
 
 export async function fetchPortfolioInvestments() {
-  return requestWithMeta("/api/v1/***REMOVED***/investments");
+  return requestWithMeta("/api/v1/portfolio/investments");
 }
 
 export async function fetchPortfolioInvestmentHistory(id) {
-  return request(`/api/v1/***REMOVED***/investments/${id}/history`);
+  return request(`/api/v1/portfolio/investments/${id}/history`);
 }
 
 export async function fetchPortfolioSummary() {
-  return requestWithMeta("/api/v1/***REMOVED***/summary");
+  return requestWithMeta("/api/v1/portfolio/summary");
 }
 
 export async function fetchPortfolioHistory() {
-  return request("/api/v1/***REMOVED***/history");
+  return request("/api/v1/portfolio/history");
 }
 
 export async function fetchPortfolioComposition() {
-  return request("/api/v1/***REMOVED***/composition");
+  return request("/api/v1/portfolio/composition");
 }
 
 export async function savePortfolioDailyValue(totalValue) {
-  return request("/api/v1/***REMOVED***/daily-value", {
+  return request("/api/v1/portfolio/daily-value", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ totalValue }),

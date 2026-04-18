@@ -23,8 +23,8 @@ final class Router
             return;
         }
 
-        if ($request->method === 'GET' && preg_match('#^/api/v1/***REMOVED***/investments/(\d+)/history$#', $request->path, $matches) === 1) {
-            $handler = $this->routes['GET /api/v1/***REMOVED***/investments/{id}/history'] ?? null;
+        if ($request->method === 'GET' && preg_match('#^/api/v1/portfolio/investments/(\d+)/history$#', $request->path, $matches) === 1) {
+            $handler = $this->routes['GET /api/v1/portfolio/investments/{id}/history'] ?? null;
             if ($handler !== null) {
                 $handler($request, (int) $matches[1]);
                 return;

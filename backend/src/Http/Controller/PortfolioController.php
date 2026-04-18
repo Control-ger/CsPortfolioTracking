@@ -11,17 +11,17 @@ use Throwable;
 
 final class PortfolioController
 {
-    public function __construct(private readonly PortfolioService $***REMOVED***Service)
+    public function __construct(private readonly PortfolioService $portfolioService)
     {
     }
 
     public function investments(Request $request): void
     {
         try {
-            $rows = $this->***REMOVED***Service->getEnrichedInvestments();
+            $rows = $this->portfolioService->getEnrichedInvestments();
             JsonResponseFactory::success(
                 $rows,
-                ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()]
+                ['warnings' => $this->portfolioService->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
             Logger::event(
@@ -38,10 +38,10 @@ final class PortfolioController
     public function summary(Request $request): void
     {
         try {
-            $rows = $this->***REMOVED***Service->getEnrichedInvestments();
+            $rows = $this->portfolioService->getEnrichedInvestments();
             JsonResponseFactory::success(
-                $this->***REMOVED***Service->getSummary($rows)->toArray(),
-                ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()]
+                $this->portfolioService->getSummary($rows)->toArray(),
+                ['warnings' => $this->portfolioService->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
             Logger::event(
@@ -58,7 +58,7 @@ final class PortfolioController
     public function history(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->***REMOVED***Service->getHistory());
+            JsonResponseFactory::success($this->portfolioService->getHistory());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -74,7 +74,7 @@ final class PortfolioController
     public function investmentHistory(Request $request, int $id): void
     {
         try {
-            JsonResponseFactory::success($this->***REMOVED***Service->getInvestmentHistory($id));
+            JsonResponseFactory::success($this->portfolioService->getInvestmentHistory($id));
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -93,8 +93,8 @@ final class PortfolioController
             $inputValue = $request->body['totalValue'] ?? $request->body['total_value'] ?? null;
             $value = is_numeric($inputValue) ? (float) $inputValue : null;
             JsonResponseFactory::success(
-                $this->***REMOVED***Service->saveDailyValue($value),
-                ['warnings' => $this->***REMOVED***Service->consumePricingWarnings()],
+                $this->portfolioService->saveDailyValue($value),
+                ['warnings' => $this->portfolioService->consumePricingWarnings()],
                 200
             );
         } catch (Throwable $exception) {
@@ -112,7 +112,7 @@ final class PortfolioController
     public function composition(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->***REMOVED***Service->getComposition());
+            JsonResponseFactory::success($this->portfolioService->getComposition());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
