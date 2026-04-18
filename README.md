@@ -27,6 +27,25 @@ npm run build
 
 Hinweis: Vite erwartet Node `20.19+` oder `22.12+`.
 
+## Umgebungsvariablen
+
+Dieses Projekt nutzt eine lokale `.env` fuer Backend, Vite-Proxy und `docker-compose.yml`.
+
+1. Vorlage kopieren:
+```powershell
+Copy-Item .env.example .env
+```
+
+2. Werte in `.env` anpassen (mindestens `CSFLOAT_API_KEY`, `DB_PASSWORD`, `DB_ROOT_PASSWORD`, Pfade/Ports fuer Docker).
+
+3. Wichtig: `.env` bleibt lokal und wird nicht versioniert. Committe nur `.env.example`.
+
+Pflichtgruppen (je nach Workflow):
+
+- Backend/DB: `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `DB_CHARSET`
+- Docker/CasaOS: `APP_HOST`, `APP_PORT`, `PMA_PORT`, `PROJECT_ROOT_PATH`, `DIST_PATH`, `BACKEND_PATH`
+- API/Debug: `CSFLOAT_API_KEY`, optional `DEBUG` und `OBSERVABILITY_*`
+
 ## Backend Einstieg
 
 - Front Controller: `backend/public/index.php`
