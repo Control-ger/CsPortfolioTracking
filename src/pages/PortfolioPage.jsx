@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useModal } from "@/ModalContext";
 import { ApiWarnings } from "@/components/ApiWarnings";
@@ -14,9 +15,11 @@ import { Watchlist } from "@/components/Watchlist";
 import { WatchlistOverview } from "@/components/WatchlistOverview";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { usePortfolioComposition } from "@/hooks/usePortfolioComposition";
+import { useCsUpdatesFeed } from "@/hooks/useCsUpdatesFeed";
 import { fetchPortfolioInvestmentHistory } from "@/lib/apiClient";
 
 function formatAge(seconds) {
@@ -50,9 +53,24 @@ function freshnessBadgeClass(staleRatio) {
   return "border-red-200 bg-red-500/10 text-red-700 dark:border-red-900/60 dark:text-red-300";
 }
 
+const TWELVE_HOURS_IN_MS = 12 * 60 * 60 * 1000;
+
+function formatRelativeHours(hours) {
+  if (!Number.isFinite(hours)) {
+    return "unbekannt";
+  }
+
+  if (hours < 1) {
+    return "<1h";
+  }
+
+  return `${Math.max(1, Math.round(hours))}h`;
+}
+
 export function PortfolioPage() {
   const { enrichedInvestments, stats, ***REMOVED***History, error, warnings } =
     usePortfolio();
+  const { latestItem: latestCsUpdate, isLoading: csUpdatesLoading } = useCsUpdatesFeed();
   const { data: compositionData } = usePortfolioComposition();
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
@@ -112,6 +130,18 @@ export function PortfolioPage() {
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
   const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
+  const latestCsUpdateTimestamp = latestCsUpdate?.publishedAt
+    ? new Date(latestCsUpdate.publishedAt).getTime()
+    : null;
+  const latestCsUpdateAgeHours =
+    latestCsUpdateTimestamp !== null
+      ? (Date.now() - latestCsUpdateTimestamp) / (60 * 60 * 1000)
+      : null;
+  const showCsUpdateBanner =
+    !csUpdatesLoading &&
+    latestCsUpdateTimestamp !== null &&
+    Number.isFinite(latestCsUpdateAgeHours) &&
+    latestCsUpdateAgeHours <= 12;
 
   return (
     <div className="min-h-screen bg-background p-4 font-sans text-foreground sm:p-6 md:p-8">
@@ -193,6 +223,29 @@ export function PortfolioPage() {
                 <PortfolioCompositionChart data={compositionData} />
               </div>
             </div>
+
+            {showCsUpdateBanner && latestCsUpdate ? (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">
+                      CS Update
+                    </p>
+                    <p className="truncate text-sm font-semibold text-foreground sm:text-base">
+                      Neues Update seit {formatRelativeHours(latestCsUpdateAgeHours)}: {latestCsUpdate.title}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Feed oeffnen
+                    </span>
+                    <Button asChild size="sm" variant="outline">
+                      <Link to="/cs-updates">Fullscreen</Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </TabsContent>
 
           <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
