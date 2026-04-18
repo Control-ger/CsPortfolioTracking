@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **Disclaimer / Haftungsausschluss**
+> Dieses Projekt wurde zu Bildungs- und Portfoliozwecken entwickelt.
+> - **Keine Finanzberatung:** Die angezeigten Daten und Berechnungen dienen nur der Information. Ich übernehme keine Haftung für die Richtigkeit der Preise oder etwaige finanzielle Verluste.
+> - **Kein Support:** Dieses Repository wird "wie besehen" (as-is) bereitgestellt. Ich kann nicht garantieren, dass die Einrichtung auf anderen Systemen reibungslos funktioniert, und biete keinen aktiven Support bei Installationsproblemen an.
+> - **Nutzung auf eigene Gefahr:** Die Verwendung der API-Schnittstellen und des Codes erfolgt auf eigenes Risiko des Nutzers.> 
+
 # CS Investor Hub
 
 CS Investor Hub ist ein React + PHP Projekt zum Tracking von CS2 Portfolio- und Watchlist-Daten.
