@@ -7,7 +7,7 @@
 
 # CS Investor Hub
 
-CS Investor Hub ist ein React + PHP Vibe Coded Projekt zum Tracking meines CS2 Portfolio- und Watchlist-Daten.
+CS Investor Hub ist ein React + PHP Vibe Coded Projekt zum Tracking meiner CS2 Portfolio- und Watchlist-Daten.
 
 ## Tech Stack
 
