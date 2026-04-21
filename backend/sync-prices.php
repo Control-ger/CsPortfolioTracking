@@ -24,7 +24,9 @@ if (!is_file($bootstrapPath)) {
 require_once $bootstrapPath;
 
 use App\Application\Service\PortfolioService;
+use App\Application\Service\FeeSettingsService;
 use App\Application\Service\PricingService;
+use App\Application\Service\WatchlistService;
 use App\Config\DatabaseConfig;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\ExchangeRateClient;
@@ -38,14 +40,18 @@ use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
-use App\Shared\Logger;
+use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
+use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 
 $startTime = microtime(true);
 $syncedCount = 0;
+$watchlistSyncedCount = 0;
 $errorCount = 0;
 $rateLimitedCount = 0;
 $status = 'success';
 $errorMessage = null;
+$snapshotSaved = false;
+$snapshotTime = null;
 
 try {
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Starting CSFloat price sync...\n");
@@ -63,6 +69,8 @@ try {
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
+    $watchlistRepository = new WatchlistRepository($pdo);
+    $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
 
     // Ensure tables exist with new schema
     $itemCatalogRepository->ensureTable();
@@ -97,6 +105,20 @@ try {
         $itemCatalogRepository,
         $itemLiveCacheRepository
     );
+    $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
+    $portfolioService = new PortfolioService(
+        $investmentRepository,
+        $positionHistoryRepository,
+        $portfolioHistoryRepository,
+        $priceHistoryRepository,
+        $pricingService,
+        $feeSettingsService
+    );
+    $watchlistService = new WatchlistService(
+        $watchlistRepository,
+        $priceHistoryRepository,
+        $pricingService
+    );
 
     // Get all unique item names from portfolio
     $sql = 'SELECT DISTINCT market_hash_name FROM investments WHERE market_hash_name IS NOT NULL';
@@ -104,13 +126,10 @@ try {
     $items = $stmt->fetchAll(\PDO::FETCH_COLUMN, 0);
 
     if (empty($items)) {
-        fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] No items found in portfolio. Nothing to sync.\n");
-        $duration = round(microtime(true) - $startTime, 2);
-        $syncStatusRepository->recordSync('success', 0, 0, 0, 'No items in portfolio', $duration);
-        exit(0);
+        fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] No portfolio items found. Continuing with watchlist and snapshot tasks.\n");
     }
 
-    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Found " . count($items) . " unique items to sync.\n");
+    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Found " . count($items) . " unique portfolio items to sync.\n");
 
     // Sync each item
     foreach ($items as $itemName) {
@@ -124,6 +143,30 @@ try {
             $errorCount++;
             fwrite(STDERR, "  ✗ {$itemName}: {$e->getMessage()}\n");
         }
+    }
+
+    // Sync watchlist prices as well (hourly snapshots for watchlist charts)
+    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Syncing watchlist live prices...\n");
+    try {
+        $watchlistSyncResult = $watchlistService->refreshPrices();
+        $watchlistSyncedCount = (int) ($watchlistSyncResult['updated'] ?? 0);
+        $watchlistTotalItems = (int) ($watchlistSyncResult['totalItems'] ?? 0);
+        fwrite(STDOUT, "  Watchlist synced: {$watchlistSyncedCount}/{$watchlistTotalItems}\n");
+    } catch (Throwable $watchlistError) {
+        $errorCount++;
+        fwrite(STDERR, "  Watchlist sync failed: {$watchlistError->getMessage()}\n");
+    }
+
+    // Persist hourly portfolio + position snapshots
+    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Saving hourly portfolio snapshot...\n");
+    try {
+        $snapshotResult = $portfolioService->saveDailyValue();
+        $snapshotSaved = true;
+        $snapshotTime = (string) ($snapshotResult['date'] ?? '');
+        fwrite(STDOUT, "  Snapshot saved for {$snapshotTime}\n");
+    } catch (Throwable $snapshotError) {
+        $errorCount++;
+        fwrite(STDERR, "  Portfolio snapshot failed: {$snapshotError->getMessage()}\n");
     }
 
     // Check for warnings (rate limiting, etc)
@@ -142,12 +185,12 @@ try {
         $errorMessage = "All items failed to sync. Error count: {$errorCount}";
     } elseif ($errorCount > 0 || $rateLimitedCount > 0) {
         $status = 'partial';
-        $errorMessage = "Partial sync: {$syncedCount} synced, {$errorCount} errors, {$rateLimitedCount} rate-limited";
+        $errorMessage = "Partial sync: {$syncedCount} portfolio items synced, {$watchlistSyncedCount} watchlist items synced, {$errorCount} errors, {$rateLimitedCount} rate-limited";
     }
 
     $duration = round(microtime(true) - $startTime, 2);
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Sync complete!\n");
-    fwrite(STDOUT, "  Status: {$status}, Synced: {$syncedCount}, Errors: {$errorCount}, Rate-limited: {$rateLimitedCount}, Duration: {$duration}s\n");
+    fwrite(STDOUT, "  Status: {$status}, Portfolio synced: {$syncedCount}, Watchlist synced: {$watchlistSyncedCount}, Snapshot: " . ($snapshotSaved ? 'saved' : 'failed') . ", Errors: {$errorCount}, Rate-limited: {$rateLimitedCount}, Duration: {$duration}s\n");
 
     // Log to database
     $syncStatusRepository->recordSync($status, $syncedCount, $errorCount, $rateLimitedCount, $errorMessage, $duration);

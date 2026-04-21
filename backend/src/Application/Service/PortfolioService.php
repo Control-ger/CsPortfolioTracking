@@ -34,7 +34,7 @@ final class PortfolioService
         $investments = $this->investmentRepository->findAll();
         $feeSettings = $this->feeSettingsService->getSettings();
         $rows = [];
-        $today = date('Y-m-d');
+        $snapshotTime = $this->currentHourBucket();
 
         foreach ($investments as $investment) {
             $name = (string) ($investment['name'] ?? '');
@@ -56,7 +56,7 @@ final class PortfolioService
                 ? ($breakEvenDeltaEuro / $breakEvenPrice) * 100
                 : null;
 
-            $this->persistPriceHistorySnapshot($name, $today, $presentation, $priceSource);
+            $this->persistPriceHistorySnapshot($name, $snapshotTime, $presentation, $priceSource);
 
             $changeMetrics = $this->buildChangeMetrics($name, $livePrice);
 
@@ -205,7 +205,11 @@ final class PortfolioService
         $this->portfolioHistoryRepository->ensureTable();
         $rows = $this->portfolioHistoryRepository->findAll();
         return array_map(
-            static fn(array $row): array => ['id' => (int) $row['id'], 'date' => $row['date'], 'wert' => (float) $row['total_value']],
+            static fn(array $row): array => [
+                'id' => (int) $row['id'],
+                'date' => self::formatSnapshotDate((string) $row['date']),
+                'wert' => (float) $row['total_value'],
+            ],
             $rows
         );
     }
@@ -217,7 +221,7 @@ final class PortfolioService
 
         return array_map(
             static fn(array $row): array => [
-                'date' => $row['date'],
+                'date' => self::formatSnapshotDate((string) $row['date']),
                 'wert' => (float) $row['total_value'],
                 'quantity' => (int) $row['quantity'],
                 'unitPrice' => (float) $row['unit_price'],
@@ -238,12 +242,12 @@ final class PortfolioService
         $rows = $this->getEnrichedInvestments();
         $summary = $this->getSummary($rows);
         $totalValue = $value ?? $summary->totalValue;
-        $today = date('Y-m-d');
-        $this->portfolioHistoryRepository->upsertForDate($today, $totalValue);
+        $snapshotTime = $this->currentHourBucket();
+        $this->portfolioHistoryRepository->upsertForDate($snapshotTime, $totalValue);
         foreach ($rows as $row) {
             $this->positionHistoryRepository->upsertSnapshot(
                 investmentId: (int) $row['id'],
-                date: $today,
+                date: $snapshotTime,
                 quantity: (int) $row['quantity'],
                 unitPrice: (float) $row['displayPrice'],
                 totalValue: (float) $row['currentValue']
@@ -256,13 +260,13 @@ final class PortfolioService
             'domain.portfolio.daily_value_saved',
             'Portfolio daily value saved',
             [
-                'date' => $today,
+                'date' => $snapshotTime,
                 'totalValue' => $totalValue,
                 'positions' => count($rows),
             ]
         );
 
-        return ['date' => $today, 'totalValue' => $totalValue];
+        return ['date' => $snapshotTime, 'totalValue' => $totalValue];
     }
 
     public function getComposition(): array
@@ -379,7 +383,7 @@ final class PortfolioService
         }
 
         foreach ($metrics as $label => $metric) {
-            $beforeDate = date('Y-m-d', strtotime('-' . $metric['windowDays'] . ' days'));
+            $beforeDate = date('Y-m-d H:i:s', strtotime('-' . $metric['windowDays'] . ' days'));
             $baselinePrice = $this->priceHistoryRepository->findLatestPriceByItem($itemName, $beforeDate);
             $metrics[$label]['baselinePrice'] = $baselinePrice;
 
@@ -642,6 +646,34 @@ final class PortfolioService
         }
 
         return $costBasisUnit / $multiplier;
+    }
+
+    private function currentHourBucket(): string
+    {
+        return date('Y-m-d H:00:00');
+    }
+
+    private static function formatSnapshotDate(string $value): string
+    {
+        $trimmed = trim($value);
+
+        if ($trimmed === '') {
+            return $trimmed;
+        }
+
+        if (str_contains($trimmed, 'T')) {
+            return $trimmed;
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $trimmed) === 1) {
+            return $trimmed . 'T00:00:00';
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/', $trimmed) === 1) {
+            return str_replace(' ', 'T', $trimmed);
+        }
+
+        return $trimmed;
     }
 
     public function toggleExcludeInvestment(int $id, bool $exclude): bool

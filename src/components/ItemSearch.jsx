@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
 import { ApiWarnings } from "./ApiWarnings";
 import { PriceSourceBadge } from "./PriceSourceBadge";
 import {
@@ -312,11 +313,21 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
     if (isSearching) {
       return (
-        <div className="flex items-center gap-2 rounded-lg border p-4 text-sm text-muted-foreground">
-          <LoaderCircle className="h-4 w-4 animate-spin" />
-          {isBrowseRequest
-            ? "Lade weitere Browse-Ergebnisse..."
-            : "Suche passende Items und gleiche Live-Preise ab..."}
+        <div className="space-y-2.5 rounded-lg border p-3">
+          {[1, 2, 3].map((entry) => (
+            <div key={entry} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+              <Skeleton className="h-12 w-12 rounded-md" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <div className="flex flex-wrap gap-1.5">
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                  <Skeleton className="h-5 w-24 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-28" />
+              </div>
+              <Skeleton className="h-9 w-24 rounded-lg" />
+            </div>
+          ))}
         </div>
       );
     }

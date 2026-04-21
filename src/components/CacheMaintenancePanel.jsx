@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
+import { Skeleton } from './ui/skeleton';
 import { AlertCircle, RefreshCw, Database } from 'lucide-react';
 import { fetchCacheMaintenanceStats } from '../lib/apiClient';
 
@@ -31,9 +32,32 @@ export function CacheMaintenancePanel() {
 
   if (loading && !stats) {
     return (
-      <div className="flex items-center justify-center p-4">
-        <RefreshCw className="h-4 w-4 animate-spin" />
-        <span className="ml-2 text-sm text-muted-foreground">Loading cache stats...</span>
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          {[1, 2, 3].map((entry) => (
+            <Card key={entry}>
+              <CardHeader className="pb-3">
+                <Skeleton className="h-4 w-28" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-4/5" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardHeader className="pb-3">
+            <Skeleton className="h-4 w-44" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {[1, 2, 3, 4].map((entry) => (
+              <Skeleton key={entry} className="h-12 w-full" />
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }

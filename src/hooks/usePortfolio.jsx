@@ -3,7 +3,6 @@ import {
   fetchPortfolioHistory,
   fetchPortfolioInvestments,
   fetchPortfolioSummary,
-  savePortfolioDailyValue,
 } from "@/lib/apiClient.js";
 
 function mergeWarnings(...warningGroups) {
@@ -44,6 +43,7 @@ function mergeWarnings(...warningGroups) {
 
 export function usePortfolio() {
   const [investments, setInvestments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalValue: 0,
     totalInvested: 0,
@@ -66,6 +66,7 @@ export function usePortfolio() {
   const [warnings, setWarnings] = useState([]);
 
   const loadData = useCallback(async () => {
+    setIsLoading(true);
     try {
       const [rowsResponse, summaryResponse, history] = await Promise.all([
         fetchPortfolioInvestments(),
@@ -83,13 +84,11 @@ export function usePortfolio() {
         )
       );
       setError("");
-
-      if ((summaryResponse?.data?.totalValue || 0) > 0) {
-        await savePortfolioDailyValue(summaryResponse.data.totalValue);
-      }
     } catch (err) {
       setError(err.message || "Fehler beim Laden der Portfolio-Daten.");
       setWarnings([]);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -105,6 +104,7 @@ export function usePortfolio() {
 
   return {
     enrichedInvestments: investments,
+    isLoading,
     stats,
     portfolioHistory,
     error,

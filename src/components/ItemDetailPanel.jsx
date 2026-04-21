@@ -17,7 +17,7 @@ import { AlertCircle } from "lucide-react";
 
 const formatPrice = (value) => `${value.toFixed(2)} EUR`;
 
-export const ItemDetailPanel = ({ item, history = [], onExcludeChange }) => {
+export const ItemDetailPanel = ({ item, history = [], historyLoading = false, onExcludeChange }) => {
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
   if (!item)
@@ -72,7 +72,7 @@ export const ItemDetailPanel = ({ item, history = [], onExcludeChange }) => {
               <CardTitle className="text-sm sm:text-lg truncate">
                 {item.name}
                 {item.excluded && (
-                  <span className="ml-2 inline text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">
+                  <span className="ml-2 inline rounded border border-amber-300/70 bg-amber-100/80 px-2 py-1 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/35 dark:text-amber-200">
                     AUSGESCHLOSSEN
                   </span>
                 )}
@@ -88,7 +88,11 @@ export const ItemDetailPanel = ({ item, history = [], onExcludeChange }) => {
                   variant="outline"
                   size="sm"
                   onClick={handleExcludeClick}
-                  className="text-[10px] h-6"
+                  className={`h-7 rounded-md border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow ${
+                    item.excluded
+                      ? "border-blue-500/50 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                      : "border-amber-500/50 bg-amber-500/10 text-amber-800 hover:bg-amber-500/20 dark:text-amber-300"
+                  }`}
                 >
                   <AlertCircle className="mr-1 h-3 w-3" />
                   {item.excluded ? "Einschließen" : "Ausschließen"}
@@ -169,7 +173,7 @@ export const ItemDetailPanel = ({ item, history = [], onExcludeChange }) => {
 
         <PortfolioChart
           history={history}
-          color={item.isProfitPositive ? "#22c55e" : "#ef4444"}
+          isLoading={historyLoading}
           title="Positionsentwicklung"
           emptyLabel="Noch keine Positionshistorie verfuegbar"
           valueLabel="Positionswert"

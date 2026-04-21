@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { usePortfolioComposition } from "@/hooks/usePortfolioComposition";
 import { useCsUpdatesFeed } from "@/hooks/useCsUpdatesFeed";
@@ -69,6 +70,7 @@ function formatRelativeHours(hours) {
 export function PortfolioPage() {
   const {
     enrichedInvestments,
+    isLoading: portfolioLoading,
     stats,
     portfolioHistory,
     error,
@@ -82,10 +84,15 @@ export function PortfolioPage() {
     latestItemAgeHours: latestCsUpdateAgeHours,
     isLoading: csUpdatesLoading,
   } = useCsUpdatesFeed();
-  const { data: compositionData } = usePortfolioComposition();
+  const {
+    data: compositionData,
+    loading: compositionLoading,
+    error: compositionError,
+  } = usePortfolioComposition();
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
+  const [selectedItemHistoryLoading, setSelectedItemHistoryLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
@@ -112,15 +119,19 @@ export function PortfolioPage() {
     const loadItemHistory = async () => {
       if (!selectedItemWithLive) {
         setSelectedItemHistory([]);
+        setSelectedItemHistoryLoading(false);
         return;
       }
 
+      setSelectedItemHistoryLoading(true);
       try {
         const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id);
         setSelectedItemHistory(history || []);
       } catch (historyError) {
         console.error("Fehler beim Laden der Positionshistorie:", historyError);
         setSelectedItemHistory([]);
+      } finally {
+        setSelectedItemHistoryLoading(false);
       }
     };
 
@@ -140,12 +151,15 @@ export function PortfolioPage() {
   };
 
   const loadItemHistory = async (itemId) => {
+    setSelectedItemHistoryLoading(true);
     try {
       const history = await fetchPortfolioInvestmentHistory(itemId);
       setSelectedItemHistory(history || []);
     } catch (historyError) {
       console.error("Fehler beim Laden der Positionshistorie:", historyError);
       setSelectedItemHistory([]);
+    } finally {
+      setSelectedItemHistoryLoading(false);
     }
   };
 
@@ -223,14 +237,34 @@ export function PortfolioPage() {
             </div>
 
             <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
-              <PortfolioChart history={portfolioHistory} color={stats.chartColor} />
+              <PortfolioChart history={portfolioHistory} isLoading={portfolioLoading} />
               <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
             </div>
 
             <div className="grid gap-4 sm:gap-6 grid-cols-1">
               <div className="rounded-lg border bg-card p-4 sm:p-6">
                 <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
-                <PortfolioCompositionChart data={compositionData} />
+                {compositionLoading ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                      <div className="lg:col-span-2 flex justify-center">
+                        <Skeleton className="h-[220px] w-full max-w-sm sm:h-[320px]" />
+                      </div>
+                      <div className="space-y-2">
+                        {[1, 2, 3, 4].map((entry) => (
+                          <Skeleton key={entry} className="h-14 w-full" />
+                        ))}
+                      </div>
+                    </div>
+                    <Skeleton className="h-16 w-full" />
+                  </div>
+                ) : compositionError ? (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                    {compositionError}
+                  </div>
+                ) : (
+                  <PortfolioCompositionChart data={compositionData} />
+                )}
               </div>
             </div>
 
@@ -293,6 +327,7 @@ export function PortfolioPage() {
               <ItemDetailPanel
                 item={selectedItem}
                 history={selectedItemHistory}
+                historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={handleExcludeChange}
               />
             </div>
@@ -305,6 +340,7 @@ export function PortfolioPage() {
                   onClose={() => closeModal(modal.id)}
                   item={modal.data.item}
                   history={selectedItemHistory}
+                  historyLoading={selectedItemHistoryLoading}
                 />
               ) : null,
             )}

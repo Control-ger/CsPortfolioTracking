@@ -49,7 +49,7 @@ function ChangeMetric({ label, percent, euro }) {
   );
 }
 
-export function ItemDetailsModal({ isOpen, onClose, item, history = [] }) {
+export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyLoading = false }) {
   if (!item) {
     return null;
   }
@@ -171,12 +171,12 @@ export function ItemDetailsModal({ isOpen, onClose, item, history = [] }) {
           </div>
         </div>
 
-        {history && history.length > 0 ? (
+        {historyLoading || (history && history.length > 0) ? (
             <div className="rounded-lg border bg-muted/20 p-3 sm:p-4">
               <h3 className="mb-3 sm:mb-4 text-sm font-semibold">Preishistorie</h3>
               <PortfolioChart
                 history={history}
-                color={item.isProfitPositive ? "#22c55e" : "#ef4444"}
+                isLoading={historyLoading}
                 title="Positionsentwicklung"
                 emptyLabel="Noch keine Positionshistorie verfuegbar"
                 valueLabel="Positionswert"

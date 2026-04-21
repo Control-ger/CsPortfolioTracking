@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
 import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
 import { ApiWarnings } from "./ApiWarnings";
@@ -7,6 +8,60 @@ import { PriceSourceBadge } from "./PriceSourceBadge";
 import { Trash2, TrendingDown, TrendingUp, X } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
 import { WatchlistItemModal } from "./WatchlistItemModal";
+
+function WatchlistLoadingSkeleton() {
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-4 w-72" />
+      </div>
+
+      <Card>
+        <CardContent className="space-y-3 p-4 sm:p-6">
+          <Skeleton className="h-10 w-full" />
+          <div className="grid gap-3 md:grid-cols-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 md:gap-6">
+        <Card>
+          <CardHeader className="pb-2 sm:pb-4">
+            <Skeleton className="h-5 w-36" />
+          </CardHeader>
+          <CardContent className="space-y-2 sm:space-y-3">
+            {[1, 2, 3, 4].map((entry) => (
+              <div key={entry} className="rounded-lg border p-3">
+                <div className="flex items-start gap-3">
+                  <Skeleton className="h-12 w-12 rounded-md" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-4/5" />
+                    <Skeleton className="h-3 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="hidden md:block">
+          <CardHeader className="pb-2 sm:pb-4">
+            <Skeleton className="h-5 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-[320px] w-full" />
+            <Skeleton className="h-12 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 export const Watchlist = ({ focusTarget = null }) => {
   const [watchlistItems, setWatchlistItems] = useState([]);
@@ -85,13 +140,7 @@ export const Watchlist = ({ focusTarget = null }) => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground">
-          Lade Watchlist und gleiche Live-Preise ab...
-        </p>
-      </div>
-    );
+    return <WatchlistLoadingSkeleton />;
   }
 
   return (
@@ -255,7 +304,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                       <div className="min-w-0 flex-1">
                         <CardTitle className="text-base sm:text-lg truncate">{selectedItem.name}</CardTitle>
                         <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                          Preisverlauf der letzten 7 Tage
+                          Interaktiver Preisverlauf
                         </p>
                         {selectedItem.currentPrice !== null && (
                           <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-muted-foreground">

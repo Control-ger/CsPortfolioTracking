@@ -16,7 +16,7 @@ final class PortfolioHistoryRepository
     {
         $sql = "CREATE TABLE IF NOT EXISTS portfolio_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            date DATE NOT NULL UNIQUE,
+            date DATETIME NOT NULL UNIQUE,
             total_value DECIMAL(10, 2) NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_date (date)
@@ -35,6 +35,8 @@ final class PortfolioHistoryRepository
             );
             throw $exception;
         }
+
+        $this->ensureDateColumnSupportsTime();
     }
 
     public function findAll(): array
@@ -70,6 +72,50 @@ final class PortfolioHistoryRepository
                 $sql,
                 $exception,
                 ['date' => $date]
+            );
+            throw $exception;
+        }
+    }
+
+    private function ensureDateColumnSupportsTime(): void
+    {
+        $checkSql = "SHOW COLUMNS FROM portfolio_history LIKE 'date'";
+
+        try {
+            $stmt = $this->pdo->query($checkSql);
+            $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $checkSql,
+                $exception,
+                ['table' => 'portfolio_history', 'column' => 'date']
+            );
+            throw $exception;
+        }
+
+        $columnType = strtolower((string) ($row['Type'] ?? ''));
+        if (str_starts_with($columnType, 'datetime')) {
+            return;
+        }
+
+        $alterSql = 'ALTER TABLE portfolio_history MODIFY COLUMN date DATETIME NOT NULL';
+
+        try {
+            $this->pdo->exec($alterSql);
+            RepositoryObservability::migrationColumnAdded(
+                self::class,
+                'portfolio_history',
+                'date_datetime'
+            );
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $alterSql,
+                $exception,
+                ['table' => 'portfolio_history', 'column' => 'date']
             );
             throw $exception;
         }

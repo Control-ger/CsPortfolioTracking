@@ -17,7 +17,7 @@ final class PositionHistoryRepository
         $sql = "CREATE TABLE IF NOT EXISTS position_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             investment_id INT NOT NULL,
-            date DATE NOT NULL,
+            date DATETIME NOT NULL,
             quantity INT NOT NULL,
             unit_price DECIMAL(10, 2) NOT NULL,
             total_value DECIMAL(12, 2) NOT NULL,
@@ -39,6 +39,8 @@ final class PositionHistoryRepository
             );
             throw $exception;
         }
+
+        $this->ensureDateColumnSupportsTime();
     }
 
     public function upsertSnapshot(
@@ -97,6 +99,50 @@ final class PositionHistoryRepository
                 $sql,
                 $exception,
                 ['investmentId' => $investmentId]
+            );
+            throw $exception;
+        }
+    }
+
+    private function ensureDateColumnSupportsTime(): void
+    {
+        $checkSql = "SHOW COLUMNS FROM position_history LIKE 'date'";
+
+        try {
+            $stmt = $this->pdo->query($checkSql);
+            $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $checkSql,
+                $exception,
+                ['table' => 'position_history', 'column' => 'date']
+            );
+            throw $exception;
+        }
+
+        $columnType = strtolower((string) ($row['Type'] ?? ''));
+        if (str_starts_with($columnType, 'datetime')) {
+            return;
+        }
+
+        $alterSql = 'ALTER TABLE position_history MODIFY COLUMN date DATETIME NOT NULL';
+
+        try {
+            $this->pdo->exec($alterSql);
+            RepositoryObservability::migrationColumnAdded(
+                self::class,
+                'position_history',
+                'date_datetime'
+            );
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $alterSql,
+                $exception,
+                ['table' => 'position_history', 'column' => 'date']
             );
             throw $exception;
         }

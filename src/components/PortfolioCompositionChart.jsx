@@ -4,9 +4,12 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 // Neue schöne Farbpalette
 const COLOR_PALETTE = [
   '#003f5c',
-  '#58508d',
-  '#bc5090',
-  '#ff6361',
+  '#2e4b7f',
+  '#655197',
+  '#9f509d',
+  '#d44e90',
+  '#fa5972',
+  '#ff7a49',
   '#ffa600',
 ];
 
@@ -63,11 +66,11 @@ export function PortfolioCompositionChart({ data }) {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Donut Chart with Legend Column */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-3 lg:items-stretch">
         {/* Chart - Left Side (takes 2 columns on large screens) */}
-        <div className="lg:col-span-2 flex justify-center">
-          <div className="relative w-full max-w-sm">
-            <ResponsiveContainer width="100%" height={isSmallScreen ? 220 : 320}>
+        <div className="flex justify-center lg:col-span-2 lg:items-center">
+          <div className="relative h-[220px] w-full max-w-sm sm:h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={displayData}
@@ -108,8 +111,8 @@ export function PortfolioCompositionChart({ data }) {
         </div>
 
         {/* Legend - Right Side */}
-        <div className="lg:col-span-1 flex flex-col justify-center">
-          <div className="space-y-2 max-h-80 overflow-y-auto sm:max-h-none">
+        <div className="flex flex-col lg:col-span-1 lg:justify-center">
+          <div className="max-h-52 space-y-2 overflow-y-auto pr-1 sm:max-h-64 lg:max-h-[320px]">
             {displayData.map((item, idx) => (
               <div
                 key={idx}

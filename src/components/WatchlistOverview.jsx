@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
 import { ApiWarnings } from "./ApiWarnings";
 import { PriceSourceBadge } from "./PriceSourceBadge";
 import { ArrowRight, Eye, TrendingDown, TrendingUp } from "lucide-react";
@@ -37,8 +38,22 @@ export const WatchlistOverview = ({ maxItems = 5, onOpenItem }) => {
             Watchlist
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Lade Watchlist...</p>
+        <CardContent className="space-y-3">
+          {[1, 2, 3].map((entry) => (
+            <div key={entry} className="flex items-center justify-between rounded-lg border p-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <Skeleton className="h-12 w-12 rounded-md" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              </div>
+              <div className="ml-4 flex items-center gap-2">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-4 rounded-full" />
+              </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
     );

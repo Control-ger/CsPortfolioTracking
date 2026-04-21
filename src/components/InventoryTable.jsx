@@ -1,4 +1,6 @@
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -104,7 +106,94 @@ function FreshnessCell({ item }) {
   );
 }
 
+function SortHeaderButton({ label, align = "left", isActive, sortDirection, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold uppercase tracking-wide transition-colors hover:bg-muted/70 ${
+        align === "right" ? "ml-auto" : ""
+      } ${isActive ? "text-foreground" : "text-muted-foreground"}`}
+      onClick={onClick}
+      title={`${label} sortieren`}
+    >
+      <span>{label}</span>
+      {isActive ? (
+        sortDirection === "asc" ? (
+          <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5" />
+        )
+      ) : (
+        <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
+      )}
+    </button>
+  );
+}
+
 export function InventoryTable({ investments, onSelectItem }) {
+  const [sortKey, setSortKey] = useState("roi");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  const sortedInvestments = useMemo(() => {
+    const getLiveSortValue = (item) => {
+      if (typeof item.livePrice === "number" && Number.isFinite(item.livePrice)) {
+        return item.livePrice;
+      }
+
+      if (typeof item.displayPrice === "number" && Number.isFinite(item.displayPrice)) {
+        return item.displayPrice;
+      }
+
+      if (typeof item.buyPrice === "number" && Number.isFinite(item.buyPrice)) {
+        return item.buyPrice;
+      }
+
+      return 0;
+    };
+
+    const getSortValue = (item) => {
+      switch (sortKey) {
+        case "item":
+          return String(item.name || "").toLowerCase();
+        case "quantity":
+          return Number(item.quantity || 0);
+        case "livePrice":
+          return getLiveSortValue(item);
+        case "roi":
+        default:
+          return Number(item.roi || 0);
+      }
+    };
+
+    const sorted = [...investments];
+
+    sorted.sort((a, b) => {
+      const aValue = getSortValue(a);
+      const bValue = getSortValue(b);
+
+      let comparison = 0;
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        comparison = aValue.localeCompare(bValue, "de");
+      } else {
+        comparison = aValue - bValue;
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return sorted;
+  }, [investments, sortDirection, sortKey]);
+
+  const toggleSort = (nextKey) => {
+    if (sortKey === nextKey) {
+      setSortDirection((currentDirection) => (currentDirection === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextKey);
+    setSortDirection(nextKey === "item" ? "asc" : "desc");
+  };
+
   return (
     <>
       {/* Desktop-View (md und höher) - Smart Columns: Item | Menge | Live | ROI% */}
@@ -112,14 +201,45 @@ export function InventoryTable({ investments, onSelectItem }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Item</TableHead>
-              <TableHead className="text-right">Menge</TableHead>
-              <TableHead className="text-right">Live Preis</TableHead>
-              <TableHead className="text-right">ROI</TableHead>
+              <TableHead>
+                <SortHeaderButton
+                  label="Item"
+                  isActive={sortKey === "item"}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("item")}
+                />
+              </TableHead>
+              <TableHead className="text-right">
+                <SortHeaderButton
+                  label="Menge"
+                  align="right"
+                  isActive={sortKey === "quantity"}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("quantity")}
+                />
+              </TableHead>
+              <TableHead className="text-right">
+                <SortHeaderButton
+                  label="Live Preis"
+                  align="right"
+                  isActive={sortKey === "livePrice"}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("livePrice")}
+                />
+              </TableHead>
+              <TableHead className="text-right">
+                <SortHeaderButton
+                  label="ROI"
+                  align="right"
+                  isActive={sortKey === "roi"}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("roi")}
+                />
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {investments.map((item) => (
+            {sortedInvestments.map((item) => (
               <TableRow
                 key={item.id}
                 className="group cursor-pointer transition-colors hover:bg-muted/50"
@@ -179,7 +299,53 @@ export function InventoryTable({ investments, onSelectItem }) {
 
       {/* Mobile-View (unter md) */}
       <div className="space-y-3 md:hidden px-2">
-        {investments.map((item) => (
+        <div className="rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-2">
+            <span>Sortierung</span>
+            <span className="font-medium text-foreground">
+              {sortKey === "item"
+                ? "Item"
+                : sortKey === "quantity"
+                  ? "Menge"
+                  : sortKey === "livePrice"
+                    ? "Live Preis"
+                    : "ROI"}{" "}
+              ({sortDirection === "asc" ? "Aufsteigend" : "Absteigend"})
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+              onClick={() => toggleSort("item")}
+            >
+              Item
+            </button>
+            <button
+              type="button"
+              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+              onClick={() => toggleSort("quantity")}
+            >
+              Menge
+            </button>
+            <button
+              type="button"
+              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+              onClick={() => toggleSort("livePrice")}
+            >
+              Live Preis
+            </button>
+            <button
+              type="button"
+              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+              onClick={() => toggleSort("roi")}
+            >
+              ROI
+            </button>
+          </div>
+        </div>
+
+        {sortedInvestments.map((item) => (
           <div
             key={item.id}
             onClick={() => onSelectItem(item)}

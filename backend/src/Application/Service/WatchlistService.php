@@ -27,8 +27,9 @@ final class WatchlistService
         }
 
         $items = $this->watchlistRepository->findAll();
-        $today = date('Y-m-d');
-        $sevenDaysAgo = date('Y-m-d', strtotime('-7 days'));
+        $now = date('Y-m-d H:i:s');
+        $sevenDaysAgo = date('Y-m-d H:i:s', strtotime('-7 days'));
+        $historyFrom = date('Y-m-d H:i:s', strtotime('-370 days'));
         $result = [];
 
         foreach ($items as $item) {
@@ -39,7 +40,7 @@ final class WatchlistService
 
             $imageUrl = $this->pricingService->getItemImageUrl($name);
 
-            $currentSnapshot = $this->priceHistoryRepository->findLatestPriceSnapshotByItem($name, $today);
+            $currentSnapshot = $this->priceHistoryRepository->findLatestPriceSnapshotByItem($name, $now);
             $currentPrice = $currentSnapshot['priceEur'] ?? null;
             $priceSource = $currentSnapshot['priceSource'] ?? null;
             $oldPrice = $this->priceHistoryRepository->findLatestPriceByItem($name, $sevenDaysAgo);
@@ -60,7 +61,7 @@ final class WatchlistService
                 priceSource: is_string($priceSource) ? $priceSource : null,
                 priceChange: $priceChange,
                 priceChangePercent: $priceChangePercent,
-                priceHistory: $this->priceHistoryRepository->findHistoryByItem($name, $sevenDaysAgo)
+                priceHistory: $this->priceHistoryRepository->findHistoryByItem($name, $historyFrom)
             );
 
             $result[] = $dto->toArray();
@@ -255,7 +256,7 @@ final class WatchlistService
 
         $this->priceHistoryRepository->upsertPrice(
             $itemName,
-            date('Y-m-d'),
+            $this->currentHourBucket(),
             (float) $snapshot['priceUsd'],
             (float) $snapshot['priceEur'],
             (float) $snapshot['exchangeRate'],
@@ -263,5 +264,10 @@ final class WatchlistService
         );
 
         return $snapshot;
+    }
+
+    private function currentHourBucket(): string
+    {
+        return date('Y-m-d H:00:00');
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
 import { CacheMaintenancePanel } from "./CacheMaintenancePanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
@@ -31,6 +32,8 @@ export function DebugPanel() {
     fetchLogs();
   }, []);
 
+  const showInitialLoading = loading && !environment && logs.app.length === 0 && logs.proxy.length === 0;
+
   return (
     <div className="space-y-4">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -49,6 +52,31 @@ export function DebugPanel() {
               {loading ? "Laden..." : "Aktualisieren"}
             </button>
           </div>
+
+          {showInitialLoading ? (
+            <>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-5 w-44" />
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Skeleton className="h-4 w-56" />
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-4 w-48" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-5 w-36" />
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {[1, 2, 3, 4].map((entry) => (
+                    <Skeleton key={entry} className="h-4 w-full" />
+                  ))}
+                </CardContent>
+              </Card>
+            </>
+          ) : null}
 
           {environment && (
             <>

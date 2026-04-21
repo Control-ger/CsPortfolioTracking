@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchDebugLogs } from "@/lib/apiClient";
 
@@ -463,7 +464,13 @@ export function DebugDashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {filteredRows.length === 0 ? (
+            {loading && rows.length === 0 ? (
+              <div className="space-y-2 p-6">
+                {[1, 2, 3, 4, 5, 6].map((entry) => (
+                  <Skeleton key={entry} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : filteredRows.length === 0 ? (
               <div className="p-6 text-sm text-muted-foreground">Keine Log-Eintraege fuer den aktuellen Filter.</div>
             ) : (
               <ScrollArea className="h-[560px]">
