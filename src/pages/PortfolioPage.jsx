@@ -125,7 +125,9 @@ export function PortfolioPage() {
 
       setSelectedItemHistoryLoading(true);
       try {
-        const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id);
+        const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id, {
+          itemName: selectedItemWithLive.name,
+        });
         setSelectedItemHistory(history || []);
       } catch (historyError) {
         console.error("Fehler beim Laden der Positionshistorie:", historyError);
@@ -150,10 +152,10 @@ export function PortfolioPage() {
     setActiveTab("watchlist");
   };
 
-  const loadItemHistory = async (itemId) => {
+  const loadItemHistory = async (itemId, itemName) => {
     setSelectedItemHistoryLoading(true);
     try {
-      const history = await fetchPortfolioInvestmentHistory(itemId);
+      const history = await fetchPortfolioInvestmentHistory(itemId, { itemName });
       setSelectedItemHistory(history || []);
     } catch (historyError) {
       console.error("Fehler beim Laden der Positionshistorie:", historyError);
@@ -312,7 +314,7 @@ export function PortfolioPage() {
                   setSelectedItem(item);
                   const historyItem = enrichedInvestments.find((inv) => inv.id === item.id);
                   if (historyItem) {
-                    loadItemHistory(historyItem.id).then(() => {
+                    loadItemHistory(historyItem.id, historyItem.name).then(() => {
                       // Auf Mobile: Modal öffnen (nach Geschichtsdaten geladen)
                       if (window.innerWidth < 768) {
                         openModal("itemDetail", { item });

@@ -109,8 +109,12 @@ export async function fetchPortfolioInvestments() {
   return requestWithMeta("/api/v1/portfolio/investments");
 }
 
-export async function fetchPortfolioInvestmentHistory(id) {
-  return request(`/api/v1/portfolio/investments/${id}/history`);
+export async function fetchPortfolioInvestmentHistory(id, options = {}) {
+  return request(
+    buildPath(`/api/v1/portfolio/investments/${id}/history`, {
+      itemName: options.itemName,
+    })
+  );
 }
 
 export async function fetchPortfolioSummary() {

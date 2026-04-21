@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
@@ -66,17 +66,6 @@ function formatTooltipDate(timestamp) {
   });
 }
 
-function formatCurrency(value) {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-
-  return `${value.toLocaleString("de-DE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} EUR`;
-}
-
 function formatSignedCurrency(value) {
   if (!Number.isFinite(value)) {
     return "-";
@@ -98,12 +87,13 @@ function formatSignedPercent(value) {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-function formatAxisCurrency(value) {
+function formatAxisPercent(value) {
   if (!Number.isFinite(value)) {
     return "-";
   }
 
-  return `EUR ${value.toLocaleString("de-DE", { maximumFractionDigits: 0 })}`;
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}%`;
 }
 
 function getRangeDays(rangeKey) {
@@ -167,9 +157,30 @@ export const PortfolioChart = ({
     () => filterHistoryByRange(normalizedHistory, rangeKey),
     [normalizedHistory, rangeKey],
   );
+  const chartData = useMemo(() => {
+    if (visibleHistory.length === 0) {
+      return [];
+    }
+
+    const baseValue = visibleHistory[0].wert;
+
+    return visibleHistory.map((entry) => {
+      const providedGrowthPercent = Number(entry?.growthPercent);
+      const growthPercent = Number.isFinite(providedGrowthPercent)
+        ? providedGrowthPercent
+        : Number.isFinite(baseValue) && baseValue > 0
+          ? ((entry.wert - baseValue) / baseValue) * 100
+          : 0;
+
+      return {
+        ...entry,
+        growthPercent,
+      };
+    });
+  }, [visibleHistory]);
 
   const trendStats = useMemo(() => {
-    if (visibleHistory.length === 0) {
+    if (chartData.length === 0) {
       return {
         lineColor: "#22c55e",
         deltaValue: 0,
@@ -178,8 +189,8 @@ export const PortfolioChart = ({
       };
     }
 
-    const firstValue = visibleHistory[0].wert;
-    const lastValue = visibleHistory[visibleHistory.length - 1].wert;
+    const firstValue = chartData[0].wert;
+    const lastValue = chartData[chartData.length - 1].wert;
     const deltaValue = lastValue - firstValue;
     const deltaPercent = firstValue > 0 ? (deltaValue / firstValue) * 100 : 0;
     const isPositive = deltaValue >= 0;
@@ -190,16 +201,16 @@ export const PortfolioChart = ({
       deltaPercent,
       isPositive,
     };
-  }, [visibleHistory]);
+  }, [chartData]);
 
   const chartConfig = useMemo(
     () => ({
-      wert: {
-        label: valueLabel,
+      growthPercent: {
+        label: "Zuwachs (%)",
         color: trendStats.lineColor,
       },
     }),
-    [trendStats.lineColor, valueLabel],
+    [trendStats.lineColor],
   );
 
   return (
@@ -231,33 +242,34 @@ export const PortfolioChart = ({
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="px-2 pb-2 sm:px-6 sm:pb-6">
         {isLoading ? (
           <div className="space-y-3">
-            <Skeleton className="h-[250px] w-full sm:h-[320px]" />
+            <Skeleton className="h-[300px] w-full sm:h-[340px]" />
             <div className="grid grid-cols-3 gap-2">
               <Skeleton className="h-3 w-full" />
               <Skeleton className="h-3 w-full" />
               <Skeleton className="h-3 w-full" />
             </div>
           </div>
-        ) : visibleHistory.length === 0 ? (
-          <div className="flex h-[250px] items-center justify-center text-muted-foreground sm:h-[320px]">
+        ) : chartData.length === 0 ? (
+          <div className="flex h-[300px] items-center justify-center text-muted-foreground sm:h-[340px]">
             <p className="text-sm">{emptyLabel}</p>
           </div>
         ) : (
-          <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full sm:h-[320px]">
+          <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full sm:h-[340px]">
             <LineChart
               accessibilityLayer
-              data={visibleHistory}
+              data={chartData}
               margin={{
-                left: 10,
-                right: 10,
+                left: 4,
+                right: 2,
                 top: 12,
                 bottom: 6,
               }}
             >
               <CartesianGrid vertical={false} />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
               <XAxis
                 dataKey="timestamp"
                 type="number"
@@ -265,29 +277,32 @@ export const PortfolioChart = ({
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                minTickGap={28}
+                minTickGap={rangeKey === "1T" ? 18 : 28}
                 tickFormatter={(value) => formatTickDate(value, rangeKey)}
               />
               <YAxis
+                dataKey="growthPercent"
+                orientation="right"
                 tickLine={false}
                 axisLine={false}
-                width={66}
-                tickFormatter={formatAxisCurrency}
+                width={54}
+                tickMargin={4}
+                tickFormatter={formatAxisPercent}
               />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
                     indicator="line"
-                    nameKey="wert"
+                    nameKey="growthPercent"
                     labelFormatter={(value) => formatTooltipDate(value)}
-                    formatter={(value) => formatCurrency(Number(value))}
+                    formatter={(value) => formatAxisPercent(Number(value))}
                   />
                 }
               />
               <Line
-                dataKey="wert"
+                dataKey="growthPercent"
                 type="monotone"
-                stroke="var(--color-wert)"
+                stroke="var(--color-growthPercent)"
                 strokeWidth={2.5}
                 dot={false}
                 activeDot={{

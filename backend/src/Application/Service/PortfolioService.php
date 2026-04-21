@@ -209,15 +209,42 @@ final class PortfolioService
                 'id' => (int) $row['id'],
                 'date' => self::formatSnapshotDate((string) $row['date']),
                 'wert' => (float) $row['total_value'],
+                'invested' => (float) ($row['invested_value'] ?? 0.0),
+                'growthPercent' => self::calculateGrowthPercent(
+                    (float) ($row['total_value'] ?? 0.0),
+                    (float) ($row['invested_value'] ?? 0.0)
+                ),
             ],
             $rows
         );
     }
 
-    public function getInvestmentHistory(int $investmentId): array
+    public function getInvestmentHistory(int $investmentId, ?string $itemName = null): array
     {
         $this->positionHistoryRepository->ensureTable();
-        $rows = $this->positionHistoryRepository->findHistoryByInvestmentId($investmentId);
+        $normalizedItemName = trim((string) $itemName);
+
+        if ($normalizedItemName !== '') {
+            $investments = $this->investmentRepository->findAll();
+            $clusterIds = array_values(array_map(
+                static fn(array $row): int => (int) ($row['id'] ?? 0),
+                array_filter(
+                    $investments,
+                    static fn(array $row): bool => strcasecmp(
+                        (string) ($row['name'] ?? ''),
+                        $normalizedItemName
+                    ) === 0
+                )
+            ));
+
+            if ($clusterIds !== []) {
+                $rows = $this->positionHistoryRepository->findHistoryByInvestmentIds($clusterIds);
+            } else {
+                $rows = $this->positionHistoryRepository->findHistoryByInvestmentId($investmentId);
+            }
+        } else {
+            $rows = $this->positionHistoryRepository->findHistoryByInvestmentId($investmentId);
+        }
 
         return array_map(
             static fn(array $row): array => [
@@ -225,6 +252,11 @@ final class PortfolioService
                 'wert' => (float) $row['total_value'],
                 'quantity' => (int) $row['quantity'],
                 'unitPrice' => (float) $row['unit_price'],
+                'invested' => (float) ($row['invested_value'] ?? 0.0),
+                'growthPercent' => self::calculateGrowthPercent(
+                    (float) ($row['total_value'] ?? 0.0),
+                    (float) ($row['invested_value'] ?? 0.0)
+                ),
             ],
             $rows
         );
@@ -242,15 +274,17 @@ final class PortfolioService
         $rows = $this->getEnrichedInvestments();
         $summary = $this->getSummary($rows);
         $totalValue = $value ?? $summary->totalValue;
+        $totalInvested = $summary->totalInvested;
         $snapshotTime = $this->currentHourBucket();
-        $this->portfolioHistoryRepository->upsertForDate($snapshotTime, $totalValue);
+        $this->portfolioHistoryRepository->upsertForDate($snapshotTime, $totalValue, $totalInvested);
         foreach ($rows as $row) {
             $this->positionHistoryRepository->upsertSnapshot(
                 investmentId: (int) $row['id'],
                 date: $snapshotTime,
                 quantity: (int) $row['quantity'],
                 unitPrice: (float) $row['displayPrice'],
-                totalValue: (float) $row['currentValue']
+                totalValue: (float) $row['currentValue'],
+                investedValue: (float) ($row['totalInvested'] ?? 0.0)
             );
         }
 
@@ -674,6 +708,15 @@ final class PortfolioService
         }
 
         return $trimmed;
+    }
+
+    private static function calculateGrowthPercent(float $totalValue, float $investedValue): float
+    {
+        if ($investedValue <= 0.0) {
+            return 0.0;
+        }
+
+        return (($totalValue - $investedValue) / $investedValue) * 100;
     }
 
     public function toggleExcludeInvestment(int $id, bool $exclude): bool

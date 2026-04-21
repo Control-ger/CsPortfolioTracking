@@ -18,6 +18,7 @@ final class PortfolioHistoryRepository
             id INT AUTO_INCREMENT PRIMARY KEY,
             date DATETIME NOT NULL UNIQUE,
             total_value DECIMAL(10, 2) NOT NULL,
+            invested_value DECIMAL(12, 2) NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_date (date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
@@ -37,11 +38,12 @@ final class PortfolioHistoryRepository
         }
 
         $this->ensureDateColumnSupportsTime();
+        $this->ensureInvestedValueColumn();
     }
 
     public function findAll(): array
     {
-        $sql = 'SELECT id, date, total_value FROM portfolio_history ORDER BY date ASC';
+        $sql = 'SELECT id, date, total_value, invested_value FROM portfolio_history ORDER BY date ASC';
 
         try {
             $stmt = $this->pdo->query($sql);
@@ -57,14 +59,14 @@ final class PortfolioHistoryRepository
         }
     }
 
-    public function upsertForDate(string $date, float $totalValue): void
+    public function upsertForDate(string $date, float $totalValue, float $investedValue): void
     {
-        $sql = 'INSERT INTO portfolio_history (date, total_value) VALUES (?, ?)
-             ON DUPLICATE KEY UPDATE total_value = VALUES(total_value)';
+        $sql = 'INSERT INTO portfolio_history (date, total_value, invested_value) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE total_value = VALUES(total_value), invested_value = VALUES(invested_value)';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$date, $totalValue]);
+            $stmt->execute([$date, $totalValue, $investedValue]);
         } catch (Throwable $exception) {
             RepositoryObservability::upsertFailed(
                 self::class,
@@ -116,6 +118,49 @@ final class PortfolioHistoryRepository
                 $alterSql,
                 $exception,
                 ['table' => 'portfolio_history', 'column' => 'date']
+            );
+            throw $exception;
+        }
+    }
+
+    private function ensureInvestedValueColumn(): void
+    {
+        $checkSql = "SHOW COLUMNS FROM portfolio_history LIKE 'invested_value'";
+
+        try {
+            $stmt = $this->pdo->query($checkSql);
+            $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $checkSql,
+                $exception,
+                ['table' => 'portfolio_history', 'column' => 'invested_value']
+            );
+            throw $exception;
+        }
+
+        if ($row !== false && $row !== null) {
+            return;
+        }
+
+        $alterSql = 'ALTER TABLE portfolio_history ADD COLUMN invested_value DECIMAL(12, 2) NOT NULL DEFAULT 0 AFTER total_value';
+
+        try {
+            $this->pdo->exec($alterSql);
+            RepositoryObservability::migrationColumnAdded(
+                self::class,
+                'portfolio_history',
+                'invested_value'
+            );
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $alterSql,
+                $exception,
+                ['table' => 'portfolio_history', 'column' => 'invested_value']
             );
             throw $exception;
         }

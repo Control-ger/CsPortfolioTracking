@@ -74,7 +74,8 @@ final class PortfolioController
     public function investmentHistory(Request $request, int $id): void
     {
         try {
-            JsonResponseFactory::success($this->portfolioService->getInvestmentHistory($id));
+            $itemName = isset($request->query['itemName']) ? (string) $request->query['itemName'] : null;
+            JsonResponseFactory::success($this->portfolioService->getInvestmentHistory($id, $itemName));
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
