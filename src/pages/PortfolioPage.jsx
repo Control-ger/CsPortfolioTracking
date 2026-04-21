@@ -6,6 +6,7 @@ import { ApiWarnings } from "@/components/ApiWarnings";
 import { InventoryTable } from "@/components/InventoryTable";
 import { ItemDetailsModal } from "@/components/ItemDetailsModal";
 import { ItemDetailPanel } from "@/components/ItemDetailPanel";
+import { CsFloatTradeSyncModal } from "@/components/CsFloatTradeSyncModal";
 import { PortfolioChart } from "@/components/PortfolioChart";
 import { PortfolioCompositionChart } from "@/components/PortfolioCompositionChart";
 import { StatCard } from "@/components/StatsCards";
@@ -53,8 +54,6 @@ function freshnessBadgeClass(staleRatio) {
   return "border-red-200 bg-red-500/10 text-red-700 dark:border-red-900/60 dark:text-red-300";
 }
 
-const TWELVE_HOURS_IN_MS = 12 * 60 * 60 * 1000;
-
 function formatRelativeHours(hours) {
   if (!Number.isFinite(hours)) {
     return "unbekannt";
@@ -68,15 +67,38 @@ function formatRelativeHours(hours) {
 }
 
 export function PortfolioPage() {
-  const { enrichedInvestments, stats, portfolioHistory, error, warnings } =
+  const {
+    enrichedInvestments,
+    stats,
+    portfolioHistory,
+    error,
+    warnings,
+    refreshPortfolio,
+    removeInvestmentFromView,
+  } =
     usePortfolio();
-  const { latestItem: latestCsUpdate, isLoading: csUpdatesLoading } = useCsUpdatesFeed();
+  const {
+    latestItem: latestCsUpdate,
+    latestItemAgeHours: latestCsUpdateAgeHours,
+    isLoading: csUpdatesLoading,
+  } = useCsUpdatesFeed();
   const { data: compositionData } = usePortfolioComposition();
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("overview");
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
+  const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
+
+  const handleExcludeChange = async (itemId, excluded) => {
+    if (excluded) {
+      setSelectedItem((currentItem) => (currentItem?.id === itemId ? null : currentItem));
+      setSelectedItemHistory([]);
+      removeInvestmentFromView(itemId);
+    }
+
+    await refreshPortfolio();
+  };
 
   const selectedItemWithLive = useMemo(() => {
     if (!selectedItem) {
@@ -130,16 +152,9 @@ export function PortfolioPage() {
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
   const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
-  const latestCsUpdateTimestamp = latestCsUpdate?.publishedAt
-    ? new Date(latestCsUpdate.publishedAt).getTime()
-    : null;
-  const latestCsUpdateAgeHours =
-    latestCsUpdateTimestamp !== null
-      ? (Date.now() - latestCsUpdateTimestamp) / (60 * 60 * 1000)
-      : null;
   const showCsUpdateBanner =
     !csUpdatesLoading &&
-    latestCsUpdateTimestamp !== null &&
+    Boolean(latestCsUpdate) &&
     Number.isFinite(latestCsUpdateAgeHours) &&
     latestCsUpdateAgeHours <= 12;
 
@@ -175,18 +190,13 @@ export function PortfolioPage() {
             <div className="grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
               <StatCard
                 title="Portfolio Wert (Live)"
-                primaryLabel="Brutto"
-                primaryValue={`${(stats.totalValue || 0).toFixed(2)} EUR`}
-                secondaryLabel="Netto"
-                secondaryValue={`${(stats.totalNetValue || 0).toFixed(2)} EUR`}
+                value={`${(stats.totalValue || 0).toFixed(2)} EUR`}
                 isPositive={stats.isPositive}
               />
               <StatCard
-                title="Gesamt Profit/Loss"
-                primaryLabel="Brutto"
-                primaryValue={`${stats.isPositive ? "+" : ""}${(stats.totalProfitEuro || 0).toFixed(2)} EUR`}
-                secondaryLabel="Netto"
-                secondaryValue={`${(stats.totalNetProfitEuro || 0) >= 0 ? "+" : ""}${(stats.totalNetProfitEuro || 0).toFixed(2)} EUR`}
+                title="Gesamt Zuwachs"
+                value={`${stats.isPositive ? "+" : ""}${(stats.totalProfitEuro || 0).toFixed(2)} EUR`}
+                subValue={`${(stats.totalRoiPercent || 0) >= 0 ? "+" : ""}${(stats.totalRoiPercent || 0).toFixed(2)}%`}
                 isPositive={stats.isPositive}
               />
               <StatCard title="Items im Bestand" value={`${stats.totalQuantity} Stueck`} />
@@ -249,6 +259,18 @@ export function PortfolioPage() {
           </TabsContent>
 
           <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
+            <div className="md:col-span-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 sm:p-4">
+              <div>
+                <h3 className="text-base font-semibold">Inventar importieren</h3>
+                <p className="text-xs text-muted-foreground">
+                  Manueller CSFloat-Sync: zuerst Preview, dann nach Backup-Bestaetigung importieren.
+                </p>
+              </div>
+              <Button type="button" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
+                CSFloat Sync
+              </Button>
+            </div>
+
             <div className="rounded-lg border bg-card overflow-x-auto md:col-span-1">
               <InventoryTable
                 investments={enrichedInvestments}
@@ -268,7 +290,11 @@ export function PortfolioPage() {
             </div>
 
             <div className="hidden md:block md:col-span-1">
-              <ItemDetailPanel item={selectedItem} history={selectedItemHistory} />
+              <ItemDetailPanel
+                item={selectedItem}
+                history={selectedItemHistory}
+                onExcludeChange={handleExcludeChange}
+              />
             </div>
 
             {modals.map((modal) =>
@@ -288,6 +314,14 @@ export function PortfolioPage() {
             <Watchlist focusTarget={watchlistFocusTarget} />
           </TabsContent>
         </Tabs>
+
+        <CsFloatTradeSyncModal
+          isOpen={isCsFloatSyncOpen}
+          onClose={() => setIsCsFloatSyncOpen(false)}
+          onSynced={async () => {
+            await refreshPortfolio();
+          }}
+        />
       </div>
     </div>
   );

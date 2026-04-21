@@ -30,6 +30,7 @@ use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
+use App\Infrastructure\Persistence\Repository\CacheMaintenanceRepository;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
 use App\Infrastructure\Persistence\Repository\ItemCatalogRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
@@ -61,11 +62,23 @@ try {
     $positionHistoryRepository = new PositionHistoryRepository($pdo);
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
+    $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
 
     // Ensure tables exist with new schema
     $itemCatalogRepository->ensureTable();
     $itemLiveCacheRepository->ensureTable();
     $syncStatusRepository->ensureTable();
+
+    // Run cache maintenance (cleanup old entries)
+    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Running cache maintenance...\n");
+    $cleanupStats = $cacheMaintenanceRepository->runAllCleanups();
+    if ($cleanupStats['liveCacheDeleted'] > 0) {
+        fwrite(STDOUT, "  Cleaned up {$cleanupStats['liveCacheDeleted']} old live cache entries (>72h)\n");
+    }
+    if ($cleanupStats['catalogCacheDeleted'] > 0) {
+        fwrite(STDOUT, "  Cleaned up {$cleanupStats['catalogCacheDeleted']} old catalog cache entries (>7d)\n");
+    }
+    fwrite(STDOUT, "  Price history: Kept all {$cleanupStats['priceHistoryDeleted']} entries (unbegrenzte Aufbewahrung)\n");
 
     // Initialize external clients
     $csFloatClient = new CsFloatClient();

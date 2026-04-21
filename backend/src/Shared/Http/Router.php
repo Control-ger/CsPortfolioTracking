@@ -23,20 +23,19 @@ final class Router
             return;
         }
 
-        if ($request->method === 'GET' && preg_match('#^/api/v1/portfolio/investments/(\d+)/history$#', $request->path, $matches) === 1) {
-            $handler = $this->routes['GET /api/v1/portfolio/investments/{id}/history'] ?? null;
-            if ($handler !== null) {
-                $handler($request, (int) $matches[1]);
-                return;
+        foreach ($this->routes as $routeKey => $handler) {
+            [$method, $routePath] = explode(' ', $routeKey, 2);
+            if ($method !== $request->method || !str_contains($routePath, '{id}')) {
+                continue;
             }
-        }
 
-        if ($request->method === 'DELETE' && preg_match('#^/api/v1/watchlist/(\d+)$#', $request->path, $matches) === 1) {
-            $handler = $this->routes['DELETE /api/v1/watchlist/{id}'] ?? null;
-            if ($handler !== null) {
-                $handler($request, (int) $matches[1]);
-                return;
+            $pattern = '#^' . str_replace('\{id\}', '(\\d+)', preg_quote($routePath, '#')) . '$#';
+            if (preg_match($pattern, $request->path, $matches) !== 1) {
+                continue;
             }
+
+            $handler($request, (int) $matches[1]);
+            return;
         }
 
         Logger::event(

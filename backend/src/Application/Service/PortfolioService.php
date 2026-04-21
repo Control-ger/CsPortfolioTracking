@@ -27,7 +27,7 @@ final class PortfolioService
     ) {
     }
 
-    public function getEnrichedInvestments(): array
+    public function getEnrichedInvestments(bool $aggregateByName = false): array
     {
         $this->ensurePriceHistoryTable();
 
@@ -122,6 +122,10 @@ final class PortfolioService
                 'freshnessStatus' => $freshnessStatus,
                 'freshnessLabel' => $this->resolveFreshnessLabel($freshnessStatus, $priceAgeSeconds),
             ];
+        }
+
+        if ($aggregateByName) {
+            return $this->aggregateInvestmentsByName($rows);
         }
 
         return $rows;
@@ -442,6 +446,141 @@ final class PortfolioService
         };
     }
 
+    private function aggregateInvestmentsByName(array $rows): array
+    {
+        $groups = [];
+
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['name'] ?? ''));
+            $key = strtolower($name !== '' ? $name : ('id_' . (string) ($row['id'] ?? '0')));
+
+            $quantity = max(0, (int) ($row['quantity'] ?? 0));
+            $totalInvested = (float) ($row['totalInvested'] ?? (((float) ($row['buyPrice'] ?? 0.0)) * $quantity));
+            $currentValue = (float) ($row['currentValue'] ?? (((float) ($row['displayPrice'] ?? 0.0)) * $quantity));
+            $costBasisTotal = (float) ($row['costBasisTotal'] ?? $totalInvested);
+            $netPositionValue = (float) ($row['netPositionValue'] ?? $currentValue);
+            $acquisitionFees = (float) ($row['appliedFees']['acquisitionFees'] ?? 0.0);
+
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'base' => $row,
+                    'quantity' => 0,
+                    'totalInvested' => 0.0,
+                    'currentValue' => 0.0,
+                    'costBasisTotal' => 0.0,
+                    'netPositionValue' => 0.0,
+                    'acquisitionFees' => 0.0,
+                    'change24hEuro' => 0.0,
+                    'change7dEuro' => 0.0,
+                    'change30dEuro' => 0.0,
+                    'change24hPercentWeighted' => 0.0,
+                    'change7dPercentWeighted' => 0.0,
+                    'change30dPercentWeighted' => 0.0,
+                    'lastPriceUpdateAt' => $row['lastPriceUpdateAt'] ?? null,
+                    'maxPriceAgeSeconds' => isset($row['priceAgeSeconds']) && is_numeric($row['priceAgeSeconds']) ? (int) $row['priceAgeSeconds'] : null,
+                ];
+            }
+
+            $groups[$key]['quantity'] += $quantity;
+            $groups[$key]['totalInvested'] += $totalInvested;
+            $groups[$key]['currentValue'] += $currentValue;
+            $groups[$key]['costBasisTotal'] += $costBasisTotal;
+            $groups[$key]['netPositionValue'] += $netPositionValue;
+            $groups[$key]['acquisitionFees'] += $acquisitionFees;
+            $groups[$key]['change24hEuro'] += (float) (($row['change24hEuro'] ?? 0.0) * $quantity);
+            $groups[$key]['change7dEuro'] += (float) (($row['change7dEuro'] ?? 0.0) * $quantity);
+            $groups[$key]['change30dEuro'] += (float) (($row['change30dEuro'] ?? 0.0) * $quantity);
+            $groups[$key]['change24hPercentWeighted'] += (float) (($row['change24hPercent'] ?? 0.0) * $quantity);
+            $groups[$key]['change7dPercentWeighted'] += (float) (($row['change7dPercent'] ?? 0.0) * $quantity);
+            $groups[$key]['change30dPercentWeighted'] += (float) (($row['change30dPercent'] ?? 0.0) * $quantity);
+
+            $existingUpdatedAt = (string) ($groups[$key]['lastPriceUpdateAt'] ?? '');
+            $candidateUpdatedAt = (string) ($row['lastPriceUpdateAt'] ?? '');
+            if ($candidateUpdatedAt !== '' && ($existingUpdatedAt === '' || strtotime($candidateUpdatedAt) > strtotime($existingUpdatedAt))) {
+                $groups[$key]['lastPriceUpdateAt'] = $candidateUpdatedAt;
+            }
+
+            if (isset($row['priceAgeSeconds']) && is_numeric($row['priceAgeSeconds'])) {
+                $candidateAge = (int) $row['priceAgeSeconds'];
+                $currentMaxAge = $groups[$key]['maxPriceAgeSeconds'];
+                if ($currentMaxAge === null || $candidateAge > $currentMaxAge) {
+                    $groups[$key]['maxPriceAgeSeconds'] = $candidateAge;
+                }
+            }
+        }
+
+        $result = [];
+
+        foreach ($groups as $group) {
+            $base = $group['base'];
+            $quantity = max(1, (int) $group['quantity']);
+            $totalInvested = (float) $group['totalInvested'];
+            $currentValue = (float) $group['currentValue'];
+            $displayPrice = $currentValue / $quantity;
+            $buyPrice = $totalInvested / $quantity;
+            $profitEuro = $currentValue - $totalInvested;
+            $roi = $totalInvested > 0 ? ($profitEuro / $totalInvested) * 100 : 0.0;
+
+            $costBasisTotal = (float) $group['costBasisTotal'];
+            $costBasisUnit = $costBasisTotal / $quantity;
+            $netPositionValue = (float) $group['netPositionValue'];
+            $netProfitEuro = $netPositionValue - $costBasisTotal;
+            $netRoiPercent = $costBasisTotal > 0 ? ($netProfitEuro / $costBasisTotal) * 100 : 0.0;
+            $breakEvenPrice = $buyPrice;
+            $breakEvenPriceNet = $this->calculateBreakEvenNetUnitPrice($costBasisUnit, $base['appliedFees'] ?? []);
+
+            $priceAgeSeconds = $group['maxPriceAgeSeconds'];
+            $freshnessStatus = $this->resolveFreshnessStatus($priceAgeSeconds, (bool) ($base['isLive'] ?? false));
+
+            $change24hPercent = $group['change24hPercentWeighted'] / $quantity;
+            $change7dPercent = $group['change7dPercentWeighted'] / $quantity;
+            $change30dPercent = $group['change30dPercentWeighted'] / $quantity;
+
+            $result[] = array_merge($base, [
+                'quantity' => $quantity,
+                'buyPrice' => $buyPrice,
+                'livePrice' => isset($base['livePrice']) && $base['livePrice'] !== null ? $displayPrice : null,
+                'displayPrice' => $displayPrice,
+                'roi' => $roi,
+                'totalInvested' => $totalInvested,
+                'currentValue' => $currentValue,
+                'profitEuro' => $profitEuro,
+                'isProfitPositive' => $profitEuro >= 0,
+                'breakEvenPrice' => $breakEvenPrice,
+                'breakEvenDeltaEuro' => $displayPrice - $breakEvenPrice,
+                'breakEvenDeltaPercent' => $breakEvenPrice > 0 ? (($displayPrice - $breakEvenPrice) / $breakEvenPrice) * 100 : null,
+                'costBasisTotal' => $costBasisTotal,
+                'costBasisUnit' => $costBasisUnit,
+                'netPositionValue' => $netPositionValue,
+                'netProfitEuro' => $netProfitEuro,
+                'netRoiPercent' => $netRoiPercent,
+                'breakEvenPriceNet' => $breakEvenPriceNet,
+                'change24hEuro' => $group['change24hEuro'] / $quantity,
+                'change24hPercent' => $change24hPercent,
+                'change7dEuro' => $group['change7dEuro'] / $quantity,
+                'change7dPercent' => $change7dPercent,
+                'change30dEuro' => $group['change30dEuro'] / $quantity,
+                'change30dPercent' => $change30dPercent,
+                'changes' => [
+                    '24h' => ['amount' => $group['change24hEuro'] / $quantity, 'percent' => $change24hPercent, 'baselinePrice' => null, 'windowDays' => 1],
+                    '7d' => ['amount' => $group['change7dEuro'] / $quantity, 'percent' => $change7dPercent, 'baselinePrice' => null, 'windowDays' => 7],
+                    '30d' => ['amount' => $group['change30dEuro'] / $quantity, 'percent' => $change30dPercent, 'baselinePrice' => null, 'windowDays' => 30],
+                ],
+                'lastPriceUpdateAt' => $group['lastPriceUpdateAt'],
+                'priceAgeSeconds' => $priceAgeSeconds,
+                'freshnessStatus' => $freshnessStatus,
+                'freshnessLabel' => $this->resolveFreshnessLabel($freshnessStatus, $priceAgeSeconds),
+                'appliedFees' => array_merge($base['appliedFees'] ?? [], [
+                    'acquisitionFees' => $group['acquisitionFees'],
+                ]),
+            ]);
+        }
+
+        usort($result, static fn (array $left, array $right): int => strcmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? '')));
+
+        return $result;
+    }
+
     private function getTypeColor(string $type): string
     {
         $colors = [
@@ -503,5 +642,10 @@ final class PortfolioService
         }
 
         return $costBasisUnit / $multiplier;
+    }
+
+    public function toggleExcludeInvestment(int $id, bool $exclude): bool
+    {
+        return $this->investmentRepository->toggleExcludeFromPortfolio($id, $exclude);
     }
 }

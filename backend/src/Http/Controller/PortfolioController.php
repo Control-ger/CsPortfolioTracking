@@ -18,7 +18,7 @@ final class PortfolioController
     public function investments(Request $request): void
     {
         try {
-            $rows = $this->portfolioService->getEnrichedInvestments();
+            $rows = $this->portfolioService->getEnrichedInvestments(true);
             JsonResponseFactory::success(
                 $rows,
                 ['warnings' => $this->portfolioService->consumePricingWarnings()]
@@ -122,6 +122,47 @@ final class PortfolioController
                 ['statusCode' => 500, 'exception' => $exception]
             );
             JsonResponseFactory::error('PORTFOLIO_COMPOSITION_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function toggleExcludeInvestment(Request $request, int $id): void
+    {
+        try {
+            $exclude = filter_var($request->body['exclude'] ?? false, FILTER_VALIDATE_BOOL);
+            $success = $this->portfolioService->toggleExcludeInvestment($id, $exclude);
+
+            if (!$success) {
+                JsonResponseFactory::error(
+                    'INVESTMENT_NOT_FOUND',
+                    'Investition mit dieser ID nicht gefunden.',
+                    ['id' => $id],
+                    404
+                );
+                return;
+            }
+
+            Logger::event(
+                'info',
+                'domain',
+                'domain.portfolio.investment_exclude_toggled',
+                'Investment exclude flag toggled',
+                ['investmentId' => $id, 'exclude' => $exclude]
+            );
+
+            JsonResponseFactory::success(
+                ['success' => true, 'investmentId' => $id, 'excluded' => $exclude],
+                [],
+                200
+            );
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio toggle exclude investment failed',
+                ['statusCode' => 500, 'investmentId' => $id, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('PORTFOLIO_TOGGLE_EXCLUDE_FAILED', $exception->getMessage(), [], 500);
         }
     }
 }

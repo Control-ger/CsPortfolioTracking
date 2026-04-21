@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Clock3, ExternalLink, Radio, RefreshCw, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertCircle, Clock3, ExternalLink, Radio, RefreshCw, Sparkles } from "lucide-react";
 
 import { useCsUpdatesFeed } from "@/hooks/useCsUpdatesFeed";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
+const CLOSED_ITEM_SENTINEL = "__closed__";
 
 function toTimestamp(value) {
   const timestamp = new Date(value).getTime();
@@ -64,10 +68,10 @@ function getSeverityClass(severity) {
   }
 }
 
-function getFeedCardClass(isFresh, isOpen, severity) {
+function getFeedItemClass(isFresh, isOpen, severity) {
   return cn(
-    "rounded-xl border transition-all duration-200",
-    isFresh ? "border-emerald-500/40 bg-emerald-500/5 shadow-sm" : "border-border bg-background",
+    "overflow-hidden rounded-xl border bg-card text-card-foreground transition-all duration-200",
+    isFresh ? "border-emerald-500/40 bg-emerald-500/5" : "border-border",
     isOpen ? "ring-1 ring-primary/20" : "",
     severity === "critical" ? "shadow-[0_0_0_1px_rgba(239,68,68,0.06)]" : "",
   );
@@ -77,17 +81,19 @@ function LoadingState() {
   return (
     <div className="space-y-3">
       {[1, 2, 3].map((index) => (
-        <div key={index} className="animate-pulse rounded-xl border bg-muted/20 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 space-y-2">
-              <div className="h-3 w-28 rounded bg-muted" />
-              <div className="h-5 w-full max-w-104 rounded bg-muted" />
-              <div className="h-4 w-5/6 rounded bg-muted" />
+        <Card key={index} className="rounded-xl border-border/70 shadow-none">
+          <CardContent className="space-y-4 p-4">
+            <div className="flex items-start gap-3">
+              <Skeleton className="h-9 w-9 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-5 w-full max-w-96" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
             </div>
-            <div className="h-8 w-8 rounded bg-muted" />
-          </div>
-          <div className="mt-4 h-14 rounded bg-muted" />
-        </div>
+            <Skeleton className="h-16 w-full" />
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -95,47 +101,39 @@ function LoadingState() {
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
-      <div className="mb-2 text-base font-semibold text-foreground">Noch keine CS-Updates verfuegbar</div>
-      Sobald neue Meldungen importiert sind, erscheinen sie hier als Live-Feed.
-    </div>
+    <Alert className="border-dashed bg-muted/20">
+      <AlertTitle>Noch keine CS-Updates verfuegbar</AlertTitle>
+      <AlertDescription>Sobald neue Meldungen importiert sind, erscheinen sie hier als Live-Feed.</AlertDescription>
+    </Alert>
   );
 }
 
 function ErrorState({ message, onRetry, hasItems }) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border p-4",
-        hasItems ? "border-amber-500/30 bg-amber-500/10" : "border-destructive/30 bg-destructive/10",
-      )}
+    <Alert
+      variant={hasItems ? "default" : "destructive"}
+      className={cn(hasItems ? "border-amber-500/30 bg-amber-500/10 text-foreground" : "")}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-semibold text-foreground">CS Updates konnten nicht geladen werden</p>
-          <p className="text-sm text-muted-foreground">{message}</p>
-        </div>
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>CS Updates konnten nicht geladen werden</AlertTitle>
+      <AlertDescription className="space-y-3">
+        <p className="text-muted-foreground">{message}</p>
         <Button variant="outline" size="sm" onClick={onRetry}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Erneut laden
         </Button>
-      </div>
-    </div>
+      </AlertDescription>
+    </Alert>
   );
 }
 
-function FeedItem({ item, isOpen, isFresh, onToggle, compact }) {
+function FeedItem({ item, isOpen, isFresh, compact }) {
   const severityClass = getSeverityClass(item.severity);
 
   return (
-    <article className={getFeedCardClass(isFresh, isOpen, item.severity)}>
-      <button
-        type="button"
-        className={cn("w-full text-left", compact ? "p-3" : "p-4")}
-        onClick={() => onToggle(item.id)}
-        aria-expanded={isOpen}
-      >
-        <div className={cn("flex items-start", compact ? "gap-2" : "gap-3")}>
+    <AccordionItem value={String(item.id)} className={cn("border-0", getFeedItemClass(isFresh, isOpen, item.severity))}>
+      <AccordionTrigger className={cn("items-start px-3 text-left sm:px-4", compact ? "py-3" : "py-4")}>
+        <div className={cn("flex w-full items-start", compact ? "gap-2" : "gap-3")}>
           <div
             className={cn(
               "mt-1 flex shrink-0 items-center justify-center rounded-full border",
@@ -145,40 +143,26 @@ function FeedItem({ item, isOpen, isFresh, onToggle, compact }) {
                 : "border-border bg-muted text-muted-foreground",
             )}
           >
-            {isFresh ? (
-              <Sparkles className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
-            ) : (
-              <Clock3 className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
-            )}
+            {isFresh ? <Sparkles className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} /> : <Clock3 className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />}
           </div>
 
-          <div className="min-w-0 flex-1 space-y-2">
+          <div className="min-w-0 flex-1 space-y-2 pr-2">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className={cn("font-semibold text-foreground", compact ? "text-sm" : "text-sm sm:text-base")}>
-                    {item.title}
-                  </h3>
+                  <h3 className={cn("font-semibold text-foreground", compact ? "text-sm" : "text-sm sm:text-base")}>{item.title}</h3>
                   {isFresh ? (
-                    <Badge
-                      variant="outline"
-                      className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    >
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
                       Neu
                     </Badge>
                   ) : null}
                   {item.isBreaking ? (
-                    <Badge
-                      variant="outline"
-                      className="border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300"
-                    >
+                    <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300">
                       Breaking
                     </Badge>
                   ) : null}
                 </div>
-                <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
-                  {item.summary}
-                </p>
+                <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>{item.summary}</p>
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
@@ -188,12 +172,6 @@ function FeedItem({ item, isOpen, isFresh, onToggle, compact }) {
                 <Badge variant="outline" className="text-muted-foreground">
                   {formatRelativeTime(item.publishedAt)}
                 </Badge>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 text-muted-foreground transition-transform",
-                    isOpen ? "rotate-180" : "",
-                  )}
-                />
               </div>
             </div>
 
@@ -210,61 +188,88 @@ function FeedItem({ item, isOpen, isFresh, onToggle, compact }) {
             </div>
           </div>
         </div>
-      </button>
+      </AccordionTrigger>
 
-      {isOpen ? (
-        <div className={cn("border-t border-border/70", compact ? "px-3 pb-3 pt-2" : "px-4 pb-4 pt-3")}>
-          <div className="space-y-3">
-            <p className={cn("leading-6 text-muted-foreground", compact ? "text-xs" : "text-sm")}>
-              {item.details}
-            </p>
+      <AccordionContent className={cn(compact ? "px-3" : "px-4")}>
+        <Separator className="mb-3" />
+        <div className="space-y-3">
+          <p className={cn("leading-6 text-muted-foreground", compact ? "text-xs" : "text-sm")}>{item.details}</p>
 
-            {Array.isArray(item.highlights) && item.highlights.length > 0 ? (
-              <ul className="space-y-2">
-                {item.highlights.map((highlight) => (
-                  <li key={highlight} className="flex gap-2 text-sm text-foreground">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                    <span>{highlight}</span>
-                  </li>
-                ))}
-              </ul>
+          {Array.isArray(item.highlights) && item.highlights.length > 0 ? (
+            <ul className="space-y-2">
+              {item.highlights.map((highlight) => (
+                <li key={highlight} className="flex gap-2 text-sm text-foreground">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  <span>{highlight}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {Array.isArray(item.tags)
+              ? item.tags.map((tag) => (
+                  <Badge key={tag} variant="outline" className="text-[10px] uppercase tracking-wide">
+                    {tag}
+                  </Badge>
+                ))
+              : null}
+
+            {item.url ? (
+              <Button asChild variant="outline" size="sm" className="ml-auto">
+                <a href={item.url} target="_blank" rel="noreferrer">
+                  Mehr Infos
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
             ) : null}
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {Array.isArray(item.tags)
-                ? item.tags.map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-[10px] uppercase tracking-wide">
-                      {tag}
-                    </Badge>
-                  ))
-                : null}
-
-              {item.url ? (
-                <Button asChild variant="outline" size="sm" className="ml-auto">
-                  <a href={item.url} target="_blank" rel="noreferrer">
-                    Mehr Infos
-                    <ExternalLink className="ml-2 h-4 w-4" />
-                  </a>
-                </Button>
-              ) : null}
-            </div>
           </div>
         </div>
-      ) : null}
-    </article>
+      </AccordionContent>
+    </AccordionItem>
   );
 }
 
 export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 : Number.POSITIVE_INFINITY } = {}) {
-  const { items, meta, latestItem, newestFreshItem, isLoading, isRefreshing, error, refresh } = useCsUpdatesFeed();
-  const [openItemId, setOpenItemId] = useState(null);
+  const {
+    items,
+    meta,
+    latestItem,
+    newestFreshItem,
+    freshItemIds,
+    isLoading,
+    isRefreshing,
+    error,
+    refresh,
+  } = useCsUpdatesFeed();
+  const [userOpenItemId, setUserOpenItemId] = useState(null);
   const visibleItems = useMemo(
     () => items.slice(0, Math.max(1, maxVisibleItems || items.length)),
     [items, maxVisibleItems],
   );
 
-  const latestFreshItemId = newestFreshItem?.id || null;
+  const visibleItemIds = useMemo(() => new Set(visibleItems.map((item) => String(item.id))), [visibleItems]);
+  const freshItemIdSet = useMemo(() => new Set((freshItemIds || []).map((id) => String(id))), [freshItemIds]);
+
+  const latestFreshItemId = newestFreshItem?.id ? String(newestFreshItem.id) : null;
   const feedHasFreshLatest = latestFreshItemId !== null;
+  const defaultOpenId = compact ? null : latestFreshItemId || (latestItem?.id ? String(latestItem.id) : null);
+
+  const openItemId = useMemo(() => {
+    if (userOpenItemId === CLOSED_ITEM_SENTINEL) {
+      return null;
+    }
+
+    if (userOpenItemId && visibleItemIds.has(userOpenItemId)) {
+      return userOpenItemId;
+    }
+
+    if (defaultOpenId && visibleItemIds.has(defaultOpenId)) {
+      return defaultOpenId;
+    }
+
+    return null;
+  }, [defaultOpenId, userOpenItemId, visibleItemIds]);
 
   const lastUpdateLabel = useMemo(() => {
     if (!latestItem?.publishedAt) {
@@ -274,23 +279,24 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
     return `${formatRelativeTime(latestItem.publishedAt)} · ${formatDateTime(latestItem.publishedAt)}`;
   }, [latestItem]);
 
-  useEffect(() => {
-    const defaultOpenId = compact ? null : latestFreshItemId || latestItem?.id || null;
-
-    setOpenItemId((currentOpenId) => {
-      if (compact) {
-        return currentOpenId && visibleItems.some((item) => item.id === currentOpenId) ? currentOpenId : defaultOpenId;
-      }
-
-      if (currentOpenId && visibleItems.some((item) => item.id === currentOpenId)) {
-        return currentOpenId;
-      }
-
-      return defaultOpenId;
-    });
-  }, [compact, latestFreshItemId, latestItem, visibleItems]);
-
   const hasItems = items.length > 0;
+
+  const feedItems = (
+    <Accordion
+      type="single"
+      collapsible
+      value={openItemId || undefined}
+      onValueChange={(value) => setUserOpenItemId(value || CLOSED_ITEM_SENTINEL)}
+      className="space-y-3"
+    >
+      {visibleItems.map((item) => {
+        const itemId = String(item.id);
+        const isFresh = freshItemIdSet.has(itemId);
+
+        return <FeedItem key={itemId} item={item} isOpen={openItemId === itemId} isFresh={isFresh} compact={compact} />;
+      })}
+    </Accordion>
+  );
 
   return (
     <Card className={cn("border-border/70 shadow-sm", compact ? "shadow-none" : "")}>
@@ -341,67 +347,29 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
         </div>
 
         {!compact && feedHasFreshLatest && newestFreshItem ? (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <Sparkles className="h-4 w-4 text-emerald-500" />
-              <span className="font-semibold text-foreground">Neueste Meldung</span>
+          <Alert className="border-emerald-500/30 bg-emerald-500/10">
+            <Sparkles className="h-4 w-4 text-emerald-500" />
+            <AlertTitle className="flex flex-wrap items-center gap-2">
+              Neueste Meldung
               <Badge variant="outline" className="border-emerald-500/30 bg-background/70 text-emerald-700 dark:text-emerald-300">
                 {formatRelativeTime(newestFreshItem.publishedAt)}
               </Badge>
-              <span className="text-muted-foreground">{newestFreshItem.title}</span>
-            </div>
-          </div>
+            </AlertTitle>
+            <AlertDescription className="text-muted-foreground">{newestFreshItem.title}</AlertDescription>
+          </Alert>
         ) : null}
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="space-y-3">
         {isLoading ? <LoadingState /> : null}
-
         {!isLoading && error ? <ErrorState message={error} onRetry={refresh} hasItems={hasItems} /> : null}
-
         {!isLoading && !hasItems && !error ? <EmptyState /> : null}
 
         {!isLoading && hasItems ? (
           compact ? (
-            <ScrollArea className="h-72 pr-3 sm:h-80">
-              <div className="space-y-2">
-                {visibleItems.map((item) => {
-                  const itemTimestamp = toTimestamp(item.publishedAt);
-                  const isFresh = itemTimestamp !== null && Date.now() - itemTimestamp <= TWENTY_FOUR_HOURS_IN_MS;
-                  const isOpen = openItemId === item.id;
-
-                  return (
-                    <FeedItem
-                      key={item.id}
-                      item={item}
-                      isOpen={isOpen}
-                      isFresh={isFresh}
-                      onToggle={(itemId) => setOpenItemId((currentOpenId) => (currentOpenId === itemId ? null : itemId))}
-                      compact
-                    />
-                  );
-                })}
-              </div>
-            </ScrollArea>
+            <ScrollArea className="h-72 pr-3 sm:h-80">{feedItems}</ScrollArea>
           ) : (
-            <div className="space-y-3">
-              {visibleItems.map((item) => {
-                const itemTimestamp = toTimestamp(item.publishedAt);
-                const isFresh = itemTimestamp !== null && Date.now() - itemTimestamp <= TWENTY_FOUR_HOURS_IN_MS;
-                const isOpen = openItemId === item.id;
-
-                return (
-                  <FeedItem
-                    key={item.id}
-                    item={item}
-                    isOpen={isOpen}
-                    isFresh={isFresh}
-                    onToggle={(itemId) => setOpenItemId((currentOpenId) => (currentOpenId === itemId ? null : itemId))}
-                    compact={false}
-                  />
-                );
-              })}
-            </div>
+            feedItems
           )
         ) : null}
       </CardContent>

@@ -133,6 +133,31 @@ export async function savePortfolioDailyValue(totalValue) {
   });
 }
 
+export async function fetchCsFloatTradeSyncPreview(payload = {}) {
+  return requestWithMeta("/api/v1/portfolio/sync/csfloat/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: payload.type || "buy",
+      limit: payload.limit || 1000,
+      maxPages: payload.maxPages || 10,
+    }),
+  });
+}
+
+export async function executeCsFloatTradeSync(payload = {}) {
+  return requestWithMeta("/api/v1/portfolio/sync/csfloat/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: payload.type || "buy",
+      limit: payload.limit || 1000,
+      maxPages: payload.maxPages || 10,
+      backupConfirmed: Boolean(payload.backupConfirmed),
+    }),
+  });
+}
+
 export async function fetchWatchlist(options = {}) {
   return requestWithMeta(
     buildPath("/api/v1/watchlist", {
@@ -193,5 +218,17 @@ export async function updateFeeSettings(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export async function toggleExcludeInvestment(id, exclude) {
+  return requestWithMeta(`/api/v1/portfolio/investments/${id}/exclude`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ exclude }),
+  });
+}
+
+export async function fetchCacheMaintenanceStats() {
+  return requestWithMeta("/api/v1/debug/cache/stats");
 }
 

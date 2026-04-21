@@ -47,24 +47,29 @@ function normalizeFeedPayload(payload) {
 }
 
 function deriveFreshness(items, meta) {
+  const now = Date.now();
   const fetchedAt = toTimestamp(meta.fetchedAt);
   const staleAfterSeconds = Number(meta.staleAfterSeconds || DEFAULT_STALE_AFTER_SECONDS);
   const staleByTime = fetchedAt !== null
-    ? Date.now() - fetchedAt > staleAfterSeconds * 1000
+    ? now - fetchedAt > staleAfterSeconds * 1000
     : false;
   const latestItem = items[0] || null;
   const latestItemTime = latestItem ? toTimestamp(latestItem.publishedAt) : null;
+  const freshItemIds = items
+    .filter((item) => {
+      const itemTime = toTimestamp(item.publishedAt);
+      return itemTime !== null && now - itemTime <= TWENTY_FOUR_HOURS_IN_MS;
+    })
+    .map((item) => item.id);
   const newestFreshItem =
-    latestItemTime !== null && Date.now() - latestItemTime <= TWENTY_FOUR_HOURS_IN_MS
+    latestItemTime !== null && now - latestItemTime <= TWENTY_FOUR_HOURS_IN_MS
       ? latestItem
-      : items.find((item) => {
-          const itemTime = toTimestamp(item.publishedAt);
-          return itemTime !== null && Date.now() - itemTime <= TWENTY_FOUR_HOURS_IN_MS;
-        }) || null;
+      : items.find((item) => freshItemIds.includes(item.id)) || null;
 
   return {
     latestItem,
     newestFreshItem,
+    freshItemIds,
     isStale: meta.isStale || staleByTime,
     fetchedAt,
   };
@@ -124,6 +129,7 @@ export function useCsUpdatesFeed({ loader = getMockCsUpdatesFeed } = {}) {
     },
     latestItem: derived.latestItem,
     newestFreshItem: derived.newestFreshItem,
+    freshItemIds: derived.freshItemIds,
     isLoading,
     isRefreshing,
     error,

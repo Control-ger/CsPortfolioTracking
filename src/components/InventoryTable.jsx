@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/table";
 
 import { PriceSourceBadge } from "@/components/PriceSourceBadge";
-import { MetricPairInline } from "@/components/MetricPair";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
   <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted">
@@ -116,7 +115,7 @@ export function InventoryTable({ investments, onSelectItem }) {
               <TableHead>Item</TableHead>
               <TableHead className="text-right">Menge</TableHead>
               <TableHead className="text-right">Live Preis</TableHead>
-              <TableHead className="text-right">ROI Brutto / Netto</TableHead>
+              <TableHead className="text-right">ROI</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -165,14 +164,9 @@ export function InventoryTable({ investments, onSelectItem }) {
 
                 <TableCell className="text-right">
                   {item.isLive ? (
-                    <MetricPairInline
-                      grossLabel="Brutto"
-                      grossValue={`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
-                      grossValueClassName={item.roi >= 0 ? "text-green-500" : "text-red-500"}
-                      netLabel="Netto"
-                      netValue={`${(item.netRoiPercent ?? 0) >= 0 ? "+" : ""}${(item.netRoiPercent ?? 0).toFixed(1)}%`}
-                      netValueClassName={(item.netRoiPercent ?? 0) >= 0 ? "text-green-600" : "text-red-600"}
-                    />
+                    <span className={`text-sm font-bold ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}>
+                      {`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
+                    </span>
                   ) : (
                     <span className="text-muted-foreground opacity-50">0.0%</span>
                   )}
@@ -209,14 +203,9 @@ export function InventoryTable({ investments, onSelectItem }) {
               </div>
               <div className="text-right">
                 {item.isLive ? (
-                  <MetricPairInline
-                    grossLabel="Brutto"
-                    grossValue={`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
-                    grossValueClassName={item.roi >= 0 ? "text-green-500" : "text-red-500"}
-                    netLabel="Netto"
-                    netValue={`${(item.netRoiPercent ?? 0) >= 0 ? "+" : ""}${(item.netRoiPercent ?? 0).toFixed(1)}%`}
-                    netValueClassName={(item.netRoiPercent ?? 0) >= 0 ? "text-green-600" : "text-red-600"}
-                  />
+                  <div className={`text-sm font-bold whitespace-nowrap ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
+                  </div>
                 ) : (
                   <div className="text-sm font-bold whitespace-nowrap text-muted-foreground opacity-50">
                     0.0%
@@ -243,7 +232,7 @@ export function InventoryTable({ investments, onSelectItem }) {
               </div>
               <div className="text-right">
                 <span className="text-muted-foreground">Break-even:</span>
-                <span className="ml-1">{formatCurrency(item.breakEvenPrice ?? item.buyPrice)}</span>
+                <span className="ml-1">{formatCurrency(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}</span>
               </div>
             </div>
 

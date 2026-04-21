@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   fetchPortfolioHistory,
   fetchPortfolioInvestments,
@@ -65,37 +65,43 @@ export function usePortfolio() {
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [rowsResponse, summaryResponse, history] = await Promise.all([
-          fetchPortfolioInvestments(),
-          fetchPortfolioSummary(),
-          fetchPortfolioHistory(),
-        ]);
+  const loadData = useCallback(async () => {
+    try {
+      const [rowsResponse, summaryResponse, history] = await Promise.all([
+        fetchPortfolioInvestments(),
+        fetchPortfolioSummary(),
+        fetchPortfolioHistory(),
+      ]);
 
-        setInvestments(rowsResponse?.data || []);
-        setStats(summaryResponse?.data || {});
-        setPortfolioHistory(history || []);
-        setWarnings(
-          mergeWarnings(
-            rowsResponse?.meta?.warnings || [],
-            summaryResponse?.meta?.warnings || []
-          )
-        );
-        setError("");
+      setInvestments(rowsResponse?.data || []);
+      setStats(summaryResponse?.data || {});
+      setPortfolioHistory(history || []);
+      setWarnings(
+        mergeWarnings(
+          rowsResponse?.meta?.warnings || [],
+          summaryResponse?.meta?.warnings || []
+        )
+      );
+      setError("");
 
-        if ((summaryResponse?.data?.totalValue || 0) > 0) {
-          await savePortfolioDailyValue(summaryResponse.data.totalValue);
-        }
-      } catch (err) {
-        setError(err.message || "Fehler beim Laden der Portfolio-Daten.");
-        setWarnings([]);
+      if ((summaryResponse?.data?.totalValue || 0) > 0) {
+        await savePortfolioDailyValue(summaryResponse.data.totalValue);
       }
-    };
-
-    loadData();
+    } catch (err) {
+      setError(err.message || "Fehler beim Laden der Portfolio-Daten.");
+      setWarnings([]);
+    }
   }, []);
+
+  const removeInvestmentFromView = useCallback((investmentId) => {
+    setInvestments((currentInvestments) =>
+      currentInvestments.filter((investment) => investment.id !== investmentId)
+    );
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadData);
+  }, [loadData]);
 
   return {
     enrichedInvestments: investments,
@@ -103,5 +109,7 @@ export function usePortfolio() {
     portfolioHistory,
     error,
     warnings,
+    refreshPortfolio: loadData,
+    removeInvestmentFromView,
   };
 }

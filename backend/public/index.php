@@ -3,16 +3,19 @@ declare(strict_types=1);
 
 use App\Application\Service\PortfolioService;
 use App\Application\Service\FeeSettingsService;
+use App\Application\Service\CsFloatTradeSyncService;
 use App\Application\Service\PricingService;
 use App\Application\Service\WatchlistService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
+use App\Http\Controller\CsFloatSyncController;
 use App\Http\Controller\DebugController;
 use App\Http\Controller\PortfolioController;
 use App\Http\Controller\SettingsController;
 use App\Http\Controller\SyncStatusController;
 use App\Http\Controller\WatchlistController;
 use App\Infrastructure\External\CsFloatClient;
+use App\Infrastructure\External\CsFloatTradeClient;
 use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
@@ -25,6 +28,7 @@ use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
+use App\Infrastructure\Persistence\Repository\CacheMaintenanceRepository;
 use App\Observability\Application\ObservabilityService;
 use App\Observability\Context\RequestContext;
 use App\Observability\Context\RequestContextStore;
@@ -353,6 +357,12 @@ try {
         $itemCatalogRepository,
         $itemLiveCacheRepository
     );
+    $csFloatTradeSyncService = new CsFloatTradeSyncService(
+        new CsFloatTradeClient(),
+        $investmentRepository,
+        $pricingService,
+        new MarketItemClassifier()
+    );
     $portfolioService = new PortfolioService(
         $investmentRepository,
         $positionHistoryRepository,
@@ -370,14 +380,18 @@ try {
     $observabilityController = new ObservabilityController($observabilityRepository);
     $frontendTelemetryController = new FrontendTelemetryController();
     $syncStatusController = new SyncStatusController($syncStatusRepository);
+    $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
 
     $router = new Router();
     $router->register('GET', '/api/v1/portfolio/investments', [$portfolioController, 'investments']);
     $router->register('GET', '/api/v1/portfolio/investments/{id}/history', [$portfolioController, 'investmentHistory']);
+    $router->register('PUT', '/api/v1/portfolio/investments/{id}/exclude', [$portfolioController, 'toggleExcludeInvestment']);
     $router->register('GET', '/api/v1/portfolio/summary', [$portfolioController, 'summary']);
     $router->register('GET', '/api/v1/portfolio/history', [$portfolioController, 'history']);
     $router->register('GET', '/api/v1/portfolio/composition', [$portfolioController, 'composition']);
     $router->register('PUT', '/api/v1/portfolio/daily-value', [$portfolioController, 'saveDailyValue']);
+    $router->register('POST', '/api/v1/portfolio/sync/csfloat/preview', [$csFloatSyncController, 'preview']);
+    $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatSyncController, 'execute']);
     $router->register('GET', '/api/v1/portfolio/sync-status', [$syncStatusController, 'status']);
     $router->register('GET', '/api/v1/portfolio/sync-history', [$syncStatusController, 'history']);
     $router->register('GET', '/api/v1/portfolio/sync-stats', [$syncStatusController, 'stats']);
@@ -392,6 +406,14 @@ try {
 
     $router->register('GET', '/api/v1/debug/logs', [$debugController, 'logs']);
     $router->register('GET', '/api/v1/debug/csfloat', [$debugController, 'csfloatDebug']);
+    $router->register('GET', '/api/v1/debug/cache/stats', function () use ($pdo) {
+        $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
+        JsonResponseFactory::success([
+            'cacheStats' => $cacheMaintenanceRepository->getCacheStatistics(),
+            'maintenanceLogs' => $cacheMaintenanceRepository->getMaintenanceLogs(20),
+            'maintenanceStats' => $cacheMaintenanceRepository->getMaintenanceStats(7),
+        ]);
+    });
     $router->register('GET', '/api/v1/observability/events', [$observabilityController, 'events']);
     $router->register('POST', '/api/v1/observability/frontend-events', [$frontendTelemetryController, 'ingest']);
 
