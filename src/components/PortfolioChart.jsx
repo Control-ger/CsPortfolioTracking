@@ -120,6 +120,7 @@ function normalizeHistory(history) {
         date: entry?.date ?? "",
         timestamp,
         wert,
+        growthPercent: entry?.growthPercent,
       };
     })
     .filter(Boolean)
@@ -162,15 +163,9 @@ export const PortfolioChart = ({
       return [];
     }
 
-    const baseValue = visibleHistory[0].wert;
-
     return visibleHistory.map((entry) => {
       const providedGrowthPercent = Number(entry?.growthPercent);
-      const growthPercent = Number.isFinite(providedGrowthPercent)
-        ? providedGrowthPercent
-        : Number.isFinite(baseValue) && baseValue > 0
-          ? ((entry.wert - baseValue) / baseValue) * 100
-          : 0;
+      const growthPercent = Number.isFinite(providedGrowthPercent) ? providedGrowthPercent : 0;
 
       return {
         ...entry,

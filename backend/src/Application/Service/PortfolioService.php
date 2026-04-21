@@ -210,10 +210,12 @@ final class PortfolioService
                 'date' => self::formatSnapshotDate((string) $row['date']),
                 'wert' => (float) $row['total_value'],
                 'invested' => (float) ($row['invested_value'] ?? 0.0),
-                'growthPercent' => self::calculateGrowthPercent(
-                    (float) ($row['total_value'] ?? 0.0),
-                    (float) ($row['invested_value'] ?? 0.0)
-                ),
+                'growthPercent' => isset($row['growth_percent']) && is_numeric($row['growth_percent'])
+                    ? (float) $row['growth_percent']
+                    : self::calculateGrowthPercent(
+                        (float) ($row['total_value'] ?? 0.0),
+                        (float) ($row['invested_value'] ?? 0.0)
+                    ),
             ],
             $rows
         );
@@ -253,10 +255,12 @@ final class PortfolioService
                 'quantity' => (int) $row['quantity'],
                 'unitPrice' => (float) $row['unit_price'],
                 'invested' => (float) ($row['invested_value'] ?? 0.0),
-                'growthPercent' => self::calculateGrowthPercent(
-                    (float) ($row['total_value'] ?? 0.0),
-                    (float) ($row['invested_value'] ?? 0.0)
-                ),
+                'growthPercent' => isset($row['growth_percent']) && is_numeric($row['growth_percent'])
+                    ? (float) $row['growth_percent']
+                    : self::calculateGrowthPercent(
+                        (float) ($row['total_value'] ?? 0.0),
+                        (float) ($row['invested_value'] ?? 0.0)
+                    ),
             ],
             $rows
         );
@@ -276,15 +280,20 @@ final class PortfolioService
         $totalValue = $value ?? $summary->totalValue;
         $totalInvested = $summary->totalInvested;
         $snapshotTime = $this->currentHourBucket();
-        $this->portfolioHistoryRepository->upsertForDate($snapshotTime, $totalValue, $totalInvested);
+        $portfolioGrowthPercent = self::calculateGrowthPercent($totalValue, $totalInvested);
+        $this->portfolioHistoryRepository->upsertForDate($snapshotTime, $totalValue, $totalInvested, $portfolioGrowthPercent);
         foreach ($rows as $row) {
+            $positionTotalValue = (float) $row['currentValue'];
+            $positionInvestedValue = (float) ($row['totalInvested'] ?? 0.0);
+            $positionGrowthPercent = self::calculateGrowthPercent($positionTotalValue, $positionInvestedValue);
             $this->positionHistoryRepository->upsertSnapshot(
                 investmentId: (int) $row['id'],
                 date: $snapshotTime,
                 quantity: (int) $row['quantity'],
                 unitPrice: (float) $row['displayPrice'],
-                totalValue: (float) $row['currentValue'],
-                investedValue: (float) ($row['totalInvested'] ?? 0.0)
+                totalValue: $positionTotalValue,
+                investedValue: $positionInvestedValue,
+                growthPercent: $positionGrowthPercent
             );
         }
 
@@ -296,11 +305,12 @@ final class PortfolioService
             [
                 'date' => $snapshotTime,
                 'totalValue' => $totalValue,
+                'growthPercent' => $portfolioGrowthPercent,
                 'positions' => count($rows),
             ]
         );
 
-        return ['date' => $snapshotTime, 'totalValue' => $totalValue];
+        return ['date' => $snapshotTime, 'totalValue' => $totalValue, 'growthPercent' => $portfolioGrowthPercent];
     }
 
     public function getComposition(): array

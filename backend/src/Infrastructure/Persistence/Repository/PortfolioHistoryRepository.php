@@ -19,6 +19,7 @@ final class PortfolioHistoryRepository
             date DATETIME NOT NULL UNIQUE,
             total_value DECIMAL(10, 2) NOT NULL,
             invested_value DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            growth_percent DECIMAL(8, 4) NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_date (date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
@@ -39,11 +40,12 @@ final class PortfolioHistoryRepository
 
         $this->ensureDateColumnSupportsTime();
         $this->ensureInvestedValueColumn();
+        $this->ensureGrowthPercentColumn();
     }
 
     public function findAll(): array
     {
-        $sql = 'SELECT id, date, total_value, invested_value FROM portfolio_history ORDER BY date ASC';
+        $sql = 'SELECT id, date, total_value, invested_value, growth_percent FROM portfolio_history ORDER BY date ASC';
 
         try {
             $stmt = $this->pdo->query($sql);
@@ -59,14 +61,14 @@ final class PortfolioHistoryRepository
         }
     }
 
-    public function upsertForDate(string $date, float $totalValue, float $investedValue): void
+    public function upsertForDate(string $date, float $totalValue, float $investedValue, ?float $growthPercent = null): void
     {
-        $sql = 'INSERT INTO portfolio_history (date, total_value, invested_value) VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE total_value = VALUES(total_value), invested_value = VALUES(invested_value)';
+        $sql = 'INSERT INTO portfolio_history (date, total_value, invested_value, growth_percent) VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE total_value = VALUES(total_value), invested_value = VALUES(invested_value), growth_percent = VALUES(growth_percent)';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$date, $totalValue, $investedValue]);
+            $stmt->execute([$date, $totalValue, $investedValue, $growthPercent]);
         } catch (Throwable $exception) {
             RepositoryObservability::upsertFailed(
                 self::class,
@@ -161,6 +163,52 @@ final class PortfolioHistoryRepository
                 $alterSql,
                 $exception,
                 ['table' => 'portfolio_history', 'column' => 'invested_value']
+            );
+            throw $exception;
+        }
+    }
+
+    private function ensureGrowthPercentColumn(): void
+    {
+        // Ensure invested_value exists first (required for AFTER clause)
+        $this->ensureInvestedValueColumn();
+
+        $checkSql = "SHOW COLUMNS FROM portfolio_history LIKE 'growth_percent'";
+
+        try {
+            $stmt = $this->pdo->query($checkSql);
+            $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $checkSql,
+                $exception,
+                ['table' => 'portfolio_history', 'column' => 'growth_percent']
+            );
+            throw $exception;
+        }
+
+        if ($row !== false && $row !== null) {
+            return;
+        }
+
+        $alterSql = 'ALTER TABLE portfolio_history ADD COLUMN growth_percent DECIMAL(8, 4) NULL AFTER invested_value';
+
+        try {
+            $this->pdo->exec($alterSql);
+            RepositoryObservability::migrationColumnAdded(
+                self::class,
+                'portfolio_history',
+                'growth_percent'
+            );
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $alterSql,
+                $exception,
+                ['table' => 'portfolio_history', 'column' => 'growth_percent']
             );
             throw $exception;
         }

@@ -22,6 +22,7 @@ final class PositionHistoryRepository
             unit_price DECIMAL(10, 2) NOT NULL,
             total_value DECIMAL(12, 2) NOT NULL,
             invested_value DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            growth_percent DECIMAL(8, 4) NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY unique_investment_date (investment_id, date),
             INDEX idx_investment_date (investment_id, date)
@@ -43,6 +44,7 @@ final class PositionHistoryRepository
 
         $this->ensureDateColumnSupportsTime();
         $this->ensureInvestedValueColumn();
+        $this->ensureGrowthPercentColumn();
     }
 
     public function upsertSnapshot(
@@ -51,19 +53,21 @@ final class PositionHistoryRepository
         int $quantity,
         float $unitPrice,
         float $totalValue,
-        float $investedValue
+        float $investedValue,
+        ?float $growthPercent = null
     ): void {
-        $sql = 'INSERT INTO position_history (investment_id, date, quantity, unit_price, total_value, invested_value)
-             VALUES (?, ?, ?, ?, ?, ?)
+        $sql = 'INSERT INTO position_history (investment_id, date, quantity, unit_price, total_value, invested_value, growth_percent)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                  quantity = VALUES(quantity),
                  unit_price = VALUES(unit_price),
                  total_value = VALUES(total_value),
-                 invested_value = VALUES(invested_value)';
+                 invested_value = VALUES(invested_value),
+                 growth_percent = VALUES(growth_percent)';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$investmentId, $date, $quantity, $unitPrice, $totalValue, $investedValue]);
+            $stmt->execute([$investmentId, $date, $quantity, $unitPrice, $totalValue, $investedValue, $growthPercent]);
         } catch (Throwable $exception) {
             RepositoryObservability::upsertFailed(
                 self::class,
@@ -78,7 +82,7 @@ final class PositionHistoryRepository
 
     public function findHistoryByInvestmentId(int $investmentId): array
     {
-        $sql = 'SELECT date, quantity, unit_price, total_value, invested_value
+        $sql = 'SELECT date, quantity, unit_price, total_value, invested_value, growth_percent
              FROM position_history
              WHERE investment_id = ?
              ORDER BY date ASC';
@@ -123,7 +127,11 @@ final class PositionHistoryRepository
                            ELSE 0
                        END AS unit_price,
                        SUM(total_value) AS total_value,
-                       SUM(invested_value) AS invested_value
+                       SUM(invested_value) AS invested_value,
+                       CASE
+                           WHEN SUM(invested_value) > 0 THEN SUM(growth_percent * invested_value) / SUM(invested_value)
+                           ELSE NULL
+                       END AS growth_percent
                 FROM position_history
                 WHERE investment_id IN ({$placeholders})
                 GROUP BY date
@@ -227,6 +235,52 @@ final class PositionHistoryRepository
                 $alterSql,
                 $exception,
                 ['table' => 'position_history', 'column' => 'invested_value']
+            );
+            throw $exception;
+        }
+    }
+
+    private function ensureGrowthPercentColumn(): void
+    {
+        // Ensure invested_value exists first (required for AFTER clause)
+        $this->ensureInvestedValueColumn();
+
+        $checkSql = "SHOW COLUMNS FROM position_history LIKE 'growth_percent'";
+
+        try {
+            $stmt = $this->pdo->query($checkSql);
+            $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $checkSql,
+                $exception,
+                ['table' => 'position_history', 'column' => 'growth_percent']
+            );
+            throw $exception;
+        }
+
+        if ($row !== false && $row !== null) {
+            return;
+        }
+
+        $alterSql = 'ALTER TABLE position_history ADD COLUMN growth_percent DECIMAL(8, 4) NULL AFTER invested_value';
+
+        try {
+            $this->pdo->exec($alterSql);
+            RepositoryObservability::migrationColumnAdded(
+                self::class,
+                'position_history',
+                'growth_percent'
+            );
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $alterSql,
+                $exception,
+                ['table' => 'position_history', 'column' => 'growth_percent']
             );
             throw $exception;
         }

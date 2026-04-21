@@ -16,9 +16,15 @@ set_time_limit(300); // 5 minutes max
 $backendRoot = dirname(__DIR__);
 $bootstrapPath = $backendRoot . '/backend/src/bootstrap.php';
 
+// Docker: backend is mounted at /var/www/html/api, so bootstrap is at /var/www/html/api/src/bootstrap.php
 if (!is_file($bootstrapPath)) {
-    fwrite(STDERR, "ERROR: Bootstrap file not found at {$bootstrapPath}\n");
-    exit(1);
+    $dockerBootstrapPath = __DIR__ . '/src/bootstrap.php';
+    if (is_file($dockerBootstrapPath)) {
+        $bootstrapPath = $dockerBootstrapPath;
+    } else {
+        fwrite(STDERR, "ERROR: Bootstrap file not found at {$bootstrapPath} or {$dockerBootstrapPath}\n");
+        exit(1);
+    }
 }
 
 require_once $bootstrapPath;
@@ -52,13 +58,14 @@ $status = 'success';
 $errorMessage = null;
 $snapshotSaved = false;
 $snapshotTime = null;
+$syncStatusRepository = null;
 
 try {
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Starting CSFloat price sync...\n");
 
     // Initialize database connection
-    $dbConfig = DatabaseConfig::fromEnv();
-    $pdo = DatabaseConnectionFactory::create($dbConfig);
+    $dbConfig = new DatabaseConfig();
+    $pdo = (new DatabaseConnectionFactory($dbConfig))->create();
 
     // Initialize repositories
     $itemCatalogRepository = new ItemCatalogRepository($pdo);
@@ -121,7 +128,7 @@ try {
     );
 
     // Get all unique item names from portfolio
-    $sql = 'SELECT DISTINCT market_hash_name FROM investments WHERE market_hash_name IS NOT NULL';
+    $sql = 'SELECT DISTINCT name FROM investments WHERE name IS NOT NULL';
     $stmt = $pdo->query($sql);
     $items = $stmt->fetchAll(\PDO::FETCH_COLUMN, 0);
 
@@ -204,7 +211,9 @@ try {
     
     try {
         $duration = round(microtime(true) - $startTime, 2);
-        $syncStatusRepository->recordSync('failed', $syncedCount, $errorCount, $rateLimitedCount, $errorMessage, $duration);
+        if ($syncStatusRepository !== null) {
+            $syncStatusRepository->recordSync('failed', $syncedCount, $errorCount, $rateLimitedCount, $errorMessage, $duration);
+        }
     } catch (Throwable $logError) {
         fwrite(STDERR, "Failed to log error: " . $logError->getMessage() . "\n");
     }
