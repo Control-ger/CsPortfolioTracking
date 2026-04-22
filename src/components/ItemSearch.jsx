@@ -8,6 +8,7 @@ import {
   ChevronsRight,
   ChevronLeft,
   ChevronRight,
+  Compass,
   LoaderCircle,
   Plus,
   Search,
@@ -66,6 +67,69 @@ const SORT_OPTIONS = [
   { value: "price_desc", label: "Preis absteigend" },
 ];
 
+const SEARCH_ALIASES = [
+  { pattern: /[()\[\]{}]/g, replacement: " " },
+  { pattern: /\bcases\b/gi, replacement: "case" },
+  { pattern: /\bstickers\b/gi, replacement: "sticker" },
+  { pattern: /\bcapsules\b/gi, replacement: "capsule" },
+  { pattern: /\bmusic kits\b/gi, replacement: "music kit" },
+  { pattern: /\bsouvenir packages\b/gi, replacement: "souvenir package" },
+  { pattern: /\bhandschuhe\b/gi, replacement: "gloves" },
+  { pattern: /\bhandschuh\b/gi, replacement: "glove" },
+  { pattern: /\bgloves\b/gi, replacement: "glove" },
+];
+
+const BROWSE_KEYWORD_MAP = {
+  case: "case",
+  cases: "case",
+  sticker: "sticker",
+  stickers: "sticker",
+  capsule: "sticker_capsule",
+  capsules: "sticker_capsule",
+  patch: "patch",
+  patches: "patch",
+  "music kit": "music_kit",
+  "music kits": "music_kit",
+  agent: "agent",
+  agents: "agent",
+  key: "key",
+  keys: "key",
+  charm: "charm",
+  charms: "charm",
+  graffiti: "graffiti",
+  glove: "skin",
+  gloves: "skin",
+  handschuh: "skin",
+  handschuhe: "skin",
+};
+
+const QUICK_BROWSE_CHIPS = [
+  { label: "Cases", type: "case" },
+  { label: "Sticker", type: "sticker" },
+  { label: "Capsules", type: "sticker_capsule" },
+  { label: "Patches", type: "patch" },
+  { label: "Music Kits", type: "music_kit" },
+  { label: "Agents", type: "agent" },
+  { label: "Charms", type: "charm" },
+];
+
+function normalizeSearchTerm(term) {
+  const trimmed = term.trim().replace(/\s+/g, " ");
+  if (trimmed === "") {
+    return "";
+  }
+
+  return SEARCH_ALIASES.reduce(
+    (current, alias) => current.replace(alias.pattern, alias.replacement),
+    trimmed,
+  );
+}
+
+function resolveKeywordBrowseType(term) {
+  const normalized = term.trim().toLowerCase();
+  return BROWSE_KEYWORD_MAP[normalized] || null;
+}
+
 export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [itemType, setItemType] = useState("all");
@@ -82,17 +146,21 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [warnings, setWarnings] = useState([]);
 
   const wearEnabled = itemType === "skin";
-  const normalizedTerm = searchTerm.trim();
-  const canBrowseWithoutQuery = BROWSABLE_ITEM_TYPES.has(itemType);
-  const isBrowseRequest = normalizedTerm.length === 0 && canBrowseWithoutQuery;
-  const shouldSearch = normalizedTerm.length >= 2 || isBrowseRequest;
+  const normalizedTerm = normalizeSearchTerm(searchTerm);
+  const keywordBrowseType = itemType === "all" ? resolveKeywordBrowseType(normalizedTerm) : null;
+  const effectiveItemType = keywordBrowseType || itemType;
+  const effectiveTerm = keywordBrowseType ? "" : normalizedTerm;
+  const canBrowseWithoutQuery = BROWSABLE_ITEM_TYPES.has(effectiveItemType);
+  const isBrowseRequest = effectiveTerm.length === 0 && canBrowseWithoutQuery;
+  const shouldSearch = effectiveTerm.length >= 2 || isBrowseRequest;
+  const hasMorePages = page < totalPages;
 
   useEffect(() => {
     setPage(1);
   }, [searchTerm, itemType, wear, sortBy]);
 
   useEffect(() => {
-    const activeWear = wearEnabled ? wear : "all";
+    const activeWear = effectiveItemType === "skin" ? wear : "all";
 
     if (!shouldSearch) {
       setResults([]);
@@ -111,9 +179,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
         setError("");
 
         const response = await searchWatchlistItems(
-          normalizedTerm,
+          effectiveTerm,
           {
-            itemType,
+            itemType: effectiveItemType,
             wear: activeWear,
             sortBy,
           },
@@ -123,7 +191,21 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
         if (!cancelled) {
           const data = response?.data;
-          setResults(data?.items || []);
+          const nextItems = data?.items || [];
+          setResults((currentItems) => {
+            if (page <= 1) {
+              return nextItems;
+            }
+
+            const existingNames = new Set(currentItems.map((entry) => entry.marketHashName));
+            const merged = [...currentItems];
+            nextItems.forEach((entry) => {
+              if (!existingNames.has(entry.marketHashName)) {
+                merged.push(entry);
+              }
+            });
+            return merged;
+          });
           setTotalItems(Number(data?.totalItems || 0));
           setTotalPages(Number(data?.totalPages || 0));
           setBrowseMode(Boolean(data?.browseMode));
@@ -152,7 +234,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [itemType, normalizedTerm, page, shouldSearch, sortBy, wear, wearEnabled]);
+  }, [effectiveItemType, effectiveTerm, page, shouldSearch, sortBy, wear]);
 
   const isAlreadyInWatchlist = (itemName) =>
     existingItems.some((item) => item.name === itemName);
@@ -163,6 +245,13 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     if (nextType !== "skin") {
       setWear("all");
     }
+  };
+
+  const handleQuickBrowse = (nextType) => {
+    setSearchTerm("");
+    setSortBy("relevance");
+    handleTypeChange(nextType);
+    setPage(1);
   };
 
   const handleAddItem = async (candidate) => {
@@ -224,12 +313,26 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     }
 
     return (
-      <div className="flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-xs text-muted-foreground">
-          {totalItems} Treffer | Seite {page} von {totalPages}
-          {browseMode ? " | Browse-Modus" : ""}
+      <div className="space-y-2 rounded-lg border px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            {results.length} / {totalItems} Treffer angezeigt | Seite {page} von {totalPages}
+            {browseMode ? " | Browse-Modus" : ""}
+          </span>
+          {hasMorePages && (
+            <button
+              type="button"
+              onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+              disabled={isSearching}
+              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSearching ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              Mehr laden
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-1">
+
+        <div className="flex items-center gap-1 overflow-x-auto">
           <button
             type="button"
             onClick={() => setPage(1)}
@@ -305,8 +408,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     if (!shouldSearch) {
       return (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          Suche nach mindestens 2 Zeichen oder waehle einen browsebaren
-          Item-Typ wie Case, Sticker oder Agent.
+          Suche mit mindestens 2 Zeichen oder starte mit Kategorien wie
+          "cases", "stickers", "music kits". Alternativ oben direkt per
+          Kategorie browsen.
         </div>
       );
     }
@@ -335,8 +439,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     if (results.length === 0) {
       return (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          Keine passenden Items fuer die aktuelle Such- und Filterkombination
-          gefunden.
+          Keine passenden Items fuer diese Kombination gefunden. Tipp: Nutze
+          die Kategorie-Chips oder versuche Begriffe wie "case", "sticker",
+          "ak-47", "moto".
         </div>
       );
     }
@@ -383,7 +488,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-primary">
-                    {candidate.livePriceEur.toFixed(2)} EUR
+                    {typeof candidate.livePriceEur === "number"
+                      ? `${candidate.livePriceEur.toFixed(2)} EUR`
+                      : "Preis folgt"}
                   </p>
                   <PriceSourceBadge
                     priceSource={candidate.priceSource}
@@ -438,6 +545,36 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             className="h-10 w-full rounded-lg border bg-background py-2 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             disabled={submittingItem !== ""}
           />
+        </div>
+
+        {keywordBrowseType && (
+          <p className="text-xs text-muted-foreground">
+            Kategorie erkannt: Suche wird als Browse fuer "{keywordBrowseType}" ausgefuehrt.
+          </p>
+        )}
+
+        <div className="rounded-lg border bg-muted/20 p-2.5">
+          <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Compass className="h-3.5 w-3.5" />
+            Schnell browsebar nach Kategorie
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK_BROWSE_CHIPS.map((chip) => (
+              <button
+                key={chip.type}
+                type="button"
+                onClick={() => handleQuickBrowse(chip.type)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  itemType === chip.type
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                }`}
+                disabled={submittingItem !== ""}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">

@@ -99,16 +99,31 @@ final class SteamMarketClient
             ]
         );
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'CsPortfolioTracking/1.0');
+        $attempts = [
+            'CsPortfolioTracking/1.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        ];
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
+        $response = false;
+        $httpCode = 0;
+        $curlError = '';
+
+        foreach ($attempts as $userAgent) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_USERAGENT, $userAgent);
+
+            $response = curl_exec($ch);
+            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = (string) curl_error($ch);
+            curl_close($ch);
+
+            if ($response !== false && $httpCode === 200 && is_string($response) && $response !== '') {
+                break;
+            }
+        }
         $durationMs = (int) round((microtime(true) - $start) * 1000);
 
         if ($response === false) {

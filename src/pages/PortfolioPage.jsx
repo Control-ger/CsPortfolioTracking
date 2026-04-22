@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useModal } from "@/ModalContext";
 import { ApiWarnings } from "@/components/ApiWarnings";
@@ -9,6 +9,7 @@ import { ItemDetailPanel } from "@/components/ItemDetailPanel";
 import { CsFloatTradeSyncModal } from "@/components/CsFloatTradeSyncModal";
 import { PortfolioChart } from "@/components/PortfolioChart";
 import { PortfolioCompositionChart } from "@/components/PortfolioCompositionChart";
+import { PortfolioHeaderCard } from "@/components/PortfolioHeaderCard";
 import { StatCard } from "@/components/StatsCards";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
@@ -67,7 +68,9 @@ function formatRelativeHours(hours) {
   return `${Math.max(1, Math.round(hours))}h`;
 }
 
-export function PortfolioPage() {
+export function PortfolioPage({ initialTab = "overview" }) {
+  const [searchParams] = useSearchParams();
+  const resolvedInitialTab = searchParams.get("tab") || initialTab;
   const {
     enrichedInvestments,
     isLoading: portfolioLoading,
@@ -93,9 +96,14 @@ export function PortfolioPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
   const [selectedItemHistoryLoading, setSelectedItemHistoryLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(resolvedInitialTab);
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
+  const [hoveredChartData, setHoveredChartData] = useState(null);
+
+  useEffect(() => {
+    setActiveTab(resolvedInitialTab);
+  }, [resolvedInitialTab]);
 
   const handleExcludeChange = async (itemId, excluded) => {
     if (excluded) {
@@ -168,6 +176,11 @@ export function PortfolioPage() {
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
   const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
+  const headerPortfolioValue = hoveredChartData?.wert ?? (stats.totalValue || 0);
+  const headerPortfolioPercent = hoveredChartData?.growthPercent ?? (stats.totalRoiPercent || 0);
+  const headerPortfolioPositive = hoveredChartData
+    ? Number(hoveredChartData.growthPercent) >= 0
+    : Boolean(stats.isPositive);
   const showCsUpdateBanner =
     !csUpdatesLoading &&
     Boolean(latestCsUpdate) &&
@@ -175,12 +188,13 @@ export function PortfolioPage() {
     latestCsUpdateAgeHours <= 12;
 
   return (
-    <div className="min-h-screen bg-background p-4 font-sans text-foreground sm:p-6 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
-        <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+    <div className="min-h-screen bg-background font-sans text-foreground pb-20">
+      <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8 p-4 sm:p-6 md:p-8">
+        {/* Header - nur auf Desktop sichtbar */}
+        <header className="hidden sm:flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
           <div className="flex-1">
-            <h1 className="text-2xl font-bold tracking-tight text-primary sm:text-3xl">CS Investor Hub</h1>
-            <p className="text-sm text-muted-foreground sm:text-base">Live Tracking via CSFloat and Currency API</p>
+            <h1 className="text-2xl font-bold tracking-tight text-primary md:text-3xl">CS Investor Hub</h1>
+            <p className="text-sm text-muted-foreground md:text-base">Live Tracking via CSFloat and Currency API</p>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -191,19 +205,37 @@ export function PortfolioPage() {
         <ApiWarnings warnings={warnings} />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {error && (
-            <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-          <TabsList className="grid w-full grid-cols-3 gap-1 sm:max-w-160">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
-            <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
-            <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
-          </TabsList>
+          {/* Tab Navigation - nur auf Desktop sichtbar */}
+          <div className="hidden sm:block">
+            {error && (
+              <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+            <TabsList className="grid w-full grid-cols-3 gap-1 sm:max-w-160">
+              <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
+              <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
+              <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
-            <div className="grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
+            {/* Mobile: PortfolioHeaderCard oben, Desktop: Alte Stats-Cards */}
+            <div className="sm:hidden">
+              <PortfolioHeaderCard
+                totalValue={headerPortfolioValue}
+                totalRoiPercent={headerPortfolioPercent}
+                isPositive={headerPortfolioPositive}
+                totalQuantity={stats.totalQuantity}
+                liveItemsCount={liveItems}
+                staleItemsCount={staleItems}
+                freshestDataAgeSeconds={stats.freshestDataAgeSeconds}
+                oldestDataAgeSeconds={stats.oldestDataAgeSeconds}
+              />
+            </div>
+
+            {/* Desktop: Alte Stats-Cards */}
+            <div className="hidden sm:grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
               <StatCard
                 title="Portfolio Wert (Live)"
                 value={`${(stats.totalValue || 0).toFixed(2)} EUR`}
@@ -239,7 +271,18 @@ export function PortfolioPage() {
             </div>
 
             <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
-              <PortfolioChart history={portfolioHistory} isLoading={portfolioLoading} />
+              <PortfolioChart
+                history={portfolioHistory}
+                isLoading={portfolioLoading}
+                onHoverChange={setHoveredChartData}
+              />
+              <div className="hidden md:block">
+                <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
+              </div>
+            </div>
+
+            {/* Mobile: Watchlist full-width */}
+            <div className="sm:hidden">
               <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
             </div>
 

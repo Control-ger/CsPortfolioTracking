@@ -15,8 +15,8 @@ final class WatchlistSearchCandidateDto
         public readonly ?string $wearLabel,
         public readonly ?string $iconUrl,
         public readonly ?string $priceSource,
-        public readonly float $livePriceEur,
-        public readonly float $livePriceUsd
+        public readonly ?float $livePriceEur,
+        public readonly ?float $livePriceUsd
     ) {
     }
 

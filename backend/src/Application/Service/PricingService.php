@@ -212,6 +212,7 @@ final class PricingService
         $resolvedQuery = $normalizedQuery !== ''
             ? $normalizedQuery
             : $this->resolveBrowseQuery($itemTypeFilter);
+        $resolvedQuery = $this->normalizeSearchQuery($resolvedQuery);
 
         if ($resolvedQuery === '' || ($normalizedQuery === '' && !$browseMode)) {
             return [
@@ -315,8 +316,12 @@ final class PricingService
                 wearLabel: isset($match['wearLabel']) ? (string) $match['wearLabel'] : null,
                 iconUrl: isset($match['iconUrl']) ? (string) $match['iconUrl'] : null,
                 priceSource: isset($match['priceSource']) ? (string) $match['priceSource'] : null,
-                livePriceEur: (float) $match['livePriceEur'],
-                livePriceUsd: (float) $match['livePriceUsd']
+                livePriceEur: isset($match['livePriceEur']) && is_numeric($match['livePriceEur'])
+                    ? (float) $match['livePriceEur']
+                    : null,
+                livePriceUsd: isset($match['livePriceUsd']) && is_numeric($match['livePriceUsd'])
+                    ? (float) $match['livePriceUsd']
+                    : null
             );
 
             $candidates[] = $dto->toArray();
@@ -697,10 +702,31 @@ final class PricingService
         };
     }
 
+    private function normalizeSearchQuery(string $query): string
+    {
+        $normalized = trim(preg_replace('/\s+/', ' ', $query) ?? '');
+        if ($normalized === '') {
+            return '';
+        }
+
+        $lower = mb_strtolower($normalized, 'UTF-8');
+
+        return match ($lower) {
+            'cases' => 'case',
+            'stickers' => 'sticker',
+            'capsules' => 'capsule',
+            'music kits' => 'music kit',
+            'souvenir packages' => 'souvenir package',
+            'handschuhe', 'handschuh', 'gloves' => 'glove',
+            default => $normalized,
+        };
+    }
+
     private function prepareSearchMatches(array $matchedItems): array
     {
         $preparedMatches = [];
         $presentationCache = [];
+        $usdToEurRate = $this->getUsdToEurRate();
 
         foreach ($matchedItems as $match) {
             $marketHashName = (string) ($match['marketHashName'] ?? '');
@@ -718,11 +744,26 @@ final class PricingService
                 $presentationCache[$marketHashName] = $presentation;
             }
 
-            if (!isset($presentation['priceEur'], $presentation['priceUsd'])) {
-                continue;
+            $priceEur = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
+            $priceUsd = isset($presentation['priceUsd']) ? (float) $presentation['priceUsd'] : null;
+            $priceSource = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
+
+            if ($priceEur === null || $priceUsd === null) {
+                $steamHint = is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null;
+                $hintPriceUsd = isset($steamHint['sellPriceUsd']) && is_numeric($steamHint['sellPriceUsd'])
+                    ? (float) $steamHint['sellPriceUsd']
+                    : null;
+
+                if ($hintPriceUsd !== null && $hintPriceUsd > 0) {
+                    $priceUsd = round($hintPriceUsd, 2);
+                    $priceEur = round($priceUsd * $usdToEurRate, 2);
+                    $priceSource = self::PRICE_SOURCE_STEAM;
+                }
             }
 
-            $match['sortPriceEur'] = (float) $presentation['priceEur'];
+            if ($priceEur !== null) {
+                $match['sortPriceEur'] = $priceEur;
+            }
             $match['displayName'] = (string) ($match['displayName'] ?? $marketHashName);
             $match['itemType'] = (string) ($presentation['itemType'] ?? $match['itemType'] ?? 'other');
             $match['itemTypeLabel'] = (string) ($presentation['itemTypeLabel'] ?? $match['itemTypeLabel'] ?? 'Other');
@@ -730,9 +771,9 @@ final class PricingService
             $match['wear'] = isset($presentation['wear']) ? (string) $presentation['wear'] : ($match['wear'] ?? null);
             $match['wearLabel'] = isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : ($match['wearLabel'] ?? null);
             $match['iconUrl'] = isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : ($match['iconUrl'] ?? null);
-            $match['priceSource'] = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
-            $match['livePriceEur'] = (float) $presentation['priceEur'];
-            $match['livePriceUsd'] = (float) $presentation['priceUsd'];
+            $match['priceSource'] = $priceSource;
+            $match['livePriceEur'] = $priceEur;
+            $match['livePriceUsd'] = $priceUsd;
             $preparedMatches[] = $match;
         }
 

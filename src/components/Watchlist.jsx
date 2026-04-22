@@ -4,8 +4,9 @@ import { Skeleton } from "./ui/skeleton";
 import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
 import { ApiWarnings } from "./ApiWarnings";
+import { ItemListRow } from "./ItemListRow";
 import { PriceSourceBadge } from "./PriceSourceBadge";
-import { Trash2, TrendingDown, TrendingUp, X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
 import { WatchlistItemModal } from "./WatchlistItemModal";
 
@@ -92,6 +93,29 @@ export const Watchlist = ({ focusTarget = null }) => {
         );
       });
     } catch (requestError) {
+      const isNetworkError = String(requestError?.name || "") === "TypeError";
+
+      if (isNetworkError) {
+        try {
+          const fallbackResponse = await fetchWatchlist({ syncLive: false });
+          const fallbackItems = fallbackResponse?.data || [];
+
+          setWatchlistItems(fallbackItems);
+          setWarnings([
+            {
+              code: "WATCHLIST_SYNC_FALLBACK",
+              label: "Live-Sync eingeschraenkt",
+              message: "Watchlist wurde ohne Live-Sync geladen. Bitte spaeter erneut versuchen.",
+            },
+          ]);
+          return;
+        } catch (fallbackError) {
+          setError(fallbackError.message || "Fehler beim Laden der Watchlist.");
+          setWarnings([]);
+          return;
+        }
+      }
+
       setError(requestError.message || "Fehler beim Laden der Watchlist.");
       setWarnings([]);
     } finally {
@@ -177,110 +201,56 @@ export const Watchlist = ({ focusTarget = null }) => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 sm:gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
-          <div className="space-y-3 sm:space-y-4">
-            <Card>
-              <CardHeader className="pb-2 sm:pb-4">
-                <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 sm:space-y-3">
-                  {watchlistItems.map((item) => {
-                    const isUp = item.trend === "up";
-                    const isDown = item.trend === "down";
-                    const Icon = isUp
-                      ? TrendingUp
-                      : isDown
-                        ? TrendingDown
-                        : null;
-                    const colorClass = isUp
-                      ? "text-green-600"
-                      : isDown
-                        ? "text-red-600"
-                        : "text-muted-foreground";
-
-                    return (
-                      <div
-                        key={item.id}
-                        ref={(node) => {
-                          if (node) {
-                            itemRefs.current.set(item.id, node);
-                            return;
-                          }
-
-                          itemRefs.current.delete(item.id);
-                        }}
-                        className={`cursor-pointer rounded-lg border p-2 sm:p-4 transition-colors ${
-                          selectedItem?.id === item.id
-                            ? "border-primary bg-primary/10"
-                            : "hover:bg-muted"
-                        }`}
-                        onClick={() => {
-                          setSelectedItem(item);
-                          if (window.innerWidth < 768) {
-                            setIsModalOpen(true);
-                          }
-                        }}
-                      >
-                        <div className="flex items-start justify-between gap-2 sm:gap-3">
-                          <div className="flex min-w-0 flex-1 gap-2 sm:gap-3">
-                            <div className="h-10 w-10 sm:h-14 sm:w-14 overflow-hidden rounded-md border bg-muted flex-shrink-0">
-                              {item.imageUrl ? (
-                                <img
-                                  src={item.imageUrl}
-                                  alt={item.name}
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                  N/A
-                                </div>
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <h3 className="text-xs sm:text-sm font-semibold truncate">
-                                {item.name}
-                              </h3>
-                              <div className="mt-1 sm:mt-2 flex items-center gap-1 sm:gap-2">
-                                {Icon && (
-                                  <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${colorClass}`} />
-                                )}
-                                <span className={`text-xs sm:text-sm ${colorClass}`}>
-                                  {item.changeLabel}
-                                </span>
-                              </div>
-                              {item.currentPrice !== null && (
-                                <div className="mt-1 text-[10px] sm:text-xs text-muted-foreground line-clamp-2">
-                                  <p>Aktuell: {item.currentPrice.toFixed(2)} EUR</p>
-                                  <PriceSourceBadge
-                                    priceSource={item.priceSource}
-                                    compact
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleRemoveItem(item.id);
-                            }}
-                            className="p-1 text-muted-foreground transition-colors hover:text-destructive flex-shrink-0"
-                            title="Aus Watchlist entfernen"
-                          >
-                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+         <div className="grid gap-3 sm:gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
+           <div className="space-y-3 sm:space-y-4">
+             <Card>
+               <CardHeader className="pb-2 sm:pb-4">
+                 <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
+               </CardHeader>
+               <CardContent>
+                 <div className="space-y-2 sm:space-y-3">
+                   {watchlistItems.map((item) => (
+                     <div
+                       key={item.id}
+                       ref={(node) => {
+                         if (node) {
+                           itemRefs.current.set(item.id, node);
+                           return;
+                         }
+                         itemRefs.current.delete(item.id);
+                       }}
+                       className={`relative transition-colors ${
+                         selectedItem?.id === item.id
+                           ? "rounded-lg border-primary bg-primary/10"
+                           : ""
+                       }`}
+                     >
+                       <ItemListRow
+                         item={item}
+                         onClick={() => {
+                           setSelectedItem(item);
+                           if (window.innerWidth < 768) {
+                             setIsModalOpen(true);
+                           }
+                         }}
+                       />
+                       <button
+                         type="button"
+                         onClick={(event) => {
+                           event.stopPropagation();
+                           handleRemoveItem(item.id);
+                         }}
+                         className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground transition-colors hover:text-destructive"
+                         title="Aus Watchlist entfernen"
+                       >
+                         <Trash2 className="h-4 w-4" />
+                       </button>
+                     </div>
+                   ))}
+                 </div>
+               </CardContent>
+             </Card>
+           </div>
 
           <div className="hidden md:block">
             {selectedItem ? (

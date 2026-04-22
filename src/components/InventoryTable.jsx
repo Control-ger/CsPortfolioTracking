@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { ItemListRow } from "@/components/ItemListRow";
 import {
   Table,
   TableBody,
@@ -297,135 +298,72 @@ export function InventoryTable({ investments, onSelectItem }) {
         </Table>
       </div>
 
-      {/* Mobile-View (unter md) */}
-      <div className="space-y-3 md:hidden px-2">
-        <div className="rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
-          <div className="flex items-center justify-between gap-2">
-            <span>Sortierung</span>
-            <span className="font-medium text-foreground">
-              {sortKey === "item"
-                ? "Item"
-                : sortKey === "quantity"
-                  ? "Menge"
-                  : sortKey === "livePrice"
-                    ? "Live Preis"
-                    : "ROI"}{" "}
-              ({sortDirection === "asc" ? "Aufsteigend" : "Absteigend"})
-            </span>
+        {/* Mobile-View (unter md) */}
+        <div className="space-y-3 px-2 md:hidden">
+          <div className="rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between gap-2">
+              <span>Sortierung</span>
+              <span className="font-medium text-foreground">
+                {sortKey === "item"
+                  ? "Item"
+                  : sortKey === "quantity"
+                    ? "Menge"
+                    : sortKey === "livePrice"
+                      ? "Live Preis"
+                      : "ROI"}{" "}
+                ({sortDirection === "asc" ? "Aufsteigend" : "Absteigend"})
+              </span>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                onClick={() => toggleSort("item")}
+              >
+                Item
+              </button>
+              <button
+                type="button"
+                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                onClick={() => toggleSort("quantity")}
+              >
+                Menge
+              </button>
+              <button
+                type="button"
+                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                onClick={() => toggleSort("livePrice")}
+              >
+                Live Preis
+              </button>
+              <button
+                type="button"
+                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                onClick={() => toggleSort("roi")}
+              >
+                ROI
+              </button>
+            </div>
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
-              onClick={() => toggleSort("item")}
-            >
-              Item
-            </button>
-            <button
-              type="button"
-              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
-              onClick={() => toggleSort("quantity")}
-            >
-              Menge
-            </button>
-            <button
-              type="button"
-              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
-              onClick={() => toggleSort("livePrice")}
-            >
-              Live Preis
-            </button>
-            <button
-              type="button"
-              className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
-              onClick={() => toggleSort("roi")}
-            >
-              ROI
-            </button>
-          </div>
+
+          {sortedInvestments.map((item) => (
+            <ItemListRow
+              key={item.id}
+              item={{
+                ...item,
+                currentPrice: item.isLive
+                  ? item.livePrice
+                  : item.buyPrice,
+                roi: item.roi,
+                trend: item.isLive ? (item.roi >= 0 ? "up" : "down") : null,
+                changeLabel: item.isLive
+                  ? `${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`
+                  : "-",
+              }}
+              onClick={() => onSelectItem(item)}
+            />
+          ))}
         </div>
-
-        {sortedInvestments.map((item) => (
-          <div
-            key={item.id}
-            onClick={() => onSelectItem(item)}
-            className="cursor-pointer rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
-          >
-            {/* Item Header */}
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2 flex-1">
-                <ItemThumbnail imageUrl={item.imageUrl} name={item.name} />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium truncate transition-colors hover:text-primary">
-                    {item.name}
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                    <span>{item.type}</span>
-                    <Badge variant="outline" className="text-[9px]">
-                      {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
-                    </Badge>
-                  </span>
-                </div>
-              </div>
-              <div className="text-right">
-                {item.isLive ? (
-                  <div className={`text-sm font-bold whitespace-nowrap ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}>
-                    {`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
-                  </div>
-                ) : (
-                  <div className="text-sm font-bold whitespace-nowrap text-muted-foreground opacity-50">
-                    0.0%
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Item Details Grid */}
-            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-              <div>
-                <span className="text-muted-foreground">Menge:</span>
-                <span className="ml-1 font-mono">{item.quantity}x</span>
-              </div>
-              <div className="text-right">
-                <span className="text-muted-foreground">Einkauf:</span>
-                <span className="ml-1">{formatCurrency(item.buyPrice)}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Live:</span>
-                <span className={`ml-1 font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}>
-                  {item.isLive ? formatCurrency(item.livePrice) : formatCurrency(item.buyPrice)}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-muted-foreground">Break-even:</span>
-                <span className="ml-1">{formatCurrency(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}</span>
-              </div>
-            </div>
-
-            {/* Changes Row */}
-            <div className="flex gap-2 text-xs mb-2">
-              <div className="flex-1">
-                <span className="text-muted-foreground block">24h</span>
-                <ChangeCell euro={item.change24hEuro} percent={item.change24hPercent} />
-              </div>
-              <div className="flex-1">
-                <span className="text-muted-foreground block">7d</span>
-                <ChangeCell euro={item.change7dEuro} percent={item.change7dPercent} />
-              </div>
-              <div className="flex-1">
-                <span className="text-muted-foreground block">30d</span>
-                <ChangeCell euro={item.change30dEuro} percent={item.change30dPercent} />
-              </div>
-            </div>
-
-            {/* Freshness */}
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground text-xs">Freshness:</span>
-              <FreshnessCell item={item} />
-            </div>
-          </div>
-        ))}
-      </div>
     </>
   );
 }

@@ -150,8 +150,10 @@ export const PortfolioChart = ({
   emptyLabel = "Noch keine Historie-Daten verfuegbar",
   valueLabel = "Wert",
   isLoading = false,
+  onHoverChange = null,
 }) => {
   const [rangeKey, setRangeKey] = useState("MAX");
+  const [hoveredIndex, setHoveredIndex] = useState(null);
 
   const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
   const visibleHistory = useMemo(
@@ -261,6 +263,26 @@ export const PortfolioChart = ({
                 right: 2,
                 top: 12,
                 bottom: 6,
+              }}
+              onMouseMove={(state) => {
+                const activeIndex = state?.activeTooltipIndex;
+                if (!Number.isInteger(activeIndex) || !chartData[activeIndex]) {
+                  return;
+                }
+
+                setHoveredIndex(activeIndex);
+                if (onHoverChange) {
+                  const hoveredData = chartData[activeIndex];
+                  onHoverChange({
+                    wert: hoveredData.wert,
+                    growthPercent: hoveredData.growthPercent,
+                    date: hoveredData.date,
+                  });
+                }
+              }}
+              onMouseLeave={() => {
+                setHoveredIndex(null);
+                onHoverChange?.(null);
               }}
             >
               <CartesianGrid vertical={false} />
