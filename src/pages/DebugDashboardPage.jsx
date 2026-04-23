@@ -360,9 +360,9 @@ export function DebugDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8 font-sans text-foreground">
+    <div className="min-h-screen bg-background p-4 sm:p-8 font-sans text-foreground pb-20 md:pb-0">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Observability

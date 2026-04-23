@@ -190,6 +190,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
   return (
     <div className="min-h-screen bg-background font-sans text-foreground pb-20">
       <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8 p-4 sm:p-6 md:p-8">
+        {/* Mobile Header - nur auf Mobile sichtbar */}
+        <header className="flex sm:hidden items-center justify-between">
+          <h1 className="text-lg font-bold tracking-tight text-primary">CS Investor Hub</h1>
+          <ThemeToggle />
+        </header>
+
         {/* Header - nur auf Desktop sichtbar */}
         <header className="hidden sm:flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
           <div className="flex-1">
@@ -292,8 +298,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 {compositionLoading ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                      <div className="lg:col-span-2 flex justify-center">
-                        <Skeleton className="h-[220px] w-full max-w-sm sm:h-[320px]" />
+                        <div className="lg:col-span-2 flex justify-center">
+                          <Skeleton className="h-55 w-full max-w-sm sm:h-80" />
                       </div>
                       <div className="space-y-2">
                         {[1, 2, 3, 4].map((entry) => (
@@ -342,7 +348,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               <div>
                 <h3 className="text-base font-semibold">Inventar importieren</h3>
                 <p className="text-xs text-muted-foreground">
-                  Manueller CSFloat-Sync: zuerst Preview, dann nach Backup-Bestaetigung importieren.
+                  Manueller CSFloat-Sync: zuerst Preview prüfen, dann Import starten.
                 </p>
               </div>
               <Button type="button" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
@@ -401,6 +407,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
           onClose={() => setIsCsFloatSyncOpen(false)}
           onSynced={async () => {
             await refreshPortfolio();
+            setActiveTab("inventory");
+            setIsCsFloatSyncOpen(false);
           }}
         />
       </div>

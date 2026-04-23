@@ -84,7 +84,7 @@ final class CsFloatSyncController
 
                 JsonResponseFactory::error(
                     'CSFLOAT_SYNC_BACKUP_REQUIRED',
-                    'Bitte bestaetige zuerst, dass du ein Datenbank-Backup erstellt hast.',
+                    'Bitte bestaetige zuerst das Preview.',
                     ['backupConfirmed' => false],
                     400
                 );

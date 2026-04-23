@@ -52,6 +52,9 @@ final class WatchlistService
                 $priceChangePercent = ($priceChange / $oldPrice) * 100;
             }
 
+            $priceHistory = $this->priceHistoryRepository->findHistoryByItem($name, $historyFrom);
+            $priceHistoryWithGrowth = $this->enrichHistoryWithGrowthPercent($priceHistory);
+
             $dto = new WatchlistItemDto(
                 id: (int) $item['id'],
                 name: $name,
@@ -61,7 +64,7 @@ final class WatchlistService
                 priceSource: is_string($priceSource) ? $priceSource : null,
                 priceChange: $priceChange,
                 priceChangePercent: $priceChangePercent,
-                priceHistory: $this->priceHistoryRepository->findHistoryByItem($name, $historyFrom)
+                priceHistory: $priceHistoryWithGrowth
             );
 
             $result[] = $dto->toArray();
@@ -269,5 +272,31 @@ final class WatchlistService
     private function currentHourBucket(): string
     {
         return date('Y-m-d H:00:00');
+    }
+
+    private function enrichHistoryWithGrowthPercent(array $priceHistory): array
+    {
+        if (empty($priceHistory)) {
+            return [];
+        }
+
+        $firstPrice = $priceHistory[0]['wert'] ?? null;
+        if ($firstPrice === null || $firstPrice == 0) {
+            return $priceHistory;
+        }
+
+        return array_map(
+            static function (array $entry) use ($firstPrice): array {
+                $currentPrice = $entry['wert'] ?? 0;
+                $growthPercent = (($currentPrice - $firstPrice) / $firstPrice) * 100;
+
+                return [
+                    'date' => $entry['date'],
+                    'wert' => $currentPrice,
+                    'growthPercent' => $growthPercent,
+                ];
+            },
+            $priceHistory
+        );
     }
 }

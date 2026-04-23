@@ -426,7 +426,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-8 font-sans text-foreground">
+    <div className="min-h-screen bg-background p-4 sm:p-8 font-sans text-foreground pb-20 md:pb-0">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Header */}
         <header className="flex items-center justify-between gap-4">

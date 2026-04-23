@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 export default function CsUpdatesPage() {
   return (
-    <div className="min-h-screen bg-background p-4 font-sans text-foreground sm:p-6 md:p-8">
+    <div className="min-h-screen bg-background p-4 font-sans text-foreground sm:p-6 md:p-8 pb-20 md:pb-0">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>

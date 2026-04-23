@@ -35,9 +35,9 @@ function Stat({ label, value, tone = "muted" }) {
         : "text-foreground";
 
   return (
-    <div className="rounded-md border p-3">
-      <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-lg font-bold ${toneClass}`}>{value}</div>
+    <div className="rounded-md border px-2 py-1.5 sm:p-2">
+      <div className="text-[9px] sm:text-[10px] uppercase text-muted-foreground leading-tight">{label}</div>
+      <div className={`text-sm sm:text-base font-bold ${toneClass}`}>{value}</div>
     </div>
   );
 }
@@ -46,15 +46,13 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [executing, setExecuting] = useState(false);
-  const [backupConfirmed, setBackupConfirmed] = useState(false);
+  const [previewConfirmed, setPreviewConfirmed] = useState(false);
   const [error, setError] = useState("");
-  const [executeResult, setExecuteResult] = useState(null);
 
   const loadPreview = async () => {
     try {
       setLoadingPreview(true);
       setError("");
-      setExecuteResult(null);
       const response = await fetchCsFloatTradeSyncPreview({ type: "buy", limit: 1000, maxPages: 10 });
       setPreview(response?.data || null);
     } catch (requestError) {
@@ -69,9 +67,8 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
       return;
     }
 
-    setBackupConfirmed(false);
+    setPreviewConfirmed(false);
     setPreview(null);
-    setExecuteResult(null);
     void loadPreview();
   }, [isOpen]);
 
@@ -89,12 +86,11 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         type: preview?.requested?.type || "buy",
         limit: preview?.requested?.limit || 1000,
         maxPages: preview?.requested?.maxPages || 10,
-        backupConfirmed,
+        backupConfirmed: previewConfirmed,
       });
       const payload = response?.data || null;
-      setExecuteResult(payload);
-      onSynced?.(payload);
-      await loadPreview();
+      await onSynced?.(payload);
+      onClose();
     } catch (requestError) {
       setError(requestError.message || "Import konnte nicht ausgefuehrt werden.");
     } finally {
@@ -110,58 +106,39 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
       size="full"
       className="p-0"
     >
-      <div className="flex h-full flex-col gap-4 overflow-hidden">
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-          Bitte vor dem Import manuell ein Datenbank-Backup erstellen. Der Sync importiert neue CSFloat-Trades als Portfolio-Items.
-        </div>
-
+      <div className="flex h-full flex-col gap-3 overflow-y-auto">
         {error ? (
           <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <Stat label="Rohdaten" value={preview ? preview.totalFetched : "-"} />
           <Stat label="Normalisiert" value={preview ? preview.normalizedCount : "-"} />
           <Stat label="Importierbar" value={preview ? preview.insertable : "-"} tone="positive" />
           <Stat label="Duplikate" value={preview ? preview.duplicates : "-"} tone="negative" />
           <Stat label="Seiten" value={preview ? preview.pagesFetched : "-"} />
+          <Stat label="Übersprungen" value={preview ? preview.skipped ?? 0 : "-"} />
         </div>
 
         {preview?.clustering?.applied ? (
-          <div className="rounded-lg border p-3 text-xs text-muted-foreground">
-            Clustering aktiv: {preview.clustering.baseNormalizedCount} normalisierte Trades wurden zu {preview.clustering.clusteredCount} Positionen zusammengefasst ({preview.clustering.collapsedTrades} zusammengelegt).
+          <div className="rounded-lg border px-2 py-1.5 text-[10px] text-muted-foreground">
+            Clustering: {preview.clustering.baseNormalizedCount} → {preview.clustering.clusteredCount} Positionen
           </div>
         ) : null}
 
         {preview?.skipped > 0 ? (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-            <div className="font-semibold">{preview.skipped} Trades wurden uebersprungen.</div>
-            {skipReasonEntries.length > 0 ? (
-              <div className="mt-1 flex flex-wrap gap-2">
-                {skipReasonEntries.map(([reason, count]) => (
-                  <Badge key={reason} variant="outline" className="border-amber-700/40 text-amber-900 dark:text-amber-200">
-                    {reason}: {count}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-            {skippedExamples.length > 0 ? (
-              <div className="mt-2 space-y-1 text-[11px] text-amber-900/90 dark:text-amber-100/90">
-                {skippedExamples.slice(0, 3).map((example, index) => (
-                  <div key={`${example.reason || "skip"}-${example.externalTradeId || index}`}>
-                    {example.reason}
-                    {example.externalTradeId ? ` | ${example.externalTradeId}` : ""}
-                    {example.name ? ` | ${example.name}` : ""}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {preview?.backupRequired ? (
-          <div className="rounded-lg border p-3 text-xs text-muted-foreground">
-            {preview.disclaimer}
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-900 dark:text-amber-200">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="font-semibold">{preview.skipped} übersprungen:</span>
+              {skipReasonEntries.slice(0, 2).map(([reason, count]) => (
+                <Badge key={reason} variant="outline" className="text-[10px] border-amber-700/40 text-amber-900 dark:text-amber-200">
+                  {reason}: {count}
+                </Badge>
+              ))}
+              {skipReasonEntries.length > 2 && (
+                <span className="text-[10px] text-amber-700">+{skipReasonEntries.length - 2} mehr</span>
+              )}
+            </div>
           </div>
         ) : null}
 
@@ -169,7 +146,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
           <CardHeader className="shrink-0 pb-2">
             <CardTitle className="text-sm uppercase text-muted-foreground">Preview</CardTitle>
           </CardHeader>
-          <CardContent className="min-h-0 flex-1 space-y-3 overflow-hidden">
+          <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             {loadingPreview ? (
               <div className="h-full space-y-2 overflow-hidden pr-1">
                 {[1, 2, 3, 4].map((entry) => (
@@ -217,28 +194,22 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
           </CardContent>
         </Card>
 
-        {executeResult ? (
-          <div className="rounded-lg border bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-            Import fertig: {executeResult.inserted || 0} neu, {executeResult.updated || 0} aktualisiert, {executeResult.duplicates || 0} Duplikate, {executeResult.skipped || 0} uebersprungen.
-          </div>
-        ) : null}
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
-              checked={backupConfirmed}
-              onChange={(event) => setBackupConfirmed(event.target.checked)}
+              checked={previewConfirmed}
+              onChange={(event) => setPreviewConfirmed(event.target.checked)}
               className="h-4 w-4 rounded border border-input"
             />
-            Ich habe ein Backup erstellt
+            Preview bestätigen
           </label>
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button type="button" variant="outline" onClick={loadPreview} disabled={loadingPreview || executing}>
               Preview neu laden
             </Button>
-            <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !backupConfirmed}>
+            <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !previewConfirmed}>
               {executing ? "Import laeuft..." : "Import starten"}
             </Button>
           </div>

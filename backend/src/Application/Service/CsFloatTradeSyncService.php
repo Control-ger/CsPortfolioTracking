@@ -248,6 +248,15 @@ final class CsFloatTradeSyncService
 
             $externalTradeId = $this->resolveTradeIdentifier($trade);
 
+            if ($this->isRefundedTrade($trade)) {
+                $this->registerSkipped($skippedStats, $skippedExamples, 'refunded', [
+                    'externalTradeId' => $externalTradeId,
+                    'name' => $this->resolveDisplayName($trade, $this->resolveMarketHashName($trade)),
+                    'marketHashName' => $this->resolveMarketHashName($trade),
+                ]);
+                continue;
+            }
+
             if (isset($seen[$externalTradeId])) {
                 $this->registerSkipped($skippedStats, $skippedExamples, 'duplicate_in_payload', [
                     'externalTradeId' => $externalTradeId,
@@ -354,8 +363,6 @@ final class CsFloatTradeSyncService
                 'clusteredCount' => (int) ($clusterMeta['clusteredCount'] ?? count($normalized)),
                 'collapsedTrades' => (int) ($clusterMeta['collapsedTrades'] ?? 0),
             ],
-            'backupRequired' => true,
-            'disclaimer' => 'Der Import schreibt neue Trades als Investments in die Datenbank. Vor dem Execute bitte manuell ein DB-Backup anlegen.',
         ];
     }
 
@@ -1024,6 +1031,21 @@ final class CsFloatTradeSyncService
         }
 
         return null;
+    }
+
+    private function isRefundedTrade(array $trade): bool
+    {
+        $state = strtolower(trim((string) $this->resolveString(
+            $trade,
+            ['state'],
+            ['trade', 'state'],
+            ['contract', 'state'],
+            ['status'],
+            ['trade', 'status'],
+            ['contract', 'status']
+        )));
+
+        return $state === 'refunded';
     }
 
     private function resolveString(array $trade, array ...$paths): ?string

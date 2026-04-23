@@ -80,7 +80,7 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md', class
         </div>
 
         {/* Content */}
-        <div className={isFullscreen ? 'flex-1 overflow-hidden p-3 sm:p-6' : 'p-3 sm:p-6'}>{children}</div>
+        <div className={isFullscreen ? 'flex-1 overflow-hidden p-3 sm:p-6 md:pb-6' : 'p-3 sm:p-6'}>{children}</div>
       </div>
     </div>
   );
