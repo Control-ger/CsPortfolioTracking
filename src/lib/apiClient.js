@@ -224,6 +224,18 @@ export async function updateFeeSettings(payload) {
   });
 }
 
+export async function fetchCsFloatApiKeyStatus() {
+  return requestWithMeta("/api/v1/settings/csfloat-api-key");
+}
+
+export async function updateCsFloatApiKey(encryptedKey) {
+  return requestWithMeta("/api/v1/settings/csfloat-api-key", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ encryptedKey }),
+  });
+}
+
 export async function toggleExcludeInvestment(id, exclude) {
   return requestWithMeta(`/api/v1/portfolio/investments/${id}/exclude`, {
     method: "PUT",

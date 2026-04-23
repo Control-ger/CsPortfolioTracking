@@ -35,7 +35,7 @@ function Stat({ label, value, tone = "muted" }) {
         : "text-foreground";
 
   return (
-    <div className="rounded-md border bg-muted/30 p-3">
+    <div className="rounded-md border p-3">
       <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
       <div className={`mt-1 text-lg font-bold ${toneClass}`}>{value}</div>
     </div>
@@ -128,7 +128,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         </div>
 
         {preview?.clustering?.applied ? (
-          <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+          <div className="rounded-lg border p-3 text-xs text-muted-foreground">
             Clustering aktiv: {preview.clustering.baseNormalizedCount} normalisierte Trades wurden zu {preview.clustering.clusteredCount} Positionen zusammengefasst ({preview.clustering.collapsedTrades} zusammengelegt).
           </div>
         ) : null}
@@ -160,7 +160,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         ) : null}
 
         {preview?.backupRequired ? (
-          <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+          <div className="rounded-lg border p-3 text-xs text-muted-foreground">
             {preview.disclaimer}
           </div>
         ) : null}

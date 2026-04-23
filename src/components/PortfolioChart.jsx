@@ -214,8 +214,8 @@ export const PortfolioChart = ({
     <Card>
       <CardHeader className="pb-2 sm:pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
-          <div className="inline-flex w-fit items-center rounded-md border bg-muted/20 p-1">
+          <CardTitle className="hidden text-base sm:block sm:text-lg">{title}</CardTitle>
+          <div className="inline-flex w-fit items-center rounded-md border p-1">
             {RANGE_OPTIONS.map((option) => {
               const isActive = rangeKey === option.key;
 

@@ -28,7 +28,7 @@ export function PortfolioCompositionChart({ data }) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-96 border rounded-lg bg-muted/20">
+      <div className="flex items-center justify-center h-96 border rounded-lg ">
         <p className="text-muted-foreground">Keine Daten verfügbar</p>
       </div>
     );
@@ -116,7 +116,7 @@ export function PortfolioCompositionChart({ data }) {
             {displayData.map((item, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-2 p-2 rounded border bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer text-xs sm:text-sm"
+                className="flex items-center gap-2 p-2 rounded border hover:bg-muted/50 transition-colors cursor-pointer text-xs sm:text-sm"
                 onMouseEnter={() => setHoveredIndex(idx)}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
@@ -136,7 +136,7 @@ export function PortfolioCompositionChart({ data }) {
 
       {/* Summary Stats - Only Items */}
       <div className="grid grid-cols-1 gap-2">
-        <div className="bg-muted/40 p-2 sm:p-3 rounded-lg text-center border">
+        <div className=" p-2 sm:p-3 rounded-lg text-center border">
           <p className="text-[9px] text-muted-foreground uppercase font-semibold">Items</p>
           <p className="text-base sm:text-lg font-bold">
             {displayData.reduce((sum, item) => sum + item.count, 0)}

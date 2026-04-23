@@ -23,7 +23,7 @@ export function MetricPairBlock({
   className = "",
 }) {
   return (
-    <div className={cn("rounded-md border bg-muted/40 p-2 sm:p-3", className)}>
+    <div className={cn("rounded-md border p-2 sm:p-3", className)}>
       {title ? <p className="text-[10px] uppercase text-muted-foreground">{title}</p> : null}
       <div className="mt-1 space-y-2">
         <MetricLine label={grossLabel} value={grossValue} valueClassName={cn("text-xs sm:text-sm font-bold", grossValueClassName)} />

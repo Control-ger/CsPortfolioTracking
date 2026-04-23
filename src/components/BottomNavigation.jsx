@@ -20,7 +20,7 @@ export const BottomNavigation = () => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background md:hidden"
       aria-label="Hauptnavigation"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 md:px-8">

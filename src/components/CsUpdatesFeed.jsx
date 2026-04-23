@@ -101,7 +101,7 @@ function LoadingState() {
 
 function EmptyState() {
   return (
-    <Alert className="border-dashed bg-muted/20">
+    <Alert className="border-dashed ">
       <AlertTitle>Noch keine CS-Updates verfuegbar</AlertTitle>
       <AlertDescription>Sobald neue Meldungen importiert sind, erscheinen sie hier als Live-Feed.</AlertDescription>
     </Alert>
@@ -140,7 +140,7 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
               compact ? "h-7 w-7" : "h-9 w-9",
               isFresh
                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
-                : "border-border bg-muted text-muted-foreground",
+                : "border-border text-muted-foreground",
             )}
           >
             {isFresh ? <Sparkles className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} /> : <Clock3 className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />}

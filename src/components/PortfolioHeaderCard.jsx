@@ -43,6 +43,11 @@ export const PortfolioHeaderCard = ({
 
   return (
     <div className="space-y-3">
+      {/* Mobile: Portfolio als Überschrift */}
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground sm:hidden">
+        Portfolio
+      </h2>
+
       {/* Hauptwert mit Trend und Frische-Indikator */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">

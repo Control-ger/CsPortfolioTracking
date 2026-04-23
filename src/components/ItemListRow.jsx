@@ -30,11 +30,11 @@ export const ItemListRow = ({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center justify-between gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted active:bg-muted/70 ${className}`}
+      className={`flex w-full items-center justify-between gap-3 p-3 text-left transition-colors sm:rounded-lg sm:border sm:bg-card sm:hover:bg-muted ${className}`}
     >
       {/* Bild + Name */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md border bg-muted">
+        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md border ">
           {item.imageUrl ? (
             <img
               src={item.imageUrl}

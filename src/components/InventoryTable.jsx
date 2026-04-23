@@ -14,7 +14,7 @@ import {
 import { PriceSourceBadge } from "@/components/PriceSourceBadge";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
-  <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted">
+  <div className="h-12 w-12 overflow-hidden rounded-md border ">
     {imageUrl ? (
       <img
         src={imageUrl}
@@ -71,7 +71,7 @@ function freshnessBadgeClass(status) {
     case "stale":
       return "border-red-200 bg-red-500/10 text-red-700 dark:border-red-900/60 dark:text-red-300";
     default:
-      return "border-muted bg-muted/30 text-muted-foreground";
+      return "border-muted text-muted-foreground";
   }
 }
 
@@ -243,7 +243,7 @@ export function InventoryTable({ investments, onSelectItem }) {
             {sortedInvestments.map((item) => (
               <TableRow
                 key={item.id}
-                className="group cursor-pointer transition-colors hover:bg-muted/50"
+                className="group cursor-pointer transition-colors"
                 onClick={() => onSelectItem(item)}
               >
                 <TableCell className="font-medium text-sm">
@@ -317,28 +317,28 @@ export function InventoryTable({ investments, onSelectItem }) {
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
                 onClick={() => toggleSort("item")}
               >
                 Item
               </button>
               <button
                 type="button"
-                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
                 onClick={() => toggleSort("quantity")}
               >
                 Menge
               </button>
               <button
                 type="button"
-                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
                 onClick={() => toggleSort("livePrice")}
               >
                 Live Preis
               </button>
               <button
                 type="button"
-                className="rounded border bg-muted/30 px-2 py-1 text-left hover:bg-muted/60"
+                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
                 onClick={() => toggleSort("roi")}
               >
                 ROI

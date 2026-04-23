@@ -457,7 +457,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               key={candidate.marketHashName}
               className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
             >
-              <div className="h-12 w-12 overflow-hidden rounded-md bg-muted">
+              <div className="h-12 w-12 overflow-hidden rounded-md ">
                 {candidate.iconUrl ? (
                   <img
                     src={candidate.iconUrl}
@@ -474,15 +474,15 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{candidate.displayName}</p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                  <span className="rounded-full px-2 py-0.5 text-[11px] text-muted-foreground">
                     {candidate.itemTypeLabel}
                   </span>
                   {candidate.wearLabel && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <span className="rounded-full px-2 py-0.5 text-[11px] text-muted-foreground">
                       {candidate.wearLabel}
                     </span>
                   )}
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                  <span className="rounded-full px-2 py-0.5 text-[11px] text-muted-foreground">
                     {candidate.marketTypeLabel}
                   </span>
                 </div>
@@ -553,7 +553,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
           </p>
         )}
 
-        <div className="rounded-lg border bg-muted/20 p-2.5">
+        <div className="rounded-lg border p-2.5">
           <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Compass className="h-3.5 w-3.5" />
             Schnell browsebar nach Kategorie

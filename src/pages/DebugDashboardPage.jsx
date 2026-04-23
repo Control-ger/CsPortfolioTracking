@@ -188,7 +188,7 @@ function levelBadgeClass(level) {
     case "DEBUG":
       return "border-slate-200 bg-slate-500/10 text-slate-700 dark:border-slate-700 dark:text-slate-300";
     default:
-      return "border-muted bg-muted/30 text-muted-foreground";
+      return "border-muted text-muted-foreground";
   }
 }
 
@@ -457,7 +457,7 @@ export function DebugDashboardPage() {
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader className="border-b bg-muted/20">
+          <CardHeader className="border-b ">
             <CardTitle className="text-base">Application Logs</CardTitle>
             <CardDescription>
               Farbcodierte Level in einer scrollbaren Tabelle fuer schnelle Analyse.

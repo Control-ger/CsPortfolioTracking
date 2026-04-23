@@ -55,7 +55,7 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
       <Card className="border-primary/20 shadow-lg">
         <CardHeader className="pb-2 sm:pb-4">
           <div className="flex items-start gap-2 sm:gap-4">
-            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted sm:h-24 sm:w-24">
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border sm:h-24 sm:w-24">
               {item.imageUrl ? (
                 <img
                   src={item.imageUrl}
@@ -103,13 +103,13 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
         </CardHeader>
         <CardContent className="space-y-3 sm:space-y-6">
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
-          <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
+          <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
             <p className="mt-2 text-xs sm:text-sm font-bold">{formatPrice(item.buyPrice)}</p>
             <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatPrice(item.buyPrice)}</p>
           </div>
 
-          <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
+          <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Live</p>
             <p
               className={`mt-2 text-xs sm:text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
@@ -128,7 +128,7 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
             </div>
           </div>
 
-          <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
+          <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Break-even</p>
             <p className="mt-2 text-xs sm:text-sm font-bold">
               {formatPrice(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}
@@ -136,13 +136,13 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
             <p className="mt-1 text-[10px] text-muted-foreground">inkl. Seller + Withdrawal + FX Fees</p>
           </div>
 
-          <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
+          <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Positionswert</p>
             <p className="mt-2 text-xs sm:text-sm font-bold">{formatPrice(item.currentValue)}</p>
             <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatPrice(item.displayPrice)}</p>
           </div>
 
-          <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
+          <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Gewinn / Verlust</p>
             <p className={`mt-2 text-xs sm:text-sm font-bold ${item.isProfitPositive ? "text-green-600" : "text-red-600"}`}>
               {`${item.isProfitPositive ? "+" : ""}${formatPrice(item.profitEuro)}`}
@@ -152,7 +152,7 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
             </p>
           </div>
 
-          <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
+          <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Freshness</p>
             <p className="mt-2 text-xs sm:text-sm font-bold">{item.freshnessLabel || "N/A"}</p>
             <p className="mt-1 text-[10px] text-muted-foreground">
@@ -160,7 +160,7 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
             </p>
           </div>
 
-          <div className="rounded-md border bg-muted/40 p-2 sm:p-3">
+          <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Cost Basis</p>
             <p className="mt-2 text-xs sm:text-sm font-bold">
               {typeof item.costBasisTotal === "number" ? formatPrice(item.costBasisTotal) : "N/A"}

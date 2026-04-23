@@ -397,6 +397,8 @@ try {
     $router->register('GET', '/api/v1/portfolio/sync-stats', [$syncStatusController, 'stats']);
     $router->register('GET', '/api/v1/settings/fees', [$settingsController, 'fees']);
     $router->register('PUT', '/api/v1/settings/fees', [$settingsController, 'updateFees']);
+    $router->register('GET', '/api/v1/settings/csfloat-api-key', [$settingsController, 'getCsFloatApiKeyStatus']);
+    $router->register('POST', '/api/v1/settings/csfloat-api-key', [$settingsController, 'updateCsFloatApiKey']);
 
     $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
     $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);

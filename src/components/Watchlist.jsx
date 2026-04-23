@@ -6,8 +6,10 @@ import { PortfolioChart } from "./PortfolioChart";
 import { ApiWarnings } from "./ApiWarnings";
 import { ItemListRow } from "./ItemListRow";
 import { PriceSourceBadge } from "./PriceSourceBadge";
-import { Trash2, X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
+import { Button } from "@/components/ui/button";
+import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { WatchlistItemModal } from "./WatchlistItemModal";
 
 function WatchlistLoadingSkeleton() {
@@ -71,6 +73,8 @@ export const Watchlist = ({ focusTarget = null }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const itemRefs = useRef(new Map());
 
   const loadWatchlistData = async () => {
@@ -155,11 +159,32 @@ export const Watchlist = ({ focusTarget = null }) => {
   const handleRemoveItem = async (id) => {
     try {
       await deleteWatchlistItem(id);
+      setSelectedItem(null);
+      setShowDeleteConfirm(false);
       await loadWatchlistData();
     } catch (requestError) {
       setError(
         requestError.message || "Fehler beim Entfernen des Watchlist-Items."
       );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await handleRemoveItem(selectedItem.id);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -219,7 +244,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                          }
                          itemRefs.current.delete(item.id);
                        }}
-                       className={`relative transition-colors ${
+                       className={`transition-colors ${
                          selectedItem?.id === item.id
                            ? "rounded-lg border-primary bg-primary/10"
                            : ""
@@ -234,17 +259,6 @@ export const Watchlist = ({ focusTarget = null }) => {
                            }
                          }}
                        />
-                       <button
-                         type="button"
-                         onClick={(event) => {
-                           event.stopPropagation();
-                           handleRemoveItem(item.id);
-                         }}
-                         className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground transition-colors hover:text-destructive"
-                         title="Aus Watchlist entfernen"
-                       >
-                         <Trash2 className="h-4 w-4" />
-                       </button>
                      </div>
                    ))}
                  </div>
@@ -258,7 +272,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                 <CardHeader className="pb-2 sm:pb-4">
                   <div className="flex items-start justify-between gap-2 sm:gap-3">
                     <div className="flex min-w-0 gap-2 sm:gap-4">
-                      <div className="h-14 w-14 sm:h-20 sm:w-20 overflow-hidden rounded-lg border bg-muted flex-shrink-0">
+                      <div className="h-14 w-14 sm:h-20 sm:w-20 overflow-hidden rounded-lg border flex-shrink-0">
                         {selectedItem.imageUrl ? (
                           <img
                             src={selectedItem.imageUrl}
@@ -313,7 +327,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                   )}
 
                   {selectedItem.changeLabel !== "N/A" && (
-                    <div className="mt-4 rounded-lg bg-muted p-4">
+                    <div className="mt-4 rounded-lg p-4">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-sm text-muted-foreground">
                           Preisveraenderung (7 Tage)
@@ -330,6 +344,28 @@ export const Watchlist = ({ focusTarget = null }) => {
                       </div>
                     </div>
                   )}
+
+                  {/* Delete Section - Desktop */}
+                  <div className="mt-6 border-t pt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDeleteClick}
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Aus Watchlist entfernen
+                    </Button>
+                  </div>
+
+                  <DeleteConfirmModal
+                    isOpen={showDeleteConfirm}
+                    onClose={handleCancelDelete}
+                    onConfirm={handleConfirmDelete}
+                    isDeleting={isDeleting}
+                    itemName={selectedItem?.name}
+                    description="aus deiner Watchlist entfernen"
+                  />
                 </CardContent>
               </Card>
             ) : (
@@ -347,6 +383,7 @@ export const Watchlist = ({ focusTarget = null }) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         item={selectedItem}
+        onDelete={handleRemoveItem}
       />
     </div>
   );

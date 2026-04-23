@@ -287,7 +287,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
             </div>
 
             <div className="grid gap-4 sm:gap-6 grid-cols-1">
-              <div className="rounded-lg border bg-card p-4 sm:p-6">
+              <div>
                 <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
                 {compositionLoading ? (
                   <div className="space-y-4">
@@ -338,7 +338,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           </TabsContent>
 
           <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
-            <div className="md:col-span-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 sm:p-4">
+            <div className="md:col-span-2 flex items-center justify-between gap-3 p-3 sm:p-4 sm:rounded-lg sm:border sm:bg-card">
               <div>
                 <h3 className="text-base font-semibold">Inventar importieren</h3>
                 <p className="text-xs text-muted-foreground">
@@ -350,7 +350,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </Button>
             </div>
 
-            <div className="rounded-lg border bg-card overflow-x-auto md:col-span-1">
+            <div className="overflow-x-auto md:col-span-1 sm:rounded-lg sm:border sm:bg-card">
               <InventoryTable
                 investments={enrichedInvestments}
                 onSelectItem={(item) => {

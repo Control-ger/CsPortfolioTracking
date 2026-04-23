@@ -26,7 +26,7 @@ final class WatchlistItemDto
             $isPositive = $this->priceChange >= 0;
             $trend = $isPositive ? 'up' : 'down';
             $sign = $isPositive ? '+' : '';
-            $changeLabel = sprintf('%s%.2fEUR (%s%.2f%%)', $sign, $this->priceChange, $sign, $this->priceChangePercent);
+            $changeLabel = sprintf('%s%.2f%%', $sign, $this->priceChangePercent);
         }
 
         return [
