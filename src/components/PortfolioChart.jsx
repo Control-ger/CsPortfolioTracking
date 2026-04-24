@@ -151,6 +151,7 @@ export const PortfolioChart = ({
   valueLabel = "Wert",
   isLoading = false,
   onHoverChange = null,
+  showAbsolute = false,
 }) => {
   const [rangeKey, setRangeKey] = useState("MAX");
   const [hoveredIndex, setHoveredIndex] = useState(null);
@@ -172,9 +173,10 @@ export const PortfolioChart = ({
       return {
         ...entry,
         growthPercent,
+        displayValue: showAbsolute ? entry.wert : growthPercent,
       };
     });
-  }, [visibleHistory]);
+  }, [visibleHistory, showAbsolute]);
 
   const trendStats = useMemo(() => {
     if (chartData.length === 0) {
@@ -203,11 +205,11 @@ export const PortfolioChart = ({
   const chartConfig = useMemo(
     () => ({
       growthPercent: {
-        label: "Zuwachs (%)",
+        label: showAbsolute ? "Preis (EUR)" : "Zuwachs (%)",
         color: trendStats.lineColor,
       },
     }),
-    [trendStats.lineColor],
+    [trendStats.lineColor, showAbsolute],
   );
 
   return (
@@ -298,26 +300,26 @@ export const PortfolioChart = ({
                 tickFormatter={(value) => formatTickDate(value, rangeKey)}
               />
               <YAxis
-                dataKey="growthPercent"
+                dataKey="displayValue"
                 orientation="right"
                 tickLine={false}
                 axisLine={false}
-                width={54}
+                width={70}
                 tickMargin={4}
-                tickFormatter={formatAxisPercent}
+                tickFormatter={showAbsolute ? (v) => `${v.toFixed(0)}€` : formatAxisPercent}
               />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
                     indicator="line"
-                    nameKey="growthPercent"
+                    nameKey="displayValue"
                     labelFormatter={(value) => formatTooltipDate(value)}
-                    formatter={(value) => formatAxisPercent(Number(value))}
+                    formatter={(value) => showAbsolute ? `${Number(value).toLocaleString("de-DE", {minimumFractionDigits: 2, maximumFractionDigits: 2})} EUR` : formatAxisPercent(Number(value))}
                   />
                 }
               />
               <Line
-                dataKey="growthPercent"
+                dataKey="displayValue"
                 type="monotone"
                 stroke="var(--color-growthPercent)"
                 strokeWidth={2.5}

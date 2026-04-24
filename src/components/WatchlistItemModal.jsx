@@ -13,10 +13,15 @@ const formatPrice = (value) =>
 export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showAbsolute, setShowAbsolute] = useState(false);
 
   if (!item) {
     return null;
   }
+
+  const togglePriceDisplay = () => {
+    setShowAbsolute(!showAbsolute);
+  };
 
   const handleDeleteClick = () => {
     setShowConfirm(true);
@@ -119,12 +124,31 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
 
         {Array.isArray(item.priceHistory) && item.priceHistory.length > 0 ? (
           <div className="rounded-lg border p-3">
-            <h3 className="mb-3 text-sm font-semibold">Preisentwicklung</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold">Preisentwicklung</h3>
+              <button
+                onClick={togglePriceDisplay}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showAbsolute ? (
+                  <>
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">EUR</span>
+                    <span className="text-muted-foreground/50">%</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-muted-foreground/50">EUR</span>
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">%</span>
+                  </>
+                )}
+              </button>
+            </div>
             <PortfolioChart
               history={item.priceHistory}
               title="Watchlist Entwicklung"
               valueLabel="Preis"
-              emptyLabel="Noch keine Preis-Historie verfuegbar"
+              emptyLabel="Noch keine Preishistorie verfuegbar"
+              showAbsolute={showAbsolute}
             />
           </div>
         ) : null}

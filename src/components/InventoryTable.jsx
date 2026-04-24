@@ -300,49 +300,39 @@ export function InventoryTable({ investments, onSelectItem }) {
 
         {/* Mobile-View (unter md) */}
         <div className="space-y-3 px-2 md:hidden">
-          <div className="rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
-            <div className="flex items-center justify-between gap-2">
-              <span>Sortierung</span>
-              <span className="font-medium text-foreground">
-                {sortKey === "item"
-                  ? "Item"
-                  : sortKey === "quantity"
-                    ? "Menge"
-                    : sortKey === "livePrice"
-                      ? "Live Preis"
-                      : "ROI"}{" "}
-                ({sortDirection === "asc" ? "Aufsteigend" : "Absteigend"})
-              </span>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
-                onClick={() => toggleSort("item")}
-              >
-                Item
-              </button>
-              <button
-                type="button"
-                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
-                onClick={() => toggleSort("quantity")}
-              >
-                Menge
-              </button>
-              <button
-                type="button"
-                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
-                onClick={() => toggleSort("livePrice")}
-              >
-                Live Preis
-              </button>
-              <button
-                type="button"
-                className="rounded border px-2 py-1 text-left hover:bg-muted/60"
-                onClick={() => toggleSort("roi")}
-              >
-                ROI
-              </button>
+          {/* Sort Controls - Compact Horizontal */}
+          <div className="flex items-center gap-2 rounded-lg border bg-card p-2">
+            <span className="text-[10px] uppercase text-muted-foreground shrink-0 pl-1">Sortierung</span>
+            <div className="flex flex-1 gap-1 overflow-x-auto no-scrollbar">
+              {[
+                { key: "item", label: "Item", short: "Name" },
+                { key: "quantity", label: "Menge", short: "Anz." },
+                { key: "livePrice", label: "Live Preis", short: "Preis" },
+                { key: "roi", label: "ROI", short: "ROI" },
+              ].map(({ key, label, short }) => {
+                const isActive = sortKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleSort(key)}
+                    className={`shrink-0 rounded px-2 py-1.5 text-xs font-medium transition-colors ${
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    }`}
+                    title={`${label} ${sortDirection === "asc" ? "↑" : "↓"}`}
+                  >
+                    <span className="sm:hidden">{short}</span>
+                    <span className="hidden sm:inline">{label}</span>
+                    {isActive && (
+                      <span className="ml-0.5 text-[10px]">
+                        {sortDirection === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

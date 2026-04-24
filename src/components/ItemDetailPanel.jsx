@@ -20,6 +20,7 @@ const formatPrice = (value) => `${value.toFixed(2)} EUR`;
 export const ItemDetailPanel = ({ item, history = [], historyLoading = false, onExcludeChange }) => {
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
+  const [showAbsolute, setShowAbsolute] = useState(false);
   if (!item)
     return (
       <div className="flex min-h-50 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-muted-foreground sm:min-h-75 sm:p-8">
@@ -165,23 +166,7 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
             <p className="mt-2 text-xs sm:text-sm font-bold">
               {typeof item.costBasisTotal === "number" ? formatPrice(item.costBasisTotal) : "N/A"}
             </p>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              pro Unit: {typeof item.costBasisUnit === "number" ? formatPrice(item.costBasisUnit) : "N/A"}
-            </p>
-          </div>
-        </div>
-
-        <PortfolioChart
-          history={history}
-          isLoading={historyLoading}
-          title="Positionsentwicklung"
-          emptyLabel="Noch keine Positionshistorie verfuegbar"
-          valueLabel="Positionswert"
-        />
-
-        {item.details?.stats6m && (
-          <div className="pt-4 border-t text-center">
-            <h4 className="text-xs font-bold uppercase mb-4 text-muted-foreground">
+            <h4 className="mt-3 text-xs font-semibold text-muted-foreground">
               Trends (6 Monate) (Work in Progress)
             </h4>
             <div className="h-45 w-full">
@@ -209,7 +194,7 @@ export const ItemDetailPanel = ({ item, history = [], historyLoading = false, on
               </ResponsiveContainer>
             </div>
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
 

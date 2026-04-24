@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useModal } from "@/ModalContext";
 import { ApiWarnings } from "@/components/ApiWarnings";
@@ -68,7 +68,11 @@ function formatRelativeHours(hours) {
   return `${Math.max(1, Math.round(hours))}h`;
 }
 
+const TABS = ["overview", "inventory", "watchlist"];
+const SWIPE_THRESHOLD = 50;
+
 export function PortfolioPage({ initialTab = "overview" }) {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const resolvedInitialTab = searchParams.get("tab") || initialTab;
   const {
@@ -100,6 +104,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
   const [hoveredChartData, setHoveredChartData] = useState(null);
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const touchEndX = useRef(null);
+  const touchEndY = useRef(null);
 
   useEffect(() => {
     setActiveTab(resolvedInitialTab);
@@ -160,6 +168,62 @@ export function PortfolioPage({ initialTab = "overview" }) {
     setActiveTab("watchlist");
   };
 
+  const handleSwipeNavigation = (direction) => {
+    const currentIndex = TABS.indexOf(activeTab);
+    if (currentIndex === -1) return;
+
+    let nextIndex;
+    if (direction === "left") {
+      nextIndex = Math.min(currentIndex + 1, TABS.length - 1);
+    } else {
+      nextIndex = Math.max(currentIndex - 1, 0);
+    }
+
+    if (nextIndex !== currentIndex) {
+      const nextTab = TABS[nextIndex];
+      const path = nextTab === "overview" ? "/" : `/${nextTab}`;
+      navigate(path);
+      setActiveTab(nextTab);
+    }
+  };
+
+  const onTouchStart = (e) => {
+    touchStartX.current = e.changedTouches[0].screenX;
+    touchStartY.current = e.changedTouches[0].screenY;
+    touchEndX.current = null;
+    touchEndY.current = null;
+  };
+
+  const onTouchMove = (e) => {
+    touchEndX.current = e.changedTouches[0].screenX;
+    touchEndY.current = e.changedTouches[0].screenY;
+  };
+
+  const onTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    if (touchStartY.current === null || touchEndY.current === null) return;
+
+    const distanceX = touchEndX.current - touchStartX.current;
+    const distanceY = touchEndY.current - touchStartY.current;
+    const isMobile = window.innerWidth < 768;
+
+    // Only trigger if horizontal movement is greater than vertical
+    const isHorizontalSwipe = Math.abs(distanceX) > Math.abs(distanceY);
+
+    if (isMobile && isHorizontalSwipe && Math.abs(distanceX) > SWIPE_THRESHOLD) {
+      if (distanceX < 0) {
+        handleSwipeNavigation("left");
+      } else {
+        handleSwipeNavigation("right");
+      }
+    }
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+    touchEndX.current = null;
+    touchEndY.current = null;
+  };
+
   const loadItemHistory = async (itemId, itemName) => {
     setSelectedItemHistoryLoading(true);
     try {
@@ -188,7 +252,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
     latestCsUpdateAgeHours <= 12;
 
   return (
-    <div className="min-h-screen bg-background font-sans text-foreground pb-20">
+    <div
+      className="min-h-screen bg-background font-sans text-foreground pb-20 touch-pan-y"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
       <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8 p-4 sm:p-6 md:p-8">
         {/* Mobile Header - nur auf Mobile sichtbar */}
         <header className="flex sm:hidden items-center justify-between">
@@ -392,6 +461,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   item={modal.data.item}
                   history={selectedItemHistory}
                   historyLoading={selectedItemHistoryLoading}
+                  onToggleExclude={handleExcludeChange}
                 />
               ) : null,
             )}

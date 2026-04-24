@@ -75,6 +75,7 @@ export const Watchlist = ({ focusTarget = null }) => {
   const [warnings, setWarnings] = useState([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showAbsolute, setShowAbsolute] = useState(false);
   const itemRefs = useRef(new Map());
 
   const loadWatchlistData = async () => {
@@ -314,18 +315,41 @@ export const Watchlist = ({ focusTarget = null }) => {
                 <CardContent>
                   {selectedItem.priceHistory &&
                   selectedItem.priceHistory.length > 0 ? (
-                    <PortfolioChart
-                      history={selectedItem.priceHistory}
-                      color={
-                        selectedItem.trend === "down" ? "#ef4444" : "#22c55e"
-                      }
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold">Preisentwicklung</h3>
+                        <button
+                          onClick={() => setShowAbsolute(!showAbsolute)}
+                          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showAbsolute ? (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">EUR</span>
+                          ) : (
+                            <span className="text-muted-foreground/50">EUR</span>
+                          )}
+                          /
+                          {showAbsolute ? (
+                            <span className="text-muted-foreground/50">%</span>
+                          ) : (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">%</span>
+                          )}
+                        </button>
+                      </div>
+                      <PortfolioChart
+                        history={selectedItem.priceHistory}
+                        color={
+                          selectedItem.trend === "down" ? "#ef4444" : "#22c55e"
+                        }
+                        valueLabel="Preis"
+                        title="Preisentwicklung"
+                        showAbsolute={showAbsolute}
+                      />
+                    </div>
                   ) : (
-                    <div className="flex h-80 items-center justify-center text-muted-foreground">
-                      <p>Noch keine Preis-Historie verfuegbar.</p>
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      Keine Preishistorie verfuegbar.
                     </div>
                   )}
-
                   {selectedItem.changeLabel !== "N/A" && (
                     <div className="mt-4 rounded-lg p-4">
                       <div className="flex items-center justify-between gap-3">
