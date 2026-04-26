@@ -121,6 +121,36 @@
   body {
     @apply bg-background text-foreground;
   }
+/*hide scrollbar in browser */
+  html, body {
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden !important; /* Der "Hammer" gegen die äußere Scrollbar */
+  }
+  #root {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Scrollbar-Design für den Content (innerhalb von <main>) */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.3 0 0); /* Ein dunkles Grau, passend zu deiner Palette */
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.4 0 0);
+  }
 }
 
 /* Hide scrollbar but keep functionality */
@@ -131,3 +161,4 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
