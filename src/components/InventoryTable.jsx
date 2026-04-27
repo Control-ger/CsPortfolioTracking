@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 
 import { PriceSourceBadge } from "@/components/PriceSourceBadge";
+import { Abbr } from "@/components/AbbreviationTooltip";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
   <div className="h-12 w-12 overflow-hidden rounded-md border ">
@@ -230,7 +231,7 @@ export function InventoryTable({ investments, onSelectItem }) {
               </TableHead>
               <TableHead className="text-right">
                 <SortHeaderButton
-                  label="ROI"
+                  label={<Abbr term="ROI" />}
                   align="right"
                   isActive={sortKey === "roi"}
                   sortDirection={sortDirection}

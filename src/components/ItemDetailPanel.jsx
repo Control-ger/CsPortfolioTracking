@@ -13,12 +13,14 @@ import { toggleExcludeInvestment } from "../lib/apiClient";
 import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 import { Badge } from "./ui/badge";
 import { AlertCircle } from "lucide-react";
+import { PortfolioChart } from "./PortfolioChart";
 
 const formatPrice = (value) => `${value.toFixed(2)} EUR`;
 
-export const ItemDetailPanel = ({ item, onExcludeChange }) => {
+export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange }) => {
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
+  const [showAbsolute, setShowAbsolute] = useState(false);
   if (!item)
     return (
         <div className="flex min-h-50 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-muted-foreground sm:min-h-75 sm:p-8">
@@ -32,6 +34,10 @@ export const ItemDetailPanel = ({ item, onExcludeChange }) => {
 
   const handleExcludeClick = () => {
     setExcludeDialogOpen(true);
+  };
+
+  const togglePriceDisplay = () => {
+    setShowAbsolute(!showAbsolute);
   };
 
   const handleExcludeConfirm = async (newExcludeState) => {
@@ -199,6 +205,39 @@ export const ItemDetailPanel = ({ item, onExcludeChange }) => {
                 )}
               </div>
             </div>
+
+            {/* Price History Chart */}
+            {Array.isArray(history) && history.length > 0 && (
+              <div className="rounded-lg border p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">Preisentwicklung</h3>
+                  <button
+                    onClick={togglePriceDisplay}
+                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showAbsolute ? (
+                      <>
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">EUR</span>
+                        <span className="text-muted-foreground/50">%</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-muted-foreground/50">EUR</span>
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">%</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <PortfolioChart
+                  history={history}
+                  title=""
+                  valueLabel="Preis"
+                  emptyLabel="Noch keine Preishistorie verfügbar"
+                  isLoading={historyLoading}
+                  showAbsolute={showAbsolute}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 

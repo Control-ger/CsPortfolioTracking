@@ -8,6 +8,7 @@ import { ItemListRow } from "./ItemListRow";
 import { PriceSourceBadge } from "./PriceSourceBadge";
 import { X, Trash2 } from "lucide-react";
 import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
+import { BREAKPOINTS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { WatchlistItemModal } from "./WatchlistItemModal";
@@ -255,7 +256,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                          item={item}
                          onClick={() => {
                            setSelectedItem(item);
-                           if (window.innerWidth < 768) {
+                           if (window.innerWidth < BREAKPOINTS.MOBILE) {
                              setIsModalOpen(true);
                            }
                          }}

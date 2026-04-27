@@ -36,6 +36,10 @@ async function requestPayload(path, options = {}) {
   try {
     response = await fetch(`${API_BASE}${path}`, options);
   } catch (fetchError) {
+    // Don't report abort errors as they're intentional
+    if (fetchError.name === 'AbortError') {
+      throw fetchError;
+    }
     void sendFrontendTelemetryEvent({
       level: "error",
       event: "frontend.fetch_error",
@@ -105,8 +109,10 @@ async function requestWithMeta(path, options = {}) {
   };
 }
 
-export async function fetchPortfolioInvestments() {
-  return requestWithMeta("/api/v1/portfolio/investments");
+export async function fetchPortfolioInvestments(options = {}) {
+  return requestWithMeta("/api/v1/portfolio/investments", {
+    signal: options.signal,
+  });
 }
 
 export async function fetchPortfolioInvestmentHistory(id, options = {}) {
@@ -117,12 +123,16 @@ export async function fetchPortfolioInvestmentHistory(id, options = {}) {
   );
 }
 
-export async function fetchPortfolioSummary() {
-  return requestWithMeta("/api/v1/portfolio/summary");
+export async function fetchPortfolioSummary(options = {}) {
+  return requestWithMeta("/api/v1/portfolio/summary", {
+    signal: options.signal,
+  });
 }
 
-export async function fetchPortfolioHistory() {
-  return request("/api/v1/portfolio/history");
+export async function fetchPortfolioHistory(options = {}) {
+  return request("/api/v1/portfolio/history", {
+    signal: options.signal,
+  });
 }
 
 export async function fetchPortfolioComposition() {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   fetchPortfolioHistory,
   fetchPortfolioInvestments,
@@ -42,6 +42,7 @@ function mergeWarnings(...warningGroups) {
 }
 
 export function usePortfolio() {
+  const abortControllerRef = useRef(null);
   const [investments, setInvestments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -66,13 +67,23 @@ export function usePortfolio() {
   const [warnings, setWarnings] = useState([]);
 
   const loadData = useCallback(async () => {
+    // Abort previous request if still pending
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     setIsLoading(true);
     try {
       const [rowsResponse, summaryResponse, history] = await Promise.all([
-        fetchPortfolioInvestments(),
-        fetchPortfolioSummary(),
-        fetchPortfolioHistory(),
+        fetchPortfolioInvestments({ signal }),
+        fetchPortfolioSummary({ signal }),
+        fetchPortfolioHistory({ signal }),
       ]);
+
+      // Don't update state if request was aborted
+      if (signal.aborted) return;
 
       setInvestments(rowsResponse?.data || []);
       setStats(summaryResponse?.data || {});
@@ -85,11 +96,22 @@ export function usePortfolio() {
       );
       setError("");
     } catch (err) {
+      // Don't update state for abort errors
+      if (err.name === 'AbortError') return;
       setError(err.message || "Fehler beim Laden der Portfolio-Daten.");
       setWarnings([]);
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
   const removeInvestmentFromView = useCallback((investmentId) => {

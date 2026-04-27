@@ -1,22 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useClickOutside } from '@/hooks/useClickOutside';
+import { useModalKeyboard } from '@/hooks/useKeyboard';
 
 export function BaseModal({ isOpen, onClose, title, children, size = 'md', className = '' }) {
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
+  // Handle click outside and ESC key
+  const modalRef = useClickOutside(onClose, isOpen);
+  useModalKeyboard(onClose, isOpen);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
     if (isOpen) {
-      window.addEventListener('keydown', handleEscape);
+      const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => {
-        window.removeEventListener('keydown', handleEscape);
-        document.body.style.overflow = 'auto';
+        document.body.style.overflow = originalOverflow;
       };
     }
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -43,6 +43,7 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md', class
 
       {/* Modal */}
       <div
+        ref={modalRef}
         className={[
           'relative bg-background shadow-lg border',
           isFullscreen

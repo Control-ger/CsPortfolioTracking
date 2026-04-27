@@ -4,6 +4,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { BaseModal } from "@/components/BaseModal";
 import { PriceSourceBadge } from "@/components/PriceSourceBadge";
 import { Badge } from "@/components/ui/badge";
+import { BREAKPOINTS } from "@/lib/constants";
 
 const formatPrice = (value) =>
   typeof value === "number" && !Number.isNaN(value) ? `${value.toFixed(2)} EUR` : "-";
@@ -52,11 +53,11 @@ function ChangeMetric({ label, percent, euro }) {
 }
 
 export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
-  const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 768);
+  const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < BREAKPOINTS.MOBILE);
 
   useEffect(() => {
     const handleResize = () => {
-      setIsSmallScreen(window.innerWidth < 768);
+      setIsSmallScreen(window.innerWidth < BREAKPOINTS.MOBILE);
     };
 
     window.addEventListener('resize', handleResize);

@@ -24,6 +24,8 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { usePortfolioComposition } from "@/hooks/usePortfolioComposition";
 import { useCsUpdatesFeed } from "@/hooks/useCsUpdatesFeed";
 import { fetchPortfolioInvestmentHistory } from "@/lib/apiClient";
+import { BREAKPOINTS, UI } from "@/lib/constants";
+import { useKeyboard } from "@/hooks/useKeyboard";
 
 function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -69,7 +71,7 @@ function formatRelativeHours(hours) {
 }
 
 const TABS = ["overview", "inventory", "watchlist"];
-const SWIPE_THRESHOLD = 50;
+const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
 
 export function PortfolioPage({ initialTab = "overview" }) {
   const navigate = useNavigate();
@@ -108,6 +110,38 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const touchStartY = useRef(null);
   const touchEndX = useRef(null);
   const touchEndY = useRef(null);
+  const searchInputRef = useRef(null);
+
+  // Keyboard shortcuts for tab navigation and search
+  useKeyboard({
+    onArrowLeft: () => {
+      const currentIndex = TABS.indexOf(activeTab);
+      if (currentIndex > 0) {
+        const newTab = TABS[currentIndex - 1];
+        setActiveTab(newTab);
+        navigate(`/?tab=${newTab}`, { replace: true });
+      }
+    },
+    onArrowRight: () => {
+      const currentIndex = TABS.indexOf(activeTab);
+      if (currentIndex < TABS.length - 1) {
+        const newTab = TABS[currentIndex + 1];
+        setActiveTab(newTab);
+        navigate(`/?tab=${newTab}`, { replace: true });
+      }
+    },
+    onSearch: () => {
+      // Focus search input if on watchlist tab, otherwise navigate to watchlist
+      if (activeTab === 'watchlist' && searchInputRef.current) {
+        searchInputRef.current.focus();
+      } else {
+        setActiveTab('watchlist');
+        navigate('/?tab=watchlist', { replace: true });
+        // Focus after navigation
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      }
+    }
+  }, true);
 
   useEffect(() => {
     setActiveTab(resolvedInitialTab);
@@ -205,12 +239,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     const distanceX = touchEndX.current - touchStartX.current;
     const distanceY = touchEndY.current - touchStartY.current;
-    const isMobile = window.innerWidth < 768;
+    const isMobileView = window.innerWidth < BREAKPOINTS.MOBILE;
 
     // Only trigger if horizontal movement is greater than vertical
     const isHorizontalSwipe = Math.abs(distanceX) > Math.abs(distanceY);
 
-    if (isMobile && isHorizontalSwipe && Math.abs(distanceX) > SWIPE_THRESHOLD) {
+    if (isMobileView && isHorizontalSwipe && Math.abs(distanceX) > SWIPE_THRESHOLD) {
       if (distanceX < 0) {
         handleSwipeNavigation("left");
       } else {
@@ -434,7 +468,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   if (historyItem) {
                     loadItemHistory(historyItem.id, historyItem.name).then(() => {
                       // Auf Mobile: Modal öffnen (nach Geschichtsdaten geladen)
-                      if (window.innerWidth < 768) {
+                      if (window.innerWidth < BREAKPOINTS.MOBILE) {
                         openModal("itemDetail", { item });
                       }
                     });

@@ -121,18 +121,26 @@
   body {
     @apply bg-background text-foreground;
   }
-/*hide scrollbar in browser */
+/* A  /* Prevent body scroll; scroll in container instead */
   html, body {
     height: 100vh;
     width: 100vw;
     margin: 0;
     padding: 0;
-    overflow: hidden !important; /* Der "Hammer" gegen die äußere Scrollbar */
+    overflow: hidden; /* Prevent body scroll; scroll in container instead */
   }
   #root {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+  }
+  
+  /* Main content area should scroll */
+  main {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   /* Scrollbar-Design für den Content (innerhalb von <main>) */
   ::-webkit-scrollbar {

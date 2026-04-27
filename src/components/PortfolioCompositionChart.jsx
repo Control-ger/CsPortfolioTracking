@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { Skeleton } from '@/components/ui/skeleton';
+import { BREAKPOINTS } from '@/lib/constants';
 
 // Neue schöne Farbpalette
 const COLOR_PALETTE = [
@@ -13,18 +15,42 @@ const COLOR_PALETTE = [
   '#ffa600',
 ];
 
-export function PortfolioCompositionChart({ data }) {
+export function PortfolioCompositionChart({ data, isLoading = false }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
-  const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 768);
+  const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < BREAKPOINTS.MOBILE);
 
   useEffect(() => {
     const handleResize = () => {
-      setIsSmallScreen(window.innerWidth < 768);
+      setIsSmallScreen(window.innerWidth < BREAKPOINTS.MOBILE);
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 border rounded-lg p-6 space-y-4">
+        {/* Donut Skeleton */}
+        <div className="relative w-48 h-48">
+          <Skeleton className="w-full h-full rounded-full" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Skeleton className="w-24 h-24 rounded-full bg-background" />
+          </div>
+        </div>
+        {/* Legend Skeleton */}
+        <div className="w-full space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Skeleton className="w-3 h-3 rounded-full" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-3 w-12 ml-auto" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!data || data.length === 0) {
     return (

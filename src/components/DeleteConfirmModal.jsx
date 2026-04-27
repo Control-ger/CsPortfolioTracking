@@ -1,13 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, X } from "lucide-react";
+import { useClickOutside } from "@/hooks/useClickOutside";
+import { useModalKeyboard } from "@/hooks/useKeyboard";
 
 export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, itemName, title = "Item entfernen?", description }) {
+  const modalRef = useClickOutside(!isDeleting ? onClose : null, isOpen);
+  useModalKeyboard(!isDeleting ? onClose : null, isOpen);
+  
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={!isDeleting ? onClose : undefined} />
-      <div className="relative w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
+      <div ref={modalRef} className="relative w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
         <button
           onClick={!isDeleting ? onClose : undefined}
           className="absolute right-3 top-3 p-1 text-muted-foreground hover:text-foreground"
