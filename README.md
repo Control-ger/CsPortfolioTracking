@@ -9,11 +9,29 @@
 
 CS Investor Hub ist ein React + PHP Vibe Coded Projekt zum Tracking meiner CS2 Portfolio- und Watchlist-Daten.
 
+## Agent-Start hier
+
+- Zentrale Agent-Doku: `AGENTS.md`
+- Repo-weite Copilot-Regeln: `.github/copilot-instructions.md`
+- Bitte bei Struktur-/Architektur-Aenderungen im selben Commit mit aktualisieren.
+
 ## Tech Stack
 
 - Frontend: React (Vite), Tailwind CSS, shadcn/ui, Recharts
+- Desktop: Electron, SQLite (`better-sqlite3`) fuer local-first Persistenz
 - Backend: PHP 8.x (MVC-artige Struktur unter `backend/src`)
-- Persistenz: MySQL (PDO)
+- Backend-Persistenz: MySQL (PDO)
+
+## Zielarchitektur: Desktop local-first
+
+Die Desktop-App ist die primaere App fuer schreibende Aktionen. Investments, Watchlist und spaetere Sync-Metadaten werden lokal in SQLite gespeichert. Der Server soll langfristig nur noch Preisdaten liefern und User-/Investment-Daten synchronisieren.
+
+- Lokale DB: Electron `userData/cs-investor-hub.sqlite`
+- Renderer-Zugriff: `window.electronAPI.localStore`
+- Main-Process-Modul: `apps/desktop/src/localStore/`
+- Runtime-Auswahl: `packages/shared/src/lib/dataSource.js`
+- Schema-Doku: `docs/local-db-schema.md`
+- Quick-Fallback-Cache: `userData/cache.json` fuer Phase 1 Offline-Reads
 
 ## Screenshots
 
