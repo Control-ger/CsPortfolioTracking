@@ -1,23 +1,38 @@
 {
-  "name": "cs-portfolio-tracking",
+  "name": "cs-portfolio-tracking-monorepo",
   "private": true,
   "version": "1.0.0",
   "main": "main.js",
   "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "apps/web",
+    "apps/desktop"
+  ],
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build --watch & electron .",
     "electron": "electron .",
     "build": "rimraf release && vite build && electron-builder",
+    "build:shared": "echo 'Shared is code-only, no build needed'",
+    "build:web": "vite build",
+    "build:desktop": "vite build && electron-builder",
+    "rebuild:desktop-native": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "build": {
     "appId": "com.csportfolio",
     "productName": "CS Investor Hub",
+    "asar": true,
+    "asarUnpack": [
+      "apps/desktop/src/localStore/**/*",
+      "node_modules/better-sqlite3/**/*"
+    ],
     "files": [
       "dist/**/*",
       "main.js",
       "preload.js",
+      "apps/desktop/src/localStore/**/*",
       "package.json"
     ],
     "directories": {
@@ -38,6 +53,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "better-sqlite3": "^12.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",

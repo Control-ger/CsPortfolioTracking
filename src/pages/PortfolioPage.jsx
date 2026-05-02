@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { usePortfolioComposition } from "@/hooks/usePortfolioComposition";
 import { useCsUpdatesFeed } from "@/hooks/useCsUpdatesFeed";
-import { fetchPortfolioInvestmentHistory } from "@/lib/apiClient";
+import { fetchPortfolioInvestmentHistory } from "@/lib/dataSource.js";
 import { BREAKPOINTS, UI } from "@/lib/constants";
 import { useKeyboard } from "@/hooks/useKeyboard";
 

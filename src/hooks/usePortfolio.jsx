@@ -1,9 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  fetchPortfolioHistory,
-  fetchPortfolioInvestments,
-  fetchPortfolioSummary,
-} from "@/lib/apiClient.js";
+import { fetchPortfolioData } from "@/lib/dataSource.js";
 
 function mergeWarnings(...warningGroups) {
   const warningsByKey = new Map();
@@ -76,11 +72,9 @@ export function usePortfolio() {
 
     setIsLoading(true);
     try {
-      const [rowsResponse, summaryResponse, history] = await Promise.all([
-        fetchPortfolioInvestments({ signal }),
-        fetchPortfolioSummary({ signal }),
-        fetchPortfolioHistory({ signal }),
-      ]);
+      const { rows: rowsResponse, summary: summaryResponse, history } = await fetchPortfolioData({
+        signal,
+      });
 
       // Don't update state if request was aborted
       if (signal.aborted) return;

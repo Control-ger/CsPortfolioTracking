@@ -7,7 +7,7 @@ import { ApiWarnings } from "./ApiWarnings";
 import { ItemListRow } from "./ItemListRow";
 import { PriceSourceBadge } from "./PriceSourceBadge";
 import { X, Trash2 } from "lucide-react";
-import { deleteWatchlistItem, fetchWatchlist } from "@/lib/apiClient.js";
+import { deleteWatchlistItemData, fetchWatchlistData } from "@/lib/dataSource.js";
 import { BREAKPOINTS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
@@ -84,7 +84,7 @@ export const Watchlist = ({ focusTarget = null }) => {
       setLoading(true);
       setError("");
 
-      const response = await fetchWatchlist({ syncLive: true });
+      const response = await fetchWatchlistData({ syncLive: true });
       const nextItems = response?.data || [];
 
       setWatchlistItems(nextItems);
@@ -103,7 +103,7 @@ export const Watchlist = ({ focusTarget = null }) => {
 
       if (isNetworkError) {
         try {
-          const fallbackResponse = await fetchWatchlist({ syncLive: false });
+          const fallbackResponse = await fetchWatchlistData({ syncLive: false });
           const fallbackItems = fallbackResponse?.data || [];
 
           setWatchlistItems(fallbackItems);
@@ -160,7 +160,7 @@ export const Watchlist = ({ focusTarget = null }) => {
 
   const handleRemoveItem = async (id) => {
     try {
-      await deleteWatchlistItem(id);
+      await deleteWatchlistItemData(id);
       setSelectedItem(null);
       setShowDeleteConfirm(false);
       await loadWatchlistData();

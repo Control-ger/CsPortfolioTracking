@@ -5,6 +5,7 @@ namespace App\Application\Service;
 
 use App\Application\Support\MarketItemClassifier;
 use App\Infrastructure\External\CsFloatTradeClient;
+use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
 use App\Shared\Logger;
 use RuntimeException;
@@ -13,40 +14,40 @@ final class CsFloatTradeSyncService
 {
     private const DEFAULT_LIMIT = 1000;
     private const DEFAULT_MAX_PAGES = 10;
-    private const EXTERNAL_SOURCE = 'csfloat';
+    private const PLATFORM = 'csfloat';
     private const DEFAULT_TRADE_CURRENCY = 'usd';
 
     private array $livePriceHintCache = [];
 
     public function __construct(
         private readonly CsFloatTradeClient $tradeClient,
+        private readonly ItemRepository $itemRepository,
         private readonly InvestmentRepository $investmentRepository,
         private readonly PricingService $pricingService,
         private readonly MarketItemClassifier $marketItemClassifier
     ) {
     }
 
-    public function preview(int $limit = self::DEFAULT_LIMIT, ?string $type = 'buy', int $maxPages = self::DEFAULT_MAX_PAGES): array
+    public function preview(int $userId, int $limit = self::DEFAULT_LIMIT, ?string $type = 'buy', int $maxPages = self::DEFAULT_MAX_PAGES): array
     {
         $collection = $this->collectTrades($limit, $type, $maxPages);
         $normalization = $this->normalizeAndClassifyTrades($collection['trades']);
         $normalized = $normalization['trades'];
         $clustered = $this->clusterTradesIfApplicable($normalized, $collection['type'] ?? null);
-        $records = $this->resolveClusterTradeIdentifiers(
-            $clustered['trades'],
-            $this->investmentRepository->findExistingExternalTradeIds(
-                $this->collectClusterLookupIds($clustered['trades']),
-                self::EXTERNAL_SOURCE
-            )
-        );
-        $existingIds = $this->investmentRepository->findExistingExternalTradeIds(
+
+        $clusterLookupIds = $this->collectClusterLookupIds($clustered['trades']);
+        $existingIds = $this->investmentRepository->findExistingExternalTradeIds($clusterLookupIds, self::PLATFORM);
+
+        $records = $this->resolveClusterTradeIdentifiers($clustered['trades'], $existingIds);
+
+        $allExistingIds = $this->investmentRepository->findExistingExternalTradeIds(
             array_map(static fn (array $trade): string => $trade['externalTradeId'], $records),
-            self::EXTERNAL_SOURCE
+            self::PLATFORM
         );
 
         $preview = $this->buildPreviewPayload(
             $records,
-            $existingIds,
+            $allExistingIds,
             $collection,
             $normalization['skippedStats'],
             $normalization['skippedExamples'],
@@ -58,11 +59,12 @@ final class CsFloatTradeSyncService
             ]
         );
         $preview['mode'] = 'preview';
+        $preview['userId'] = $userId;
 
         return $preview;
     }
 
-    public function execute(int $limit = self::DEFAULT_LIMIT, ?string $type = 'buy', int $maxPages = self::DEFAULT_MAX_PAGES): array
+    public function execute(int $userId, int $limit = self::DEFAULT_LIMIT, ?string $type = 'buy', int $maxPages = self::DEFAULT_MAX_PAGES): array
     {
         $this->investmentRepository->ensureImportColumns();
 
@@ -70,16 +72,14 @@ final class CsFloatTradeSyncService
         $normalization = $this->normalizeAndClassifyTrades($collection['trades']);
         $normalized = $normalization['trades'];
         $clustered = $this->clusterTradesIfApplicable($normalized, $collection['type'] ?? null);
-        $records = $this->resolveClusterTradeIdentifiers(
-            $clustered['trades'],
-            $this->investmentRepository->findExistingExternalTradeIds(
-                $this->collectClusterLookupIds($clustered['trades']),
-                self::EXTERNAL_SOURCE
-            )
-        );
+
+        $clusterLookupIds = $this->collectClusterLookupIds($clustered['trades']);
+        $existingIdsBefore = $this->investmentRepository->findExistingExternalTradeIds($clusterLookupIds, self::PLATFORM);
+
+        $records = $this->resolveClusterTradeIdentifiers($clustered['trades'], $existingIdsBefore);
         $existingIdsBefore = $this->investmentRepository->findExistingExternalTradeIds(
             array_map(static fn (array $trade): string => $trade['externalTradeId'], $records),
-            self::EXTERNAL_SOURCE
+            self::PLATFORM
         );
         $existingIds = $existingIdsBefore;
 
@@ -97,6 +97,14 @@ final class CsFloatTradeSyncService
                 $skipped++;
                 continue;
             }
+
+            $itemId = $this->itemRepository->findOrCreateByName(
+                (string) ($trade['marketHashName'] ?? $trade['name'] ?? 'Unknown Item'),
+                (string) ($trade['type'] ?? 'other')
+            );
+            $trade['itemId'] = $itemId;
+            $trade['userId'] = $userId;
+            $trade['platform'] = self::PLATFORM;
 
             if (isset($existingIds[$trade['externalTradeId']])) {
                 if (!empty($trade['isClustered'])) {
@@ -117,7 +125,7 @@ final class CsFloatTradeSyncService
                             'domain.csfloat_trade_sync.update_failed',
                             'CSFloat clustered trade snapshot update failed',
                             [
-                                'externalSource' => self::EXTERNAL_SOURCE,
+                                'externalSource' => self::PLATFORM,
                                 'externalTradeId' => $trade['externalTradeId'],
                                 'exception' => $exception,
                             ]
@@ -155,7 +163,7 @@ final class CsFloatTradeSyncService
                     'domain.csfloat_trade_sync.insert_failed',
                     'CSFloat trade import failed',
                     [
-                        'externalSource' => self::EXTERNAL_SOURCE,
+                        'externalSource' => self::PLATFORM,
                         'externalTradeId' => $trade['externalTradeId'],
                         'exception' => $exception,
                     ]
@@ -187,6 +195,7 @@ final class CsFloatTradeSyncService
         $payload['insertedSample'] = $sampleInserted;
         $payload['duplicateSample'] = $sampleDuplicates;
         $payload['updatedSample'] = $sampleUpdated;
+        $payload['userId'] = $userId;
 
         return $payload;
     }
@@ -286,8 +295,10 @@ final class CsFloatTradeSyncService
                 $this->resolveString($trade, ['item', 'type_name'], ['trade', 'type_name'], ['type_name'])
             );
 
+            $buyPriceUsd = $this->resolvePriceUsd($trade);
+
             $normalized[] = [
-                'externalSource' => self::EXTERNAL_SOURCE,
+                'externalSource' => self::PLATFORM,
                 'externalTradeId' => $externalTradeId,
                 'marketHashName' => $marketHashName,
                 'name' => $this->resolveDisplayName($trade, $marketHashName),
@@ -296,6 +307,7 @@ final class CsFloatTradeSyncService
                 'quantity' => $quantity,
                 'buyPrice' => $buyPrice,
                 'buyPriceTotal' => $buyPriceTotal,
+                'buyPriceUsd' => $buyPriceUsd,
                 'purchasedAt' => $this->resolvePurchasedAt($trade),
                 'fundingMode' => 'wallet_funded',
                 'rawPayloadJson' => json_encode($trade, JSON_UNESCAPED_UNICODE),
@@ -440,7 +452,8 @@ final class CsFloatTradeSyncService
     private function buildClusterKey(array $trade): string
     {
         $name = trim((string) ($trade['marketHashName'] ?? $trade['name'] ?? 'Unknown Item'));
-        $price = number_format(round((float) ($trade['buyPrice'] ?? 0.0), 4), 4, '.', '');
+        // Use USD price for clustering if available (no conversion rounding issues)
+        $price = number_format(round((float) ($trade['buyPriceUsd'] ?? $trade['buyPrice'] ?? 0.0), 4), 4, '.', '');
         $fundingMode = trim((string) ($trade['fundingMode'] ?? 'wallet_funded'));
         $type = trim((string) ($trade['type'] ?? 'other'));
 
@@ -450,7 +463,8 @@ final class CsFloatTradeSyncService
     private function buildLegacyClusterKey(array $trade): string
     {
         $name = trim((string) ($trade['marketHashName'] ?? $trade['name'] ?? 'Unknown Item'));
-        $price = number_format(round((float) ($trade['buyPriceTotal'] ?? $trade['buyPrice'] ?? 0.0), 4), 4, '.', '');
+        // Use USD price for clustering if available (no conversion rounding issues)
+        $price = number_format(round((float) ($trade['buyPriceUsd'] ?? $trade['buyPriceTotal'] ?? $trade['buyPrice'] ?? 0.0), 4), 4, '.', '');
         $fundingMode = trim((string) ($trade['fundingMode'] ?? 'wallet_funded'));
         $type = trim((string) ($trade['type'] ?? 'other'));
 
@@ -826,6 +840,47 @@ final class CsFloatTradeSyncService
         }
 
         return 0.0;
+    }
+
+    private function resolvePriceUsd(array $trade): ?float
+    {
+        // Extract original USD price before any conversion
+        // CSFloat trades are typically in USD
+        $usdCandidates = [
+            ['price_usd'],
+            ['priceUsd'],
+            ['total_usd'],
+            ['totalUsd'],
+            ['amount_usd'],
+            ['amountUsd'],
+            ['price', 'usd'],
+            ['price', 'amount_usd'],
+            ['trade', 'price', 'usd'],
+            ['contract', 'price_usd'],
+            ['contract', 'price', 'usd'],
+            ['listing', 'price_usd'],
+            ['listing', 'price', 'usd'],
+        ];
+
+        foreach ($usdCandidates as $path) {
+            $value = $this->readPath($trade, $path);
+            if ($value !== null && is_numeric($value) && (float) $value > 0) {
+                return (float) $value;
+            }
+        }
+
+        // If currency is USD and we have a price, return it
+        $currency = $this->resolveCurrency($trade);
+        if (strtoupper($currency) === 'USD') {
+            $directPrice = $this->readPath($trade, ['price'])
+                ?? $this->readPath($trade, ['total_price'])
+                ?? $this->readPath($trade, ['amount']);
+            if (is_numeric($directPrice) && (float) $directPrice > 0) {
+                return (float) $directPrice;
+            }
+        }
+
+        return null;
     }
 
     private function resolvePriceFromNode(mixed $node): ?array

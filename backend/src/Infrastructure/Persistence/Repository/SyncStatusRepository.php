@@ -15,17 +15,15 @@ final class SyncStatusRepository
     public function ensureTable(): void
     {
         $sql = "CREATE TABLE IF NOT EXISTS sync_status (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            sync_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            status ENUM('success', 'failed', 'partial') NOT NULL DEFAULT 'partial',
-            items_synced INT DEFAULT 0,
-            items_failed INT DEFAULT 0,
-            rate_limited INT DEFAULT 0,
-            error_message TEXT DEFAULT NULL,
-            duration_seconds DECIMAL(5, 2) DEFAULT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_sync_date (sync_date),
-            INDEX idx_status (status)
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            user_id       INT          NOT NULL,
+            source        VARCHAR(64)  NOT NULL,
+            status        VARCHAR(32)  NOT NULL,
+            last_sync_at  TIMESTAMP    NULL,
+            error_message TEXT         NULL,
+            updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE idx_user_source (user_id, source)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
@@ -43,49 +41,40 @@ final class SyncStatusRepository
         }
     }
 
-    public function recordSync(
-        string $status,
-        int $itemsSynced,
-        int $itemsFailed,
-        int $rateLimited,
-        ?string $errorMessage,
-        ?float $durationSeconds
-    ): int {
-        $sql = 'INSERT INTO sync_status (status, items_synced, items_failed, rate_limited, error_message, duration_seconds)
-                VALUES (?, ?, ?, ?, ?, ?)';
+    public function updateStatus(int $userId, string $source, string $status, ?string $errorMessage = null): void
+    {
+        $sql = 'INSERT INTO sync_status (user_id, source, status, last_sync_at, error_message)
+                VALUES (?, ?, ?, NOW(), ?)
+                ON DUPLICATE KEY UPDATE
+                    status = VALUES(status),
+                    last_sync_at = NOW(),
+                    error_message = VALUES(error_message)';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([
-                $status,
-                $itemsSynced,
-                $itemsFailed,
-                $rateLimited,
-                $errorMessage,
-                $durationSeconds,
-            ]);
-            return (int) $this->pdo->lastInsertId();
+            $stmt->execute([$userId, $source, $status, $errorMessage]);
         } catch (Throwable $exception) {
-            RepositoryObservability::insertFailed(
+            RepositoryObservability::upsertFailed(
                 self::class,
                 __FUNCTION__,
                 $sql,
                 $exception,
-                ['status' => $status]
+                ['userId' => $userId, 'source' => $source]
             );
             throw $exception;
         }
     }
 
-    public function getLastSync(): ?array
+    public function getLastSync(int $userId, string $source = 'csfloat'): ?array
     {
-        $sql = 'SELECT id, sync_date, status, items_synced, items_failed, rate_limited, error_message, duration_seconds
+        $sql = 'SELECT id, source, status, last_sync_at, error_message
                 FROM sync_status
-                ORDER BY sync_date DESC
+                WHERE user_id = ? AND source = ?
                 LIMIT 1';
 
         try {
-            $stmt = $this->pdo->query($sql);
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$userId, $source]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             return $row ?: null;
         } catch (Throwable $exception) {
@@ -94,22 +83,23 @@ final class SyncStatusRepository
                 __FUNCTION__,
                 $sql,
                 $exception,
-                []
+                ['userId' => $userId, 'source' => $source]
             );
             throw $exception;
         }
     }
 
-    public function getLatestSyncs(int $limit = 10): array
+    public function getLatestSyncs(int $userId, int $limit = 10): array
     {
-        $sql = 'SELECT id, sync_date, status, items_synced, items_failed, rate_limited, error_message, duration_seconds
+        $sql = 'SELECT id, source, status, last_sync_at, error_message
                 FROM sync_status
-                ORDER BY sync_date DESC
+                WHERE user_id = ?
+                ORDER BY last_sync_at DESC
                 LIMIT ?';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$limit]);
+            $stmt->execute([$userId, $limit]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC) ?? [];
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -117,36 +107,7 @@ final class SyncStatusRepository
                 __FUNCTION__,
                 $sql,
                 $exception,
-                ['limit' => $limit]
-            );
-            throw $exception;
-        }
-    }
-
-    public function getSyncStats(int $hoursBack = 24): array
-    {
-        $sql = 'SELECT 
-                    COUNT(*) as total_syncs,
-                    SUM(CASE WHEN status = "success" THEN 1 ELSE 0 END) as successful_syncs,
-                    SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed_syncs,
-                    SUM(CASE WHEN status = "partial" THEN 1 ELSE 0 END) as partial_syncs,
-                    SUM(items_synced) as total_items_synced,
-                    SUM(items_failed) as total_items_failed,
-                    AVG(duration_seconds) as avg_duration_seconds
-                FROM sync_status
-                WHERE sync_date >= DATE_SUB(NOW(), INTERVAL ? HOUR)';
-
-        try {
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$hoursBack]);
-            return $stmt->fetch(PDO::FETCH_ASSOC) ?? [];
-        } catch (Throwable $exception) {
-            RepositoryObservability::queryFailed(
-                self::class,
-                __FUNCTION__,
-                $sql,
-                $exception,
-                ['hoursBack' => $hoursBack]
+                ['userId' => $userId, 'limit' => $limit]
             );
             throw $exception;
         }

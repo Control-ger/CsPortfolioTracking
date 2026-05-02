@@ -15,15 +15,14 @@ final class ItemLiveCacheRepository
     public function ensureTable(): void
     {
         $sql = "CREATE TABLE IF NOT EXISTS item_live_cache (
-            market_hash_name VARCHAR(255) PRIMARY KEY,
-            price_usd DECIMAL(10, 2) NOT NULL,
-            price_eur DECIMAL(10, 2) NOT NULL,
-            exchange_rate DECIMAL(10, 6) NOT NULL,
-            price_source VARCHAR(16) DEFAULT NULL,
-            fetched_at DATETIME NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_fetched_at (fetched_at)
+            item_id          INT            NOT NULL PRIMARY KEY,
+            price_usd        DECIMAL(10,2)  NOT NULL,
+            exchange_rate_id INT            NOT NULL,
+            price_source     VARCHAR(64),
+            fetched_at       TIMESTAMP      NOT NULL,
+            updated_at       TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (item_id)          REFERENCES items(id)          ON DELETE CASCADE,
+            FOREIGN KEY (exchange_rate_id) REFERENCES exchange_rates(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
@@ -39,19 +38,18 @@ final class ItemLiveCacheRepository
             );
             throw $exception;
         }
-
-        $this->ensurePriceSourceColumn();
     }
 
-    public function findByMarketHashName(string $marketHashName): ?array
+    public function findByItemId(int $itemId): ?array
     {
-        $sql = 'SELECT market_hash_name, price_usd, price_eur, exchange_rate, price_source, fetched_at
-             FROM item_live_cache
-             WHERE market_hash_name = ?';
+        $sql = 'SELECT ilc.price_usd, ilc.exchange_rate_id, ilc.price_source, ilc.fetched_at, er.usd_to_eur
+                FROM item_live_cache ilc
+                JOIN exchange_rates er ON er.id = ilc.exchange_rate_id
+                WHERE ilc.item_id = ?';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$marketHashName]);
+            $stmt->execute([$itemId]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             return $row ?: null;
         } catch (Throwable $exception) {
@@ -60,82 +58,58 @@ final class ItemLiveCacheRepository
                 __FUNCTION__,
                 $sql,
                 $exception,
-                ['marketHashName' => $marketHashName]
+                ['itemId' => $itemId]
             );
             throw $exception;
         }
     }
 
     public function upsert(
-        string $marketHashName,
+        int $itemId,
         float $priceUsd,
-        float $priceEur,
-        float $exchangeRate,
+        int $exchangeRateId,
         string $priceSource,
         string $fetchedAt
     ): void {
         $sql = 'INSERT INTO item_live_cache (
-                market_hash_name, price_usd, price_eur, exchange_rate, price_source, fetched_at
-             ) VALUES (?, ?, ?, ?, ?, ?)
+                item_id, price_usd, exchange_rate_id, price_source, fetched_at
+             ) VALUES (?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 price_usd = VALUES(price_usd),
-                price_eur = VALUES(price_eur),
-                exchange_rate = VALUES(exchange_rate),
+                exchange_rate_id = VALUES(exchange_rate_id),
                 price_source = VALUES(price_source),
                 fetched_at = VALUES(fetched_at),
                 updated_at = CURRENT_TIMESTAMP';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$marketHashName, $priceUsd, $priceEur, $exchangeRate, $priceSource, $fetchedAt]);
+            $stmt->execute([$itemId, $priceUsd, $exchangeRateId, $priceSource, $fetchedAt]);
         } catch (Throwable $exception) {
             RepositoryObservability::upsertFailed(
                 self::class,
                 __FUNCTION__,
                 $sql,
                 $exception,
-                ['marketHashName' => $marketHashName]
+                ['itemId' => $itemId]
             );
             throw $exception;
         }
     }
 
-    private function ensurePriceSourceColumn(): void
+    public function deleteByItemId(int $itemId): bool
     {
-        $checkSql = "SHOW COLUMNS FROM item_live_cache LIKE 'price_source'";
+        $sql = 'DELETE FROM item_live_cache WHERE item_id = ?';
+
         try {
-            $stmt = $this->pdo->query($checkSql);
-            $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+            $stmt = $this->pdo->prepare($sql);
+            return $stmt->execute([$itemId]) && $stmt->rowCount() > 0;
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
                 self::class,
                 __FUNCTION__,
-                $checkSql,
+                $sql,
                 $exception,
-                ['table' => 'item_live_cache', 'column' => 'price_source']
-            );
-            throw $exception;
-        }
-
-        if ($row !== false && $row !== null) {
-            return;
-        }
-
-        $alterSql = 'ALTER TABLE item_live_cache ADD COLUMN price_source VARCHAR(16) DEFAULT NULL AFTER exchange_rate';
-        try {
-            $this->pdo->exec($alterSql);
-            RepositoryObservability::migrationColumnAdded(
-                self::class,
-                'item_live_cache',
-                'price_source'
-            );
-        } catch (Throwable $exception) {
-            RepositoryObservability::queryFailed(
-                self::class,
-                __FUNCTION__,
-                $alterSql,
-                $exception,
-                ['table' => 'item_live_cache', 'column' => 'price_source']
+                ['itemId' => $itemId]
             );
             throw $exception;
         }

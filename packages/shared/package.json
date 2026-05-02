@@ -1,0 +1,18 @@
+{
+  "name": "@packages/shared",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Shared React components, hooks, and utilities for web and desktop apps",
+  "exports": {
+    "./components": "./src/components/index.js",
+    "./hooks": "./src/hooks/index.js",
+    "./contexts": "./src/contexts/index.js",
+    "./lib": "./src/lib/index.js",
+    "./pages": "./src/pages/index.js",
+    "./types": "./src/types/index.js"
+  },
+  "files": [
+    "src"
+  ]
+}
+

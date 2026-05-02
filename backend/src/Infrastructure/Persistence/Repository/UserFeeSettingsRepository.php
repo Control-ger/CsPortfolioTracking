@@ -11,13 +11,11 @@ final class UserFeeSettingsRepository
     private const DEFAULT_SETTINGS = [
         'fxFeePercent' => 0.0,
         'sellerFeePercent' => 2.0,
-        'withdrawalFeePercent' => 2.5,
-        'depositFeePercent' => 2.8,
-        'depositFeeFixedEur' => 0.26,
+        'withdrawalFee' => 2.5,
+        'depositFee' => 2.8,
+        'depositFeeFixed' => 0.26,
         'source' => 'defaults',
     ];
-
-    private bool $tableReady = false;
 
     public function __construct(private readonly PDO $pdo)
     {
@@ -25,24 +23,23 @@ final class UserFeeSettingsRepository
 
     public function ensureTable(): void
     {
-        if ($this->tableReady) {
-            return;
-        }
-
         $sql = "CREATE TABLE IF NOT EXISTS user_fee_settings (
-            id INT PRIMARY KEY,
-            fx_fee_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
-            seller_fee_percent DECIMAL(5,2) NOT NULL DEFAULT 2.00,
-            withdrawal_fee_percent DECIMAL(5,2) NOT NULL DEFAULT 2.50,
-            deposit_fee_percent DECIMAL(5,2) NOT NULL DEFAULT 2.80,
-            deposit_fee_fixed_eur DECIMAL(10,2) NOT NULL DEFAULT 0.26,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            id                  INT AUTO_INCREMENT PRIMARY KEY,
+            user_id             INT            NOT NULL,
+            fx_fee_percent      DECIMAL(5,4)   NOT NULL DEFAULT 0,
+            seller_fee_percent  DECIMAL(5,4)   NOT NULL DEFAULT 0,
+            withdrawal_fee      DECIMAL(10,2)  NOT NULL DEFAULT 0,
+            deposit_fee         DECIMAL(5,4)   NOT NULL DEFAULT 0,
+            deposit_fee_fixed   DECIMAL(10,2)  NOT NULL DEFAULT 0,
+            valid_from          TIMESTAMP      NOT NULL,
+            valid_to            TIMESTAMP      NULL,
+            created_at          TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_valid (user_id, valid_from)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
             $this->pdo->exec($sql);
-            $this->tableReady = true;
             RepositoryObservability::schemaEnsured(self::class, 'user_fee_settings');
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -56,27 +53,34 @@ final class UserFeeSettingsRepository
         }
     }
 
-    public function findOrDefault(): array
+    public function findCurrentByUserId(int $userId): array
     {
         $this->ensureTable();
 
-        $sql = 'SELECT fx_fee_percent, seller_fee_percent, withdrawal_fee_percent, deposit_fee_percent, deposit_fee_fixed_eur
-            FROM user_fee_settings WHERE id = 1 LIMIT 1';
+        $sql = 'SELECT id, fx_fee_percent, seller_fee_percent, withdrawal_fee, deposit_fee, deposit_fee_fixed
+                FROM user_fee_settings
+                WHERE user_id = ?
+                  AND valid_from <= NOW()
+                  AND (valid_to IS NULL OR valid_to > NOW())
+                ORDER BY valid_from DESC
+                LIMIT 1';
 
         try {
-            $stmt = $this->pdo->query($sql);
-            $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : false;
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!is_array($row)) {
                 return self::DEFAULT_SETTINGS;
             }
 
             return [
+                'id' => (int) $row['id'],
                 'fxFeePercent' => (float) $row['fx_fee_percent'],
                 'sellerFeePercent' => (float) $row['seller_fee_percent'],
-                'withdrawalFeePercent' => (float) $row['withdrawal_fee_percent'],
-                'depositFeePercent' => (float) $row['deposit_fee_percent'],
-                'depositFeeFixedEur' => (float) $row['deposit_fee_fixed_eur'],
+                'withdrawalFee' => (float) $row['withdrawal_fee'],
+                'depositFee' => (float) $row['deposit_fee'],
+                'depositFeeFixed' => (float) $row['deposit_fee_fixed'],
                 'source' => 'db',
             ];
         } catch (Throwable $exception) {
@@ -84,43 +88,50 @@ final class UserFeeSettingsRepository
                 self::class,
                 __FUNCTION__,
                 $sql,
-                $exception
+                $exception,
+                ['userId' => $userId]
             );
             throw $exception;
         }
     }
 
-    public function upsert(array $settings): array
+    public function createNewVersion(int $userId, array $settings): array
     {
         $this->ensureTable();
 
-        $sql = 'INSERT INTO user_fee_settings (
-                id,
-                fx_fee_percent,
-                seller_fee_percent,
-                withdrawal_fee_percent,
-                deposit_fee_percent,
-                deposit_fee_fixed_eur
-            ) VALUES (1, :fx, :seller, :withdrawal, :depositPercent, :depositFixed)
-            ON DUPLICATE KEY UPDATE
-                fx_fee_percent = VALUES(fx_fee_percent),
-                seller_fee_percent = VALUES(seller_fee_percent),
-                withdrawal_fee_percent = VALUES(withdrawal_fee_percent),
-                deposit_fee_percent = VALUES(deposit_fee_percent),
-                deposit_fee_fixed_eur = VALUES(deposit_fee_fixed_eur),
-                updated_at = CURRENT_TIMESTAMP';
+        // Close previous version
+        $closeSql = 'UPDATE user_fee_settings SET valid_to = NOW()
+                     WHERE user_id = ? AND valid_to IS NULL';
+        try {
+            $stmt = $this->pdo->prepare($closeSql);
+            $stmt->execute([$userId]);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $closeSql,
+                $exception,
+                ['userId' => $userId]
+            );
+            throw $exception;
+        }
+
+        // Insert new version
+        $sql = 'INSERT INTO user_fee_settings (user_id, fx_fee_percent, seller_fee_percent, withdrawal_fee, deposit_fee, deposit_fee_fixed, valid_from)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())';
 
         try {
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([
-                ':fx' => $settings['fxFeePercent'],
-                ':seller' => $settings['sellerFeePercent'],
-                ':withdrawal' => $settings['withdrawalFeePercent'],
-                ':depositPercent' => $settings['depositFeePercent'],
-                ':depositFixed' => $settings['depositFeeFixedEur'],
+                $userId,
+                $settings['fxFeePercent'] ?? 0,
+                $settings['sellerFeePercent'] ?? 0,
+                $settings['withdrawalFee'] ?? 0,
+                $settings['depositFee'] ?? 0,
+                $settings['depositFeeFixed'] ?? 0,
             ]);
 
-            $stored = $this->findOrDefault();
+            $stored = $this->findCurrentByUserId($userId);
             $stored['source'] = 'db';
             return $stored;
         } catch (Throwable $exception) {
@@ -129,7 +140,7 @@ final class UserFeeSettingsRepository
                 __FUNCTION__,
                 $sql,
                 $exception,
-                $settings
+                ['userId' => $userId]
             );
             throw $exception;
         }

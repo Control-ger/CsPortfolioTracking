@@ -1,0 +1,17 @@
+{
+  "name": "cs-portfolio-desktop",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "main.js",
+  "description": "CS Portfolio Tracking - Electron Desktop version",
+  "scripts": {
+    "dev": "vite build --watch & electron .",
+    "build": "vite build && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1"
+  }
+}
+
+

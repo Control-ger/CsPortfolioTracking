@@ -13,7 +13,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
-import { createWatchlistItem, searchWatchlistItems } from "@/lib/apiClient.js";
+import { createWatchlistItemData, searchWatchlistItemsData } from "@/lib/dataSource.js";
 
 const ITEM_TYPE_OPTIONS = [
   { value: "all", label: "Alle Typen" },
@@ -68,7 +68,7 @@ const SORT_OPTIONS = [
 ];
 
 const SEARCH_ALIASES = [
-  { pattern: /[()\[\]{}]/g, replacement: " " },
+  { pattern: new RegExp("[(){}\\[\\]]", "g"), replacement: " " },
   { pattern: /\bcases\b/gi, replacement: "case" },
   { pattern: /\bstickers\b/gi, replacement: "sticker" },
   { pattern: /\bcapsules\b/gi, replacement: "capsule" },
@@ -178,7 +178,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
         setIsSearching(true);
         setError("");
 
-        const response = await searchWatchlistItems(
+        const response = await searchWatchlistItemsData(
           effectiveTerm,
           {
             itemType: effectiveItemType,
@@ -270,7 +270,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     try {
       setSubmittingItem(marketHashName);
       setError("");
-      await createWatchlistItem(marketHashName, candidate.itemType || "other");
+      await createWatchlistItemData(marketHashName, candidate.itemType || "other");
       setSearchTerm("");
       setResults([]);
       setTotalItems(0);

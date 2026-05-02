@@ -21,6 +21,28 @@ CS Investor Hub ist ein React + PHP Vibe Coded Projekt zum Tracking meiner CS2 P
 - Desktop: Electron, SQLite (`better-sqlite3`) fuer local-first Persistenz
 - Backend: PHP 8.x (MVC-artige Struktur unter `backend/src`)
 - Backend-Persistenz: MySQL (PDO)
+- Monorepo: npm workspaces mit `apps/web`, `apps/desktop`, `packages/shared`
+
+## Projektstruktur (Monorepo)
+
+Dieses Projekt verwendet eine Monorepo-Struktur mit npm workspaces:
+
+```
+├── apps/
+│   ├── web/          # Web/PWA Client (read-only)
+│   └── desktop/      # Electron Desktop App (write-enabled)
+├── packages/
+│   └── shared/       # Gemeinsamer React Code
+├── backend/          # PHP Backend API
+└── dist/             # Build Output
+```
+
+### Workspace-Aufteilung
+
+- **`packages/shared`** - Gemeinsame React Komponenten, Hooks, Contexts, Utils
+- **`apps/web`** - Web-spezifischer Entry Point, PWA Manifest, Service Worker
+- **`apps/desktop`** - Electron main/preload, Desktop-spezifische IPC-Logik
+- **`backend`** - PHP API, bleibt unverändert
 
 ## Zielarchitektur: Desktop local-first
 

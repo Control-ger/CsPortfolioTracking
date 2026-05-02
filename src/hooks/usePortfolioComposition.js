@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchPortfolioComposition } from '@/lib/apiClient.js';
+import { fetchPortfolioComposition } from '@/lib/dataSource.js';
 
 export function usePortfolioComposition() {
   const [data, setData] = useState([]);

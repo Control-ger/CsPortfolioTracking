@@ -1,0 +1,16 @@
+{
+  "name": "cs-portfolio-web",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "CS Portfolio Tracking - Web/PWA version (read-only)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^7.2.4"
+  }
+}
+
+

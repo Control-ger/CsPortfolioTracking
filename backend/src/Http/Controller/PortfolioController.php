@@ -18,7 +18,8 @@ final class PortfolioController
     public function investments(Request $request): void
     {
         try {
-            $rows = $this->portfolioService->getEnrichedInvestments(true);
+            $userId = $this->resolveUserId($request);
+            $rows = $this->portfolioService->getEnrichedInvestments($userId, true);
             JsonResponseFactory::success(
                 $rows,
                 ['warnings' => $this->portfolioService->consumePricingWarnings()]
@@ -38,7 +39,8 @@ final class PortfolioController
     public function summary(Request $request): void
     {
         try {
-            $rows = $this->portfolioService->getEnrichedInvestments();
+            $userId = $this->resolveUserId($request);
+            $rows = $this->portfolioService->getEnrichedInvestments($userId);
             JsonResponseFactory::success(
                 $this->portfolioService->getSummary($rows)->toArray(),
                 ['warnings' => $this->portfolioService->consumePricingWarnings()]
@@ -58,7 +60,7 @@ final class PortfolioController
     public function history(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->portfolioService->getHistory());
+            JsonResponseFactory::success($this->portfolioService->getHistory($this->resolveUserId($request)));
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -74,8 +76,7 @@ final class PortfolioController
     public function investmentHistory(Request $request, int $id): void
     {
         try {
-            $itemName = isset($request->query['itemName']) ? (string) $request->query['itemName'] : null;
-            JsonResponseFactory::success($this->portfolioService->getInvestmentHistory($id, $itemName));
+            JsonResponseFactory::success($this->portfolioService->getInvestmentHistory($this->resolveUserId($request), $id));
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -94,7 +95,7 @@ final class PortfolioController
             $inputValue = $request->body['totalValue'] ?? $request->body['total_value'] ?? null;
             $value = is_numeric($inputValue) ? (float) $inputValue : null;
             JsonResponseFactory::success(
-                $this->portfolioService->saveDailyValue($value),
+                $this->portfolioService->saveDailyValue($this->resolveUserId($request), $value),
                 ['warnings' => $this->portfolioService->consumePricingWarnings()],
                 200
             );
@@ -113,7 +114,7 @@ final class PortfolioController
     public function composition(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->portfolioService->getComposition());
+            JsonResponseFactory::success($this->portfolioService->getComposition($this->resolveUserId($request)));
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -130,7 +131,7 @@ final class PortfolioController
     {
         try {
             $exclude = filter_var($request->body['exclude'] ?? false, FILTER_VALIDATE_BOOL);
-            $success = $this->portfolioService->toggleExcludeInvestment($id, $exclude);
+            $success = $this->portfolioService->toggleExcludeInvestment($this->resolveUserId($request), $id, $exclude);
 
             if (!$success) {
                 JsonResponseFactory::error(
@@ -165,5 +166,25 @@ final class PortfolioController
             );
             JsonResponseFactory::error('PORTFOLIO_TOGGLE_EXCLUDE_FAILED', $exception->getMessage(), [], 500);
         }
+    }
+
+    private function resolveUserId(Request $request): int
+    {
+        foreach (['x-user-id', 'user-id'] as $header) {
+            if (isset($request->headers[$header]) && is_numeric($request->headers[$header])) {
+                return max(1, (int) $request->headers[$header]);
+            }
+        }
+
+        foreach (['userId', 'user_id'] as $key) {
+            if (isset($request->body[$key]) && is_numeric($request->body[$key])) {
+                return max(1, (int) $request->body[$key]);
+            }
+            if (isset($request->query[$key]) && is_numeric($request->query[$key])) {
+                return max(1, (int) $request->query[$key]);
+            }
+        }
+
+        return 1;
     }
 }

@@ -4,7 +4,7 @@ import { Skeleton } from "./ui/skeleton";
 import { ApiWarnings } from "./ApiWarnings";
 import { ItemListRow } from "./ItemListRow";
 import { ChevronDown, ChevronUp, Eye, TrendingUp, TrendingDown } from "lucide-react";
-import { fetchWatchlist } from "@/lib/apiClient.js";
+import { fetchWatchlistData } from "@/lib/dataSource.js";
 import { cn } from "@/lib/utils";
 import { UI } from "@/lib/constants";
 
@@ -88,7 +88,6 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
 };
 
 export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenItem }) => {
-  const [watchlistItems, setWatchlistItems] = useState([]);
   const [allWatchlistItems, setAllWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [warnings, setWarnings] = useState([]);
@@ -98,10 +97,9 @@ export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenIte
     const loadWatchlistData = async () => {
       try {
         setLoading(true);
-        const response = await fetchWatchlist();
+        const response = await fetchWatchlistData();
         const items = response?.data || [];
         setAllWatchlistItems(items);
-        setWatchlistItems(items.slice(0, maxItems));
         setWarnings(response?.meta?.warnings || []);
       } catch (err) {
         console.error("Fehler beim Laden der Watchlist:", err);
@@ -114,9 +112,6 @@ export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenIte
     loadWatchlistData();
   }, [maxItems]);
 
-  // Bestimme welche Items angezeigt werden
-  const displayedItems = isExpanded ? allWatchlistItems : watchlistItems;
-  const hasMoreItems = allWatchlistItems.length > maxItems;
 
   if (loading) {
     return (

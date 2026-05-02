@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, Wallet, ArrowLeft } from "lucide-react";
+import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, Wallet, ArrowLeft, Settings, DollarSign } from "lucide-react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
@@ -102,33 +103,27 @@ export function SettingsPage() {
     setApiKeySuccess("");
   };
 
-  const handleSaveApiKey = async () => {
+  const handleUpdateCsFloatApiKey = async () => {
     try {
       setApiKeySaving(true);
       setApiKeyError("");
       setApiKeySuccess("");
 
-      if (!encryptionReady) {
-        throw new Error('Verschluesselung nicht konfiguriert. Bitte ENCRYPTION_KEY in .env setzen (mindestens 32 Zeichen).');
+      if (!isEncryptionConfigured()) {
+        setApiKeyError("Encryption ist nicht konfiguriert.");
+        return;
       }
 
-      if (!apiKey.trim() || apiKey.length < 10) {
-        throw new Error('Bitte einen gueltigen CSFloat API Key eingeben (mindestens 10 Zeichen).');
-      }
+      const encryptedKey = encrypt(apiKey.trim());
+      await updateCsFloatApiKey(encryptedKey);
 
-      const encryptedKey = await encrypt(apiKey.trim());
-      const response = await updateCsFloatApiKey(encryptedKey);
-      const result = response?.data || {};
-
-      setApiKeyStatus({
-        configured: true,
-        lastFour: result.lastFour || apiKey.slice(-4)
-      });
+      setApiKeySuccess("API Key wurde erfolgreich aktualisiert.");
       setApiKey("");
-      setShowApiKey(false);
-      setApiKeySuccess(`CSFloat API Key gespeichert (endet auf ...${result.lastFour || apiKey.slice(-4)})`);
-    } catch (saveError) {
-      setApiKeyError(saveError.message || "API Key konnte nicht gespeichert werden.");
+
+      const statusResponse = await fetchCsFloatApiKeyStatus();
+      setApiKeyStatus(statusResponse);
+    } catch (err) {
+      setApiKeyError(err.message || "Fehler beim Aktualisieren des API Keys.");
     } finally {
       setApiKeySaving(false);
     }
@@ -168,6 +163,67 @@ export function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  
+  const renderGeneralTab = () => {
+    const { currency, currencies, setCurrency, exchangeRates, ratesLoading } = useCurrency();
+
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5" />
+            <CardTitle>Waehrung</CardTitle>
+          </div>
+          <CardDescription>
+            Waehle deine bevorzugte Waehrung fuer Preisanzeigen.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-foreground">
+              Anzeige-Waehrung
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {Object.entries(currencies).map(([code, info]) => (
+                <button
+                  key={code}
+                  onClick={() => setCurrency(code)}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 transition-colors ${
+                    currency === code
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border hover:bg-accent'
+                  }`}
+                >
+                  <span className="text-lg font-bold">{info.symbol}</span>
+                  <span className="text-xs font-medium">{info.code}</span>
+                  <span className="text-[10px] text-muted-foreground">{info.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {ratesLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          ) : (
+            <div className="rounded-md bg-muted p-3 text-sm">
+              <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div>1 EUR = {exchangeRates.USD?.toFixed(4) || '-'} USD</div>
+                <div>1 EUR = {exchangeRates.GBP?.toFixed(4) || '-'} GBP</div>
+              </div>
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                Kurse werden taeglich aktualisiert.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
   };
 
   const renderFeesTab = () => {
@@ -414,7 +470,7 @@ export function SettingsPage() {
 
           <div className="flex justify-end">
             <Button
-              onClick={handleSaveApiKey}
+              onClick={handleUpdateCsFloatApiKey}
               disabled={apiKeySaving || !encryptionReady || !apiKey.trim()}
             >
               {apiKeySaving ? "Speichert..." : apiKeyStatus.configured ? "Key Aktualisieren" : "Key Speichern"}
@@ -439,7 +495,7 @@ export function SettingsPage() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
               <p className="text-sm text-muted-foreground">
-                Gebuehren und API Konfiguration
+                Gebuehren, Waehrung und API Konfiguration
               </p>
             </div>
           </div>
@@ -451,7 +507,11 @@ export function SettingsPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="general" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              <span>Allgemein</span>
+            </TabsTrigger>
             <TabsTrigger value="fees" className="flex items-center gap-2">
               <Wallet className="h-4 w-4" />
               <span>Gebuehren</span>
@@ -464,6 +524,10 @@ export function SettingsPage() {
               )}
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="general" className="mt-4">
+            {renderGeneralTab()}
+          </TabsContent>
 
           <TabsContent value="fees" className="mt-4">
             {renderFeesTab()}

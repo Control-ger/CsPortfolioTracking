@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Application\Service;
 
+use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Shared\Dto\WatchlistItemDto;
@@ -12,21 +13,22 @@ final class WatchlistService
 {
     public function __construct(
         private readonly WatchlistRepository $watchlistRepository,
+        private readonly ItemRepository $itemRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
         private readonly PricingService $pricingService
     ) {
     }
 
-    public function listWithMetrics(bool $syncLive = false): array
+    public function listWithMetrics(int $userId = 1, bool $syncLive = false): array
     {
         $this->watchlistRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
 
         if ($syncLive) {
-            $this->syncLivePrices();
+            $this->syncLivePrices($userId);
         }
 
-        $items = $this->watchlistRepository->findAll();
+        $items = $this->watchlistRepository->findAll($userId);
         $now = date('Y-m-d H:i:s');
         $sevenDaysAgo = date('Y-m-d H:i:s', strtotime('-7 days'));
         $historyFrom = date('Y-m-d H:i:s', strtotime('-370 days'));
@@ -34,16 +36,16 @@ final class WatchlistService
 
         foreach ($items as $item) {
             $name = (string) ($item['name'] ?? '');
+            $itemId = (int) ($item['item_id'] ?? 0);
             if ($name === '') {
                 continue;
             }
 
             $imageUrl = $this->pricingService->getItemImageUrl($name);
 
-            $currentSnapshot = $this->priceHistoryRepository->findLatestPriceSnapshotByItem($name, $now);
-            $currentPrice = $currentSnapshot['priceEur'] ?? null;
-            $priceSource = $currentSnapshot['priceSource'] ?? null;
-            $oldPrice = $this->priceHistoryRepository->findLatestPriceByItem($name, $sevenDaysAgo);
+            $currentPrice = $itemId > 0 ? $this->priceHistoryRepository->findLatestPriceByItemId($itemId, $now) : null;
+            $priceSource = null;
+            $oldPrice = $itemId > 0 ? $this->priceHistoryRepository->findLatestPriceByItemId($itemId, $sevenDaysAgo) : null;
             $priceChange = null;
             $priceChangePercent = null;
 
@@ -52,7 +54,7 @@ final class WatchlistService
                 $priceChangePercent = ($priceChange / $oldPrice) * 100;
             }
 
-            $priceHistory = $this->priceHistoryRepository->findHistoryByItem($name, $historyFrom);
+            $priceHistory = $itemId > 0 ? $this->priceHistoryRepository->findHistoryByItemId($itemId, $historyFrom) : [];
             $priceHistoryWithGrowth = $this->enrichHistoryWithGrowthPercent($priceHistory);
 
             $dto = new WatchlistItemDto(
@@ -148,7 +150,7 @@ final class WatchlistService
         return $this->pricingService->consumeWarnings();
     }
 
-    public function addItem(string $name, string $type = 'skin'): array
+    public function addItem(int $userId = 1, string $name = '', string $type = 'skin'): array
     {
         $trimmedName = trim($name);
         if ($trimmedName === '') {
@@ -158,12 +160,14 @@ final class WatchlistService
         $this->watchlistRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
 
-        if ($this->watchlistRepository->existsByName($trimmedName)) {
+        $itemId = $this->itemRepository->findOrCreateByName($trimmedName, $type);
+
+        if ($this->watchlistRepository->existsByItemId($userId, $itemId)) {
             throw new \RuntimeException('Item ist bereits in der Watchlist vorhanden.');
         }
 
-        $id = $this->watchlistRepository->insert($trimmedName, $type);
-        $liveSnapshot = $this->syncSingleItemPrice($trimmedName);
+        $id = $this->watchlistRepository->insert($userId, $itemId, null);
+        $liveSnapshot = $this->syncSingleItemPrice($itemId, $trimmedName);
 
         Logger::event(
             'info',
@@ -172,6 +176,7 @@ final class WatchlistService
             'Watchlist item created',
             [
                 'itemId' => $id,
+                'userId' => $userId,
                 'itemName' => $trimmedName,
                 'itemType' => $type,
                 'isLiveSynced' => $liveSnapshot !== null,
@@ -202,7 +207,7 @@ final class WatchlistService
         return $deleted;
     }
 
-    public function refreshPrices(): array
+    public function refreshPrices(int $userId = 1): array
     {
         $this->watchlistRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
@@ -213,7 +218,7 @@ final class WatchlistService
             'domain.watchlist.price_refresh_started',
             'Watchlist price refresh started'
         );
-        $result = $this->syncLivePrices();
+        $result = $this->syncLivePrices($userId);
         Logger::event(
             'info',
             'domain',
@@ -228,18 +233,19 @@ final class WatchlistService
         return $result;
     }
 
-    private function syncLivePrices(): array
+    private function syncLivePrices(int $userId): array
     {
-        $items = $this->watchlistRepository->findAll();
+        $items = $this->watchlistRepository->findAll($userId);
         $updated = 0;
 
         foreach ($items as $item) {
             $name = (string) ($item['name'] ?? '');
+            $itemId = (int) ($item['item_id'] ?? 0);
             if ($name === '') {
                 continue;
             }
 
-            if ($this->syncSingleItemPrice($name) === null) {
+            if ($itemId <= 0 || $this->syncSingleItemPrice($itemId, $name) === null) {
                 continue;
             }
 
@@ -250,7 +256,7 @@ final class WatchlistService
         return ['updated' => $updated, 'totalItems' => count($items)];
     }
 
-    private function syncSingleItemPrice(string $itemName): ?array
+    private function syncSingleItemPrice(int $itemId, string $itemName): ?array
     {
         $snapshot = $this->pricingService->getLivePriceSnapshot($itemName);
         if ($snapshot === null) {
@@ -258,11 +264,10 @@ final class WatchlistService
         }
 
         $this->priceHistoryRepository->upsertPrice(
-            $itemName,
+            $itemId,
             $this->currentHourBucket(),
             (float) $snapshot['priceUsd'],
-            (float) $snapshot['priceEur'],
-            (float) $snapshot['exchangeRate'],
+            (int) ($snapshot['exchangeRateId'] ?? 0),
             isset($snapshot['priceSource']) ? (string) $snapshot['priceSource'] : null
         );
 

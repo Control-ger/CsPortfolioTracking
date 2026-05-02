@@ -30,3 +30,9 @@ dist-ssr
 dist/
 release/
 dist_electron/
+
+# Monorepo dist and node_modules
+apps/*/dist/
+apps/*/node_modules/
+packages/*/dist/
+packages/*/node_modules/

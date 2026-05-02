@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Application\Service;
 
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
+use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
@@ -19,6 +20,7 @@ final class PortfolioService
 
     public function __construct(
         private readonly InvestmentRepository $investmentRepository,
+        private readonly ExchangeRateRepository $exchangeRateRepository,
         private readonly PositionHistoryRepository $positionHistoryRepository,
         private readonly PortfolioHistoryRepository $portfolioHistoryRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
@@ -27,18 +29,21 @@ final class PortfolioService
     ) {
     }
 
-    public function getEnrichedInvestments(bool $aggregateByName = false): array
+    public function getEnrichedInvestments(int $userId = 1, bool $aggregateByName = false): array
     {
         $this->ensurePriceHistoryTable();
 
-        $investments = $this->investmentRepository->findAll();
-        $feeSettings = $this->feeSettingsService->getSettings();
+        $investments = $this->investmentRepository->findAll($userId);
+        $feeSettings = $this->feeSettingsService->getSettings($userId);
         $rows = [];
         $snapshotTime = $this->currentHourBucket();
 
         foreach ($investments as $investment) {
+            $itemId = (int) ($investment['item_id'] ?? 0);
             $name = (string) ($investment['name'] ?? '');
-            $buyPrice = (float) ($investment['buy_price'] ?? 0);
+            $buyPriceUsd = isset($investment['buy_price_usd']) ? (float) $investment['buy_price_usd'] : null;
+            $usdToEurRate = $this->pricingService->getUsdToEurRate();
+            $buyPrice = $buyPriceUsd !== null ? round($buyPriceUsd * $usdToEurRate, 2) : 0.0;
             $quantity = (int) ($investment['quantity'] ?? 0);
             $presentation = $this->pricingService->getItemPresentation($name);
             $livePrice = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
@@ -56,9 +61,9 @@ final class PortfolioService
                 ? ($breakEvenDeltaEuro / $breakEvenPrice) * 100
                 : null;
 
-            $this->persistPriceHistorySnapshot($name, $snapshotTime, $presentation, $priceSource);
+            $this->persistPriceHistorySnapshot($itemId, $snapshotTime, $presentation, $priceSource);
 
-            $changeMetrics = $this->buildChangeMetrics($name, $livePrice);
+            $changeMetrics = $this->buildChangeMetrics($itemId, $livePrice);
 
             $fetchedAt = isset($presentation['fetchedAt']) ? (string) $presentation['fetchedAt'] : null;
             $priceAgeSeconds = $this->resolveFreshnessSeconds($fetchedAt);
@@ -74,12 +79,14 @@ final class PortfolioService
 
             $rows[] = [
                 'id' => (int) $investment['id'],
+                'itemId' => $itemId,
                 'name' => $name,
                 'type' => (string) $investment['type'],
                 'imageUrl' => $presentation['iconUrl'] ?? null,
                 'marketTypeLabel' => $presentation['marketTypeLabel'] ?? null,
                 'wearName' => $presentation['wearLabel'] ?? null,
                 'buyPrice' => $buyPrice,
+                'buyPriceUsd' => $buyPriceUsd,
                 'quantity' => $quantity,
                 'livePrice' => $livePrice,
                 'priceSource' => $priceSource,
@@ -200,67 +207,38 @@ final class PortfolioService
         );
     }
 
-    public function getHistory(): array
+    public function getHistory(int $userId = 1): array
     {
         $this->portfolioHistoryRepository->ensureTable();
-        $rows = $this->portfolioHistoryRepository->findAll();
+        $rows = $this->portfolioHistoryRepository->findAll($userId);
         return array_map(
             static fn(array $row): array => [
                 'id' => (int) $row['id'],
                 'date' => self::formatSnapshotDate((string) $row['date']),
-                'wert' => (float) $row['total_value'],
-                'invested' => (float) ($row['invested_value'] ?? 0.0),
-                'growthPercent' => isset($row['growth_percent']) && is_numeric($row['growth_percent'])
-                    ? (float) $row['growth_percent']
-                    : self::calculateGrowthPercent(
-                        (float) ($row['total_value'] ?? 0.0),
-                        (float) ($row['invested_value'] ?? 0.0)
-                    ),
+                'wert' => (float) $row['total_value_usd'],
+                'invested' => (float) ($row['invested_value_usd'] ?? 0.0),
+                'growthPercent' => self::calculateGrowthPercent(
+                    (float) ($row['total_value_usd'] ?? 0.0),
+                    (float) ($row['invested_value_usd'] ?? 0.0)
+                ),
             ],
             $rows
         );
     }
 
-    public function getInvestmentHistory(int $investmentId, ?string $itemName = null): array
+    public function getInvestmentHistory(int $userId = 1, int $itemId = 0): array
     {
         $this->positionHistoryRepository->ensureTable();
-        $normalizedItemName = trim((string) $itemName);
-
-        if ($normalizedItemName !== '') {
-            $investments = $this->investmentRepository->findAll();
-            $clusterIds = array_values(array_map(
-                static fn(array $row): int => (int) ($row['id'] ?? 0),
-                array_filter(
-                    $investments,
-                    static fn(array $row): bool => strcasecmp(
-                        (string) ($row['name'] ?? ''),
-                        $normalizedItemName
-                    ) === 0
-                )
-            ));
-
-            if ($clusterIds !== []) {
-                $rows = $this->positionHistoryRepository->findHistoryByInvestmentIds($clusterIds);
-            } else {
-                $rows = $this->positionHistoryRepository->findHistoryByInvestmentId($investmentId);
-            }
-        } else {
-            $rows = $this->positionHistoryRepository->findHistoryByInvestmentId($investmentId);
-        }
+        $rows = $itemId > 0 ? $this->positionHistoryRepository->findHistoryByItemId($userId, $itemId) : [];
 
         return array_map(
             static fn(array $row): array => [
                 'date' => self::formatSnapshotDate((string) $row['date']),
-                'wert' => (float) $row['total_value'],
-                'quantity' => (int) $row['quantity'],
-                'unitPrice' => (float) $row['unit_price'],
-                'invested' => (float) ($row['invested_value'] ?? 0.0),
-                'growthPercent' => isset($row['growth_percent']) && is_numeric($row['growth_percent'])
-                    ? (float) $row['growth_percent']
-                    : self::calculateGrowthPercent(
-                        (float) ($row['total_value'] ?? 0.0),
-                        (float) ($row['invested_value'] ?? 0.0)
-                    ),
+                'wert' => ((float) ($row['quantity_open'] ?? 0.0)) * ((float) ($row['avg_buy_price_usd'] ?? 0.0)),
+                'quantity' => (int) $row['quantity_open'],
+                'unitPrice' => (float) $row['avg_buy_price_usd'],
+                'invested' => ((float) ($row['quantity_open'] ?? 0.0)) * ((float) ($row['avg_buy_price_usd'] ?? 0.0)),
+                'growthPercent' => 0.0,
             ],
             $rows
         );
@@ -271,29 +249,28 @@ final class PortfolioService
         return $this->pricingService->consumeWarnings();
     }
 
-    public function saveDailyValue(?float $value = null): array
+    public function saveDailyValue(int $userId = 1, ?float $value = null): array
     {
         $this->portfolioHistoryRepository->ensureTable();
         $this->positionHistoryRepository->ensureTable();
-        $rows = $this->getEnrichedInvestments();
+        $rows = $this->getEnrichedInvestments($userId);
         $summary = $this->getSummary($rows);
         $totalValue = $value ?? $summary->totalValue;
         $totalInvested = $summary->totalInvested;
         $snapshotTime = $this->currentHourBucket();
         $portfolioGrowthPercent = self::calculateGrowthPercent($totalValue, $totalInvested);
-        $this->portfolioHistoryRepository->upsertForDate($snapshotTime, $totalValue, $totalInvested, $portfolioGrowthPercent);
+        $feeSettings = $this->feeSettingsService->getSettings($userId);
+        $feeSettingId = (int) ($feeSettings['id'] ?? 0);
+        $exchangeRateId = $this->exchangeRateRepository->ensureTodayRate($this->pricingService->getUsdToEurRate());
+        $this->portfolioHistoryRepository->upsertForDate($userId, $snapshotTime, $feeSettingId, $totalValue, $totalInvested, 0.0);
         foreach ($rows as $row) {
-            $positionTotalValue = (float) $row['currentValue'];
-            $positionInvestedValue = (float) ($row['totalInvested'] ?? 0.0);
-            $positionGrowthPercent = self::calculateGrowthPercent($positionTotalValue, $positionInvestedValue);
             $this->positionHistoryRepository->upsertSnapshot(
-                investmentId: (int) $row['id'],
-                date: $snapshotTime,
-                quantity: (int) $row['quantity'],
-                unitPrice: (float) $row['displayPrice'],
-                totalValue: $positionTotalValue,
-                investedValue: $positionInvestedValue,
-                growthPercent: $positionGrowthPercent
+                $userId,
+                (int) ($row['itemId'] ?? 0),
+                $snapshotTime,
+                (int) $row['quantity'],
+                (float) ($row['buyPriceUsd'] ?? 0.0),
+                $exchangeRateId
             );
         }
 
@@ -313,37 +290,38 @@ final class PortfolioService
         return ['date' => $snapshotTime, 'totalValue' => $totalValue, 'growthPercent' => $portfolioGrowthPercent];
     }
 
-    public function getComposition(): array
+    public function getComposition(int $userId = 1): array
     {
-        $investments = $this->getEnrichedInvestments();
+        $investments = $this->getEnrichedInvestments($userId);
         $composition = [];
         $totalValue = 0.0;
 
-        // Group by name (individual item) instead of type
         foreach ($investments as $investment) {
             $name = (string) $investment['name'];
+            $itemId = (int) ($investment['itemId'] ?? 0);
             $type = (string) $investment['type'];
             $currentValue = (float) $investment['currentValue'];
             $totalValue += $currentValue;
 
-            if (!isset($composition[$name])) {
-                $composition[$name] = [
+            $key = $itemId > 0 ? (string) $itemId : $name;
+            if (!isset($composition[$key])) {
+                $composition[$key] = [
                     'count' => 0,
                     'value' => 0.0,
                     'type' => $type,
+                    'name' => $name,
                 ];
             }
 
-            $composition[$name]['count'] += (int) $investment['quantity'];
-            $composition[$name]['value'] += $currentValue;
+            $composition[$key]['count'] += (int) $investment['quantity'];
+            $composition[$key]['value'] += $currentValue;
         }
 
-        // Calculate percentages and format
         $result = [];
-        foreach ($composition as $name => $data) {
+        foreach ($composition as $data) {
             $percentage = $totalValue > 0 ? ($data['value'] / $totalValue) * 100 : 0;
             $result[] = [
-                'name' => $name,
+                'name' => $data['name'],
                 'type' => $data['type'],
                 'count' => $data['count'],
                 'value' => round($data['value'], 2),
@@ -352,7 +330,6 @@ final class PortfolioService
             ];
         }
 
-        // Sort by value descending
         usort($result, fn($a, $b) => $b['value'] <=> $a['value']);
 
         return $result;
@@ -386,35 +363,29 @@ final class PortfolioService
     }
 
     private function persistPriceHistorySnapshot(
-        string $itemName,
+        int $itemId,
         string $date,
         array $presentation,
         ?string $priceSource
     ): void {
-        $priceEur = $presentation['priceEur'] ?? null;
         $priceUsd = $presentation['priceUsd'] ?? null;
         $exchangeRate = $presentation['exchangeRate'] ?? null;
+        $exchangeRateId = $this->exchangeRateRepository->ensureTodayRate((float) ($exchangeRate ?? $this->pricingService->getUsdToEurRate()));
 
-        if (
-            $priceEur === null || $priceEur <= 0
-            || $priceUsd === null || $priceUsd <= 0
-            || $exchangeRate === null || $exchangeRate <= 0
-            || $itemName === ''
-        ) {
+        if ($priceUsd === null || $priceUsd <= 0 || $itemId <= 0) {
             return;
         }
 
         $this->priceHistoryRepository->upsertPrice(
-            $itemName,
+            $itemId,
             $date,
             $priceUsd,
-            $priceEur,
-            $exchangeRate,
+            $exchangeRateId,
             $priceSource
         );
     }
 
-    private function buildChangeMetrics(string $itemName, ?float $currentPrice): array
+    private function buildChangeMetrics(int $itemId, ?float $currentPrice): array
     {
         $metrics = [
             '24h' => ['amount' => null, 'percent' => null, 'baselinePrice' => null, 'windowDays' => 1],
@@ -422,13 +393,13 @@ final class PortfolioService
             '30d' => ['amount' => null, 'percent' => null, 'baselinePrice' => null, 'windowDays' => 30],
         ];
 
-        if ($itemName === '' || $currentPrice === null || $currentPrice <= 0) {
+        if ($itemId <= 0 || $currentPrice === null || $currentPrice <= 0) {
             return $metrics;
         }
 
         foreach ($metrics as $label => $metric) {
             $beforeDate = date('Y-m-d H:i:s', strtotime('-' . $metric['windowDays'] . ' days'));
-            $baselinePrice = $this->priceHistoryRepository->findLatestPriceByItem($itemName, $beforeDate);
+            $baselinePrice = $this->priceHistoryRepository->findLatestPriceByItemId($itemId, $beforeDate);
             $metrics[$label]['baselinePrice'] = $baselinePrice;
 
             if ($baselinePrice === null || $baselinePrice <= 0) {
@@ -729,8 +700,8 @@ final class PortfolioService
         return (($totalValue - $investedValue) / $investedValue) * 100;
     }
 
-    public function toggleExcludeInvestment(int $id, bool $exclude): bool
+    public function toggleExcludeInvestment(int $userId = 1, int $id = 0, bool $exclude = false): bool
     {
-        return $this->investmentRepository->toggleExcludeFromPortfolio($id, $exclude);
+        return false;
     }
 }

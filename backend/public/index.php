@@ -10,6 +10,7 @@ use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
 use App\Http\Controller\CsFloatSyncController;
 use App\Http\Controller\DebugController;
+use App\Http\Controller\ExchangeRateController;
 use App\Http\Controller\PortfolioController;
 use App\Http\Controller\SettingsController;
 use App\Http\Controller\SyncStatusController;
@@ -25,6 +26,7 @@ use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
+use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
@@ -347,6 +349,7 @@ try {
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
+    (new UserRepository($pdo))->ensureDefaultUser();
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
 
     $pricingService = new PricingService(
@@ -381,6 +384,7 @@ try {
     $frontendTelemetryController = new FrontendTelemetryController();
     $syncStatusController = new SyncStatusController($syncStatusRepository);
     $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
+    $exchangeRateController = new ExchangeRateController(new ExchangeRateClient());
 
     $router = new Router();
     $router->register('GET', '/api/v1/portfolio/investments', [$portfolioController, 'investments']);
@@ -399,6 +403,7 @@ try {
     $router->register('PUT', '/api/v1/settings/fees', [$settingsController, 'updateFees']);
     $router->register('GET', '/api/v1/settings/csfloat-api-key', [$settingsController, 'getCsFloatApiKeyStatus']);
     $router->register('POST', '/api/v1/settings/csfloat-api-key', [$settingsController, 'updateCsFloatApiKey']);
+    $router->register('GET', '/api/v1/exchange-rate', [$exchangeRateController, 'getRates']);
 
     $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
     $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);

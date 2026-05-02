@@ -12,14 +12,20 @@ final class FeeSettingsService
     {
     }
 
-    public function getSettings(): array
+    public function getSettings(int $userId = 1): array
     {
-        return $this->repository->findOrDefault();
+        $settings = $this->repository->findCurrentByUserId($userId);
+
+        if (!isset($settings['id'])) {
+            $settings = $this->repository->createNewVersion($userId, $this->normalizeForRepository($settings));
+        }
+
+        return $this->normalizeForService($settings);
     }
 
-    public function updateSettings(array $input): array
+    public function updateSettings(int $userId = 1, array $input = []): array
     {
-        $current = $this->repository->findOrDefault();
+        $current = $this->getSettings($userId);
 
         $settings = [
             'fxFeePercent' => $this->validatePercentage(
@@ -44,7 +50,33 @@ final class FeeSettingsService
             ),
         ];
 
-        return $this->repository->upsert($settings);
+        return $this->normalizeForService(
+            $this->repository->createNewVersion($userId, $this->normalizeForRepository($settings))
+        );
+    }
+
+    private function normalizeForRepository(array $settings): array
+    {
+        return [
+            'fxFeePercent' => (float) ($settings['fxFeePercent'] ?? 0.0),
+            'sellerFeePercent' => (float) ($settings['sellerFeePercent'] ?? 0.0),
+            'withdrawalFee' => (float) ($settings['withdrawalFeePercent'] ?? $settings['withdrawalFee'] ?? 0.0),
+            'depositFee' => (float) ($settings['depositFeePercent'] ?? $settings['depositFee'] ?? 0.0),
+            'depositFeeFixed' => (float) ($settings['depositFeeFixedEur'] ?? $settings['depositFeeFixed'] ?? 0.0),
+        ];
+    }
+
+    private function normalizeForService(array $settings): array
+    {
+        return [
+            'id' => isset($settings['id']) ? (int) $settings['id'] : null,
+            'fxFeePercent' => (float) ($settings['fxFeePercent'] ?? $settings['fx_fee_percent'] ?? 0.0),
+            'sellerFeePercent' => (float) ($settings['sellerFeePercent'] ?? $settings['seller_fee_percent'] ?? 0.0),
+            'withdrawalFeePercent' => (float) ($settings['withdrawalFee'] ?? $settings['withdrawal_fee'] ?? 0.0),
+            'depositFeePercent' => (float) ($settings['depositFee'] ?? $settings['deposit_fee'] ?? 0.0),
+            'depositFeeFixedEur' => (float) ($settings['depositFeeFixed'] ?? $settings['deposit_fee_fixed'] ?? 0.0),
+            'source' => (string) ($settings['source'] ?? 'defaults'),
+        ];
     }
 
     private function validatePercentage(mixed $value, string $field): float

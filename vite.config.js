@@ -9,12 +9,17 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     base: './',
+    root: 'apps/web',
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
+        "@shared": path.resolve(__dirname, "./packages/shared/src"),
+        "@": path.resolve(__dirname, "./packages/shared/src"),
       },
     },
     build: {
+      // Output to root dist/ so Electron can find it
+      outDir: path.resolve(__dirname, "./dist"),
+      emptyOutDir: true,
       // Hier deaktivieren wir die zufälligen Hashes
       rollupOptions: {
         output: {

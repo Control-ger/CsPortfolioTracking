@@ -21,7 +21,7 @@ final class WatchlistController
     {
         try {
             $syncLive = filter_var($request->query['syncLive'] ?? false, FILTER_VALIDATE_BOOL);
-            $items = $this->watchlistService->listWithMetrics($syncLive);
+            $items = $this->watchlistService->listWithMetrics($this->resolveUserId($request), $syncLive);
             JsonResponseFactory::success(
                 $items,
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
@@ -71,7 +71,7 @@ final class WatchlistController
             $name = (string) ($request->body['name'] ?? '');
             $type = (string) ($request->body['type'] ?? 'skin');
             JsonResponseFactory::success(
-                $this->watchlistService->addItem($name, $type),
+                $this->watchlistService->addItem($this->resolveUserId($request), $name, $type),
                 ['warnings' => $this->watchlistService->consumePricingWarnings()],
                 201
             );
@@ -129,7 +129,7 @@ final class WatchlistController
     {
         try {
             JsonResponseFactory::success(
-                $this->watchlistService->refreshPrices(),
+                $this->watchlistService->refreshPrices($this->resolveUserId($request)),
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
         } catch (Throwable $exception) {
@@ -142,5 +142,25 @@ final class WatchlistController
             );
             JsonResponseFactory::error('WATCHLIST_REFRESH_FAILED', $exception->getMessage(), [], 500);
         }
+    }
+
+    private function resolveUserId(Request $request): int
+    {
+        foreach (['x-user-id', 'user-id'] as $header) {
+            if (isset($request->headers[$header]) && is_numeric($request->headers[$header])) {
+                return max(1, (int) $request->headers[$header]);
+            }
+        }
+
+        foreach (['userId', 'user_id'] as $key) {
+            if (isset($request->body[$key]) && is_numeric($request->body[$key])) {
+                return max(1, (int) $request->body[$key]);
+            }
+            if (isset($request->query[$key]) && is_numeric($request->query[$key])) {
+                return max(1, (int) $request->query[$key]);
+            }
+        }
+
+        return 1;
     }
 }

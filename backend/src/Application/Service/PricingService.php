@@ -7,7 +7,8 @@ use App\Application\Support\MarketItemClassifier;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SteamMarketClient;
-use App\Infrastructure\Persistence\Repository\ItemCatalogRepository;
+use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
+use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Shared\Dto\WatchlistSearchCandidateDto;
 use App\Shared\Logger;
@@ -40,7 +41,8 @@ final class PricingService
         private readonly ExchangeRateClient $exchangeRateClient,
         private readonly SteamMarketClient $steamMarketClient,
         private readonly MarketItemClassifier $marketItemClassifier,
-        private readonly ItemCatalogRepository $itemCatalogRepository,
+        private readonly ItemRepository $itemRepository,
+        private readonly ExchangeRateRepository $exchangeRateRepository,
         private readonly ItemLiveCacheRepository $itemLiveCacheRepository
     ) {
     }
@@ -72,7 +74,9 @@ final class PricingService
             'priceUsd' => (float) $presentation['priceUsd'],
             'priceEur' => (float) $presentation['priceEur'],
             'exchangeRate' => (float) $presentation['exchangeRate'],
+            'exchangeRateId' => isset($presentation['exchangeRateId']) ? (int) $presentation['exchangeRateId'] : null,
             'priceSource' => $presentation['priceSource'] ?? null,
+            'itemId' => isset($presentation['itemId']) ? (int) $presentation['itemId'] : null,
             'itemType' => $presentation['itemType'] ?? null,
             'itemTypeLabel' => $presentation['itemTypeLabel'] ?? null,
             'wearName' => $presentation['wearLabel'] ?? null,
@@ -98,8 +102,9 @@ final class PricingService
         $this->ensureCacheTables();
 
         $catalog = $this->getCatalogEntry($itemName, $steamHint);
+        $itemId = isset($catalog['itemId']) ? (int) $catalog['itemId'] : 0;
         $cachedLive = $this->normalizeLiveCacheRow(
-            $this->itemLiveCacheRepository->findByMarketHashName($itemName)
+            $itemId > 0 ? $this->itemLiveCacheRepository->findByItemId($itemId) : null
         );
 
         if ($this->isFreshLiveCache($cachedLive)) {
@@ -155,11 +160,7 @@ final class PricingService
 
         if ($listing !== null) {
             $catalog = $this->persistCatalogEntry($itemName, $catalog, $steamHint, $listing);
-            $liveCache = $this->persistLiveCacheEntry(
-                $itemName,
-                (float) $listing['priceUsd'],
-                self::PRICE_SOURCE_CSFLOAT
-            );
+            $liveCache = $this->persistLiveCacheEntry($itemId, (float) $listing['priceUsd'], self::PRICE_SOURCE_CSFLOAT);
 
             return $this->buildPresentation($catalog, $liveCache);
         }
@@ -183,11 +184,7 @@ final class PricingService
                 $steamPriceSnapshot['steamHint'],
                 null
             );
-            $liveCache = $this->persistLiveCacheEntry(
-                $itemName,
-                $steamPriceSnapshot['priceUsd'],
-                self::PRICE_SOURCE_STEAM
-            );
+            $liveCache = $this->persistLiveCacheEntry($itemId, $steamPriceSnapshot['priceUsd'], self::PRICE_SOURCE_STEAM);
 
             return $this->buildPresentation($catalog, $liveCache);
         }
@@ -344,7 +341,7 @@ final class PricingService
             return;
         }
 
-        $this->itemCatalogRepository->ensureTable();
+        $this->itemRepository->ensureTable();
         $this->itemLiveCacheRepository->ensureTable();
         $this->cacheTablesReady = true;
     }
@@ -353,9 +350,15 @@ final class PricingService
     {
         $this->ensureCacheTables();
 
-        $catalog = $this->normalizeCatalogRow(
-            $this->itemCatalogRepository->findByMarketHashName($itemName)
-        );
+        $item = $this->itemRepository->findByMarketHashName($itemName)
+            ?? $this->itemRepository->findByName($itemName);
+
+        if ($item === null) {
+            $itemId = $this->itemRepository->findOrCreateByName($itemName, 'other');
+            $item = $this->itemRepository->findById($itemId);
+        }
+
+        $catalog = $this->normalizeCatalogRow($item);
         if ($catalog !== null && $this->hasUsefulCatalogData($catalog) && $this->isFreshCatalogCache($catalog)) {
             return $catalog;
         }
@@ -375,7 +378,7 @@ final class PricingService
         ?array $listing
     ): ?array {
         $resolvedExisting = $existingCatalog ?? $this->normalizeCatalogRow(
-            $this->itemCatalogRepository->findByMarketHashName($itemName)
+            $this->itemRepository->findByMarketHashName($itemName) ?? $this->itemRepository->findByName($itemName)
         );
 
         if ($steamHint === null && $listing === null && $resolvedExisting === null) {
@@ -393,7 +396,10 @@ final class PricingService
             $itemName
         );
 
+        $itemId = isset($resolvedExisting['itemId']) ? (int) $resolvedExisting['itemId'] : $this->itemRepository->findOrCreateByName($itemName, (string) ($classification['key'] ?? 'other'));
+
         $catalog = [
+            'itemId' => $itemId,
             'marketHashName' => $itemName,
             'cachedAt' => date('Y-m-d H:i:s'),
             'imageUrl' => $listing['iconUrl']
@@ -409,39 +415,40 @@ final class PricingService
             'wearLabel' => $wear['label'] ?? ($resolvedExisting['wearLabel'] ?? null),
         ];
 
-        $this->itemCatalogRepository->upsert(
-            $itemName,
-            $catalog['imageUrl'],
-            $catalog['itemType'],
-            $catalog['itemTypeLabel'],
-            $catalog['marketTypeLabel'],
-            $catalog['wear'],
-            $catalog['wearLabel']
-        );
+        $this->itemRepository->updateCatalogData($itemId, [
+            'image_url' => $catalog['imageUrl'],
+            'item_type' => $catalog['itemType'],
+            'item_type_label' => $catalog['itemTypeLabel'],
+            'market_type_label' => $catalog['marketTypeLabel'],
+            'wear_key' => $catalog['wear'],
+            'wear_label' => $catalog['wearLabel'],
+            'catalog_cached_at' => $catalog['cachedAt'],
+        ]);
 
         return $catalog;
     }
 
-    private function persistLiveCacheEntry(string $itemName, float $priceUsd, string $priceSource): array
+    private function persistLiveCacheEntry(int $itemId, float $priceUsd, string $priceSource): array
     {
         $exchangeRate = $this->getUsdToEurRate();
+        $exchangeRateId = $this->exchangeRateRepository->ensureTodayRate($exchangeRate);
         $priceEur = round($priceUsd * $exchangeRate, 2);
         $fetchedAt = date('Y-m-d H:i:s');
 
         $this->itemLiveCacheRepository->upsert(
-            $itemName,
+            $itemId,
             round($priceUsd, 2),
-            $priceEur,
-            $exchangeRate,
+            $exchangeRateId,
             $priceSource,
             $fetchedAt
         );
 
         return [
-            'marketHashName' => $itemName,
+            'itemId' => $itemId,
             'priceUsd' => round($priceUsd, 2),
             'priceEur' => $priceEur,
             'exchangeRate' => $exchangeRate,
+            'exchangeRateId' => $exchangeRateId,
             'priceSource' => $priceSource,
             'fetchedAt' => $fetchedAt,
         ];
@@ -450,9 +457,12 @@ final class PricingService
     private function buildPresentation(?array $catalog, ?array $liveCache): array
     {
         return [
+            'itemId' => $catalog['itemId'] ?? null,
+            'marketHashName' => $catalog['marketHashName'] ?? null,
             'priceUsd' => $liveCache['priceUsd'] ?? null,
             'priceEur' => $liveCache['priceEur'] ?? null,
             'exchangeRate' => $liveCache['exchangeRate'] ?? null,
+            'exchangeRateId' => $liveCache['exchangeRateId'] ?? null,
             'priceSource' => $liveCache['priceSource'] ?? null,
             'itemType' => $catalog['itemType'] ?? null,
             'itemTypeLabel' => $catalog['itemTypeLabel'] ?? null,
@@ -471,13 +481,15 @@ final class PricingService
         }
 
         return [
-            'marketHashName' => (string) ($row['market_hash_name'] ?? ''),
+            'itemId' => isset($row['id']) ? (int) $row['id'] : null,
+            'marketHashName' => (string) ($row['market_hash_name'] ?? $row['name'] ?? ''),
             'imageUrl' => isset($row['image_url']) ? (string) $row['image_url'] : null,
-            'itemType' => isset($row['item_type']) ? (string) $row['item_type'] : null,
+            'itemType' => isset($row['item_type']) ? (string) $row['item_type'] : (isset($row['type']) ? (string) $row['type'] : null),
             'itemTypeLabel' => isset($row['item_type_label']) ? (string) $row['item_type_label'] : null,
             'marketTypeLabel' => isset($row['market_type_label']) ? (string) $row['market_type_label'] : null,
             'wear' => isset($row['wear_key']) ? (string) $row['wear_key'] : null,
             'wearLabel' => isset($row['wear_label']) ? (string) $row['wear_label'] : null,
+            'cachedAt' => isset($row['catalog_cached_at']) ? (string) $row['catalog_cached_at'] : (isset($row['updated_at']) ? (string) $row['updated_at'] : null),
         ];
     }
 
@@ -488,10 +500,11 @@ final class PricingService
         }
 
         return [
-            'marketHashName' => (string) ($row['market_hash_name'] ?? ''),
+            'itemId' => isset($row['item_id']) ? (int) $row['item_id'] : null,
             'priceUsd' => isset($row['price_usd']) ? (float) $row['price_usd'] : null,
-            'priceEur' => isset($row['price_eur']) ? (float) $row['price_eur'] : null,
-            'exchangeRate' => isset($row['exchange_rate']) ? (float) $row['exchange_rate'] : null,
+            'priceEur' => isset($row['price_usd'], $row['usd_to_eur']) ? ((float) $row['price_usd']) * ((float) $row['usd_to_eur']) : null,
+            'exchangeRate' => isset($row['usd_to_eur']) ? (float) $row['usd_to_eur'] : null,
+            'exchangeRateId' => isset($row['exchange_rate_id']) ? (int) $row['exchange_rate_id'] : null,
             'priceSource' => isset($row['price_source']) ? (string) $row['price_source'] : null,
             'fetchedAt' => isset($row['fetched_at']) ? (string) $row['fetched_at'] : null,
         ];
