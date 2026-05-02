@@ -18,7 +18,7 @@ const localStorePath = __dirname.includes("app.asar")
     "/src/localStore/index.js"
   : path.join(__dirname, "src/localStore/index.js");
 
-const { createLocalStore } = await import(localStorePath);
+const { createLocalStore } = await import(`file://${localStorePath}`);
 
 function getLocalStore() {
   if (!localStore) {
