@@ -30,6 +30,10 @@ function toInputValue(value, fallback) {
   return String(value);
 }
 
+function isDesktopRuntime() {
+  return typeof window !== "undefined" && Boolean(window.electronAPI?.secrets);
+}
+
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState("fees");
   const [form, setForm] = useState(DEFAULT_FORM);
@@ -48,6 +52,7 @@ export function SettingsPage() {
   const [apiKeyError, setApiKeyError] = useState("");
   const [apiKeySuccess, setApiKeySuccess] = useState("");
   const [encryptionReady, setEncryptionReady] = useState(false);
+  const desktopRuntime = isDesktopRuntime();
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -79,7 +84,11 @@ export function SettingsPage() {
         const keyStatus = keyStatusResponse?.data || { configured: false, lastFour: null };
         setApiKeyStatus(keyStatus);
 
-        setEncryptionReady(isEncryptionConfigured());
+        setEncryptionReady(
+          desktopRuntime
+            ? keyStatus.encryptionAvailable !== false
+            : isEncryptionConfigured(),
+        );
         setError("");
       } catch (loadError) {
         setError(loadError.message || "Settings konnten nicht geladen werden.");
@@ -109,19 +118,20 @@ export function SettingsPage() {
       setApiKeyError("");
       setApiKeySuccess("");
 
-      if (!isEncryptionConfigured()) {
+      if (!desktopRuntime && !isEncryptionConfigured()) {
         setApiKeyError("Encryption ist nicht konfiguriert.");
         return;
       }
 
-      const encryptedKey = encrypt(apiKey.trim());
-      await updateCsFloatApiKey(encryptedKey);
+      const trimmedApiKey = apiKey.trim();
+      const keyPayload = desktopRuntime ? trimmedApiKey : encrypt(trimmedApiKey);
+      await updateCsFloatApiKey(keyPayload);
 
       setApiKeySuccess("API Key wurde erfolgreich aktualisiert.");
       setApiKey("");
 
       const statusResponse = await fetchCsFloatApiKeyStatus();
-      setApiKeyStatus(statusResponse);
+      setApiKeyStatus(statusResponse?.data || statusResponse);
     } catch (err) {
       setApiKeyError(err.message || "Fehler beim Aktualisieren des API Keys.");
     } finally {
@@ -403,7 +413,7 @@ export function SettingsPage() {
             )}
           </div>
           <CardDescription>
-            API Key fuer CSFloat Integration. Wird verschluesselt uebertragen und in .env gespeichert.
+            API Key fuer CSFloat Integration. Wird lokal verschluesselt gespeichert.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -411,7 +421,11 @@ export function SettingsPage() {
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
-                <span>Verschluesselung nicht konfiguriert. Bitte VITE_ENCRYPTION_KEY in .env setzen.</span>
+                <span>
+                  {desktopRuntime
+                    ? "OS-Verschluesselung ist auf diesem System nicht verfuegbar."
+                    : "Verschluesselung nicht konfiguriert. Bitte VITE_ENCRYPTION_KEY in .env setzen."}
+                </span>
               </div>
             </div>
           )}
@@ -464,7 +478,9 @@ export function SettingsPage() {
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              AES-256-CBC Verschluesselung. Der Key wird nie unverschluesselt uebertragen.
+              {desktopRuntime
+                ? "Desktop speichert den Key ueber die OS-Verschluesselung im Electron Main Process."
+                : "AES-256-CBC Verschluesselung. Der Key wird nie unverschluesselt uebertragen."}
             </p>
           </div>
 

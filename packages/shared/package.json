@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Shared React components, hooks, and utilities for web and desktop apps",
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
   "exports": {
     "./components": "./src/components/index.js",
     "./hooks": "./src/hooks/index.js",

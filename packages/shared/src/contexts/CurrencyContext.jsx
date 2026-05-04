@@ -32,18 +32,22 @@ export function CurrencyProvider({ children }) {
     const loadRates = async () => {
       setRatesLoading(true);
       try {
-        const response = await fetch('/api/v1/exchange-rate');
-        if (response.ok) {
-          const data = await response.json();
-          // data contains rates relative to EUR
-          setExchangeRates({
-            EUR: 1,
-            USD: data.USD || 1.08,
-            GBP: data.GBP || 0.85,
-          });
+        // Only try to fetch if not using file:// protocol (Electron on first load)
+        if (typeof window !== 'undefined' && window.location.protocol !== 'file:') {
+          const response = await fetch('/api/v1/exchange-rate');
+          if (response.ok) {
+            const data = await response.json();
+            // data contains rates relative to EUR
+            setExchangeRates({
+              EUR: 1,
+              USD: data.USD || 1.08,
+              GBP: data.GBP || 0.85,
+            });
+          }
         }
-      } catch {
-        // Keep fallback rates
+      } catch (err) {
+        // Keep fallback rates on network error (silent fail)
+        console.debug('[CurrencyContext] Exchange rate fetch failed, using fallback rates', err?.message);
       } finally {
         setRatesLoading(false);
       }

@@ -183,6 +183,7 @@ export function createLocalStore(userDataPath) {
       name: row.name,
       type: row.type,
       quantity: row.quantity,
+      buyPrice: row.buy_price_usd,
       buyPriceUsd: row.buy_price_usd,
       fundingMode: row.funding_mode,
       revision: row.revision,
@@ -263,7 +264,7 @@ export function createLocalStore(userDataPath) {
         serverId,
         itemId: row.itemId ? String(row.itemId) : null,
         userId: String(row.userId || userId || "local"),
-        name: String(row.name || ""),
+        name: String(row.name || row.marketHashName || row.itemName || ""),
         type: String(row.type || "skin"),
         quantity: Number(row.quantity || 1),
         buyPriceUsd: row.buyPriceUsd === undefined ? null : Number(row.buyPriceUsd),
@@ -398,10 +399,13 @@ export function createLocalStore(userDataPath) {
         serverId: input.serverId ?? null,
         itemId: input.itemId ? String(input.itemId) : null,
         userId: String(input.userId || "local"),
-        name: String(input.name || ""),
-        type: String(input.type || "skin"),
+        name: String(input.name || input.marketHashName || input.itemName || ""),
+        type: String(input.type || input.itemType || "skin"),
         quantity: Number(input.quantity || 1),
-        buyPriceUsd: input.buyPriceUsd === undefined ? null : Number(input.buyPriceUsd),
+        buyPriceUsd:
+          input.buyPriceUsd === undefined
+            ? (input.buyPrice === undefined ? null : Number(input.buyPrice))
+            : Number(input.buyPriceUsd),
         fundingMode: String(input.fundingMode || "wallet_funded"),
         payload: serialize(payload),
         revision: Number(input.revision || 1),

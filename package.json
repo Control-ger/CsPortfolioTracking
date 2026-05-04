@@ -2,7 +2,7 @@
   "name": "cs-portfolio-tracking-monorepo",
   "private": true,
   "version": "1.0.0",
-  "main": "main.js",
+  "main": "apps/desktop/main.js",
   "type": "module",
   "workspaces": [
     "packages/shared",
@@ -12,7 +12,10 @@
   "scripts": {
     "dev": "vite build --watch & electron .",
     "electron": "electron .",
-    "build": "rimraf release && vite build && electron-builder",
+    "electron:debug": "set DEBUG=1&& electron .",
+    "electron:debug:ps": "powershell -Command \"$env:DEBUG='1'; electron .\"",
+    "clean": "rimraf dist release node_modules/.vite",
+    "build": "npm run clean && vite build && electron-builder",
     "build:shared": "echo 'Shared is code-only, no build needed'",
     "build:web": "vite build",
     "build:desktop": "vite build && electron-builder",
@@ -26,13 +29,20 @@
     "asar": true,
     "asarUnpack": [
       "apps/desktop/src/localStore/**/*",
-      "node_modules/better-sqlite3/**/*"
+      "backend/**/*",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*"
     ],
     "files": [
       "dist/**/*",
-      "main.js",
-      "preload.js",
+      "apps/desktop/main.js",
+      "apps/desktop/preload.js",
       "apps/desktop/src/localStore/**/*",
+      "backend/**/*",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*",
       "package.json"
     ],
     "directories": {

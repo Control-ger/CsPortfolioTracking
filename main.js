@@ -1,30 +1,19 @@
 /* eslint-disable */
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const cacheFileName = 'cache.json';
+let createLocalStore = null;
 let localStore = null;
-
-// ESM imports don't go through Electron's ASAR path patching.
-// In the packaged app, unpacked files live at app.asar.unpacked/...
-// but import.meta.url still points at app.asar/..., so we need
-// to correct the path before dynamic-importing the localStore.
-const localStorePath = __dirname.includes('app.asar')
-    ? __dirname.replace('app.asar', 'app.asar.unpacked') +
-      '/apps/desktop/src/localStore/index.js'
-    : path.join(__dirname, 'apps/desktop/src/localStore/index.js');
-
-const { createLocalStore } = await import(localStorePath);
 
 function getLocalStore() {
     if (!localStore) {
         localStore = createLocalStore(app.getPath('userData'));
     }
-
     return localStore;
 }
 
@@ -76,7 +65,17 @@ function createWindow() {
 }
 
 // App starten
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+    const base = __dirname.includes('app.asar')
+        ? __dirname.replace('app.asar', 'app.asar.unpacked')
+        : __dirname;
+    const localStorePath = path.join(base, 'apps/desktop/src/localStore/index.js');
+
+    // pathToFileURL correctly produces file:///C:/... on Windows
+    ({ createLocalStore } = await import(pathToFileURL(localStorePath).href));
+
+    createWindow();
+});
 ipcMain.on('window-control', (event, action) => {
     const win = BrowserWindow.getFocusedWindow();
     if (!win) return;
@@ -138,6 +137,75 @@ ipcMain.handle('local-store-upsert-portfolio-snapshot', (event, payload) => getL
 ipcMain.handle('local-store-upsert-price', (event, payload) => getLocalStore().upsertPrice(payload));
 ipcMain.handle('local-store-list-pending-operations', (event, limit) => getLocalStore().listPendingOperations(limit));
 ipcMain.handle('local-store-mark-operation-applied', (event, id) => getLocalStore().markOperationApplied(id));
+
+// Shell / External links
+ipcMain.handle('open-external', async (event, url) => {
+    await shell.openExternal(url);
+    return true;
+});
+
+// Auth Session Management
+const sessionFileName = 'session.enc';
+let currentSession = null;
+
+function getSessionFilePath() {
+    return path.join(app.getPath('userData'), sessionFileName);
+}
+
+async function readSessionFile() {
+    try {
+        const content = await fs.readFile(getSessionFilePath(), 'utf8');
+        return JSON.parse(content);
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.warn('[desktop-session] failed to read session file', error);
+        }
+        return null;
+    }
+}
+
+async function writeSessionFile(sessionData) {
+    await fs.mkdir(path.dirname(getSessionFilePath()), { recursive: true });
+    await fs.writeFile(
+        getSessionFilePath(),
+        JSON.stringify(sessionData, null, 2),
+        'utf8'
+    );
+}
+
+ipcMain.handle('store-session', async (event, token, user) => {
+    try {
+        currentSession = { token, user, createdAt: new Date().toISOString() };
+        await writeSessionFile(currentSession);
+        return true;
+    } catch (error) {
+        console.warn('[desktop-session] failed to store session', error);
+        return false;
+    }
+});
+
+ipcMain.handle('get-session', async () => {
+    try {
+        if (!currentSession) {
+            currentSession = await readSessionFile();
+        }
+        return currentSession;
+    } catch (error) {
+        console.warn('[desktop-session] failed to get session', error);
+        return null;
+    }
+});
+
+ipcMain.handle('clear-session', async () => {
+    try {
+        currentSession = null;
+        await fs.unlink(getSessionFilePath()).catch(() => {});
+        return true;
+    } catch (error) {
+        console.warn('[desktop-session] failed to clear session', error);
+        return false;
+    }
+});
 
 app.on('window-all-closed', () => {
     localStore?.close();

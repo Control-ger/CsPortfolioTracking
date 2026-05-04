@@ -4,8 +4,8 @@ Diese Datei definiert repo-weite Arbeitsregeln fuer Copilot in diesem Projekt.
 
 ## Pflicht-Start fuer jede Session
 
-1. Zuerst `AGENTS.md` lesen.
-2. Danach `README.md` lesen.
+1. Zuerst `AGENTS.md` lesen — sie ist die einzige Wahrheit.
+2. `README.md` nur für Setup/Install-Befehle konsultieren, nicht für Architektur.
 3. Bei Backend-Aenderungen zuerst `backend/public/index.php` und die betroffenen Service-/Repository-Dateien pruefen.
 
 ## Arbeitsprinzipien

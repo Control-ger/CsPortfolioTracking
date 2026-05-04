@@ -1,59 +1,20 @@
 > [!IMPORTANT]
+> [!WARNING]
+> **Für Agenten:** Diese Datei enthält ausschließlich User-facing Setup-Info.
+> Architektur, Pläne, Schemas → gehören in `docs/` und `AGENTS.md`.
+> Wer Architektur-Content in diese Datei schreibt, macht einen Fehler.
+> Bei Unklarheit: `AGENTS.md` ist die einzige Wahrheit.
+
+> [!IMPORTANT]
 > **Disclaimer / Haftungsausschluss**
-> Dieses Projekt wurde zu Bildungs- und Portfoliozwecken entwickelt.
+> Dieses Projekt wurde zu Bildungs- und Portfoliozwecken vibe coded.
 > - **Keine Finanzberatung:** Die angezeigten Daten und Berechnungen dienen nur der Information. Ich übernehme keine Haftung für die Richtigkeit der Preise oder etwaige finanzielle Verluste.
 > - **Kein Support:** Dieses Repository wird "wie besehen" (as-is) bereitgestellt. Ich kann nicht garantieren, dass die Einrichtung auf anderen Systemen reibungslos funktioniert, und biete keinen aktiven Support bei Installationsproblemen an.
-> - **Nutzung auf eigene Gefahr:** Die Verwendung der API-Schnittstellen und des Codes erfolgt auf eigenes Risiko des Nutzers.> 
+> - **Nutzung auf eigene Gefahr:** Die Verwendung der API-Schnittstellen und des Codes erfolgt auf eigenes Risiko des Nutzers.
 
 # CS Investor Hub
 
-CS Investor Hub ist ein React + PHP Vibe Coded Projekt zum Tracking meiner CS2 Portfolio- und Watchlist-Daten.
-
-## Agent-Start hier
-
-- Zentrale Agent-Doku: `AGENTS.md`
-- Repo-weite Copilot-Regeln: `.github/copilot-instructions.md`
-- Bitte bei Struktur-/Architektur-Aenderungen im selben Commit mit aktualisieren.
-
-## Tech Stack
-
-- Frontend: React (Vite), Tailwind CSS, shadcn/ui, Recharts
-- Desktop: Electron, SQLite (`better-sqlite3`) fuer local-first Persistenz
-- Backend: PHP 8.x (MVC-artige Struktur unter `backend/src`)
-- Backend-Persistenz: MySQL (PDO)
-- Monorepo: npm workspaces mit `apps/web`, `apps/desktop`, `packages/shared`
-
-## Projektstruktur (Monorepo)
-
-Dieses Projekt verwendet eine Monorepo-Struktur mit npm workspaces:
-
-```
-├── apps/
-│   ├── web/          # Web/PWA Client (read-only)
-│   └── desktop/      # Electron Desktop App (write-enabled)
-├── packages/
-│   └── shared/       # Gemeinsamer React Code
-├── backend/          # PHP Backend API
-└── dist/             # Build Output
-```
-
-### Workspace-Aufteilung
-
-- **`packages/shared`** - Gemeinsame React Komponenten, Hooks, Contexts, Utils
-- **`apps/web`** - Web-spezifischer Entry Point, PWA Manifest, Service Worker
-- **`apps/desktop`** - Electron main/preload, Desktop-spezifische IPC-Logik
-- **`backend`** - PHP API, bleibt unverändert
-
-## Zielarchitektur: Desktop local-first
-
-Die Desktop-App ist die primaere App fuer schreibende Aktionen. Investments, Watchlist und spaetere Sync-Metadaten werden lokal in SQLite gespeichert. Der Server soll langfristig nur noch Preisdaten liefern und User-/Investment-Daten synchronisieren.
-
-- Lokale DB: Electron `userData/cs-investor-hub.sqlite`
-- Renderer-Zugriff: `window.electronAPI.localStore`
-- Main-Process-Modul: `apps/desktop/src/localStore/`
-- Runtime-Auswahl: `packages/shared/src/lib/dataSource.js`
-- Schema-Doku: `docs/local-db-schema.md`
-- Quick-Fallback-Cache: `userData/cache.json` fuer Phase 1 Offline-Reads
+CS Investor Hub ist ein React + PHP Projekt zum Tracking meiner CS2 Portfolio- und Watchlist-Daten.
 
 ## Screenshots
 
@@ -117,90 +78,6 @@ Pflichtgruppen (je nach Workflow):
 - Docker/CasaOS: `APP_HOST`, `APP_PORT`, `PMA_PORT`, `PROJECT_ROOT_PATH`, `DIST_PATH`, `BACKEND_PATH`
 - API/Debug: `CSFLOAT_API_KEY`, optional `DEBUG` und `OBSERVABILITY_*`
 
-## Backend Einstieg
-
-- Front Controller: `backend/public/index.php`
-- Bootstrap: `backend/src/bootstrap.php`
-- API-Basis (Frontend): `VITE_API_BASE_URL` oder Standard `${window.location.origin}/api/index.php`
-
-## Observability
-
-Das Projekt verwendet ein strukturiertes Observability-Backend unter `backend/src/Observability`.
-
-### Kernverhalten
-
-- Alle relevanten Backend-Events werden als strukturierte JSON-Events erzeugt.
-- Jeder API-Response setzt `X-Request-Id`.
-- Bei gesetztem Header `X-Request-Id` wird die ID validiert (Pattern + max. Laenge), sonst neu generiert.
-- Bei `OBSERVABILITY_ENABLED=false` ist nur DB-Write aus; File-Logging/Fallback bleibt aktiv.
-- `observability_events` wird automatisch angelegt (`JSON` mit automatischem `LONGTEXT`-Fallback).
-
-### Wichtige Env Flags
-
-- `OBSERVABILITY_ENABLED` (default: `true`)
-- `OBSERVABILITY_EVENTS_API_ENABLED` (default: `false`)
-- `OBSERVABILITY_FRONTEND_TELEMETRY_ENABLED` (default: `false`)
-- `OBSERVABILITY_RETENTION_DAYS` (default: `30`)
-- `DEBUG` (aktiviert intern zusaetzlich Debug-Endpunkte/Verhalten)
-
-### Startup Events
-
-Beim Prozessstart werden einmalig geschrieben:
-
-- `system.bootstrap.completed`
-- `system.config.active`
-- `system.db.ready`
-
-### Frontend Telemetry
-
-- Client erfasst:
-- `window.error`
-- `window.unhandledrejection`
-- React Error Boundary
-- API Fetch-Fehler
-
-- Ingestion Endpoint:
-- `POST /api/v1/observability/frontend-events`
-
-- Schutzmechanismen:
-- Clientseitiges Rate-Limit: max. 20 Events/Minute
-- Serverseitiges Rate-Limit: max. 20 Events/Minute pro IP
-- Payload-Limit: 8KB
-
-### Observability API / Debug
-
-- `GET /api/v1/observability/events`
-- Filter: `category`, `level`, `event`, `requestId`, `from`, `to`, `limit`
-- Endpoint ist per Env-Guard abgesichert (`DEBUG` oder `OBSERVABILITY_EVENTS_API_ENABLED`)
-
-- `GET /api/v1/debug/logs`
-- Liest primaer aus `observability_events`, faellt bei Bedarf auf Legacy-Dateien zurueck
-
-- `GET /api/v1/debug/csfloat`
-- Nutzt primaer Events, zeigt Legacy Proxy Logs weiter kompatibel an
-
-Legacy Log-Dateien:
-
-- `/var/www/html/logs/app.log`
-- `/var/www/html/logs/csfloat_proxy.log`
-
-## Verifikation
-
-### Frontend
-
-```bash
-npx eslint src/lib/frontendTelemetry.js src/components/AppErrorBoundary.jsx src/main.jsx src/lib/apiClient.js
-npm run build
-```
-
-### PHP Syntax Check (Beispiel Windows PowerShell)
-
-```powershell
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-php -l backend/public/index.php
-```
-
 ## Hinweise
 
-- In diesem Repo koennen noch andere, nicht-observability-bezogene Lint-Warnungen existieren.
-- Fuer produktive Retention sollte ein periodischer Job fuer `observability_events` eingerichtet werden.
+- In diesem Repo koennen noch andere Lint-Warnungen existieren.

@@ -13,6 +13,7 @@ use App\Http\Controller\DebugController;
 use App\Http\Controller\ExchangeRateController;
 use App\Http\Controller\PortfolioController;
 use App\Http\Controller\SettingsController;
+use App\Http\Controller\SteamAuthController;
 use App\Http\Controller\SyncStatusController;
 use App\Http\Controller\WatchlistController;
 use App\Infrastructure\External\CsFloatClient;
@@ -23,6 +24,7 @@ use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
 use App\Infrastructure\Persistence\Repository\ItemCatalogRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
+use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
@@ -30,6 +32,7 @@ use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
+use App\Infrastructure\Persistence\Repository\AuthStateRepository;
 use App\Infrastructure\Persistence\Repository\CacheMaintenanceRepository;
 use App\Observability\Application\ObservabilityService;
 use App\Observability\Context\RequestContext;
@@ -345,11 +348,16 @@ try {
     $portfolioHistoryRepository = new PortfolioHistoryRepository($pdo);
     $watchlistRepository = new WatchlistRepository($pdo);
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
+    $itemRepository = new ItemRepository($pdo);
     $itemCatalogRepository = new ItemCatalogRepository($pdo);
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
-    (new UserRepository($pdo))->ensureDefaultUser();
+    $userRepository = new UserRepository($pdo);
+    $userRepository->ensureDefaultUser();
+    
+    // Initialize auth state tokens table for Steam OpenID
+    (new AuthStateRepository($pdo))->ensureTable();
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
 
     $pricingService = new PricingService(
@@ -362,6 +370,7 @@ try {
     );
     $csFloatTradeSyncService = new CsFloatTradeSyncService(
         new CsFloatTradeClient(),
+        $itemRepository,
         $investmentRepository,
         $pricingService,
         new MarketItemClassifier()
@@ -385,6 +394,7 @@ try {
     $syncStatusController = new SyncStatusController($syncStatusRepository);
     $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
     $exchangeRateController = new ExchangeRateController(new ExchangeRateClient());
+    $steamAuthController = new SteamAuthController($pdo, $userRepository);
 
     $router = new Router();
     $router->register('GET', '/api/v1/portfolio/investments', [$portfolioController, 'investments']);
@@ -423,6 +433,81 @@ try {
     });
     $router->register('GET', '/api/v1/observability/events', [$observabilityController, 'events']);
     $router->register('POST', '/api/v1/observability/frontend-events', [$frontendTelemetryController, 'ingest']);
+
+    // Steam Authentication Routes
+    $router->register('POST', '/api/v1/auth/steam/login', function () use ($steamAuthController) {
+        $result = $steamAuthController->login($_GET, $_SERVER);
+        JsonResponseFactory::success($result, [], $result['success'] ? 200 : 400);
+    });
+    $router->register('GET', '/api/v1/auth/steam/callback', function () use ($steamAuthController) {
+        $result = $steamAuthController->callback($_GET, $_SERVER);
+        
+        if (!$result['success']) {
+            // Return error page for web clients
+            http_response_code(400);
+            header('Content-Type: text/html');
+            echo '<h1>Authentication Failed</h1><p>' . htmlspecialchars($result['error'] ?? 'Unknown error') . '</p>';
+            return;
+        }
+        
+        $redirectUrl = $result['redirectUrl'] ?? '';
+        $sessionToken = $result['sessionToken'] ?? '';
+        
+        // Determine if this is a desktop custom protocol URL or web URL
+        $isDesktopProtocol = preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $redirectUrl) === 1
+            && !preg_match('/^https?:\/\//i', $redirectUrl) === 1;
+        
+        if ($isDesktopProtocol) {
+            // Desktop: Redirect to custom protocol with token only
+            // User data is embedded in the encrypted session token
+            $callbackUrl = $redirectUrl . '?token=' . urlencode($sessionToken);
+            header('Location: ' . $callbackUrl);
+            exit;
+        } else {
+            // Web: Redirect to web callback with token only
+            // Client will fetch user data via validateSession endpoint
+            $webCallbackUrl = $redirectUrl . '?token=' . urlencode($sessionToken);
+            header('Location: ' . $webCallbackUrl);
+            exit;
+        }
+    });
+    $router->register('GET', '/api/v1/auth/steam/inventory', function () use ($steamAuthController) {
+        $steamId = $_GET['steamId'] ?? '';
+        if (!$steamId) {
+            JsonResponseFactory::error('MISSING_STEAM_ID', 'Steam ID required', [], 400);
+            return;
+        }
+        $result = $steamAuthController->getCS2Inventory($steamId);
+        JsonResponseFactory::success($result, [], $result['success'] ? 200 : 400);
+    });
+    $router->register('GET', '/api/v1/auth/session/validate', function () use ($steamAuthController) {
+        // Extract token from Authorization header or query param
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
+        $token = $_GET['token'] ?? '';
+        
+        if (!$token && !$authHeader) {
+            JsonResponseFactory::error('MISSING_TOKEN', 'Session token required', [], 401);
+            return;
+        }
+        
+        $sessionToken = $token ?: str_replace('Bearer ', '', $authHeader);
+        $user = $steamAuthController->validateSession($sessionToken);
+        
+        if (!$user) {
+            JsonResponseFactory::error('INVALID_SESSION', 'Session expired or invalid', [], 401);
+            return;
+        }
+        
+        JsonResponseFactory::success([
+            'valid' => true,
+            'user' => [
+                'id' => $user['userId'],
+                'steamId' => $user['steamId'],
+                'name' => $user['name'] ?? null,
+                'avatar' => $user['avatar'] ?? null,
+            ]
+        ]);
+    });
 
     $router->dispatch($request);
 

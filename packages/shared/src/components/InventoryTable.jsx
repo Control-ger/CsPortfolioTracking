@@ -13,6 +13,7 @@ import {
 
 import { PriceSourceBadge } from "@shared/components/PriceSourceBadge";
 import { Abbr } from "@shared/components/AbbreviationTooltip";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
   <div className="h-12 w-12 overflow-hidden rounded-md border ">
@@ -30,14 +31,6 @@ const ItemThumbnail = ({ imageUrl, name }) => (
     )}
   </div>
 );
-
-function formatCurrency(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "-";
-  }
-
-  return `${value.toFixed(2)} EUR`;
-}
 
 function formatSignedCurrency(value) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -133,6 +126,7 @@ function SortHeaderButton({ label, align = "left", isActive, sortDirection, onCl
 }
 
 export function InventoryTable({ investments, onSelectItem }) {
+  const { formatPrice } = useCurrency();
   const [sortKey, setSortKey] = useState("roi");
   const [sortDirection, setSortDirection] = useState("desc");
 
@@ -273,12 +267,17 @@ export function InventoryTable({ investments, onSelectItem }) {
                 >
                   {item.isLive ? (
                     <div className="flex flex-col items-end gap-1">
-                      <span>{formatCurrency(item.livePrice)}</span>
+                      <span>{formatPrice(item.livePrice)}</span>
                       <PriceSourceBadge priceSource={item.priceSource} compact />
                     </div>
                   ) : (
                     <div className="flex flex-col items-end">
-                      <span className="text-xs">{formatCurrency(item.buyPrice)}</span>
+                      <span className="text-xs">
+                        {formatPrice(item.buyPriceUsd ?? item.buyPrice, {
+                          useUsd: true,
+                          buyPriceUsd: item.buyPriceUsd ?? item.buyPrice,
+                        })}
+                      </span>
                       <span className="animate-pulse text-[9px] uppercase">Warte...</span>
                     </div>
                   )}
@@ -345,6 +344,7 @@ export function InventoryTable({ investments, onSelectItem }) {
                 currentPrice: item.isLive
                   ? item.livePrice
                   : item.buyPrice,
+                currentPriceUsd: item.isLive ? null : item.buyPriceUsd ?? item.buyPrice,
                 roi: item.roi,
                 trend: item.isLive ? (item.roi >= 0 ? "up" : "down") : null,
                 changeLabel: item.isLive

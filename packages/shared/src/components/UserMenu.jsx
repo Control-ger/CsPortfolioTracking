@@ -1,5 +1,5 @@
-import { UserRound } from "lucide-react"
-import { Link, useLocation } from "react-router-dom"
+import { UserRound, LogOut } from "lucide-react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@shared/components/ui/button"
 import {
@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@shared/components/ui/dropdown-menu"
+import { logout } from "@shared/lib/auth"
 
 const NAV_ITEMS = [
   { label: "Portfolio", to: "/" },
@@ -19,6 +20,13 @@ const NAV_ITEMS = [
 
 export function UserMenu() {
   const location = useLocation()
+  const navigate = useNavigate()
+
+  const handleLogout = async () => {
+    logout()
+    // Reload to trigger auth check
+    window.location.href = '/'
+  }
 
   return (
     <DropdownMenu>
@@ -39,6 +47,11 @@ export function UserMenu() {
             <Link to={item.to}>{item.label}</Link>
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Abmelden</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

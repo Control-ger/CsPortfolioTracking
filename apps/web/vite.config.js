@@ -16,14 +16,23 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@shared': path.resolve(__dirname, '../../packages/shared/src'),
         '@': path.resolve(__dirname, '../../packages/shared/src'),
+        // Force all React imports to resolve to the same physical path
+        'react': path.resolve(__dirname, '../../node_modules/react'),
+        'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
+        'react/jsx-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-runtime.js'),
+        'react/jsx-dev-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-dev-runtime.js'),
       },
+      dedupe: ['react', 'react-dom'],
     },
     build: {
+      sourcemap: true,
       rollupOptions: {
         output: {
           entryFileNames: 'assets/[name].js',
           chunkFileNames: 'assets/[name].js',
           assetFileNames: 'assets/[name].[ext]',
+          // Prevent duplicate React
+          inlineDynamicImports: true,
         },
       },
     },

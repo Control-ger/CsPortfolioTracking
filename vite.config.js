@@ -14,18 +14,28 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@shared": path.resolve(__dirname, "./packages/shared/src"),
         "@": path.resolve(__dirname, "./packages/shared/src"),
+        // Force all React imports to resolve to the same physical path from root node_modules
+        "react": path.resolve(__dirname, "./node_modules/react"),
+        "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
+        "react/jsx-runtime": path.resolve(__dirname, "./node_modules/react/jsx-runtime.js"),
+        "react/jsx-dev-runtime": path.resolve(__dirname, "./node_modules/react/jsx-dev-runtime.js"),
       },
+      // Critical: Deduplicate React across all modules to prevent multiple React instances
+      dedupe: ['react', 'react-dom'],
     },
     build: {
       // Output to root dist/ so Electron can find it
       outDir: path.resolve(__dirname, "./dist"),
       emptyOutDir: true,
-      // Hier deaktivieren wir die zufälligen Hashes
+      // Enable sourcemaps for debugging in dev
+      sourcemap: true,
       rollupOptions: {
         output: {
           entryFileNames: `assets/[name].js`,
           chunkFileNames: `assets/[name].js`,
           assetFileNames: `assets/[name].[ext]`,
+          // Inline dynamic imports to prevent duplicate React instances
+          inlineDynamicImports: true,
         },
       },
     },

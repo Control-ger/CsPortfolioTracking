@@ -20,7 +20,7 @@ final class InvestmentRepository
             item_id           INT            NOT NULL,
             buy_price_usd     DECIMAL(10,2)  NOT NULL,
             quantity          INT            NOT NULL,
-            funding_mode      ENUM('cash','trade','balance') NOT NULL DEFAULT 'cash',
+            funding_mode      ENUM('cash_in','wallet_funded') NOT NULL DEFAULT 'wallet_funded',
             platform          VARCHAR(64),
             external_trade_id VARCHAR(255),
             purchased_at      TIMESTAMP      NOT NULL,
@@ -36,6 +36,100 @@ final class InvestmentRepository
         try {
             $this->pdo->exec($sql);
             RepositoryObservability::schemaEnsured(self::class, 'investments');
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception
+            );
+            throw $exception;
+        }
+    }
+
+    public function ensureImportColumns(): void
+    {
+        $this->ensureTable();
+
+        $columns = [
+            'platform' => "ALTER TABLE investments ADD COLUMN platform VARCHAR(64) NULL AFTER funding_mode",
+            'external_trade_id' => "ALTER TABLE investments ADD COLUMN external_trade_id VARCHAR(255) NULL AFTER platform",
+            'raw_payload_json' => "ALTER TABLE investments ADD COLUMN raw_payload_json JSON NULL AFTER purchased_at",
+        ];
+
+        foreach ($columns as $column => $sql) {
+            if ($this->columnExists('investments', $column)) {
+                continue;
+            }
+
+            try {
+                $this->pdo->exec($sql);
+            } catch (Throwable $exception) {
+                RepositoryObservability::queryFailed(
+                    self::class,
+                    __FUNCTION__,
+                    $sql,
+                    $exception,
+                    ['column' => $column]
+                );
+                throw $exception;
+            }
+        }
+
+        $this->ensureFundingModeEnum();
+        $this->ensureExternalTradeIndex();
+    }
+
+    private function columnExists(string $table, string $column): bool
+    {
+        $sql = "SHOW COLUMNS FROM {$table} WHERE Field = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$column]);
+        return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    private function indexExists(string $table, string $indexName): bool
+    {
+        $sql = "SHOW INDEX FROM {$table} WHERE Key_name = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$indexName]);
+        return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    private function ensureFundingModeEnum(): void
+    {
+        $compatSql = "ALTER TABLE investments
+                MODIFY COLUMN funding_mode ENUM('cash','trade','balance','cash_in','wallet_funded') NOT NULL DEFAULT 'wallet_funded'";
+        $finalSql = "ALTER TABLE investments
+                MODIFY COLUMN funding_mode ENUM('cash_in','wallet_funded') NOT NULL DEFAULT 'wallet_funded'";
+
+        try {
+            $this->pdo->exec($compatSql);
+            $this->pdo->exec(
+                "UPDATE investments SET funding_mode = 'wallet_funded'
+                 WHERE funding_mode IS NULL OR funding_mode IN ('cash', 'trade', 'balance', '')"
+            );
+            $this->pdo->exec($finalSql);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $finalSql,
+                $exception
+            );
+            throw $exception;
+        }
+    }
+
+    private function ensureExternalTradeIndex(): void
+    {
+        if ($this->indexExists('investments', 'uq_external_trade')) {
+            return;
+        }
+
+        $sql = 'ALTER TABLE investments ADD UNIQUE KEY uq_external_trade (platform, external_trade_id)';
+        try {
+            $this->pdo->exec($sql);
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
                 self::class,
@@ -181,7 +275,7 @@ final class InvestmentRepository
                 (int) ($trade['itemId']),
                 (float) ($trade['buyPriceUsd'] ?? 0.0),
                 max(1, (int) ($trade['quantity'] ?? 1)),
-                (string) ($trade['fundingMode'] ?? 'cash'),
+                (string) ($trade['fundingMode'] ?? 'wallet_funded'),
                 (string) ($trade['platform'] ?? 'csfloat'),
                 (string) ($trade['externalTradeId'] ?? ''),
                 $trade['purchasedAt'] ?? date('Y-m-d H:i:s'),
@@ -235,7 +329,7 @@ final class InvestmentRepository
                 (int) ($trade['itemId']),
                 (float) ($trade['buyPriceUsd'] ?? 0.0),
                 max(1, (int) ($trade['quantity'] ?? 1)),
-                (string) ($trade['fundingMode'] ?? 'cash'),
+                (string) ($trade['fundingMode'] ?? 'wallet_funded'),
                 (string) ($trade['platform'] ?? 'csfloat'),
                 (string) ($trade['externalTradeId'] ?? ''),
                 $trade['purchasedAt'] ?? date('Y-m-d H:i:s'),

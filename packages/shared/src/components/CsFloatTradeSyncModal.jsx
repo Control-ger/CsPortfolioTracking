@@ -9,14 +9,7 @@ import {
   executeCsFloatTradeSync,
   fetchCsFloatTradeSyncPreview,
 } from "@shared/lib/apiClient";
-
-function formatPrice(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "-";
-  }
-
-  return `${value.toFixed(2)} EUR`;
-}
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 function formatDate(value) {
   if (!value) {
@@ -43,6 +36,7 @@ function Stat({ label, value, tone = "muted" }) {
 }
 
 export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
+  const { formatPrice } = useCurrency();
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -179,7 +173,12 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                       <div className="truncate text-[10px] text-muted-foreground">{trade.marketHashName}</div>
                     </div>
                     <div className="text-xs text-muted-foreground md:text-right">{trade.quantity}x</div>
-                    <div className="text-xs md:text-right">{formatPrice(trade.buyPrice)}</div>
+                    <div className="text-xs md:text-right">
+                      {formatPrice(trade.buyPriceUsd ?? trade.buyPrice, {
+                        useUsd: true,
+                        buyPriceUsd: trade.buyPriceUsd ?? trade.buyPrice,
+                      })}
+                    </div>
                     <div className="text-xs text-muted-foreground md:text-right">{formatDate(trade.purchasedAt)}</div>
                     <div className="flex items-center justify-between gap-2 md:justify-end">
                       <Badge variant={trade.status === "duplicate" ? "outline" : "default"}>

@@ -1,4 +1,5 @@
 import { TrendingDown, TrendingUp, RotateCw, Clock } from "lucide-react";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const formatAge = (seconds) => {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -34,6 +35,7 @@ export const PortfolioHeaderCard = ({
   freshestDataAgeSeconds = 0,
   oldestDataAgeSeconds = 0,
 }) => {
+  const { currency, formatPrice } = useCurrency();
   const Icon = isPositive ? TrendingUp : TrendingDown;
   const trendColor = isPositive ? "text-green-600" : "text-red-600";
   const hasStaleItems = staleItemsCount > 0;
@@ -53,9 +55,12 @@ export const PortfolioHeaderCard = ({
         <div className="flex-1">
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-bold tracking-tight">
-              {(totalValue || 0).toFixed(2)}
+              {formatPrice(totalValue || 0, {
+                useUsd: true,
+                buyPriceUsd: totalValue || 0,
+              }).replace(/^[^\d-]+/, "")}
             </span>
-            <span className="text-sm text-muted-foreground">EUR</span>
+            <span className="text-sm text-muted-foreground">{currency}</span>
           </div>
           <div className={`mt-1 flex items-center gap-1 ${trendColor}`}>
             <Icon className="h-4 w-4" />

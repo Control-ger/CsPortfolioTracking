@@ -2,10 +2,49 @@ import {
   errorToContext,
   sendFrontendTelemetryEvent,
 } from "./frontendTelemetry";
+import { getCurrentUser } from "./auth.js";
 import * as localCache from "./localCache.js";
 
 const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`;
-const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE);
+let desktopApiBasePromise = null;
+
+function normalizeApiBase(value) {
+  return String(value || "")
+    .replace(/\/+$/, "")
+    .replace(/\/api\/v1$/i, "");
+}
+
+async function resolveApiBase() {
+  if (
+    typeof window !== "undefined" &&
+    window.electronAPI?.backend?.getBaseUrl
+  ) {
+    desktopApiBasePromise ||= window.electronAPI.backend.getBaseUrl();
+    const desktopBase = await desktopApiBasePromise;
+    if (desktopBase) {
+      return normalizeApiBase(desktopBase);
+    }
+  }
+
+  return API_BASE;
+}
+
+function resetDesktopApiBase() {
+  desktopApiBasePromise = null;
+}
+
+function getDesktopSecrets() {
+  if (
+    typeof window === "undefined" ||
+    !window.electronAPI ||
+    !window.electronAPI.secrets
+  ) {
+    return null;
+  }
+
+  return window.electronAPI.secrets;
+}
 
 // Deterministic cache keys for Phase 1 offline fallback. Only GET endpoints
 // consumed by portfolio/watchlist UI are cached; mutations are never cached.
@@ -77,10 +116,10 @@ function buildPath(path, query = {}) {
   return queryString ? `${path}?${queryString}` : path;
 }
 
-function buildApiError(path, response, payload) {
+function buildApiError(path, response, payload, apiBase = API_BASE) {
   const message =
     payload?.error?.message ||
-    `API-Fehler (${response.status}) fuer ${API_BASE}${path}`;
+    `API-Fehler (${response.status}) fuer ${apiBase}${path}`;
   const error = new Error(message);
   error.status = response.status;
   error.code = payload?.error?.code || "API_REQUEST_FAILED";
@@ -91,10 +130,11 @@ function buildApiError(path, response, payload) {
 async function requestPayload(path, options = {}) {
   const method = String(options?.method || "GET").toUpperCase();
   const cacheKey = getCacheKey(path, method);
+  const apiBase = await resolveApiBase();
   let response;
 
   try {
-    response = await fetch(`${API_BASE}${path}`, options);
+    response = await fetch(`${apiBase}${path}`, options);
   } catch (fetchError) {
     // Don't report abort errors as they're intentional
     if (fetchError.name === "AbortError") {
@@ -107,7 +147,7 @@ async function requestPayload(path, options = {}) {
       context: {
         method,
         path,
-        apiBase: API_BASE,
+        apiBase,
         ...errorToContext(fetchError),
       },
     });
@@ -143,7 +183,7 @@ async function requestPayload(path, options = {}) {
   }
 
   if (!response.ok) {
-    const apiError = buildApiError(path, response, payload);
+    const apiError = buildApiError(path, response, payload, apiBase);
     void sendFrontendTelemetryEvent({
       level: "error",
       event: "frontend.fetch_error",
@@ -184,6 +224,39 @@ async function requestWithMeta(path, options = {}) {
   return {
     data: payload?.data,
     meta: payload?.meta || {},
+  };
+}
+
+function getDesktopLocalStore() {
+  if (
+    typeof window === "undefined" ||
+    !window.electronAPI ||
+    !window.electronAPI.localStore
+  ) {
+    return null;
+  }
+
+  return window.electronAPI.localStore;
+}
+
+function mapCsFloatPreviewTradeToInvestment(trade) {
+  const name = trade?.marketHashName || trade?.name || "Unknown Item";
+  const buyPriceUsd = Number(trade?.buyPriceUsd ?? trade?.buyPrice ?? 0);
+
+  return {
+    id: trade?.externalTradeId ? `csfloat-${trade.externalTradeId}` : undefined,
+    name,
+    marketHashName: name,
+    type: trade?.type || "skin",
+    quantity: Number(trade?.quantity || 1),
+    buyPrice: buyPriceUsd,
+    buyPriceUsd,
+    fundingMode: trade?.fundingMode || "wallet_funded",
+    imageUrl: trade?.imageUrl || null,
+    platform: "csfloat",
+    externalTradeId: trade?.externalTradeId || null,
+    purchasedAt: trade?.purchasedAt || null,
+    notes: `Imported from CSFloat trade ${trade?.externalTradeId || ""}`.trim(),
   };
 }
 
@@ -238,6 +311,36 @@ export async function fetchCsFloatTradeSyncPreview(payload = {}) {
 }
 
 export async function executeCsFloatTradeSync(payload = {}) {
+  const localStore = getDesktopLocalStore();
+  if (localStore) {
+    const preview = await fetchCsFloatTradeSyncPreview(payload);
+    const currentUser = await getCurrentUser();
+    const userId = currentUser?.id || currentUser?.steamId || "local";
+    const trades = Array.isArray(preview?.data?.importTrades)
+      ? preview.data.importTrades
+      : Array.isArray(preview?.data?.sampleTrades)
+        ? preview.data.sampleTrades
+      : [];
+    const rows = trades.map(mapCsFloatPreviewTradeToInvestment);
+    const result = await localStore.importInvestments(rows, userId);
+
+    return {
+      data: {
+        ...(preview?.data || {}),
+        mode: "execute",
+        status: "success",
+        inserted: result?.imported || rows.length,
+        duplicates: 0,
+        skippedDuringInsert: 0,
+        errors: [],
+        desktopLocal: true,
+      },
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
   return requestWithMeta("/api/v1/portfolio/sync/csfloat/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -313,14 +416,37 @@ export async function updateFeeSettings(payload) {
 }
 
 export async function fetchCsFloatApiKeyStatus() {
+  const desktopSecrets = getDesktopSecrets();
+  if (desktopSecrets?.getCsFloatApiKeyStatus) {
+    return {
+      data: await desktopSecrets.getCsFloatApiKeyStatus(),
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
   return requestWithMeta("/api/v1/settings/csfloat-api-key");
 }
 
-export async function updateCsFloatApiKey(encryptedKey) {
+export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
+  const desktopSecrets = getDesktopSecrets();
+  if (desktopSecrets?.setCsFloatApiKey) {
+    const result = await desktopSecrets.setCsFloatApiKey(apiKeyOrEncryptedKey);
+    resetDesktopApiBase();
+
+    return {
+      data: result?.status || result,
+      meta: {
+        source: "desktop-safe-storage",
+      },
+    };
+  }
+
   return requestWithMeta("/api/v1/settings/csfloat-api-key", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ encryptedKey }),
+    body: JSON.stringify({ encryptedKey: apiKeyOrEncryptedKey }),
   });
 }
 

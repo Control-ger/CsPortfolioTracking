@@ -5,9 +5,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     close: () => ipcRenderer.send('window-control', 'close'),
     minimize: () => ipcRenderer.send('window-control', 'minimize'),
     maximize: () => ipcRenderer.send('window-control', 'maximize'),
+    openExternal: (url) => ipcRenderer.invoke('open-external', url),
     localFileRead: (key) => ipcRenderer.invoke('local-cache-read', key),
     localFileWrite: (key, content) => ipcRenderer.invoke('local-cache-write', key, content),
     localFileRemove: (key) => ipcRenderer.invoke('local-cache-remove', key),
+    // Auth session management
+    storeSession: (token, user) => ipcRenderer.invoke('store-session', token, user),
+    getSession: () => ipcRenderer.invoke('get-session'),
+    clearSession: () => ipcRenderer.invoke('clear-session'),
+    // Steam auth callback listener
+    once: (channel, callback) => ipcRenderer.once(channel, callback),
     localStore: {
         info: () => ipcRenderer.invoke('local-store-info'),
         listInvestments: (userId) => ipcRenderer.invoke('local-store-list-investments', userId),

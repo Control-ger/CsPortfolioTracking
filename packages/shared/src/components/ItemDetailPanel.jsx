@@ -14,10 +14,10 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 import { Badge } from "./ui/badge";
 import { AlertCircle } from "lucide-react";
 import { PortfolioChart } from "./PortfolioChart";
-
-const formatPrice = (value) => `${value.toFixed(2)} EUR`;
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange }) => {
+  const { formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
@@ -56,6 +56,11 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
   };
 
   const stats6m = item.details?.stats6m;
+  const formatUsdPrice = (value) =>
+    formatPrice(value, {
+      useUsd: true,
+      buyPriceUsd: value,
+    });
 
   return (
       <>
@@ -112,8 +117,8 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
             <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
               <div className="rounded-md border p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
-                <p className="mt-2 text-xs sm:text-sm font-bold">{formatPrice(item.buyPrice)}</p>
-                <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatPrice(item.buyPrice)}</p>
+                <p className="mt-2 text-xs sm:text-sm font-bold">{formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
               </div>
 
               <div className="rounded-md border p-2 sm:p-3">

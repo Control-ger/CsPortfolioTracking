@@ -1,6 +1,9 @@
 // API Client
 export * from "./apiClient.js";
 
+// Authentication
+export * from "./auth.js";
+
 // Local Cache
 export * as localCache from "./localCache.js";
 

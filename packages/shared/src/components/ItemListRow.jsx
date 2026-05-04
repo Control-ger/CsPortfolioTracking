@@ -1,4 +1,5 @@
 import { TrendingDown, TrendingUp, ArrowRight } from "lucide-react";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 /**
  * ItemListRow - Minimale Listenansicht für Items
@@ -9,6 +10,8 @@ export const ItemListRow = ({
   onClick,
   className = "",
 }) => {
+  const { formatPrice } = useCurrency();
+
   if (!item) {
     return null;
   }
@@ -52,7 +55,12 @@ export const ItemListRow = ({
           <h4 className="truncate text-sm font-medium">{item.name}</h4>
           {item.currentPrice !== null && item.currentPrice !== undefined && (
             <p className="truncate text-xs text-muted-foreground">
-              {item.currentPrice.toFixed(2)} EUR
+              {item.currentPriceUsd !== null && item.currentPriceUsd !== undefined
+                ? formatPrice(item.currentPriceUsd, {
+                    useUsd: true,
+                    buyPriceUsd: item.currentPriceUsd,
+                  })
+                : formatPrice(item.currentPrice)}
             </p>
           )}
         </div>

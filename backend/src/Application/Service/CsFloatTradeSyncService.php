@@ -30,6 +30,8 @@ final class CsFloatTradeSyncService
 
     public function preview(int $userId, int $limit = self::DEFAULT_LIMIT, ?string $type = 'buy', int $maxPages = self::DEFAULT_MAX_PAGES): array
     {
+        $this->investmentRepository->ensureImportColumns();
+
         $collection = $this->collectTrades($limit, $type, $maxPages);
         $normalization = $this->normalizeAndClassifyTrades($collection['trades']);
         $normalized = $normalization['trades'];
@@ -67,6 +69,7 @@ final class CsFloatTradeSyncService
     public function execute(int $userId, int $limit = self::DEFAULT_LIMIT, ?string $type = 'buy', int $maxPages = self::DEFAULT_MAX_PAGES): array
     {
         $this->investmentRepository->ensureImportColumns();
+        $this->itemRepository->ensureTable();
 
         $collection = $this->collectTrades($limit, $type, $maxPages);
         $normalization = $this->normalizeAndClassifyTrades($collection['trades']);

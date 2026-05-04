@@ -11,6 +11,7 @@ import { PortfolioChart } from "@shared/components";
 import { PortfolioCompositionChart } from "@shared/components";
 import { PortfolioHeaderCard } from "@shared/components";
 import { StatCard } from "@shared/components";
+import { SteamLoginPrompt } from "@shared/components";
 import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
 import { Watchlist } from "@shared/components";
@@ -26,6 +27,7 @@ import { useCsUpdatesFeed } from "@shared/hooks";
 import { fetchPortfolioInvestmentHistory } from "@shared/lib";
 import { BREAKPOINTS, UI } from "@shared/lib";
 import { useKeyboard } from "@shared/hooks";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -74,12 +76,14 @@ const TABS = ["overview", "inventory", "watchlist"];
 const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
 
 export function PortfolioPage({ initialTab = "overview" }) {
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const resolvedInitialTab = searchParams.get("tab") || initialTab;
   const {
     enrichedInvestments,
     isLoading: portfolioLoading,
+    authRequired,
     stats,
     portfolioHistory,
     error,
@@ -189,6 +193,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     void loadItemHistory();
   }, [selectedItemWithLive]);
+
+  // Keep this return after all hooks. Returning before the other hooks run changes
+  // hook order after login and triggers React's minified error #310.
+  if (authRequired) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <SteamLoginPrompt onLoginSuccess={refreshPortfolio} />
+      </div>
+    );
+  }
 
   const handleOpenWatchlistItem = (item) => {
     if (!item?.id) {
@@ -347,12 +361,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
             <div className="hidden sm:grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
               <StatCard
                 title="Portfolio Wert (Live)"
-                value={`${(stats.totalValue || 0).toFixed(2)} EUR`}
+                value={formatPrice(stats.totalValue || 0, {
+                  useUsd: true,
+                  buyPriceUsd: stats.totalValue || 0,
+                })}
                 isPositive={stats.isPositive}
               />
               <StatCard
                 title="Gesamt Zuwachs"
-                value={`${stats.isPositive ? "+" : ""}${(stats.totalProfitEuro || 0).toFixed(2)} EUR`}
+                value={`${stats.isPositive ? "+" : ""}${formatPrice(Math.abs(stats.totalProfitEuro || 0), {
+                  useUsd: true,
+                  buyPriceUsd: Math.abs(stats.totalProfitEuro || 0),
+                })}`}
                 subValue={`${(stats.totalRoiPercent || 0) >= 0 ? "+" : ""}${(stats.totalRoiPercent || 0).toFixed(2)}%`}
                 isPositive={stats.isPositive}
               />

@@ -3,9 +3,7 @@ import { BaseModal } from "@shared/components/BaseModal";
 import { PriceSourceBadge } from "@shared/components/PriceSourceBadge";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
 import { Badge } from "@shared/components/ui/badge";
-
-const formatPrice = (value) =>
-  typeof value === "number" && !Number.isNaN(value) ? `${value.toFixed(2)} EUR` : "-";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const formatSignedPrice = (value) =>
   typeof value === "number" && !Number.isNaN(value)
@@ -51,6 +49,7 @@ function ChangeMetric({ label, percent, euro }) {
 }
 
 export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyLoading = false, onToggleExclude }) {
+  const { formatPrice } = useCurrency();
   const [activeTab, setActiveTab] = useState("overview");
   const [showAbsolute, setShowAbsolute] = useState(false);
 
@@ -65,6 +64,11 @@ export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyL
   const togglePriceDisplay = () => {
     setShowAbsolute(!showAbsolute);
   };
+  const formatUsdPrice = (value) =>
+    formatPrice(value, {
+      useUsd: true,
+      buyPriceUsd: value,
+    });
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="3xl" className="w-full sm:max-w-2xl md:max-w-4xl md:hidden">
@@ -105,8 +109,8 @@ export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyL
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
           <div className="rounded-md border p-2 sm:p-3">
             <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
-            <p className="mt-2 text-sm font-bold">{formatPrice(item.buyPrice)}</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatPrice(item.buyPrice)}</p>
+            <p className="mt-2 text-sm font-bold">{formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
           </div>
 
           <div className="rounded-md border p-2 sm:p-3">

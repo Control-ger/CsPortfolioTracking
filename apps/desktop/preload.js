@@ -1,5 +1,5 @@
 /* eslint-disable */
-const { contextBridge, ipcRenderer } = require("electron"); // ipcRenderer hier hinzufügen!
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
   close: () => ipcRenderer.send("window-control", "close"),
@@ -9,6 +9,31 @@ contextBridge.exposeInMainWorld("electronAPI", {
   localFileWrite: (key, content) =>
     ipcRenderer.invoke("local-cache-write", key, content),
   localFileRemove: (key) => ipcRenderer.invoke("local-cache-remove", key),
+  
+  // Session management
+  getSession: () => ipcRenderer.invoke("session-store", "get"),
+  storeSession: (token, user) => ipcRenderer.invoke("session-store", "set", { token, user }),
+  clearSession: () => ipcRenderer.invoke("session-store", "clear"),
+  
+  // External URL opening
+  openExternal: (url) => ipcRenderer.invoke("open-external", url),
+  
+  // Debugging
+  openDevTools: () => ipcRenderer.invoke("open-devtools"),
+  backend: {
+    getBaseUrl: () => ipcRenderer.invoke("backend-base-url"),
+    getSidecarSecret: () => ipcRenderer.invoke("backend-sidecar-secret"),
+  },
+  secrets: {
+    getCsFloatApiKeyStatus: () => ipcRenderer.invoke("secret-csfloat-status"),
+    setCsFloatApiKey: (apiKey) => ipcRenderer.invoke("secret-csfloat-set", apiKey),
+    clearCsFloatApiKey: () => ipcRenderer.invoke("secret-csfloat-clear"),
+  },
+  
+  // IPC event bridge
+  once: (channel, handler) => ipcRenderer.once(channel, handler),
+  on: (channel, handler) => ipcRenderer.on(channel, handler),
+  
   localStore: {
     info: () => ipcRenderer.invoke("local-store-info"),
     listInvestments: (userId) =>
@@ -19,6 +44,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-upsert-investment", payload),
     deleteInvestment: (id) =>
       ipcRenderer.invoke("local-store-delete-investment", id),
+    getInvestment: (id) =>
+      ipcRenderer.invoke("local-store-get-investment", id),
     listWatchlist: (userId) =>
       ipcRenderer.invoke("local-store-list-watchlist", userId),
     importWatchlist: (rows, userId) =>
@@ -27,6 +54,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-upsert-watchlist-item", payload),
     deleteWatchlistItem: (id) =>
       ipcRenderer.invoke("local-store-delete-watchlist-item", id),
+    listPortfolioSnapshots: (userId, limit) =>
+      ipcRenderer.invoke("local-store-list-portfolio-snapshots", userId, limit),
+    upsertPortfolioSnapshot: (payload) =>
+      ipcRenderer.invoke("local-store-upsert-portfolio-snapshot", payload),
     upsertPrice: (payload) => ipcRenderer.invoke("local-store-upsert-price", payload),
     listPendingOperations: (limit) =>
       ipcRenderer.invoke("local-store-list-pending-operations", limit),
