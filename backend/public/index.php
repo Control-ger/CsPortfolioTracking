@@ -212,7 +212,58 @@ function obs_should_emit_startup_events(): bool
     return true;
 }
 
-header('Access-Control-Allow-Origin: *');
+$corsAllowedOriginsRaw = getenv('CORS_ALLOWED_ORIGINS') ?: ($_ENV['CORS_ALLOWED_ORIGINS'] ?? '');
+$requestOrigin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+$requestHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
+$isCorsOriginAllowed = static function (string $origin, string $host, string $allowedOriginsRaw): bool {
+    if ($origin === '') {
+        return true;
+    }
+
+    if (strtolower($origin) === 'null') {
+        return false;
+    }
+
+    $parsedHost = parse_url($origin, PHP_URL_HOST);
+    $parsedScheme = parse_url($origin, PHP_URL_SCHEME);
+    if (!is_string($parsedHost) || !is_string($parsedScheme)) {
+        return false;
+    }
+
+    $requestHostOnly = explode(':', $host)[0] ?? $host;
+    if ($requestHostOnly !== '' && strcasecmp($parsedHost, $requestHostOnly) === 0 && in_array(strtolower($parsedScheme), ['http', 'https'], true)) {
+        return true;
+    }
+
+    if (preg_match('#^(localhost|127\.0\.0\.1)$#i', $parsedHost) === 1 && in_array(strtolower($parsedScheme), ['http', 'https'], true)) {
+        return true;
+    }
+
+    $configured = array_values(array_filter(array_map('trim', explode(',', (string) $allowedOriginsRaw))));
+    foreach ($configured as $allowedOrigin) {
+        if (strcasecmp($origin, $allowedOrigin) === 0) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+if (!$isCorsOriginAllowed($requestOrigin, $requestHost, (string) $corsAllowedOriginsRaw)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'error' => 'Origin not allowed',
+        'code' => 'CORS_ORIGIN_DENIED',
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($requestOrigin !== '') {
+    header('Access-Control-Allow-Origin: ' . $requestOrigin);
+    header('Vary: Origin');
+}
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Request-Id');
 
@@ -457,16 +508,17 @@ try {
         $isDesktopProtocol = preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $redirectUrl) === 1
             && !preg_match('/^https?:\/\//i', $redirectUrl) === 1;
         
+        $tokenFragment = '#token=' . rawurlencode($sessionToken);
         if ($isDesktopProtocol) {
             // Desktop: Redirect to custom protocol with token only
             // User data is embedded in the encrypted session token
-            $callbackUrl = $redirectUrl . '?token=' . urlencode($sessionToken);
+            $callbackUrl = $redirectUrl . $tokenFragment;
             header('Location: ' . $callbackUrl);
             exit;
         } else {
             // Web: Redirect to web callback with token only
             // Client will fetch user data via validateSession endpoint
-            $webCallbackUrl = $redirectUrl . '?token=' . urlencode($sessionToken);
+            $webCallbackUrl = $redirectUrl . $tokenFragment;
             header('Location: ' . $webCallbackUrl);
             exit;
         }
@@ -481,16 +533,15 @@ try {
         JsonResponseFactory::success($result, [], $result['success'] ? 200 : 400);
     });
     $router->register('GET', '/api/v1/auth/session/validate', function () use ($steamAuthController) {
-        // Extract token from Authorization header or query param
+        // Extract token from Authorization header
         $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
-        $token = $_GET['token'] ?? '';
-        
-        if (!$token && !$authHeader) {
+
+        if (!$authHeader) {
             JsonResponseFactory::error('MISSING_TOKEN', 'Session token required', [], 401);
             return;
         }
-        
-        $sessionToken = $token ?: str_replace('Bearer ', '', $authHeader);
+
+        $sessionToken = str_replace('Bearer ', '', $authHeader);
         $user = $steamAuthController->validateSession($sessionToken);
         
         if (!$user) {

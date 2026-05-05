@@ -194,7 +194,8 @@ function initiateWebSteamLogin() {
  */
 export async function handleWebAuthCallback() {
   const urlParams = new URLSearchParams(window.location.search);
-  const token = urlParams.get('token');
+  const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+  const token = hashParams.get('token') || urlParams.get('token');
   
   if (!token) {
     return { success: false, error: 'Missing token in callback URL' };
@@ -328,9 +329,12 @@ export async function devModeLogin() {
 export async function validateSession(token) {
   try {
     const apiBase = await resolveApiBase();
-    const response = await fetch(`${apiBase}/api/v1/auth/session/validate?token=${encodeURIComponent(token)}`, {
+    const response = await fetch(`${apiBase}/api/v1/auth/session/validate`, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
     });
     
     if (!response.ok) {

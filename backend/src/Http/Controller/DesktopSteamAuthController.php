@@ -140,13 +140,21 @@ final class DesktopSteamAuthController
 
     private function getCallbackUrl(array $server, string $state): string
     {
-        $host = (string) ($server['HTTP_HOST'] ?? '127.0.0.1');
+        $host = '127.0.0.1';
+        $port = (string) ($server['SERVER_PORT'] ?? '');
+        if (preg_match('/^\d{2,5}$/', $port) === 1) {
+            $host .= ':' . $port;
+        }
         return "http://{$host}/api/v1/auth/steam/callback?state={$state}";
     }
 
     private function getRealm(array $server): string
     {
-        $host = (string) ($server['HTTP_HOST'] ?? '127.0.0.1');
+        $host = '127.0.0.1';
+        $port = (string) ($server['SERVER_PORT'] ?? '');
+        if (preg_match('/^\d{2,5}$/', $port) === 1) {
+            $host .= ':' . $port;
+        }
         return "http://{$host}";
     }
 

@@ -528,8 +528,8 @@ function handleProtocolUrl(url) {
   try {
     const urlObj = new URL(url);
     const params = urlObj.searchParams;
-    
-    const token = params.get("token");
+    const hashParams = new URLSearchParams((urlObj.hash || "").replace(/^#/, ""));
+    const token = params.get("token") || hashParams.get("token");
     
     if (token) {
       // Store the session (token only - user data will be validated by renderer)

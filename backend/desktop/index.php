@@ -12,7 +12,30 @@ $backendRoot = dirname(__DIR__);
 
 require_once $backendRoot . '/src/bootstrap.php';
 
-header('Access-Control-Allow-Origin: *');
+$desktopOrigin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+$isDesktopOriginAllowed = static function (string $origin): bool {
+    if ($origin === '' || strtolower($origin) === 'null') {
+        return true;
+    }
+
+    return preg_match('#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#i', $origin) === 1;
+};
+
+if (!$isDesktopOriginAllowed($desktopOrigin)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'error' => 'Origin not allowed',
+        'code' => 'CORS_ORIGIN_DENIED',
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($desktopOrigin !== '') {
+    header('Access-Control-Allow-Origin: ' . $desktopOrigin);
+    header('Vary: Origin');
+}
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Request-Id, X-Desktop-Sidecar-Secret');
 
@@ -123,11 +146,9 @@ $router->register('GET', '/api/v1/auth/steam/result', static function () use ($s
 
 $router->register('GET', '/api/v1/auth/session/validate', static function () use ($steamAuthController): void {
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
-    $token = (string) ($_GET['token'] ?? '');
-
-    if ($token === '' && is_string($authHeader) && $authHeader !== '') {
-        $token = str_replace('Bearer ', '', $authHeader);
-    }
+    $token = is_string($authHeader) && $authHeader !== ''
+        ? str_replace('Bearer ', '', $authHeader)
+        : '';
 
     if ($token === '') {
         JsonResponseFactory::error('MISSING_TOKEN', 'Session token required', [], 401);
