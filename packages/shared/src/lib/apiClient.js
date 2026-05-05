@@ -4,6 +4,7 @@ import {
 } from "./frontendTelemetry";
 import { getCurrentUser } from "./auth.js";
 import * as localCache from "./localCache.js";
+import { unwrapLocalStoreResult } from "./localStoreResult.js";
 
 const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`;
 const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE);
@@ -256,6 +257,8 @@ function mapCsFloatPreviewTradeToInvestment(trade) {
     platform: "csfloat",
     externalTradeId: trade?.externalTradeId || null,
     purchasedAt: trade?.purchasedAt || null,
+    floatValue: trade?.floatValue ?? trade?.float ?? null,
+    paintSeed: trade?.paintSeed ?? trade?.patternSeed ?? null,
     notes: `Imported from CSFloat trade ${trade?.externalTradeId || ""}`.trim(),
   };
 }
@@ -322,7 +325,10 @@ export async function executeCsFloatTradeSync(payload = {}) {
         ? preview.data.sampleTrades
       : [];
     const rows = trades.map(mapCsFloatPreviewTradeToInvestment);
-    const result = await localStore.importInvestments(rows, userId);
+    const result = unwrapLocalStoreResult(
+      await localStore.importInvestments(rows, userId),
+      "local-store-import-investments",
+    );
 
     return {
       data: {
@@ -450,7 +456,44 @@ export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
   });
 }
 
-export async function toggleExcludeInvestment(id, exclude) {
+export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds = []) {
+  const localStore = getDesktopLocalStore();
+  if (localStore) {
+    const candidateIds = Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
+      ? sourceInvestmentIds
+      : [id];
+
+    for (const candidateId of candidateIds) {
+      const existing = unwrapLocalStoreResult(
+        await localStore.getInvestment(candidateId),
+        "local-store-get-investment",
+      );
+
+      if (!existing) {
+        continue;
+      }
+
+      unwrapLocalStoreResult(
+        await localStore.upsertInvestment({
+          ...existing,
+          excluded: Boolean(exclude),
+        }),
+        "local-store-upsert-investment",
+      );
+    }
+
+    return {
+      data: {
+        success: true,
+        investmentId: id,
+        excluded: Boolean(exclude),
+      },
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
   return requestWithMeta(`/api/v1/portfolio/investments/${id}/exclude`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

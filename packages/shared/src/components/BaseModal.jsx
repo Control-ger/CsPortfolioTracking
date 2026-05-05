@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useClickOutside } from '../hooks/useClickOutside.js';
 import { useModalKeyboard } from '../hooks/useKeyboard.js';
 

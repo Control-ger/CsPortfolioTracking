@@ -43,7 +43,7 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
   const handleExcludeConfirm = async (newExcludeState) => {
     setIsExcludeLoading(true);
     try {
-      await toggleExcludeInvestment(item.id, newExcludeState);
+      await toggleExcludeInvestment(item.id, newExcludeState, item.sourceInvestmentIds || []);
       setExcludeDialogOpen(false);
       if (onExcludeChange) {
         onExcludeChange(item.id, newExcludeState);
@@ -56,6 +56,7 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
   };
 
   const stats6m = item.details?.stats6m;
+  const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
   const formatUsdPrice = (value) =>
     formatPrice(value, {
       useUsd: true,
@@ -67,12 +68,14 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
         <Card className="border-primary/20 shadow-lg">
           <CardHeader className="pb-2 sm:pb-4">
             <div className="flex items-start gap-2 sm:gap-4">
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border sm:h-24 sm:w-24">
+              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted/30 p-1 sm:h-24 sm:w-24">
                 {item.imageUrl ? (
                     <img
                         src={item.imageUrl}
                         alt={item.name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                        decoding="async"
                     />
                 ) : (
                     <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
@@ -160,7 +163,9 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
                   {`${item.isProfitPositive ? "+" : ""}${formatPrice(item.profitEuro)}`}
                 </p>
                 <p className="mt-1 text-[10px] text-muted-foreground">
-                  {`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(2)}%`}
+                  {roiValue === null
+                    ? "N/A"
+                    : `${roiValue >= 0 ? "+" : ""}${roiValue.toFixed(2)}%`}
                 </p>
               </div>
 

@@ -154,7 +154,6 @@ export const PortfolioChart = ({
   showAbsolute = false,
 }) => {
   const [rangeKey, setRangeKey] = useState("MAX");
-  const [hoveredIndex, setHoveredIndex] = useState(null);
 
   const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
   const visibleHistory = useMemo(
@@ -272,7 +271,6 @@ export const PortfolioChart = ({
                   return;
                 }
 
-                setHoveredIndex(activeIndex);
                 if (onHoverChange) {
                   const hoveredData = chartData[activeIndex];
                   onHoverChange({
@@ -283,7 +281,6 @@ export const PortfolioChart = ({
                 }
               }}
               onMouseLeave={() => {
-                setHoveredIndex(null);
                 onHoverChange?.(null);
               }}
             >

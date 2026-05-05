@@ -5,6 +5,8 @@
  * Desktop uses custom protocol handler (cs-portfolio://), Web uses normal redirect.
  */
 
+import { unwrapLocalStoreResult } from "./localStoreResult.js";
+
 // Resolve configured API base URL - handle Electron file:// origin gracefully
 function resolveConfiguredApiBase() {
   if (import.meta.env.VITE_API_BASE_URL) {
@@ -148,7 +150,7 @@ async function initiateDesktopSteamLogin() {
             clearInterval(interval);
             await storeSession(result.sessionToken, validationResult.user);
             resolve({ success: true, user: validationResult.user, sessionToken: result.sessionToken });
-          } catch (error) {
+          } catch {
             clearTimeout(timeout);
             clearInterval(interval);
             reject(new Error('Failed to validate session'));
@@ -280,9 +282,9 @@ export async function getCurrentUser() {
 /**
  * Logout user
  */
-export function logout() {
+export async function logout() {
   if (isDesktopApp()) {
-    window.electronAPI.clearSession();
+    await window.electronAPI.clearSession();
   } else {
     sessionStorage.removeItem('auth_token');
     sessionStorage.removeItem('auth_user');
@@ -371,25 +373,20 @@ export async function fetchCS2Inventory(steamId) {
 export async function importInventoryAsInvestments(items, userId) {
   // Use local store if available (Desktop)
   if (isDesktopApp() && window.electronAPI.localStore) {
-    const investments = items.map(item => ({
-      id: item.assetId || item.id || undefined,
-      name: item.marketHashName || item.name,
-      type: item.type || 'skin',
-      marketHashName: item.marketHashName || item.name,
-      imageUrl: item.iconUrl ? `https://community.cloudflare.steamstatic.com/economy/image/${item.iconUrl}` : null,
-      quantity: 1,
-      buyPrice: 0, // User needs to set price
-      buyPriceUsd: 0,
-      buyDate: new Date().toISOString(),
-      notes: `Imported from CS2 inventory: ${item.marketHashName || item.name}`,
-      userId: userId
-    }));
-    
-    for (const investment of investments) {
-      await window.electronAPI.localStore.upsertInvestment(investment);
-    }
-    
-    return { success: true, imported: investments.length };
+    const result = unwrapLocalStoreResult(
+      await window.electronAPI.localStore.syncSteamInventory(items, userId),
+      "local-store-sync-steam-inventory",
+    );
+
+    return {
+      success: true,
+      imported: Number(result?.imported || 0),
+      updated: Number(result?.updated || 0),
+      missingMarked: Number(result?.missingMarked || 0),
+      matchesSuggested: Number(result?.matchesSuggested || 0),
+      totalIncoming: Number(result?.totalIncoming || 0),
+      importedItems: Array.isArray(result?.importedItems) ? result.importedItems : [],
+    };
   }
   
   // TODO: Implement server-side import for Web

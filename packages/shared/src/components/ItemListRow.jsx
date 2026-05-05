@@ -37,13 +37,14 @@ export const ItemListRow = ({
     >
       {/* Bild + Name */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md border ">
+        <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-md border bg-muted/30 p-1">
           {item.imageUrl ? (
             <img
               src={item.imageUrl}
               alt={item.name}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain"
               loading="lazy"
+              decoding="async"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">

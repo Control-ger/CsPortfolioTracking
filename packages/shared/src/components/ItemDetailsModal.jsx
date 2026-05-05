@@ -50,7 +50,6 @@ function ChangeMetric({ label, percent, euro }) {
 
 export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyLoading = false, onToggleExclude }) {
   const { formatPrice } = useCurrency();
-  const [activeTab, setActiveTab] = useState("overview");
   const [showAbsolute, setShowAbsolute] = useState(false);
 
   if (!item) return null;
@@ -74,12 +73,14 @@ export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyL
     <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="3xl" className="w-full sm:max-w-2xl md:max-w-4xl md:hidden">
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="h-24 w-24 sm:h-32 sm:w-32 shrink-0 overflow-hidden rounded-lg border ">
+          <div className="h-24 w-24 sm:h-32 sm:w-32 shrink-0 overflow-hidden rounded-lg border bg-muted/30 p-1">
             {item.imageUrl ? (
               <img
                 src={item.imageUrl}
                 alt={item.name}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
+                loading="lazy"
+                decoding="async"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
@@ -151,7 +152,7 @@ export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyL
               {`${item.isProfitPositive ? "+" : ""}${formatPrice(item.profitEuro)}`}
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              {`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(2)}%`}
+              {formatSignedPercent(item.roi)}
             </p>
           </div>
 

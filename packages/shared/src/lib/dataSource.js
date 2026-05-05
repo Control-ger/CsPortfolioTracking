@@ -1,6 +1,7 @@
 import {
   createWatchlistItem as createApiWatchlistItem,
   deleteWatchlistItem as deleteApiWatchlistItem,
+  fetchPortfolioComposition as fetchApiPortfolioComposition,
   fetchPortfolioHistory as fetchApiPortfolioHistory,
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
   fetchPortfolioSummary as fetchApiPortfolioSummary,
@@ -8,6 +9,7 @@ import {
 } from "./apiClient.js";
 
 import { getCurrentUser, isAuthenticated } from "./auth.js";
+import { unwrapLocalStoreResult } from "./localStoreResult.js";
 
 const DEFAULT_STATS = {
   totalValue: 0,
@@ -163,7 +165,7 @@ function clusterDesktopInvestments(rows = []) {
       group.purchaseClusters.push({
         priceKey,
         buyPriceUsd,
-        buyPrice,
+        buyPrice: buyPriceUsd,
         quantity,
         totalCostUsd,
       });
@@ -189,10 +191,50 @@ function clusterDesktopInvestments(rows = []) {
   });
 }
 
+function buildPortfolioComposition(rows = []) {
+  const groups = new Map();
+  let totalValue = 0;
+
+  rows.forEach((row) => {
+    const quantity = Number(row.quantity || 0);
+    const displayPrice = Number(row.displayPrice ?? row.livePrice ?? row.buyPrice ?? 0);
+    const currentValue = Number(row.currentValue ?? displayPrice * quantity);
+    totalValue += currentValue;
+
+    const key = String(row.marketHashName || row.name || row.itemName || row.id || "");
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: row.name || row.marketHashName || "Unknown Item",
+        type: row.type || "skin",
+        count: 0,
+        value: 0,
+      });
+    }
+
+    const entry = groups.get(key);
+    entry.count += quantity;
+    entry.value += currentValue;
+  });
+
+  const palette = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4", "#f97316"];
+  return Array.from(groups.values())
+    .sort((a, b) => b.value - a.value)
+    .map((entry, index) => ({
+      ...entry,
+      value: Number(entry.value.toFixed(2)),
+      percentage: totalValue > 0 ? Number(((entry.value / totalValue) * 100).toFixed(1)) : 0,
+      color: palette[index % palette.length],
+    }));
+}
+
 async function fetchDesktopPortfolioData(options = {}) {
   const localStore = getDesktopLocalStore();
-  const rawRows = await localStore.listInvestments(options.userId);
-  let rows = clusterDesktopInvestments(rawRows);
+  const rawRows = unwrapLocalStoreResult(
+    await localStore.listInvestments(options.userId),
+    "local-store-list-investments",
+  );
+  const activeRows = rawRows.filter((row) => row?.excluded !== true);
+  let rows = clusterDesktopInvestments(activeRows);
   let meta = {
     source: "desktop-local",
     rawInvestmentCount: rawRows.length,
@@ -206,8 +248,32 @@ async function fetchDesktopPortfolioData(options = {}) {
     meta.message = "Import items from your CS2 inventory to get started";
   }
 
-  // History is only available from server - skip for now
-  let history = [];
+  const snapshots = unwrapLocalStoreResult(
+    await localStore.listPortfolioSnapshots(options.userId, 365),
+    "local-store-list-portfolio-snapshots",
+  );
+  let history = (Array.isArray(snapshots) ? snapshots : []).map((snapshot) => {
+    const investedValue = Number(snapshot.investedValue || 0);
+    const totalValue = Number(snapshot.wert || 0);
+    return {
+      date: snapshot.date,
+      wert: totalValue,
+      invested: investedValue,
+      growthPercent: investedValue > 0 ? ((totalValue - investedValue) / investedValue) * 100 : 0,
+    };
+  });
+
+  if (history.length === 0 && rows.length > 0) {
+    const summary = calculatePortfolioSummary(rows);
+    history = [
+      {
+        date: new Date().toISOString(),
+        wert: Number(summary.totalValue || 0),
+        invested: Number(summary.totalInvested || 0),
+        growthPercent: Number(summary.totalRoiPercent || 0),
+      },
+    ];
+  }
 
   return {
     rows: {
@@ -258,6 +324,23 @@ export async function fetchPortfolioData(options = {}) {
   return fetchApiPortfolioData(options);
 }
 
+export async function fetchPortfolioCompositionData() {
+  const localStore = getDesktopLocalStore();
+  if (!localStore) {
+    return fetchApiPortfolioComposition();
+  }
+
+  const user = await getCurrentUser();
+  const userId = user?.id || "local";
+  const rawRows = unwrapLocalStoreResult(
+    await localStore.listInvestments(userId),
+    "local-store-list-investments",
+  );
+  const activeRows = rawRows.filter((row) => row?.excluded !== true);
+  const clusteredRows = clusterDesktopInvestments(activeRows);
+  return buildPortfolioComposition(clusteredRows);
+}
+
 export async function fetchWatchlistData(options = {}) {
   // Auth-First: Check if user is authenticated (async for Desktop IPC)
   const authenticated = await isAuthenticated();
@@ -277,7 +360,10 @@ export async function fetchWatchlistData(options = {}) {
     return fetchApiWatchlist(options);
   }
 
-  let items = await localStore.listWatchlist(userId);
+  let items = unwrapLocalStoreResult(
+    await localStore.listWatchlist(userId),
+    "local-store-list-watchlist",
+  );
   let meta = {
     source: "desktop-local",
     warnings: [],
@@ -311,10 +397,13 @@ export async function createWatchlistItemData(name, type = "skin") {
     return createApiWatchlistItem(name, type);
   }
 
-  return localStore.upsertWatchlistItem({
-    name,
-    type,
-  });
+  return unwrapLocalStoreResult(
+    await localStore.upsertWatchlistItem({
+      name,
+      type,
+    }),
+    "local-store-upsert-watchlist-item",
+  );
 }
 
 export async function deleteWatchlistItemData(id) {
@@ -324,5 +413,8 @@ export async function deleteWatchlistItemData(id) {
     return deleteApiWatchlistItem(id);
   }
 
-  return localStore.deleteWatchlistItem(id);
+  return unwrapLocalStoreResult(
+    await localStore.deleteWatchlistItem(id),
+    "local-store-delete-watchlist-item",
+  );
 }

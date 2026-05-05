@@ -1,6 +1,11 @@
 import path from "path";
+import process from "process";
+import { fileURLToPath } from "url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig(({ mode }) => {
   // Lädt die .env Datei basierend auf dem aktuellen Modus (development/production)

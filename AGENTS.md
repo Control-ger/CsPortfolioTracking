@@ -242,3 +242,13 @@ Change: Desktop Secret Storage festgelegt
 - CSFloat API Key wird lokal ueber Electron `safeStorage` gespeichert.
 - Der Key wird dem lokalen PHP-Sidecar nur zur Laufzeit als Prozess-Environment bereitgestellt.
 - `.env`, SQLite, Server-DB und Web-Build duerfen keine lokalen CSFloat API Keys enthalten.
+
+---
+
+Updated: 2026-05-05
+Change: Lokale Steam-Sync-Verwaltung und Notification-Persistenz erweitert
+- Neue lokale Tabelle `sync_notifications` fuer persistente Sync-Benachrichtigungen mit Read-Status (`read_at`).
+- Steam-Sync-Notifications sind restart-fest und koennen einzeln oder gesammelt als gelesen markiert werden.
+- Auto-Sync ist lokal durch Cooldown begrenzt und bleibt manuell triggerbar.
+- Fehlertexte fuer Steam-Import wurden fuer typische Ursachen (Inventory access denied, Rate Limit, invalid response, Netzwerk) konkretisiert.
+- Journey/Onboarding zeigt klaren Schrittfortschritt fuer Steam, Import, CSFloat-Key und Matching-Status.

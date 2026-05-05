@@ -68,7 +68,6 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
 
   const sampleRows = useMemo(() => preview?.sampleTrades || [], [preview]);
   const skipReasons = useMemo(() => preview?.skipReasons || {}, [preview]);
-  const skippedExamples = useMemo(() => preview?.skippedExamples || [], [preview]);
   const skipReasonEntries = useMemo(() => Object.entries(skipReasons).sort((a, b) => b[1] - a[1]), [skipReasons]);
   const hasPreview = Boolean(preview);
 

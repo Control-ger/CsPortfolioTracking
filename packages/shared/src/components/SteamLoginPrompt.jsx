@@ -3,6 +3,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { initiateSteamLogin, isAuthenticated, getCurrentUser, devModeLogin } from "../lib/auth.js";
 import { useState, useEffect } from "react";
 
+function formatSteamInventoryError(error) {
+  const raw = String(error?.message || error || "");
+  const upper = raw.toUpperCase();
+  if (upper.includes("INVENTORY_ACCESS_DENIED")) {
+    return "Steam-Inventar ist nicht oeffentlich erreichbar. Stelle in Steam Profil und Inventar auf oeffentlich und versuche es erneut.";
+  }
+  if (upper.includes("RATE") || upper.includes("429")) {
+    return "Steam hat den Zugriff temporaer begrenzt. Bitte in einigen Minuten erneut versuchen.";
+  }
+  if (upper.includes("INVALID RESPONSE") || upper.includes("JSON")) {
+    return "Steam hat keine gueltige Inventarantwort geliefert. Bitte spaeter erneut versuchen.";
+  }
+  return raw || "Steam-Inventar konnte nicht importiert werden.";
+}
+
 /**
  * Steam Login Prompt Component
  * 
@@ -13,6 +28,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [user, setUser] = useState(null);
+  const [syncInfo, setSyncInfo] = useState("");
 
   // Check if already logged in (e.g., after page reload)
   useEffect(() => {
@@ -21,6 +37,9 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       if (authenticated) {
         const currentUser = await getCurrentUser();
         setUser(currentUser);
+        if (currentUser?.steamId) {
+          await importCS2Inventory(currentUser.steamId, currentUser.id);
+        }
         onLoginSuccess?.(currentUser);
       }
     };
@@ -84,15 +103,24 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         const marketableItems = inventoryResult.items.filter(item => item.marketable);
         
         if (marketableItems.length > 0) {
-          await importInventoryAsInvestments(marketableItems, userId);
+          const importResult = await importInventoryAsInvestments(marketableItems, userId);
           
-          // Show success message or redirect
-          console.log(`Imported ${marketableItems.length} CS2 items as investments`);
+          setSyncInfo(
+            `Steam Sync: ${importResult.imported || 0} neu, ${importResult.updated || 0} aktualisiert, ${importResult.missingMarked || 0} als fehlend markiert, ${importResult.matchesSuggested || 0} Matching-Vorschlaege.`
+          );
+          console.log(`Steam inventory synced`, importResult);
+        } else {
+          setSyncInfo("Steam Sync: Keine marketable Items im Inventar gefunden.");
         }
+      } else if (!inventoryResult.success) {
+        throw new Error(inventoryResult.error || "Steam inventory request failed");
+      } else {
+        setSyncInfo("Steam Sync: Inventar ist leer.");
       }
     } catch (err) {
+      const message = formatSteamInventoryError(err);
+      setSyncInfo(`Steam Sync fehlgeschlagen: ${message}`);
       console.warn("Failed to import CS2 inventory:", err);
-      // Don't block login if inventory import fails
     }
   };
 
@@ -149,6 +177,11 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         {error && (
           <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
             {error}
+          </div>
+        )}
+        {syncInfo && (
+          <div className="p-3 text-xs text-amber-800 bg-amber-50 rounded-md">
+            {syncInfo}
           </div>
         )}
 

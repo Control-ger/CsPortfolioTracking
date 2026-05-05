@@ -63,6 +63,9 @@ final class DesktopCsFloatController
 
             $importTrades[] = $this->mapTradePreviewRow($trade);
         }
+
+        $clustered = $this->clusterTradesIfApplicable($importTrades, $type);
+        $importTrades = $clustered['trades'];
         $sampleTrades = array_slice($importTrades, 0, 20);
 
         JsonResponseFactory::success([
@@ -76,21 +79,22 @@ final class DesktopCsFloatController
             'pagesFetched' => count($pages),
             'pageStats' => $pages,
             'totalFetched' => count($trades),
-            'normalizedCount' => count($importTrades),
+            'normalizedCount' => $clustered['baseNormalizedCount'],
             'insertable' => count($importTrades),
             'duplicates' => 0,
             'skipped' => array_sum($skippedStats),
             'skipReasons' => $skippedStats,
             'skippedExamples' => $skippedExamples,
+            'skipReasonDetails' => $this->buildSkipReasonDetails($skippedStats, $skippedExamples),
             'sampleTrades' => $sampleTrades,
             'importTrades' => $importTrades,
             'rawCount' => count($trades),
             'errors' => $errors,
             'clustering' => [
-                'applied' => false,
-                'baseNormalizedCount' => count($importTrades),
+                'applied' => $clustered['applied'],
+                'baseNormalizedCount' => $clustered['baseNormalizedCount'],
                 'clusteredCount' => count($importTrades),
-                'collapsedTrades' => 0,
+                'collapsedTrades' => $clustered['collapsedTrades'],
             ],
             'rawTrades' => $trades,
         ]);
@@ -155,6 +159,7 @@ final class DesktopCsFloatController
             'typeLabel' => 'CS2 Item',
             'quantity' => 1,
             'buyPrice' => $this->readPriceUsd($trade),
+            'buyPriceTotal' => $this->readPriceUsd($trade),
             'buyPriceUsd' => $this->readPriceUsd($trade),
             'purchasedAt' => $this->readString($trade, ['created_at'])
                 ?? $this->readString($trade, ['createdAt'])
@@ -187,13 +192,39 @@ final class DesktopCsFloatController
 
     private function isVerifiedTrade(array $trade): bool
     {
+        // CSFloat may expose an explicit verified boolean flag
+        foreach (
+            [
+                ['verified'],
+                ['is_verified'],
+                ['trade', 'verified'],
+                ['contract', 'verified'],
+                ['listing', 'verified'],
+            ] as $path
+        ) {
+            if ($this->readPath($trade, $path) === true) {
+                return true;
+            }
+        }
+
         $states = $this->readTradeStates($trade);
         if ($states === []) {
             return true;
         }
 
+        $goodStates = [
+            'verified',
+            'completed',
+            'done',
+            'finished',
+            'sold',
+            '2',      // common CSFloat numeric code for sold/completed
+            '1124',   // observed CSFloat numeric code for completed trades
+        ];
+
         foreach ($states as $state) {
-            if (strtolower(trim($state)) !== 'verified') {
+            $normalized = strtolower(trim((string) $state));
+            if (!in_array($normalized, $goodStates, true)) {
                 return false;
             }
         }
@@ -396,5 +427,148 @@ final class DesktopCsFloatController
             'state' => $context['state'] ?? null,
             'message' => $context['message'] ?? null,
         ], static fn ($value) => $value !== null && $value !== '');
+    }
+
+    private function clusterTradesIfApplicable(array $normalized, ?string $type): array
+    {
+        if ($type !== 'buy') {
+            return [
+                'applied' => false,
+                'trades' => $normalized,
+                'baseNormalizedCount' => count($normalized),
+                'collapsedTrades' => 0,
+            ];
+        }
+
+        $clusters = [];
+        foreach ($normalized as $trade) {
+            $clusterKey = $this->buildClusterKey($trade);
+            if (!isset($clusters[$clusterKey])) {
+                $clusters[$clusterKey] = [
+                    'base' => $trade,
+                    'quantity' => max(1, (int) ($trade['quantity'] ?? 1)),
+                    'purchasedAt' => $trade['purchasedAt'] ?? null,
+                    'tradeIds' => [$trade['externalTradeId']],
+                ];
+                continue;
+            }
+
+            $clusters[$clusterKey]['quantity'] += max(1, (int) ($trade['quantity'] ?? 1));
+            $clusters[$clusterKey]['tradeIds'][] = $trade['externalTradeId'];
+            $clusters[$clusterKey]['purchasedAt'] = $this->earliestDate(
+                $clusters[$clusterKey]['purchasedAt'] ?? null,
+                $trade['purchasedAt'] ?? null
+            );
+        }
+
+        $clustered = [];
+        foreach ($clusters as $clusterKey => $cluster) {
+            $base = $cluster['base'];
+            $legacyClusterKey = $this->buildLegacyClusterKey($base);
+            $tradeIds = array_values(array_unique(array_filter(array_map(
+                static fn ($value) => trim((string) $value),
+                $cluster['tradeIds']
+            ))));
+            sort($tradeIds);
+
+            $base['externalTradeId'] = 'cluster_' . sha1($clusterKey);
+            $base['legacyExternalTradeId'] = 'cluster_' . sha1($legacyClusterKey);
+            $base['quantity'] = max(1, (int) ($cluster['quantity'] ?? 1));
+            $base['buyPriceTotal'] = round(($base['buyPrice'] ?? 0.0) * $base['quantity'], 4);
+            $base['purchasedAt'] = $cluster['purchasedAt'] ?? null;
+            $base['rawPayloadJson'] = json_encode([
+                'clustered' => true,
+                'clusterKey' => $clusterKey,
+                'legacyClusterKey' => $legacyClusterKey,
+                'sourceTradeIds' => $tradeIds,
+                'sourceTradeCount' => count($tradeIds),
+                'unitBuyPrice' => $base['buyPrice'] ?? null,
+                'totalBuyPrice' => ($base['buyPrice'] ?? 0) * $base['quantity'],
+            ], JSON_UNESCAPED_UNICODE);
+            $base['isClustered'] = true;
+            $base['clusterSourceTradeCount'] = count($tradeIds);
+
+            $clustered[] = $base;
+        }
+
+        usort(
+            $clustered,
+            static fn (array $left, array $right): int => strcmp((string) ($left['marketHashName'] ?? ''), (string) ($right['marketHashName'] ?? ''))
+        );
+
+        return [
+            'applied' => true,
+            'trades' => $clustered,
+            'baseNormalizedCount' => count($normalized),
+            'collapsedTrades' => max(0, count($normalized) - count($clustered)),
+        ];
+    }
+
+    private function buildClusterKey(array $trade): string
+    {
+        $name = trim((string) ($trade['marketHashName'] ?? $trade['name'] ?? 'Unknown Item'));
+        $price = number_format(round((float) ($trade['buyPriceUsd'] ?? $trade['buyPrice'] ?? 0.0), 4), 4, '.', '');
+        $fundingMode = trim((string) ($trade['fundingMode'] ?? 'wallet_funded'));
+        $type = trim((string) ($trade['type'] ?? 'other'));
+
+        return strtolower($name . '|' . $price . '|' . $fundingMode . '|' . $type);
+    }
+
+    private function buildLegacyClusterKey(array $trade): string
+    {
+        $name = trim((string) ($trade['marketHashName'] ?? $trade['name'] ?? 'Unknown Item'));
+        $price = number_format(round((float) ($trade['buyPriceUsd'] ?? $trade['buyPriceTotal'] ?? $trade['buyPrice'] ?? 0.0), 4), 4, '.', '');
+        $fundingMode = trim((string) ($trade['fundingMode'] ?? 'wallet_funded'));
+        $type = trim((string) ($trade['type'] ?? 'other'));
+
+        return strtolower($name . '|' . $price . '|' . $fundingMode . '|' . $type);
+    }
+
+    private function earliestDate(?string $current, ?string $candidate): ?string
+    {
+        if ($current === null || trim($current) === '') {
+            return $candidate;
+        }
+        if ($candidate === null || trim($candidate) === '') {
+            return $current;
+        }
+
+        $currentTimestamp = strtotime($current);
+        $candidateTimestamp = strtotime($candidate);
+        if ($currentTimestamp === false || $candidateTimestamp === false) {
+            return $current;
+        }
+
+        return $candidateTimestamp < $currentTimestamp ? $candidate : $current;
+    }
+
+    private function buildSkipReasonDetails(array $skippedStats, array $skippedExamples): array
+    {
+        $labels = [
+            'invalid_payload' => 'Ungueltige Trade-Daten',
+            'non_verified_state' => 'Nicht verifiziert / abgebrochen',
+            'refunded' => 'Rueckerstattet',
+            'duplicate_in_payload' => 'Duplikat',
+            'missing_price' => 'Preis fehlt',
+        ];
+
+        $details = [];
+        foreach ($skippedStats as $reason => $count) {
+            $details[$reason] = [
+                'count' => $count,
+                'label' => $labels[$reason] ?? $reason,
+                'states' => [],
+            ];
+        }
+
+        foreach ($skippedExamples as $example) {
+            $reason = $example['reason'] ?? '';
+            $state = $example['state'] ?? '';
+            if ($state !== '' && isset($details[$reason]) && !in_array($state, $details[$reason]['states'], true)) {
+                $details[$reason]['states'][] = $state;
+            }
+        }
+
+        return $details;
     }
 }

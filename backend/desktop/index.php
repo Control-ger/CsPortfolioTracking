@@ -73,7 +73,7 @@ $router->register('GET', '/api/v1/settings/csfloat-api-key', static function ():
 
     JsonResponseFactory::success([
         'hasKey' => $hasConfiguredKey,
-        'source' => $hasConfiguredKey ? 'env' : 'missing',
+        'source' => $hasConfiguredKey ? 'electron-safe-storage' : 'missing',
         'desktopLocal' => true,
     ]);
 });
@@ -107,7 +107,7 @@ $router->register('GET', '/api/v1/auth/steam/callback', static function () use (
         . '<main style="max-width:420px; text-align:center;">'
         . '<h1>Steam login complete</h1>'
         . '<p>You can return to CS Investor Hub. This browser tab can be closed.</p>'
-        . '<script>setTimeout(function(){ window.close(); }, 1200);</script>'
+        . '<p style=\"color:#9ca3af; font-size:0.9rem; margin-top:1rem;\">You may close this tab.</p>'
         . '</main></body></html>';
 });
 
@@ -164,5 +164,59 @@ $router->register('GET', '/api/v1/auth/steam/inventory', static function () use 
 
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/preview', [$csFloatController, 'preview']);
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatController, 'execute']);
+
+// Desktop stubs for routes not yet implemented in the local sidecar
+$router->register('GET', '/api/v1/watchlist/search', static function (Request $request): void {
+    JsonResponseFactory::success([
+        'items' => [],
+        'total' => 0,
+        'page' => (int) ($request->query['page'] ?? 1),
+        'limit' => (int) ($request->query['limit'] ?? 6),
+        'source' => 'desktop-local',
+    ]);
+});
+
+$resolveDesktopLogFile = static function (): ?string {
+    $logFile = getenv('DESKTOP_LOG_FILE') ?: ($_ENV['DESKTOP_LOG_FILE'] ?? null);
+    if (!is_string($logFile) || trim($logFile) === '') {
+        return null;
+    }
+
+    return $logFile;
+};
+
+$readDesktopLogLines = static function (?string $logFile, int $limit): array {
+    if ($logFile === null || !is_file($logFile)) {
+        return [];
+    }
+
+    $lines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines === false) {
+        return [];
+    }
+
+    return array_slice($lines, -$limit);
+};
+
+$router->register('GET', '/api/v1/debug/logs', static function (Request $request) use ($resolveDesktopLogFile, $readDesktopLogLines): void {
+    $limit = (int) ($request->query['limit'] ?? 100);
+    $limit = max(1, min($limit, 1000));
+    $logFile = $resolveDesktopLogFile();
+    $logs = $readDesktopLogLines($logFile, $limit);
+
+    JsonResponseFactory::success([
+        'type' => (string) ($request->query['type'] ?? 'app'),
+        'source' => $logFile ? 'desktop-log-file' : 'desktop-local',
+        'totalLines' => count($logs),
+        'displayedLines' => count($logs),
+        'logs' => $logs,
+        'events' => [],
+        'message' => $logFile ? null : 'Desktop log file not configured',
+    ]);
+});
+
+$router->register('POST', '/api/v1/observability/frontend-events', static function (): void {
+    http_response_code(204);
+});
 
 $router->dispatch($request);

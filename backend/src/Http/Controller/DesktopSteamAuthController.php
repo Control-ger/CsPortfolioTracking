@@ -111,7 +111,26 @@ final class DesktopSteamAuthController
 
     public function validateSession(string $token): ?array
     {
-        return $this->decryptSessionToken($token);
+        $payload = $this->decryptSessionToken($token);
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $steamId = (string) ($payload['steamId'] ?? '');
+        $hasName = is_string($payload['name'] ?? null) && trim((string) $payload['name']) !== '';
+        $hasAvatar = is_string($payload['avatar'] ?? null) && trim((string) $payload['avatar']) !== '';
+
+        if ($steamId !== '' && (!$hasName || !$hasAvatar)) {
+            $profile = $this->fetchSteamProfile($steamId);
+            if (!$hasName && is_string($profile['name'] ?? null) && trim((string) $profile['name']) !== '') {
+                $payload['name'] = (string) $profile['name'];
+            }
+            if (!$hasAvatar && is_string($profile['avatar'] ?? null) && trim((string) $profile['avatar']) !== '') {
+                $payload['avatar'] = (string) $profile['avatar'];
+            }
+        }
+
+        return $payload;
     }
 
     public function getCS2Inventory(string $steamId64): array
@@ -276,41 +295,88 @@ final class DesktopSteamAuthController
     private function fetchSteamProfile(string $steamId64): array
     {
         $apiKey = getenv(self::STEAM_API_KEY_ENV) ?: ($_ENV[self::STEAM_API_KEY_ENV] ?? null);
-        if (!is_string($apiKey) || $apiKey === '') {
+        if (is_string($apiKey) && $apiKey !== '') {
+            $url = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?'
+                . http_build_query(['key' => $apiKey, 'steamids' => $steamId64]);
+
+            $data = $this->fetchJson($url, 10);
+            $player = $data['response']['players'][0] ?? null;
+            if (is_array($player)) {
+                return [
+                    'name' => $player['personaname'] ?? null,
+                    'avatar' => $player['avatarfull'] ?? null,
+                ];
+            }
+        }
+
+        return $this->fetchSteamProfilePublic($steamId64);
+    }
+
+    private function fetchSteamProfilePublic(string $steamId64): array
+    {
+        $url = "https://steamcommunity.com/profiles/{$steamId64}/?xml=1";
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $this->applyDesktopCurlTlsOptions($ch);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'CS-Portfolio-Desktop/1.0');
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || $response === '' || $httpCode !== 200) {
             return [];
         }
 
-        $url = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?'
-            . http_build_query(['key' => $apiKey, 'steamids' => $steamId64]);
-
-        $data = $this->fetchJson($url, 10);
-        $player = $data['response']['players'][0] ?? null;
-        if (!is_array($player)) {
+        $xml = @simplexml_load_string($response);
+        if (!$xml instanceof \SimpleXMLElement) {
             return [];
         }
+
+        $name = trim((string) ($xml->steamID ?? ''));
+        $avatarFull = trim((string) ($xml->avatarFull ?? ''));
+        $avatarMedium = trim((string) ($xml->avatarMedium ?? ''));
+        $avatarIcon = trim((string) ($xml->avatarIcon ?? ''));
 
         return [
-            'name' => $player['personaname'] ?? null,
-            'avatar' => $player['avatarfull'] ?? null,
+            'name' => $name !== '' ? $name : null,
+            'avatar' => $avatarFull !== '' ? $avatarFull : ($avatarMedium !== '' ? $avatarMedium : ($avatarIcon !== '' ? $avatarIcon : null)),
         ];
     }
 
     private function fetchPublicInventory(string $steamId64): array
     {
-        $url = "https://steamcommunity.com/inventory/{$steamId64}/730/2?count=5000&l=english";
-        $data = $this->fetchJson($url, 30);
+        $url = "https://steamcommunity.com/inventory/{$steamId64}/730/2?count=2000&l=english";
+        $result = $this->fetchJsonWithStatus($url, 30);
+        $data = $result['data'] ?? null;
+        $httpCode = (int) ($result['httpCode'] ?? 0);
 
-        if ($data === null) {
+        if (!is_array($data)) {
             return [
                 'success' => false,
-                'error' => 'Inventory not accessible or Steam did not return JSON',
+                'error' => 'Inventory not accessible (private profile, rate-limited, or Steam returned invalid response)',
                 'code' => 'INVENTORY_ACCESS_DENIED',
+                'details' => ['httpCode' => $httpCode],
+            ];
+        }
+
+        $assets = is_array($data['assets'] ?? null) ? $data['assets'] : [];
+        $descriptions = is_array($data['descriptions'] ?? null) ? $data['descriptions'] : [];
+        if ($assets === [] && $descriptions === []) {
+            return [
+                'success' => false,
+                'error' => 'Inventory appears empty or inaccessible. Items in Storage Units may not be visible via this endpoint.',
+                'code' => 'INVENTORY_EMPTY_OR_INACCESSIBLE',
+                'details' => ['httpCode' => $httpCode],
             ];
         }
 
         return [
             'success' => true,
-            'items' => $this->parseCS2Items($data['assets'] ?? [], $data['descriptions'] ?? []),
+            'items' => $this->parseCS2Items($assets, $descriptions),
         ];
     }
 
@@ -333,6 +399,33 @@ final class DesktopSteamAuthController
 
         $decoded = json_decode((string) $response, true);
         return is_array($decoded) ? $decoded : null;
+    }
+
+    private function fetchJsonWithStatus(string $url, int $timeout): array
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $this->applyDesktopCurlTlsOptions($ch);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'CS-Portfolio-Desktop/1.0');
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false || $httpCode !== 200) {
+            return [
+                'data' => null,
+                'httpCode' => $httpCode,
+            ];
+        }
+
+        $decoded = json_decode((string) $response, true);
+        return [
+            'data' => is_array($decoded) ? $decoded : null,
+            'httpCode' => $httpCode,
+        ];
     }
 
     private function applyDesktopCurlTlsOptions(\CurlHandle $ch): void
@@ -369,6 +462,20 @@ final class DesktopSteamAuthController
             }
 
             $marketHashName = (string) ($description['market_hash_name'] ?? $description['name'] ?? 'Unknown');
+            $inspectLink = null;
+            $actions = $description['actions'] ?? [];
+            if (is_array($actions)) {
+                foreach ($actions as $action) {
+                    if (!is_array($action)) {
+                        continue;
+                    }
+                    $link = (string) ($action['link'] ?? '');
+                    if ($link !== '' && str_contains(strtolower((string) ($action['name'] ?? '')), 'inspect')) {
+                        $inspectLink = $link;
+                        break;
+                    }
+                }
+            }
             $items[] = [
                 'assetId' => $asset['assetid'] ?? null,
                 'classId' => $asset['classid'] ?? null,
@@ -376,6 +483,7 @@ final class DesktopSteamAuthController
                 'name' => $marketHashName,
                 'marketHashName' => $marketHashName,
                 'iconUrl' => $description['icon_url'] ?? null,
+                'inspectLink' => $inspectLink,
                 'tradable' => ((int) ($description['tradable'] ?? 0)) === 1,
                 'marketable' => ((int) ($description['marketable'] ?? 0)) === 1,
                 'type' => $this->determineItemType($marketHashName),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { ThemeToggle } from "@shared/components/ThemeToggle";
@@ -364,6 +364,12 @@ export function DebugDashboardPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div className="space-y-2">
+            <Button variant="ghost" asChild className="h-8 px-2 text-muted-foreground">
+              <Link to="/settings">
+                <ArrowLeft className="h-4 w-4" />
+                Zurueck zu Einstellungen
+              </Link>
+            </Button>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Observability
             </p>
@@ -372,9 +378,6 @@ export function DebugDashboardPage() {
               Strukturierte Application Logs mit Event-, Item- und Request-ID-Filtern.
             </p>
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button variant="outline" asChild>
-                <Link to="/">Zurueck zum Portfolio</Link>
-              </Button>
               <Badge variant="outline">Quelle: {source}</Badge>
               {fetchedAt && (
                 <Badge variant="secondary">
@@ -385,7 +388,9 @@ export function DebugDashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <UserMenu />
+            <div className="hidden sm:block">
+              <UserMenu />
+            </div>
           </div>
         </header>
 

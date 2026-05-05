@@ -1,4 +1,4 @@
-import { forwardRef, createContext, useContext, useMemo } from "react"
+import { forwardRef, createContext, useContext, useMemo, useId } from "react"
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "../../lib/utils.js"
@@ -22,10 +22,11 @@ function useChart() {
 }
 
 const ChartContainer = forwardRef(({ id, className, children, config, ...props }, ref) => {
+  const fallbackId = useId();
   const chartId = useMemo(() => {
-    const uniqueId = Math.random().toString(36).substr(2, 9);
-    return `chart-${id || uniqueId.replace(/:/g, "")}`;
-  }, [id])
+    const normalized = String(id || fallbackId).replace(/:/g, "");
+    return `chart-${normalized}`;
+  }, [id, fallbackId])
 
   return (
     <ChartContext.Provider value={{ config }}>

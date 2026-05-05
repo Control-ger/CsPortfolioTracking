@@ -17,7 +17,7 @@ export function useAbortableFetch() {
     }
   }, []);
 
-  const fetchWithAbort = useCallback(async (fetchFn, options = {}) => {
+  const fetchWithAbort = useCallback(async (fetchFn) => {
     // Abort any pending request
     abort();
     

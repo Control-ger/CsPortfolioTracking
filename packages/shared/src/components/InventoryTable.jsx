@@ -16,13 +16,14 @@ import { Abbr } from "@shared/components/AbbreviationTooltip";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
-  <div className="h-12 w-12 overflow-hidden rounded-md border ">
+  <div className="h-14 w-14 overflow-hidden rounded-md border bg-muted/30 p-1">
     {imageUrl ? (
       <img
         src={imageUrl}
         alt={name}
-        className="h-full w-full object-cover"
+        className="h-full w-full object-contain"
         loading="lazy"
+        decoding="async"
       />
     ) : (
       <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">

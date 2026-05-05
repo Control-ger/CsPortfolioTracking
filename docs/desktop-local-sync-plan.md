@@ -186,7 +186,14 @@ Final Note für nächsten Agenten
 ---
 
 Updated: 2026-04-30
-Change: Desktop-local-first / Sync Roadmap (Agent‑Plan)
+Change: Desktop-local-first / Sync Roadmap (Agent-Plan)
 
-```
+---
 
+Updated: 2026-05-05
+Change: Lokale Steam-Sync-UX und Persistenz erweitert (Desktop)
+- Persistente lokale Sync-Benachrichtigungen in SQLite (sync_notifications) inkl. Read-Status (read_at).
+- Notification-Workflow im Desktop: erstellen, listen, einzeln als gelesen markieren, alle als gelesen markieren.
+- Steam Auto-Sync lokal begrenzt (Cooldown), plus manueller "Jetzt Steam Sync"-Trigger in der Verwaltung.
+- Fehler-Handling fuer Steam-Import verbessert (Inventory access denied, Rate-Limit, invalid response, Netzwerkfehler) mit klaren Retry-Hinweisen.
+- Onboarding/Journey um sichtbaren Schrittfortschritt erweitert (Steam verbunden, Inventory importiert, CSFloat Key, Matching-Status).

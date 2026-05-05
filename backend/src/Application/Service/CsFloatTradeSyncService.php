@@ -312,6 +312,8 @@ final class CsFloatTradeSyncService
                 'buyPriceTotal' => $buyPriceTotal,
                 'buyPriceUsd' => $buyPriceUsd,
                 'purchasedAt' => $this->resolvePurchasedAt($trade),
+                'floatValue' => $this->resolveFloatValue($trade),
+                'paintSeed' => $this->resolvePaintSeed($trade),
                 'fundingMode' => 'wallet_funded',
                 'rawPayloadJson' => json_encode($trade, JSON_UNESCAPED_UNICODE),
                 'rawCurrency' => $this->resolveCurrency($trade),
@@ -575,6 +577,8 @@ final class CsFloatTradeSyncService
             'quantity' => $trade['quantity'],
             'buyPrice' => $trade['buyPrice'],
             'purchasedAt' => $trade['purchasedAt'],
+            'floatValue' => $trade['floatValue'] ?? null,
+            'paintSeed' => $trade['paintSeed'] ?? null,
             'fundingMode' => $trade['fundingMode'],
             'rawCurrency' => $trade['rawCurrency'],
         ];
@@ -1085,6 +1089,67 @@ final class CsFloatTradeSyncService
             $timestamp = is_numeric($value) ? (int) $value : strtotime((string) $value);
             if ($timestamp !== false && $timestamp > 0) {
                 return date('Y-m-d H:i:s', $timestamp > 2000000000 ? (int) floor($timestamp / 1000) : $timestamp);
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveFloatValue(array $trade): ?float
+    {
+        foreach (
+            [
+                ['float_value'],
+                ['floatValue'],
+                ['float'],
+                ['item', 'float_value'],
+                ['item', 'floatValue'],
+                ['item', 'float'],
+                ['listing', 'float_value'],
+                ['listing', 'floatValue'],
+                ['listing', 'float'],
+            ] as $path
+        ) {
+            $value = $this->readPath($trade, $path);
+            if (!is_numeric($value)) {
+                continue;
+            }
+
+            $floatValue = (float) $value;
+            if ($floatValue >= 0 && $floatValue <= 1) {
+                return $floatValue;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolvePaintSeed(array $trade): ?int
+    {
+        foreach (
+            [
+                ['paint_seed'],
+                ['paintSeed'],
+                ['pattern_seed'],
+                ['patternSeed'],
+                ['item', 'paint_seed'],
+                ['item', 'paintSeed'],
+                ['item', 'pattern_seed'],
+                ['item', 'patternSeed'],
+                ['listing', 'paint_seed'],
+                ['listing', 'paintSeed'],
+                ['listing', 'pattern_seed'],
+                ['listing', 'patternSeed'],
+            ] as $path
+        ) {
+            $value = $this->readPath($trade, $path);
+            if (!is_numeric($value)) {
+                continue;
+            }
+
+            $seed = (int) $value;
+            if ($seed >= 0) {
+                return $seed;
             }
         }
 

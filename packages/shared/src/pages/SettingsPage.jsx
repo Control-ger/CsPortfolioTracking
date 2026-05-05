@@ -5,6 +5,7 @@ import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
+import { DebugPanel } from "@shared/components/DebugPanel";
 import { Badge } from "@shared/components/ui/badge";
 import { Button } from "@shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
@@ -35,13 +36,14 @@ function isDesktopRuntime() {
 }
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("fees");
+  const [activeTab, setActiveTab] = useState("general");
   const [form, setForm] = useState(DEFAULT_FORM);
   const [source, setSource] = useState("defaults");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const currencyContext = useCurrency();
 
   // CSFloat API Key State
   const [apiKey, setApiKey] = useState("");
@@ -53,7 +55,6 @@ export function SettingsPage() {
   const [apiKeySuccess, setApiKeySuccess] = useState("");
   const [encryptionReady, setEncryptionReady] = useState(false);
   const desktopRuntime = isDesktopRuntime();
-
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -99,7 +100,7 @@ export function SettingsPage() {
     };
 
     void loadSettings();
-  }, []);
+  }, [desktopRuntime]);
 
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -177,62 +178,91 @@ export function SettingsPage() {
 
   
   const renderGeneralTab = () => {
-    const { currency, currencies, setCurrency, exchangeRates, ratesLoading } = useCurrency();
+    const { currency, currencies, setCurrency, exchangeRates, ratesLoading } = currencyContext;
 
     return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5" />
-            <CardTitle>Waehrung</CardTitle>
-          </div>
-          <CardDescription>
-            Waehle deine bevorzugte Waehrung fuer Preisanzeigen.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">
-              Anzeige-Waehrung
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(currencies).map(([code, info]) => (
-                <button
-                  key={code}
-                  onClick={() => setCurrency(code)}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 transition-colors ${
-                    currency === code
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:bg-accent'
-                  }`}
-                >
-                  <span className="text-lg font-bold">{info.symbol}</span>
-                  <span className="text-xs font-medium">{info.code}</span>
-                  <span className="text-[10px] text-muted-foreground">{info.name}</span>
-                </button>
-              ))}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              <CardTitle>Waehrung</CardTitle>
             </div>
-          </div>
-
-          {ratesLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-3 w-32" />
-            </div>
-          ) : (
-            <div className="rounded-md bg-muted p-3 text-sm">
-              <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                <div>1 EUR = {exchangeRates.USD?.toFixed(4) || '-'} USD</div>
-                <div>1 EUR = {exchangeRates.GBP?.toFixed(4) || '-'} GBP</div>
+            <CardDescription>
+              Waehle deine bevorzugte Waehrung fuer Preisanzeigen.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground">
+                Anzeige-Waehrung
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {Object.entries(currencies).map(([code, info]) => (
+                  <button
+                    key={code}
+                    onClick={() => setCurrency(code)}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 transition-colors ${
+                      currency === code
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    <span className="text-lg font-bold">{info.symbol}</span>
+                    <span className="text-xs font-medium">{info.code}</span>
+                    <span className="text-[10px] text-muted-foreground">{info.name}</span>
+                  </button>
+                ))}
               </div>
-              <p className="mt-2 text-[10px] text-muted-foreground">
-                Kurse werden taeglich aktualisiert.
-              </p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {ratesLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            ) : (
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div>1 EUR = {exchangeRates.USD?.toFixed(4) || "-"} USD</div>
+                  <div>1 EUR = {exchangeRates.GBP?.toFixed(4) || "-"} GBP</div>
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Kurse werden taeglich aktualisiert.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Datenschutz und Steam API</CardTitle>
+            <CardDescription>
+              Transparenz ueber Datenquellen, Speicherung und Nutzung.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Diese App nutzt Steam als Datenquelle, ist jedoch nicht offiziell von Valve betrieben oder
+              unterstuetzt.
+            </p>
+            <p>
+              Abgerufen werden nur noetige Profildaten und Inventardaten fuer die von dir genutzten Features
+              (z. B. Portfolio-Import und Sync).
+            </p>
+            <p>
+              Gespeichert werden portfolio-relevante Itemdaten, Exclude-Status und optional manuell gesetzte
+              Einkaufspreise. Steam-Passwoerter werden nicht gespeichert oder verarbeitet.
+            </p>
+            <p>
+              Auto-Sync ist optional, kann deaktiviert werden und ist zusaetzlich durch ein Intervall begrenzt,
+              um API-Aufrufe zu reduzieren.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   };
 
@@ -517,13 +547,15 @@ export function SettingsPage() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <UserMenu />
+            <div className="hidden sm:block">
+              <UserMenu />
+            </div>
           </div>
         </header>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="general" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <span>Allgemein</span>
@@ -539,6 +571,9 @@ export function SettingsPage() {
                 <span className="ml-1 h-2 w-2 rounded-full bg-amber-500" />
               )}
             </TabsTrigger>
+            <TabsTrigger value="debug" className="flex items-center gap-2">
+              <span>Debug</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="mt-4">
@@ -551,6 +586,10 @@ export function SettingsPage() {
 
           <TabsContent value="api" className="mt-4">
             {renderApiKeyTab()}
+          </TabsContent>
+
+          <TabsContent value="debug" className="mt-4">
+            <DebugPanel />
           </TabsContent>
         </Tabs>
       </div>

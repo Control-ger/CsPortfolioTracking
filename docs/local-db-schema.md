@@ -18,6 +18,24 @@ Ziel: Electron ist local-first. Schreibende Portfolio- und Watchlist-Aktionen la
 - `price_history`: Historische Itempreise.
 - `portfolio_snapshots`: Lokale Portfolio-Snapshots.
 - `operations_log`: Idempotente Aenderungsqueue fuer spaeteren Push-Sync.
+- `steam_inventory_state`: letzter bekannter Steam-Inventarstatus je Asset (`in_inventory`, `last_seen_at`, `last_missing_at`).
+- `steam_csfloat_matches`: Vorschlags-/Statusspeicher fuer Steam <-> CSFloat Matching (`suggested`, `auto_linked`, `manual_confirmed`, `rejected`).
+- `sync_notifications`: persistente lokale Benachrichtigungen inkl. Read-Status (`read_at`).
+
+## Neue Notification-Tabelle (Stand 2026-05-05)
+
+- Zweck: Persistente Sync-Hinweise statt nur fluechtigem UI-State.
+- Felder:
+  - `id` (TEXT, PK)
+  - `user_id` (TEXT)
+  - `category` (TEXT, z. B. `steam_sync`)
+  - `title` (TEXT)
+  - `message` (TEXT)
+  - `payload` (TEXT JSON)
+  - `created_at` (TEXT ISO)
+  - `read_at` (TEXT ISO, nullable)
+- Index:
+  - `idx_sync_notifications_user (user_id, created_at DESC, read_at)`
 
 ## Regeln
 

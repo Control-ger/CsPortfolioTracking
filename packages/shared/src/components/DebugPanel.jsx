@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { CacheMaintenancePanel } from "./CacheMaintenancePanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
@@ -18,8 +20,8 @@ export function DebugPanel() {
       const data = await response.json();
       if (data.data) {
         setLogs(data.data.logs || { app: [], proxy: [] });
-        setEnvironment(data.data.environment);
-        setDebug(data.data.debug);
+        setEnvironment(data.data.environment || null);
+        setDebug(data.data.debug || null);
       }
     } catch (error) {
       console.error("Fehler beim Laden der Logs:", error);
@@ -29,10 +31,15 @@ export function DebugPanel() {
   };
 
   useEffect(() => {
-    fetchLogs();
+    void fetchLogs();
   }, []);
 
   const showInitialLoading = loading && !environment && logs.app.length === 0 && logs.proxy.length === 0;
+  const appLogCount = Array.isArray(logs.app) ? logs.app.length : 0;
+  const proxyLogCount = Array.isArray(logs.proxy) ? logs.proxy.length : 0;
+  const hasAnyLogs = appLogCount > 0 || proxyLogCount > 0;
+  const statusTone = environment?.apiKeyProvided ? "default" : "destructive";
+  const statusText = environment?.apiKeyProvided ? "API Key erkannt" : "API Key fehlt";
 
   return (
     <div className="space-y-4">
@@ -43,14 +50,13 @@ export function DebugPanel() {
         </TabsList>
 
         <TabsContent value="csfloat" className="space-y-4">
-          <div className="flex gap-2 items-center">
-            <button
-              onClick={fetchLogs}
-              disabled={loading}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
-            >
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => void fetchLogs()} disabled={loading} size="sm">
               {loading ? "Laden..." : "Aktualisieren"}
-            </button>
+            </Button>
+            <Badge variant={statusTone}>{statusText}</Badge>
+            <Badge variant="outline">App Logs: {appLogCount}</Badge>
+            <Badge variant="outline">Proxy Logs: {proxyLogCount}</Badge>
           </div>
 
           {showInitialLoading ? (
@@ -78,74 +84,96 @@ export function DebugPanel() {
             </>
           ) : null}
 
-          {environment && (
-            <>
-              <Card className="border-amber-200/50 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20">
+          {environment ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">CSFloat Konfiguration</CardTitle>
+                  <CardTitle className="text-sm">Konfiguration</CardTitle>
                 </CardHeader>
-                <CardContent className="text-xs space-y-1">
-                  <p>
-                    <strong>API-Key vorhanden:</strong> {environment.apiKeyProvided ? "✅ Ja" : "❌ Nein"}
-                  </p>
-                  <p>
-                    <strong>API-Key Länge:</strong> {environment.apiKeyLength}
-                  </p>
-                  <p>
-                    <strong>API-Key Prefix:</strong> {environment.apiKeyPrefix}
-                  </p>
+                <CardContent className="space-y-2 text-xs">
+                  <div className="flex items-center justify-between rounded border p-2">
+                    <span className="text-muted-foreground">API Key</span>
+                    <Badge variant={environment.apiKeyProvided ? "default" : "destructive"}>
+                      {environment.apiKeyProvided ? "Vorhanden" : "Fehlt"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between rounded border p-2">
+                    <span className="text-muted-foreground">Key Laenge</span>
+                    <span className="font-mono">{environment.apiKeyLength ?? "-"}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded border p-2">
+                    <span className="text-muted-foreground">Key Prefix</span>
+                    <span className="font-mono">{environment.apiKeyPrefix || "-"}</span>
+                  </div>
                 </CardContent>
               </Card>
 
-              {debug && (
-                <Card className="border-red-200/50 dark:border-red-800/50 bg-red-50/50 dark:bg-red-950/20">
+              {debug ? (
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-sm">Debug Info</CardTitle>
+                    <CardTitle className="text-sm">Runtime</CardTitle>
                   </CardHeader>
-                  <CardContent className="text-xs space-y-2 font-mono">
-                    <p>
-                      <strong>getenv():</strong> {debug.getenv}
-                    </p>
-                    <p>
-                      <strong>$_ENV:</strong> {debug.ENV}
-                    </p>
-
-                    <div className="mt-3 pt-3 border-t dark:border-muted">
-                      <p className="font-bold mb-1">.env Datei Standorte:</p>
-                      {debug.env_locations && Object.entries(debug.env_locations).map(([path, exists]) => (
-                        <p key={path}>
-                          {exists ? "✅" : "❌"} {path}
-                        </p>
-                      ))}
+                  <CardContent className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between rounded border p-2">
+                      <span className="text-muted-foreground">getenv()</span>
+                      <span className="font-mono">{debug.getenv}</span>
                     </div>
-
-                    <div className="mt-3 pt-3 border-t dark:border-muted">
-                      <p className="font-bold mb-1">System Info:</p>
-                      <p>SAPI: {debug.php_sapi_name}</p>
-                      <p>CWD: {debug.getcwd}</p>
+                    <div className="flex items-center justify-between rounded border p-2">
+                      <span className="text-muted-foreground">$_ENV</span>
+                      <span className="font-mono">{debug.ENV}</span>
                     </div>
-
-                    <div className="mt-3 pt-3 border-t dark:border-muted">
-                      <p className="font-bold mb-1">Alle Env-Keys ({debug.all_env_keys?.length || 0}):</p>
-                      <div className="max-h-40 overflow-auto bg-background dark:bg-slate-900 p-2 rounded text-[10px] border dark:border-muted">
-                        {debug.all_env_keys?.map(key => (
-                          <p key={key}>{key}</p>
-                        ))}
-                      </div>
+                    <div className="flex items-center justify-between rounded border p-2">
+                      <span className="text-muted-foreground">SAPI</span>
+                      <span className="font-mono">{debug.php_sapi_name || "-"}</span>
+                    </div>
+                    <div className="rounded border p-2">
+                      <p className="mb-1 text-muted-foreground">Working Directory</p>
+                      <p className="break-all font-mono text-[11px]">{debug.getcwd || "-"}</p>
                     </div>
                   </CardContent>
                 </Card>
-              )}
-            </>
-          )}
+              ) : null}
+            </div>
+          ) : null}
 
-          {logs.app && logs.app.length > 0 && (
+          {debug?.env_locations ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">App Logs ({logs.app.length})</CardTitle>
+                <CardTitle className="text-sm">.env Datei-Standorte</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs">
+                {Object.entries(debug.env_locations).map(([entryPath, exists]) => (
+                  <div key={entryPath} className="flex items-center justify-between rounded border p-2">
+                    <span className="truncate text-muted-foreground">{entryPath}</span>
+                    <Badge variant={exists ? "default" : "secondary"}>{exists ? "Gefunden" : "Fehlt"}</Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {debug?.all_env_keys?.length ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Env Keys ({debug.all_env_keys.length})</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-green-400 p-3 rounded font-mono text-xs overflow-auto max-h-96 space-y-1 border dark:border-muted">
+                <div className="max-h-40 overflow-auto rounded border bg-slate-100 p-2 font-mono text-[11px] dark:bg-slate-900">
+                  {debug.all_env_keys.map((key) => (
+                    <p key={key}>{key}</p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {appLogCount > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">App Logs ({appLogCount})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-96 space-y-1 overflow-auto rounded border bg-slate-100 p-3 font-mono text-xs text-slate-900 dark:border-muted dark:bg-slate-900 dark:text-green-400">
                   {logs.app.map((line, idx) => (
                     <div key={idx} className="break-words">
                       {line}
@@ -154,15 +182,15 @@ export function DebugPanel() {
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
-          {logs.proxy && logs.proxy.length > 0 && (
+          {proxyLogCount > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">CSFloat Proxy Logs ({logs.proxy.length})</CardTitle>
+                <CardTitle className="text-sm">CSFloat Proxy Logs ({proxyLogCount})</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-blue-400 p-3 rounded font-mono text-xs overflow-auto max-h-96 space-y-1 border dark:border-muted">
+                <div className="max-h-96 space-y-1 overflow-auto rounded border bg-slate-100 p-3 font-mono text-xs text-slate-900 dark:border-muted dark:bg-slate-900 dark:text-blue-400">
                   {logs.proxy.map((line, idx) => (
                     <div key={idx} className="break-words">
                       {line}
@@ -171,13 +199,11 @@ export function DebugPanel() {
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
-          {!logs.app || (logs.app.length === 0 && !logs.proxy) || logs.proxy.length === 0 ? (
+          {!hasAnyLogs ? (
             <Card className="border-dashed">
-              <CardContent className="pt-6 text-center text-muted-foreground">
-                Keine Logs vorhanden
-              </CardContent>
+              <CardContent className="pt-6 text-center text-muted-foreground">Keine Logs vorhanden</CardContent>
             </Card>
           ) : null}
         </TabsContent>

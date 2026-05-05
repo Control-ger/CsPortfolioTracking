@@ -136,6 +136,7 @@ function buildSidecarEnv() {
 
   merged.APP_ENV = merged.APP_ENV || "desktop";
   merged.DESKTOP_SIDECAR_SECRET = sidecarSecret;
+  merged.DESKTOP_LOG_FILE = LOG_FILE;
   if (localCsFloatApiKey) {
     merged.CSFLOAT_API_KEY = localCsFloatApiKey;
   }
@@ -284,8 +285,6 @@ async function startPhpSidecar() {
     phpBinary,
     [
       "-d",
-      "extension=pdo_mysql",
-      "-d",
       "extension=curl",
       "-d",
       "extension=openssl",
@@ -411,7 +410,21 @@ function createWindow() {
   console.log("[main] DevTools opened in detach mode");
 
   // Log renderer console messages to file
-  mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
+  mainWindow.webContents.on("console-message", (...args) => {
+    let level;
+    let message;
+    let line;
+    let sourceId;
+
+    if (typeof args[1] === "number") {
+      // Electron <= 21 signature: (event, level, message, line, sourceId)
+      [, level, message, line, sourceId] = args;
+    } else {
+      // Electron >= 22 signature: (event)
+      const event = args[0] || {};
+      ({ level, message, line, sourceId } = event);
+    }
+
     const levels = ["", "LOG", "WARNING", "ERROR", "DEBUG"];
     const levelName = levels[level] || "UNKNOWN";
     console.log(`[renderer:${levelName}] ${message} (${sourceId}:${line})`);
@@ -635,7 +648,6 @@ ipcMain.handle("open-devtools", async () => {
 });
 
 ipcMain.handle("backend-base-url", () => backendBaseUrl);
-ipcMain.handle("backend-sidecar-secret", () => sidecarSecret);
 ipcMain.handle("secret-csfloat-status", () => getCsFloatApiKeyStatus());
 ipcMain.handle("secret-csfloat-set", async (event, apiKey) => {
   const status = await writeCsFloatApiKey(apiKey);
@@ -652,48 +664,81 @@ ipcMain.handle("secret-csfloat-clear", async () => {
   };
 });
 
-ipcMain.handle("local-store-info", () => getLocalStore().getInfo());
-ipcMain.handle("local-store-list-investments", (event, userId) =>
-  getLocalStore().listInvestments(userId),
+function safeLocalStoreInvoke(channel, handler) {
+  ipcMain.handle(channel, async (event, ...args) => {
+    try {
+      const store = getLocalStore();
+      return await handler(store, ...args);
+    } catch (error) {
+      console.error(`[localStore] Error in ${channel}:`, error);
+      return { error: error.message || "Local store operation failed", channel };
+    }
+  });
+}
+
+safeLocalStoreInvoke("local-store-info", (store) => store.getInfo());
+safeLocalStoreInvoke("local-store-list-investments", (store, userId) =>
+  store.listInvestments(userId),
 );
-ipcMain.handle("local-store-import-investments", (event, rows, userId) =>
-  getLocalStore().importInvestments(rows, userId),
+safeLocalStoreInvoke("local-store-import-investments", (store, rows, userId) =>
+  store.importInvestments(rows, userId),
 );
-ipcMain.handle("local-store-upsert-investment", (event, payload) =>
-  getLocalStore().upsertInvestment(payload),
+safeLocalStoreInvoke("local-store-sync-steam-inventory", (store, rows, userId) =>
+  store.syncSteamInventory(rows, userId),
 );
-ipcMain.handle("local-store-delete-investment", (event, id) =>
-  getLocalStore().deleteInvestment(id),
+safeLocalStoreInvoke("local-store-upsert-investment", (store, payload) =>
+  store.upsertInvestment(payload),
 );
-ipcMain.handle("local-store-get-investment", (event, id) =>
-  getLocalStore().getInvestment(id),
+safeLocalStoreInvoke("local-store-delete-investment", (store, id) =>
+  store.deleteInvestment(id),
 );
-ipcMain.handle("local-store-list-watchlist", (event, userId) =>
-  getLocalStore().listWatchlistItems(userId),
+safeLocalStoreInvoke("local-store-get-investment", (store, id) =>
+  store.getInvestment(id),
 );
-ipcMain.handle("local-store-import-watchlist", (event, rows, userId) =>
-  getLocalStore().importWatchlistItems(rows, userId),
+safeLocalStoreInvoke("local-store-list-watchlist", (store, userId) =>
+  store.listWatchlistItems(userId),
 );
-ipcMain.handle("local-store-upsert-watchlist-item", (event, payload) =>
-  getLocalStore().upsertWatchlistItem(payload),
+safeLocalStoreInvoke("local-store-import-watchlist", (store, rows, userId) =>
+  store.importWatchlistItems(rows, userId),
 );
-ipcMain.handle("local-store-delete-watchlist-item", (event, id) =>
-  getLocalStore().deleteWatchlistItem(id),
+safeLocalStoreInvoke("local-store-upsert-watchlist-item", (store, payload) =>
+  store.upsertWatchlistItem(payload),
 );
-ipcMain.handle("local-store-list-portfolio-snapshots", (event, userId, limit) =>
-  getLocalStore().listPortfolioSnapshots(userId, limit),
+safeLocalStoreInvoke("local-store-delete-watchlist-item", (store, id) =>
+  store.deleteWatchlistItem(id),
 );
-ipcMain.handle("local-store-upsert-portfolio-snapshot", (event, payload) =>
-  getLocalStore().upsertPortfolioSnapshot(payload),
+safeLocalStoreInvoke("local-store-list-portfolio-snapshots", (store, userId, limit) =>
+  store.listPortfolioSnapshots(userId, limit),
 );
-ipcMain.handle("local-store-upsert-price", (event, payload) =>
-  getLocalStore().upsertPrice(payload),
+safeLocalStoreInvoke("local-store-upsert-portfolio-snapshot", (store, payload) =>
+  store.upsertPortfolioSnapshot(payload),
 );
-ipcMain.handle("local-store-list-pending-operations", (event, limit) =>
-  getLocalStore().listPendingOperations(limit),
+safeLocalStoreInvoke("local-store-upsert-price", (store, payload) =>
+  store.upsertPrice(payload),
 );
-ipcMain.handle("local-store-mark-operation-applied", (event, id) =>
-  getLocalStore().markOperationApplied(id),
+safeLocalStoreInvoke("local-store-list-pending-operations", (store, limit) =>
+  store.listPendingOperations(limit),
+);
+safeLocalStoreInvoke("local-store-list-steam-csfloat-matches", (store, userId, status, limit) =>
+  store.listSteamCsfloatMatches(userId, status, limit),
+);
+safeLocalStoreInvoke("local-store-update-steam-csfloat-match-status", (store, matchId, status) =>
+  store.updateSteamCsfloatMatchStatus(matchId, status),
+);
+safeLocalStoreInvoke("local-store-create-notification", (store, payload) =>
+  store.createNotification(payload),
+);
+safeLocalStoreInvoke("local-store-list-notifications", (store, userId, options) =>
+  store.listNotifications(userId, options),
+);
+safeLocalStoreInvoke("local-store-mark-notification-read", (store, id) =>
+  store.markNotificationRead(id),
+);
+safeLocalStoreInvoke("local-store-mark-all-notifications-read", (store, userId, category) =>
+  store.markAllNotificationsRead(userId, category),
+);
+safeLocalStoreInvoke("local-store-mark-operation-applied", (store, id) =>
+  store.markOperationApplied(id),
 );
 
 app.on("window-all-closed", () => {

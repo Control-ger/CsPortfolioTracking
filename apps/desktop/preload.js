@@ -22,7 +22,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openDevTools: () => ipcRenderer.invoke("open-devtools"),
   backend: {
     getBaseUrl: () => ipcRenderer.invoke("backend-base-url"),
-    getSidecarSecret: () => ipcRenderer.invoke("backend-sidecar-secret"),
   },
   secrets: {
     getCsFloatApiKeyStatus: () => ipcRenderer.invoke("secret-csfloat-status"),
@@ -40,6 +39,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-list-investments", userId),
     importInvestments: (rows, userId) =>
       ipcRenderer.invoke("local-store-import-investments", rows, userId),
+    syncSteamInventory: (rows, userId) =>
+      ipcRenderer.invoke("local-store-sync-steam-inventory", rows, userId),
     upsertInvestment: (payload) =>
       ipcRenderer.invoke("local-store-upsert-investment", payload),
     deleteInvestment: (id) =>
@@ -61,6 +62,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     upsertPrice: (payload) => ipcRenderer.invoke("local-store-upsert-price", payload),
     listPendingOperations: (limit) =>
       ipcRenderer.invoke("local-store-list-pending-operations", limit),
+    listSteamCsfloatMatches: (userId, status, limit) =>
+      ipcRenderer.invoke("local-store-list-steam-csfloat-matches", userId, status, limit),
+    updateSteamCsfloatMatchStatus: (matchId, status) =>
+      ipcRenderer.invoke("local-store-update-steam-csfloat-match-status", matchId, status),
+    createNotification: (payload) =>
+      ipcRenderer.invoke("local-store-create-notification", payload),
+    listNotifications: (userId, options) =>
+      ipcRenderer.invoke("local-store-list-notifications", userId, options),
+    markNotificationRead: (id) =>
+      ipcRenderer.invoke("local-store-mark-notification-read", id),
+    markAllNotificationsRead: (userId, category) =>
+      ipcRenderer.invoke("local-store-mark-all-notifications-read", userId, category),
     markOperationApplied: (id) =>
       ipcRenderer.invoke("local-store-mark-operation-applied", id),
   },
