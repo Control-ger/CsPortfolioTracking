@@ -449,11 +449,7 @@ export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
     };
   }
 
-  return requestWithMeta("/api/v1/settings/csfloat-api-key", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ encryptedKey: apiKeyOrEncryptedKey }),
-  });
+  throw new Error("CSFloat API Key updates are only supported in the Desktop app.");
 }
 
 export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds = []) {

@@ -13,7 +13,7 @@ import { Input } from "@shared/components/ui/input";
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components/ui/tabs";
 import { fetchFeeSettings, updateFeeSettings, fetchCsFloatApiKeyStatus, updateCsFloatApiKey } from "@shared/lib/apiClient";
-import { encrypt, isEncryptionConfigured } from "@shared/lib/encryption";
+import { isEncryptionConfigured } from "@shared/lib/encryption";
 
 const DEFAULT_FORM = {
   fxFeePercent: "0",
@@ -119,14 +119,13 @@ export function SettingsPage() {
       setApiKeyError("");
       setApiKeySuccess("");
 
-      if (!desktopRuntime && !isEncryptionConfigured()) {
-        setApiKeyError("Encryption ist nicht konfiguriert.");
+      if (!desktopRuntime) {
+        setApiKeyError("CSFloat API Key kann nur in der Desktop-App gesetzt werden.");
         return;
       }
 
       const trimmedApiKey = apiKey.trim();
-      const keyPayload = desktopRuntime ? trimmedApiKey : encrypt(trimmedApiKey);
-      await updateCsFloatApiKey(keyPayload);
+      await updateCsFloatApiKey(trimmedApiKey);
 
       setApiKeySuccess("API Key wurde erfolgreich aktualisiert.");
       setApiKey("");
@@ -510,7 +509,7 @@ export function SettingsPage() {
             <p className="text-xs text-muted-foreground">
               {desktopRuntime
                 ? "Desktop speichert den Key ueber die OS-Verschluesselung im Electron Main Process."
-                : "AES-256-CBC Verschluesselung. Der Key wird nie unverschluesselt uebertragen."}
+                : "Web-Modus: CSFloat Key-Update ist deaktiviert."}
             </p>
           </div>
 

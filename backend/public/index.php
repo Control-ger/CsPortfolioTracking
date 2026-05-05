@@ -212,6 +212,11 @@ function obs_should_emit_startup_events(): bool
     return true;
 }
 
+function obs_debug_endpoints_enabled(): bool
+{
+    return obs_env_flag('DEBUG', false) || obs_env_flag('OBSERVABILITY_EVENTS_API_ENABLED', false);
+}
+
 $corsAllowedOriginsRaw = getenv('CORS_ALLOWED_ORIGINS') ?: ($_ENV['CORS_ALLOWED_ORIGINS'] ?? '');
 $requestOrigin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
 $requestHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
@@ -472,16 +477,18 @@ try {
     $router->register('DELETE', '/api/v1/watchlist/{id}', [$watchlistController, 'delete']);
     $router->register('POST', '/api/v1/watchlist/prices/refresh', [$watchlistController, 'refresh']);
 
-    $router->register('GET', '/api/v1/debug/logs', [$debugController, 'logs']);
-    $router->register('GET', '/api/v1/debug/csfloat', [$debugController, 'csfloatDebug']);
-    $router->register('GET', '/api/v1/debug/cache/stats', function () use ($pdo) {
-        $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
-        JsonResponseFactory::success([
-            'cacheStats' => $cacheMaintenanceRepository->getCacheStatistics(),
-            'maintenanceLogs' => $cacheMaintenanceRepository->getMaintenanceLogs(20),
-            'maintenanceStats' => $cacheMaintenanceRepository->getMaintenanceStats(7),
-        ]);
-    });
+    if (obs_debug_endpoints_enabled()) {
+        $router->register('GET', '/api/v1/debug/logs', [$debugController, 'logs']);
+        $router->register('GET', '/api/v1/debug/csfloat', [$debugController, 'csfloatDebug']);
+        $router->register('GET', '/api/v1/debug/cache/stats', function () use ($pdo) {
+            $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
+            JsonResponseFactory::success([
+                'cacheStats' => $cacheMaintenanceRepository->getCacheStatistics(),
+                'maintenanceLogs' => $cacheMaintenanceRepository->getMaintenanceLogs(20),
+                'maintenanceStats' => $cacheMaintenanceRepository->getMaintenanceStats(7),
+            ]);
+        });
+    }
     $router->register('GET', '/api/v1/observability/events', [$observabilityController, 'events']);
     $router->register('POST', '/api/v1/observability/frontend-events', [$frontendTelemetryController, 'ingest']);
 

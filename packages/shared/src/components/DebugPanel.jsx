@@ -103,7 +103,7 @@ export function DebugPanel() {
                   </div>
                   <div className="flex items-center justify-between rounded border p-2">
                     <span className="text-muted-foreground">Key Prefix</span>
-                    <span className="font-mono">{environment.apiKeyPrefix || "-"}</span>
+                    <span className="font-mono">hidden</span>
                   </div>
                 </CardContent>
               </Card>
@@ -114,14 +114,6 @@ export function DebugPanel() {
                     <CardTitle className="text-sm">Runtime</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-xs">
-                    <div className="flex items-center justify-between rounded border p-2">
-                      <span className="text-muted-foreground">getenv()</span>
-                      <span className="font-mono">{debug.getenv}</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded border p-2">
-                      <span className="text-muted-foreground">$_ENV</span>
-                      <span className="font-mono">{debug.ENV}</span>
-                    </div>
                     <div className="flex items-center justify-between rounded border p-2">
                       <span className="text-muted-foreground">SAPI</span>
                       <span className="font-mono">{debug.php_sapi_name || "-"}</span>
@@ -152,16 +144,16 @@ export function DebugPanel() {
             </Card>
           ) : null}
 
-          {debug?.all_env_keys?.length ? (
+          {typeof debug?.all_env_keys_count === "number" ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Env Keys ({debug.all_env_keys.length})</CardTitle>
+                <CardTitle className="text-sm">Env Keys</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="max-h-40 overflow-auto rounded border bg-slate-100 p-2 font-mono text-[11px] dark:bg-slate-900">
-                  {debug.all_env_keys.map((key) => (
-                    <p key={key}>{key}</p>
-                  ))}
+                <div className="rounded border bg-slate-100 p-2 text-xs dark:bg-slate-900">
+                  <p className="text-muted-foreground">
+                    Anzahl verfuegbarer Keys: <span className="font-mono">{debug.all_env_keys_count}</span>
+                  </p>
                 </div>
               </CardContent>
             </Card>

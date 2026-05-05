@@ -82,15 +82,12 @@ final class DebugController
                 '/home/api/.env' => is_file('/home/api/.env'),
                 '/app/.env' => is_file('/app/.env'),
             ];
-            $allEnvVars = $_ENV;
 
             $debug = [
                 'source' => $events !== [] ? 'observability_events' : 'legacy_files',
                 'eventsCount' => count($events),
-                'getenv' => getenv('CSFLOAT_API_KEY') ?: 'NOT_FOUND',
-                'ENV' => $_ENV['CSFLOAT_API_KEY'] ?? 'NOT_FOUND',
                 'env_locations' => $envLocations,
-                'all_env_keys' => array_keys($allEnvVars),
+                'all_env_keys_count' => count(array_keys($_ENV)),
                 'php_sapi_name' => php_sapi_name(),
                 'getcwd' => getcwd(),
             ];
@@ -101,7 +98,6 @@ final class DebugController
                 'environment' => [
                     'apiKeyProvided' => $apiKey !== null && $apiKey !== '',
                     'apiKeyLength' => $apiKey ? strlen($apiKey) : 0,
-                    'apiKeyPrefix' => $apiKey ? substr($apiKey, 0, 8) . '***' : 'NONE',
                 ],
                 'debug' => $debug,
             ]);

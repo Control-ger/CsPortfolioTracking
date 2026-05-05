@@ -358,7 +358,29 @@ async function writeCacheFile(cacheData) {
 async function readSessionFile() {
   try {
     const content = await fs.readFile(getSessionFilePath(), "utf8");
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    if (parsed.encrypted === true && typeof parsed.payload === "string") {
+      if (!safeStorage.isEncryptionAvailable()) {
+        console.warn("[desktop-session] safeStorage unavailable; cannot decrypt session");
+        return null;
+      }
+
+      try {
+        const decrypted = safeStorage.decryptString(Buffer.from(parsed.payload, "base64"));
+        const session = JSON.parse(decrypted);
+        return session && typeof session === "object" ? session : null;
+      } catch (decryptError) {
+        console.warn("[desktop-session] failed to decrypt session file", decryptError);
+        return null;
+      }
+    }
+
+    // Legacy fallback for plaintext sessions written by old builds.
+    return parsed;
   } catch (error) {
     if (error.code !== "ENOENT") {
       console.warn("[desktop-session] failed to read session file", error);
@@ -369,9 +391,24 @@ async function readSessionFile() {
 
 async function writeSessionFile(sessionData) {
   await fs.mkdir(path.dirname(getSessionFilePath()), { recursive: true });
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("OS encryption unavailable: session cannot be stored securely.");
+  }
+
+  const encryptedPayload = safeStorage
+    .encryptString(JSON.stringify(sessionData))
+    .toString("base64");
+
   await fs.writeFile(
     getSessionFilePath(),
-    JSON.stringify(sessionData, null, 2),
+    JSON.stringify(
+      {
+        encrypted: true,
+        payload: encryptedPayload,
+      },
+      null,
+      2,
+    ),
     "utf8",
   );
 }
