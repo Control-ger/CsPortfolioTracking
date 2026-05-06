@@ -34,23 +34,49 @@ final class PortfolioService
         $this->ensurePriceHistoryTable();
 
         $investments = $this->investmentRepository->findAll($userId);
+        $activeInvestments = [];
+        foreach ($investments as $investment) {
+            if ($this->isExcludedInvestment($investment)) {
+                continue;
+            }
+            $activeInvestments[] = $investment;
+        }
+
+        $itemIds = array_values(array_unique(array_filter(array_map(
+            static fn(array $investment): int => (int) ($investment['item_id'] ?? 0),
+            $activeInvestments
+        ), static fn(int $itemId): bool => $itemId > 0)));
+
+        $baseline24h = $this->priceHistoryRepository->findLatestPriceMapByItemIds(
+            $itemIds,
+            date('Y-m-d H:i:s', strtotime('-1 days'))
+        );
+        $baseline7d = $this->priceHistoryRepository->findLatestPriceMapByItemIds(
+            $itemIds,
+            date('Y-m-d H:i:s', strtotime('-7 days'))
+        );
+        $baseline30d = $this->priceHistoryRepository->findLatestPriceMapByItemIds(
+            $itemIds,
+            date('Y-m-d H:i:s', strtotime('-30 days'))
+        );
+
         $feeSettings = $this->feeSettingsService->getSettings($userId);
         $rows = [];
         $snapshotTime = $this->currentHourBucket();
+        $presentationCache = [];
 
-        foreach ($investments as $investment) {
-            $excluded = $this->isExcludedInvestment($investment);
-            if ($excluded) {
-                continue;
-            }
-
+        foreach ($activeInvestments as $investment) {
+            $excluded = false;
             $itemId = (int) ($investment['item_id'] ?? 0);
             $name = (string) ($investment['name'] ?? '');
             $buyPriceUsd = isset($investment['buy_price_usd']) ? (float) $investment['buy_price_usd'] : null;
             $usdToEurRate = $this->pricingService->getUsdToEurRate();
             $buyPrice = $buyPriceUsd !== null ? round($buyPriceUsd * $usdToEurRate, 2) : 0.0;
             $quantity = (int) ($investment['quantity'] ?? 0);
-            $presentation = $this->pricingService->getItemPresentation($name);
+            if (!isset($presentationCache[$name])) {
+                $presentationCache[$name] = $this->pricingService->getItemPresentation($name);
+            }
+            $presentation = $presentationCache[$name];
             $livePrice = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
             $priceSource = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
             $displayPrice = $livePrice ?? $buyPrice;
@@ -68,7 +94,13 @@ final class PortfolioService
 
             $this->persistPriceHistorySnapshot($itemId, $snapshotTime, $presentation, $priceSource);
 
-            $changeMetrics = $this->buildChangeMetrics($itemId, $livePrice);
+            $changeMetrics = $this->buildChangeMetricsFromBaselines(
+                $itemId,
+                $livePrice,
+                $baseline24h,
+                $baseline7d,
+                $baseline30d
+            );
 
             $fetchedAt = isset($presentation['fetchedAt']) ? (string) $presentation['fetchedAt'] : null;
             $priceAgeSeconds = $this->resolveFreshnessSeconds($fetchedAt);
@@ -393,8 +425,13 @@ final class PortfolioService
         );
     }
 
-    private function buildChangeMetrics(int $itemId, ?float $currentPrice): array
-    {
+    private function buildChangeMetricsFromBaselines(
+        int $itemId,
+        ?float $currentPrice,
+        array $baseline24h,
+        array $baseline7d,
+        array $baseline30d
+    ): array {
         $metrics = [
             '24h' => ['amount' => null, 'percent' => null, 'baselinePrice' => null, 'windowDays' => 1],
             '7d' => ['amount' => null, 'percent' => null, 'baselinePrice' => null, 'windowDays' => 7],
@@ -405,11 +442,15 @@ final class PortfolioService
             return $metrics;
         }
 
-        foreach ($metrics as $label => $metric) {
-            $beforeDate = date('Y-m-d H:i:s', strtotime('-' . $metric['windowDays'] . ' days'));
-            $baselinePrice = $this->priceHistoryRepository->findLatestPriceByItemId($itemId, $beforeDate);
-            $metrics[$label]['baselinePrice'] = $baselinePrice;
+        $baselineMapByLabel = [
+            '24h' => $baseline24h,
+            '7d' => $baseline7d,
+            '30d' => $baseline30d,
+        ];
 
+        foreach ($baselineMapByLabel as $label => $baselineMap) {
+            $baselinePrice = isset($baselineMap[$itemId]) ? (float) $baselineMap[$itemId] : null;
+            $metrics[$label]['baselinePrice'] = $baselinePrice;
             if ($baselinePrice === null || $baselinePrice <= 0) {
                 continue;
             }
