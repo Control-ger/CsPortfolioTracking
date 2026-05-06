@@ -43,9 +43,39 @@ final class PortfolioController
     {
         try {
             $userId = $this->resolveUserId($request);
-            $rows = $this->portfolioService->getEnrichedInvestments($userId);
-            $summary = $this->portfolioService->getSummary($rows)->toArray();
-            $meta = ['warnings' => $this->portfolioService->consumePricingWarnings()];
+            $usePrimaryScalingRead = $this->primaryScalingReadEnabled() && $this->scalingShadowReadService !== null;
+            $summary = [];
+            $meta = ['warnings' => []];
+
+            if ($usePrimaryScalingRead) {
+                $scaled = $this->scalingShadowReadService->buildPortfolioSummary($userId);
+                $totalValue = (float) ($scaled['totalValue'] ?? 0.0);
+                $totalInvested = (float) ($scaled['totalInvested'] ?? 0.0);
+                $totalProfitEuro = $totalValue - $totalInvested;
+                $summary = [
+                    'totalValue' => $totalValue,
+                    'totalInvested' => $totalInvested,
+                    'totalQuantity' => (int) ($scaled['totalQuantity'] ?? 0),
+                    'totalProfitEuro' => $totalProfitEuro,
+                    'totalRoiPercent' => $totalInvested > 0 ? ($totalProfitEuro / $totalInvested) * 100 : 0.0,
+                    'totalNetValue' => $totalValue,
+                    'totalNetProfitEuro' => $totalProfitEuro,
+                    'totalNetRoiPercent' => $totalInvested > 0 ? ($totalProfitEuro / $totalInvested) * 100 : 0.0,
+                    'isPositive' => $totalProfitEuro >= 0,
+                    'chartColor' => $totalProfitEuro >= 0 ? '#22c55e' : '#ef4444',
+                    'liveItemsCount' => (int) ($scaled['pricedPositions'] ?? 0),
+                    'staleLiveItemsCount' => 0,
+                    'staleLiveItemsRatioPercent' => 0.0,
+                    'freshestDataAgeSeconds' => null,
+                    'oldestDataAgeSeconds' => null,
+                ];
+                $meta['readPath'] = 'scaling_primary';
+            } else {
+                $rows = $this->portfolioService->getEnrichedInvestments($userId);
+                $summary = $this->portfolioService->getSummary($rows)->toArray();
+                $meta = ['warnings' => $this->portfolioService->consumePricingWarnings()];
+                $meta['readPath'] = 'legacy';
+            }
 
             if ($this->shadowReadEnabled() && $this->scalingShadowReadService !== null) {
                 $shadow = $this->scalingShadowReadService->buildPortfolioSummary($userId);
@@ -222,6 +252,16 @@ final class PortfolioController
     private function shadowReadEnabled(): bool
     {
         $value = getenv('SCALING_SHADOW_READ_ENABLED');
+        if ($value === false || $value === null) {
+            return false;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function primaryScalingReadEnabled(): bool
+    {
+        $value = getenv('SCALING_PRIMARY_READ_ENABLED');
         if ($value === false || $value === null) {
             return false;
         }

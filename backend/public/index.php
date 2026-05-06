@@ -31,7 +31,6 @@ use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
-use App\Infrastructure\Persistence\Repository\UserPositionRepository;
 use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
@@ -414,7 +413,6 @@ try {
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
     $userRepository = new UserRepository($pdo);
-    $userPositionRepository = new UserPositionRepository($pdo);
     $userRepository->ensureDefaultUser();
     // Ensure core schema in a deterministic order on fresh databases.
     // This prevents first-request failures when foreign-key dependent tables
@@ -457,7 +455,7 @@ try {
         $priceHistoryRepository,
         $pricingService
     );
-    $scalingShadowReadService = new ScalingShadowReadService($pdo, $userPositionRepository);
+    $scalingShadowReadService = new ScalingShadowReadService($pdo);
     $syncService = new SyncService($pdo);
     $settingsController = new SettingsController($feeSettingsService);
 

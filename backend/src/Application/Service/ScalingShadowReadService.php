@@ -3,70 +3,69 @@ declare(strict_types=1);
 
 namespace App\Application\Service;
 
-use App\Infrastructure\Persistence\Repository\UserPositionRepository;
 use PDO;
 use Throwable;
 
 final class ScalingShadowReadService
 {
     public function __construct(
-        private readonly PDO $pdo,
-        private readonly UserPositionRepository $userPositionRepository
+        private readonly PDO $pdo
     ) {
     }
 
     public function buildPortfolioSummary(int $userId): array
     {
-        $positions = $this->userPositionRepository->findAllByUserId($userId);
-        if ($positions === []) {
+        $positionsSql = 'SELECT
+                            COUNT(*) AS positions,
+                            COALESCE(SUM(quantity_open), 0) AS total_quantity,
+                            COALESCE(SUM(total_cost_usd), 0) AS total_invested_usd
+                         FROM user_positions
+                         WHERE user_id = ? AND quantity_open > 0';
+        $valueSql = 'SELECT
+                        COALESCE(SUM(up.quantity_open * ipl.price_usd), 0) AS total_value_usd,
+                        COALESCE(COUNT(ipl.item_id), 0) AS priced_positions
+                     FROM user_positions up
+                     INNER JOIN item_price_latest ipl ON ipl.item_id = up.item_id
+                     WHERE up.user_id = ? AND up.quantity_open > 0';
+        $rateSql = 'SELECT usd_to_eur
+                    FROM exchange_rates
+                    ORDER BY date DESC, id DESC
+                    LIMIT 1';
+
+        try {
+            $positionsStmt = $this->pdo->prepare($positionsSql);
+            $positionsStmt->execute([$userId]);
+            $positionsRow = $positionsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $valueStmt = $this->pdo->prepare($valueSql);
+            $valueStmt->execute([$userId]);
+            $valueRow = $valueStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $rateStmt = $this->pdo->query($rateSql);
+            $usdToEur = (float) ($rateStmt?->fetchColumn() ?: 0.0);
+            if ($usdToEur <= 0) {
+                $usdToEur = 1.0;
+            }
+
+            $totalValueUsd = (float) ($valueRow['total_value_usd'] ?? 0.0);
+            $totalInvestedUsd = (float) ($positionsRow['total_invested_usd'] ?? 0.0);
+
+            return [
+                'positions' => (int) ($positionsRow['positions'] ?? 0),
+                'pricedPositions' => (int) ($valueRow['priced_positions'] ?? 0),
+                'totalQuantity' => (int) ($positionsRow['total_quantity'] ?? 0),
+                'totalValue' => round($totalValueUsd * $usdToEur, 2),
+                'totalInvested' => round($totalInvestedUsd * $usdToEur, 2),
+            ];
+        } catch (Throwable) {
             return [
                 'positions' => 0,
+                'pricedPositions' => 0,
+                'totalQuantity' => 0,
                 'totalValue' => 0.0,
                 'totalInvested' => 0.0,
             ];
         }
-
-        $totalValue = 0.0;
-        $totalInvested = 0.0;
-        $positionCount = 0;
-
-        $sql = 'SELECT ipl.price_usd, er.usd_to_eur
-                FROM item_price_latest ipl
-                INNER JOIN exchange_rates er ON er.id = ipl.exchange_rate_id
-                WHERE ipl.item_id = ?
-                LIMIT 1';
-        $stmt = $this->pdo->prepare($sql);
-
-        foreach ($positions as $row) {
-            $itemId = (int) ($row['item_id'] ?? 0);
-            $quantity = (int) ($row['quantity_open'] ?? 0);
-            $avgBuyPriceUsd = (float) ($row['avg_buy_price_usd'] ?? 0.0);
-            if ($itemId <= 0 || $quantity <= 0) {
-                continue;
-            }
-
-            $stmt->execute([$itemId]);
-            $priceRow = $stmt->fetch(PDO::FETCH_ASSOC);
-            if (!is_array($priceRow)) {
-                continue;
-            }
-
-            $priceUsd = (float) ($priceRow['price_usd'] ?? 0.0);
-            $usdToEur = (float) ($priceRow['usd_to_eur'] ?? 0.0);
-            if ($priceUsd <= 0 || $usdToEur <= 0) {
-                continue;
-            }
-
-            $totalValue += $quantity * $priceUsd * $usdToEur;
-            $totalInvested += $quantity * $avgBuyPriceUsd * $usdToEur;
-            $positionCount++;
-        }
-
-        return [
-            'positions' => $positionCount,
-            'totalValue' => round($totalValue, 2),
-            'totalInvested' => round($totalInvested, 2),
-        ];
     }
 
     public function buildWatchlistStats(int $userId): array
@@ -94,4 +93,3 @@ final class ScalingShadowReadService
         }
     }
 }
-
