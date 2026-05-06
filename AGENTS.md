@@ -28,6 +28,7 @@ Verstöße dagegen sind aktiv rückgängig zu machen.
 | `docs/sync-api.md` | IN PROGRESS | Sync API Contract |
 | `docs/repo-restructure-plan.md` | FINAL | Monorepo Struktur |
 | `docs/desktop-local-sync-plan.md` | IN PROGRESS | Sync Roadmap |
+| `docs/server-scale-plan.md` | IN PROGRESS | Server scaling architecture + migration plan |
 | `docs/fee-settings-plan.md` | IN PROGRESS | Fee/Break-even Features |
 | `docs/cs-updates-feed-plan.md` | IN PROGRESS | Updates/Feed Feature |
 | `backend/MVC_API_CONTRACT.md` | FINAL | Backend API Contract |
