@@ -7,7 +7,9 @@ import fsSync from "fs";
 import net from "net";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
-import { autoUpdater } from "electron-updater";
+import electronUpdater from "electron-updater";
+
+const { autoUpdater } = electronUpdater;
 
 // ============================================================
 // Debug / Logging Setup
