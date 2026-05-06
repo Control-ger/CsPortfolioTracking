@@ -32,6 +32,13 @@ final class WatchlistService
         $now = date('Y-m-d H:i:s');
         $sevenDaysAgo = date('Y-m-d H:i:s', strtotime('-7 days'));
         $historyFrom = date('Y-m-d H:i:s', strtotime('-370 days'));
+        $itemIds = array_values(array_unique(array_filter(array_map(
+            static fn(array $item): int => (int) ($item['item_id'] ?? 0),
+            $items
+        ), static fn(int $itemId): bool => $itemId > 0)));
+        $latestPriceMap = $this->priceHistoryRepository->findLatestPriceMapByItemIds($itemIds, $now);
+        $oldPriceMap = $this->priceHistoryRepository->findLatestPriceMapByItemIds($itemIds, $sevenDaysAgo);
+        $historyMap = $this->priceHistoryRepository->findHistoryMapByItemIds($itemIds, $historyFrom);
         $result = [];
 
         foreach ($items as $item) {
@@ -41,11 +48,14 @@ final class WatchlistService
                 continue;
             }
 
-            $imageUrl = $this->pricingService->getItemImageUrl($name);
+            $imageUrl = isset($item['image_url']) ? (string) $item['image_url'] : '';
+            if ($imageUrl === '') {
+                $imageUrl = (string) ($this->pricingService->getItemImageUrl($name) ?? '');
+            }
 
-            $currentPrice = $itemId > 0 ? $this->priceHistoryRepository->findLatestPriceByItemId($itemId, $now) : null;
+            $currentPrice = $itemId > 0 ? ($latestPriceMap[$itemId] ?? null) : null;
             $priceSource = null;
-            $oldPrice = $itemId > 0 ? $this->priceHistoryRepository->findLatestPriceByItemId($itemId, $sevenDaysAgo) : null;
+            $oldPrice = $itemId > 0 ? ($oldPriceMap[$itemId] ?? null) : null;
             $priceChange = null;
             $priceChangePercent = null;
 
@@ -54,7 +64,7 @@ final class WatchlistService
                 $priceChangePercent = ($priceChange / $oldPrice) * 100;
             }
 
-            $priceHistory = $itemId > 0 ? $this->priceHistoryRepository->findHistoryByItemId($itemId, $historyFrom) : [];
+            $priceHistory = $itemId > 0 ? ($historyMap[$itemId] ?? []) : [];
             $priceHistoryWithGrowth = $this->enrichHistoryWithGrowthPercent($priceHistory);
 
             $dto = new WatchlistItemDto(

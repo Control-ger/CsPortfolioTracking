@@ -99,6 +99,104 @@ final class PriceHistoryRepository
         }
     }
 
+    public function findLatestPriceMapByItemIds(array $itemIds, string $beforeDate): array
+    {
+        $normalizedIds = array_values(array_unique(array_filter(array_map(
+            static fn(mixed $value): int => (int) $value,
+            $itemIds
+        ), static fn(int $value): bool => $value > 0)));
+
+        if ($normalizedIds === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($normalizedIds), '?'));
+        $sql = "SELECT ph.item_id, ph.price_usd, er.usd_to_eur
+                FROM price_history ph
+                JOIN (
+                    SELECT item_id, MAX(date) AS latest_date
+                    FROM price_history
+                    WHERE date <= ? AND item_id IN ({$placeholders})
+                    GROUP BY item_id
+                ) latest ON latest.item_id = ph.item_id AND latest.latest_date = ph.date
+                JOIN exchange_rates er ON er.id = ph.exchange_rate_id";
+
+        $params = array_merge([$beforeDate], $normalizedIds);
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $map = [];
+            foreach ($rows as $row) {
+                $itemId = (int) ($row['item_id'] ?? 0);
+                if ($itemId <= 0) {
+                    continue;
+                }
+                $map[$itemId] = (float) ($row['price_usd'] ?? 0.0) * (float) ($row['usd_to_eur'] ?? 0.0);
+            }
+            return $map;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['itemIds' => count($normalizedIds), 'beforeDate' => $beforeDate]
+            );
+            throw $exception;
+        }
+    }
+
+    public function findHistoryMapByItemIds(array $itemIds, string $fromDate): array
+    {
+        $normalizedIds = array_values(array_unique(array_filter(array_map(
+            static fn(mixed $value): int => (int) $value,
+            $itemIds
+        ), static fn(int $value): bool => $value > 0)));
+
+        if ($normalizedIds === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($normalizedIds), '?'));
+        $sql = "SELECT ph.item_id, ph.date, ph.price_usd, er.usd_to_eur
+                FROM price_history ph
+                JOIN exchange_rates er ON er.id = ph.exchange_rate_id
+                WHERE ph.item_id IN ({$placeholders}) AND ph.date >= ?
+                ORDER BY ph.item_id ASC, ph.date ASC";
+
+        $params = array_merge($normalizedIds, [$fromDate]);
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $map = [];
+            foreach ($rows as $row) {
+                $itemId = (int) ($row['item_id'] ?? 0);
+                if ($itemId <= 0) {
+                    continue;
+                }
+                $map[$itemId] ??= [];
+                $map[$itemId][] = [
+                    'date' => (string) ($row['date'] ?? ''),
+                    'priceEur' => (float) ($row['price_usd'] ?? 0.0) * (float) ($row['usd_to_eur'] ?? 0.0),
+                ];
+            }
+            return $map;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['itemIds' => count($normalizedIds), 'fromDate' => $fromDate]
+            );
+            throw $exception;
+        }
+    }
+
     public function upsertPrice(
         int $itemId,
         string $date,
