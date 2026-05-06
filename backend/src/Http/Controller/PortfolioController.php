@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Application\Service\PortfolioService;
+use App\Application\Service\ScalingShadowReadService;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Logger;
@@ -11,8 +12,10 @@ use Throwable;
 
 final class PortfolioController
 {
-    public function __construct(private readonly PortfolioService $portfolioService)
-    {
+    public function __construct(
+        private readonly PortfolioService $portfolioService,
+        private readonly ?ScalingShadowReadService $scalingShadowReadService = null
+    ) {
     }
 
     public function investments(Request $request): void
@@ -41,9 +44,37 @@ final class PortfolioController
         try {
             $userId = $this->resolveUserId($request);
             $rows = $this->portfolioService->getEnrichedInvestments($userId);
+            $summary = $this->portfolioService->getSummary($rows)->toArray();
+            $meta = ['warnings' => $this->portfolioService->consumePricingWarnings()];
+
+            if ($this->shadowReadEnabled() && $this->scalingShadowReadService !== null) {
+                $shadow = $this->scalingShadowReadService->buildPortfolioSummary($userId);
+                $delta = abs(((float) ($summary['totalValue'] ?? 0.0)) - ((float) ($shadow['totalValue'] ?? 0.0)));
+                $meta['shadowRead'] = [
+                    'enabled' => true,
+                    'totalValueDelta' => round($delta, 2),
+                    'positions' => (int) ($shadow['positions'] ?? 0),
+                ];
+
+                if ($delta > 0.5) {
+                    Logger::event(
+                        'warning',
+                        'domain',
+                        'domain.shadow_read.portfolio_summary_mismatch',
+                        'Portfolio summary mismatch between legacy and scalable shadow read',
+                        [
+                            'userId' => $userId,
+                            'legacyTotalValue' => (float) ($summary['totalValue'] ?? 0.0),
+                            'shadowTotalValue' => (float) ($shadow['totalValue'] ?? 0.0),
+                            'delta' => round($delta, 2),
+                        ]
+                    );
+                }
+            }
+
             JsonResponseFactory::success(
-                $this->portfolioService->getSummary($rows)->toArray(),
-                ['warnings' => $this->portfolioService->consumePricingWarnings()]
+                $summary,
+                $meta
             );
         } catch (Throwable $exception) {
             Logger::event(
@@ -186,5 +217,15 @@ final class PortfolioController
         }
 
         return 1;
+    }
+
+    private function shadowReadEnabled(): bool
+    {
+        $value = getenv('SCALING_SHADOW_READ_ENABLED');
+        if ($value === false || $value === null) {
+            return false;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\SyncService;
 use App\Shared\Http\JsonResponseFactory;
@@ -16,7 +17,8 @@ final class WatchlistController
 {
     public function __construct(
         private readonly WatchlistService $watchlistService,
-        private readonly SyncService $syncService
+        private readonly SyncService $syncService,
+        private readonly ?ScalingShadowReadService $scalingShadowReadService = null
     )
     {
     }
@@ -24,11 +26,23 @@ final class WatchlistController
     public function list(Request $request): void
     {
         try {
+            $userId = $this->resolveUserId($request);
             $syncLive = filter_var($request->query['syncLive'] ?? false, FILTER_VALIDATE_BOOL);
-            $items = $this->watchlistService->listWithMetrics($this->resolveUserId($request), $syncLive);
+            $items = $this->watchlistService->listWithMetrics($userId, $syncLive);
+            $meta = ['warnings' => $this->watchlistService->consumePricingWarnings()];
+
+            if ($this->shadowReadEnabled() && $this->scalingShadowReadService !== null) {
+                $shadow = $this->scalingShadowReadService->buildWatchlistStats($userId);
+                $meta['shadowRead'] = [
+                    'enabled' => true,
+                    'totalItems' => (int) ($shadow['totalItems'] ?? 0),
+                    'pricedItems' => (int) ($shadow['pricedItems'] ?? 0),
+                ];
+            }
+
             JsonResponseFactory::success(
                 $items,
-                ['warnings' => $this->watchlistService->consumePricingWarnings()]
+                $meta
             );
         } catch (Throwable $exception) {
             Logger::event(
@@ -188,5 +202,15 @@ final class WatchlistController
         }
 
         return 1;
+    }
+
+    private function shadowReadEnabled(): bool
+    {
+        $value = getenv('SCALING_SHADOW_READ_ENABLED');
+        if ($value === false || $value === null) {
+            return false;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 }

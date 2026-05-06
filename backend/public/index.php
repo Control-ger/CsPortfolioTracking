@@ -5,6 +5,7 @@ use App\Application\Service\PortfolioService;
 use App\Application\Service\FeeSettingsService;
 use App\Application\Service\CsFloatTradeSyncService;
 use App\Application\Service\PricingService;
+use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\SyncService;
 use App\Application\Support\MarketItemClassifier;
@@ -30,6 +31,7 @@ use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
+use App\Infrastructure\Persistence\Repository\UserPositionRepository;
 use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
@@ -412,6 +414,7 @@ try {
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
     $userRepository = new UserRepository($pdo);
+    $userPositionRepository = new UserPositionRepository($pdo);
     $userRepository->ensureDefaultUser();
     // Ensure core schema in a deterministic order on fresh databases.
     // This prevents first-request failures when foreign-key dependent tables
@@ -454,11 +457,12 @@ try {
         $priceHistoryRepository,
         $pricingService
     );
+    $scalingShadowReadService = new ScalingShadowReadService($pdo, $userPositionRepository);
     $syncService = new SyncService($pdo);
     $settingsController = new SettingsController($feeSettingsService);
 
-    $portfolioController = new PortfolioController($portfolioService);
-    $watchlistController = new WatchlistController($watchlistService, $syncService);
+    $portfolioController = new PortfolioController($portfolioService, $scalingShadowReadService);
+    $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService);
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);
     $frontendTelemetryController = new FrontendTelemetryController();
