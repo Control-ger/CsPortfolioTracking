@@ -4,9 +4,9 @@
 START TRANSACTION;
 
 CREATE TABLE IF NOT EXISTS item_price_latest (
-    item_id BIGINT NOT NULL,
+    item_id INT NOT NULL,
     price_usd DECIMAL(12,4) NOT NULL,
-    exchange_rate_id BIGINT NOT NULL,
+    exchange_rate_id INT NOT NULL,
     price_source VARCHAR(64) NOT NULL,
     provider_timestamp DATETIME NULL,
     fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -20,10 +20,10 @@ CREATE TABLE IF NOT EXISTS item_price_latest (
 
 CREATE TABLE IF NOT EXISTS item_price_history_hourly (
     id BIGINT NOT NULL AUTO_INCREMENT,
-    item_id BIGINT NOT NULL,
+    item_id INT NOT NULL,
     bucket_start DATETIME NOT NULL,
     price_usd DECIMAL(12,4) NOT NULL,
-    exchange_rate_id BIGINT NOT NULL,
+    exchange_rate_id INT NOT NULL,
     price_source VARCHAR(64) NOT NULL,
     provider_timestamp DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS item_price_history_hourly (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS user_positions (
-    user_id BIGINT NOT NULL,
-    item_id BIGINT NOT NULL,
+    user_id INT NOT NULL,
+    item_id INT NOT NULL,
     quantity_open BIGINT NOT NULL,
     avg_buy_price_usd DECIMAL(12,4) NOT NULL,
     total_cost_usd DECIMAL(18,4) NOT NULL,
@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS user_positions (
 
 CREATE TABLE IF NOT EXISTS position_events (
     id BIGINT NOT NULL AUTO_INCREMENT,
-    user_id BIGINT NOT NULL,
-    item_id BIGINT NOT NULL,
+    user_id INT NOT NULL,
+    item_id INT NOT NULL,
     event_type ENUM('buy','sell','import','adjustment') NOT NULL,
     quantity_delta BIGINT NOT NULL,
     unit_price_usd DECIMAL(12,4) NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS position_events (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS portfolio_snapshots_daily (
-    user_id BIGINT NOT NULL,
+    user_id INT NOT NULL,
     snapshot_date DATE NOT NULL,
     total_value_usd DECIMAL(18,4) NOT NULL,
     invested_value_usd DECIMAL(18,4) NOT NULL,
