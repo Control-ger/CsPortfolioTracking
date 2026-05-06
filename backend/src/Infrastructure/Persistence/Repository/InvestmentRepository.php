@@ -300,6 +300,12 @@ final class InvestmentRepository
 
     public function upsertImportedTradeSnapshot(array $trade): int
     {
+        $userId = (int) ($trade['userId'] ?? 1);
+        $platform = (string) ($trade['platform'] ?? 'csfloat');
+        $externalTradeId = (string) ($trade['externalTradeId'] ?? '');
+        $incomingPayloadJson = $trade['rawPayloadJson'] ?? null;
+        $mergedPayloadJson = $this->mergeRawPayloadForImport($userId, $platform, $externalTradeId, $incomingPayloadJson);
+
         $sql = 'INSERT INTO investments (
                 user_id,
                 item_id,
@@ -325,15 +331,15 @@ final class InvestmentRepository
         try {
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([
-                (int) ($trade['userId'] ?? 1),
+                $userId,
                 (int) ($trade['itemId']),
                 (float) ($trade['buyPriceUsd'] ?? 0.0),
                 max(1, (int) ($trade['quantity'] ?? 1)),
                 (string) ($trade['fundingMode'] ?? 'wallet_funded'),
-                (string) ($trade['platform'] ?? 'csfloat'),
-                (string) ($trade['externalTradeId'] ?? ''),
+                $platform,
+                $externalTradeId,
                 $trade['purchasedAt'] ?? date('Y-m-d H:i:s'),
-                $trade['rawPayloadJson'] ?? null,
+                $mergedPayloadJson,
             ]);
 
             return (int) $this->pdo->lastInsertId();
@@ -407,5 +413,59 @@ final class InvestmentRepository
         ]);
 
         return true;
+    }
+
+    private function mergeRawPayloadForImport(
+        int $userId,
+        string $platform,
+        string $externalTradeId,
+        mixed $incomingPayloadJson
+    ): ?string {
+        $incomingPayload = $this->decodeRawPayload($incomingPayloadJson);
+        if ($incomingPayload === null) {
+            return is_string($incomingPayloadJson) ? $incomingPayloadJson : null;
+        }
+
+        $existingPayload = $this->findExistingRawPayloadForExternalTrade($userId, $platform, $externalTradeId);
+        if ($existingPayload !== null) {
+            if (array_key_exists('excluded', $existingPayload) && !array_key_exists('excluded', $incomingPayload)) {
+                $incomingPayload['excluded'] = (bool) $existingPayload['excluded'];
+            }
+            if (array_key_exists('isExcluded', $existingPayload) && !array_key_exists('isExcluded', $incomingPayload)) {
+                $incomingPayload['isExcluded'] = (bool) $existingPayload['isExcluded'];
+            }
+        }
+
+        return json_encode($incomingPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function findExistingRawPayloadForExternalTrade(int $userId, string $platform, string $externalTradeId): ?array
+    {
+        if ($externalTradeId === '') {
+            return null;
+        }
+
+        $sql = 'SELECT raw_payload_json
+                FROM investments
+                WHERE user_id = ? AND platform = ? AND external_trade_id = ?
+                LIMIT 1';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$userId, $platform, $externalTradeId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row)) {
+            return null;
+        }
+
+        return $this->decodeRawPayload($row['raw_payload_json'] ?? null);
+    }
+
+    private function decodeRawPayload(mixed $rawPayload): ?array
+    {
+        if (!is_string($rawPayload) || trim($rawPayload) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($rawPayload, true);
+        return is_array($decoded) ? $decoded : null;
     }
 }

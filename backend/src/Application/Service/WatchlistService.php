@@ -6,6 +6,7 @@ namespace App\Application\Service;
 use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
+use App\Infrastructure\External\SteamMarketClient;
 use App\Shared\Dto\WatchlistItemDto;
 use App\Shared\Logger;
 
@@ -15,7 +16,8 @@ final class WatchlistService
         private readonly WatchlistRepository $watchlistRepository,
         private readonly ItemRepository $itemRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
-        private readonly PricingService $pricingService
+        private readonly PricingService $pricingService,
+        private readonly SteamMarketClient $steamMarketClient
     ) {
     }
 
@@ -96,40 +98,195 @@ final class WatchlistService
     {
         $normalizedQuery = trim($query);
         $normalizedItemType = trim((string) $itemTypeFilter);
-        $canBrowseByFilter = $this->canBrowseByFilter($normalizedItemType);
+        $normalizedWear = trim((string) $wearFilter);
+        $resolvedLimit = max(1, min($limit, 20));
+        $resolvedPage = max(1, $page);
+        $offset = ($resolvedPage - 1) * $resolvedLimit;
+        $browseMode = $normalizedQuery === '' && $this->canBrowseByFilter($normalizedItemType);
+        $normalizedSortBy = trim((string) $sortBy) !== '' ? trim((string) $sortBy) : 'relevance';
 
-        if ($normalizedQuery === '' && !$canBrowseByFilter) {
+        if ($normalizedQuery === '' && !$browseMode) {
             return [
                 'items' => [],
-                'page' => max(1, $page),
-                'limit' => max(1, min($limit, 12)),
+                'page' => $resolvedPage,
+                'limit' => $resolvedLimit,
                 'totalItems' => 0,
                 'totalPages' => 0,
-                'sortBy' => trim((string) $sortBy) !== '' ? trim((string) $sortBy) : 'relevance',
+                'sortBy' => $normalizedSortBy,
                 'browseMode' => false,
             ];
         }
 
-        if ($normalizedQuery !== '' && strlen($normalizedQuery) < 2) {
+        if ($normalizedQuery !== '' && mb_strlen($normalizedQuery) < 2) {
             return [
                 'items' => [],
-                'page' => max(1, $page),
-                'limit' => max(1, min($limit, 12)),
+                'page' => $resolvedPage,
+                'limit' => $resolvedLimit,
                 'totalItems' => 0,
                 'totalPages' => 0,
-                'sortBy' => trim((string) $sortBy) !== '' ? trim((string) $sortBy) : 'relevance',
+                'sortBy' => $normalizedSortBy,
                 'browseMode' => false,
             ];
         }
 
-        return $this->pricingService->searchWatchlistCandidates(
-            $normalizedQuery,
-            $limit,
-            $itemTypeFilter,
-            $wearFilter,
-            $page,
-            $sortBy
+        $searchQuery = $normalizedQuery;
+        if ($searchQuery === '' && $browseMode) {
+            $searchQuery = '';
+        }
+
+        $rows = $this->itemRepository->searchCatalog(
+            $searchQuery,
+            $normalizedItemType !== '' ? $normalizedItemType : null,
+            $normalizedWear !== '' ? $normalizedWear : null,
+            $normalizedSortBy,
+            $resolvedLimit,
+            $offset
         );
+        $totalItems = $this->itemRepository->countCatalog(
+            $searchQuery,
+            $normalizedItemType !== '' ? $normalizedItemType : null,
+            $normalizedWear !== '' ? $normalizedWear : null
+        );
+        $totalPages = $totalItems > 0 ? (int) ceil($totalItems / $resolvedLimit) : 0;
+
+        $items = array_map(static function (array $row): array {
+            return [
+                'marketHashName' => (string) ($row['market_hash_name'] ?? ''),
+                'displayName' => (string) (($row['name'] ?? '') ?: ($row['market_hash_name'] ?? '')),
+                'itemType' => (string) (($row['item_type'] ?? '') ?: ($row['type'] ?? 'other')),
+                'itemTypeLabel' => (string) (($row['item_type_label'] ?? '') ?: (($row['type'] ?? 'Other'))),
+                'marketTypeLabel' => (string) (($row['market_type_label'] ?? '') ?: (($row['item_type_label'] ?? '') ?: 'CS2 Item')),
+                'wear' => isset($row['wear_key']) ? (string) $row['wear_key'] : null,
+                'wearLabel' => isset($row['wear_label']) ? (string) $row['wear_label'] : null,
+                'iconUrl' => isset($row['image_url']) ? (string) $row['image_url'] : null,
+                'priceSource' => isset($row['price_source']) ? (string) $row['price_source'] : null,
+                'livePriceEur' => isset($row['price_eur']) && is_numeric($row['price_eur'])
+                    ? round((float) $row['price_eur'], 2)
+                    : null,
+                'livePriceUsd' => isset($row['price_usd']) && is_numeric($row['price_usd'])
+                    ? round((float) $row['price_usd'], 2)
+                    : null,
+            ];
+        }, $rows);
+        $steamPriceMap = $this->buildSteamPriceMapForQuery($normalizedQuery, $resolvedLimit, $offset);
+        if ($steamPriceMap !== []) {
+            $items = $this->applySteamFallbackToSearchItems($items, $steamPriceMap);
+        }
+
+        return [
+            'items' => $items,
+            'page' => $resolvedPage,
+            'limit' => $resolvedLimit,
+            'totalItems' => $totalItems,
+            'totalPages' => $totalPages,
+            'sortBy' => $normalizedSortBy,
+            'browseMode' => $browseMode,
+        ];
+    }
+
+    private function buildSteamPriceMapForQuery(string $query, int $limit, int $offset): array
+    {
+        $normalizedQuery = trim($query);
+        if ($normalizedQuery === '') {
+            return [];
+        }
+
+        $steamResult = $this->steamMarketClient->searchItems($normalizedQuery, max(8, $limit), $offset);
+        $steamItems = $steamResult['items'] ?? null;
+        if (!is_array($steamItems)) {
+            return [];
+        }
+
+        $priceMap = [];
+        foreach ($steamItems as $steamItem) {
+            if (!is_array($steamItem)) {
+                continue;
+            }
+
+            $marketHashName = trim((string) ($steamItem['marketHashName'] ?? ''));
+            if ($marketHashName === '') {
+                continue;
+            }
+
+            $priceUsd = isset($steamItem['sellPriceUsd']) && is_numeric($steamItem['sellPriceUsd'])
+                ? (float) $steamItem['sellPriceUsd']
+                : null;
+            if ($priceUsd === null || $priceUsd <= 0) {
+                continue;
+            }
+
+            $priceMap[$marketHashName] = [
+                'priceUsd' => $priceUsd,
+                'iconUrl' => isset($steamItem['iconUrl']) ? (string) $steamItem['iconUrl'] : null,
+            ];
+        }
+
+        return $priceMap;
+    }
+
+    private function applySteamFallbackToSearchItems(array $items, array $steamPriceMap): array
+    {
+        $usdToEurRate = $this->pricingService->getUsdToEurRate();
+
+        return array_map(static function (array $item) use ($steamPriceMap, $usdToEurRate): array {
+            $marketHashName = trim((string) ($item['marketHashName'] ?? ''));
+            if ($marketHashName === '' || !isset($steamPriceMap[$marketHashName])) {
+                return $item;
+            }
+
+            $hasLivePrice = isset($item['livePriceUsd']) && is_numeric($item['livePriceUsd']) && (float) $item['livePriceUsd'] > 0;
+            if ($hasLivePrice) {
+                return $item;
+            }
+
+            $steamPrice = $steamPriceMap[$marketHashName];
+            $priceUsd = (float) ($steamPrice['priceUsd'] ?? 0);
+            if ($priceUsd <= 0) {
+                return $item;
+            }
+
+            $item['livePriceUsd'] = round($priceUsd, 2);
+            $item['livePriceEur'] = round($priceUsd * $usdToEurRate, 2);
+            $item['priceSource'] = 'steam';
+            if ((empty($item['iconUrl']) || $item['iconUrl'] === null) && !empty($steamPrice['iconUrl'])) {
+                $item['iconUrl'] = (string) $steamPrice['iconUrl'];
+            }
+
+            return $item;
+        }, $items);
+    }
+
+    public function addItemsBatch(int $userId, array $items): array
+    {
+        $created = [];
+        $duplicates = [];
+        $errors = [];
+
+        foreach ($items as $index => $item) {
+            $name = trim((string) ($item['marketHashName'] ?? $item['name'] ?? ''));
+            $type = (string) ($item['itemType'] ?? $item['type'] ?? 'skin');
+            if ($name === '') {
+                $errors[] = ['index' => $index, 'code' => 'MISSING_NAME', 'message' => 'Name fehlt.'];
+                continue;
+            }
+
+            try {
+                $created[] = $this->addItem($userId, $name, $type);
+            } catch (\RuntimeException $exception) {
+                $duplicates[] = ['name' => $name, 'message' => $exception->getMessage()];
+            } catch (\Throwable $exception) {
+                $errors[] = ['name' => $name, 'code' => 'ADD_FAILED', 'message' => $exception->getMessage()];
+            }
+        }
+
+        return [
+            'created' => $created,
+            'createdCount' => count($created),
+            'duplicateCount' => count($duplicates),
+            'duplicates' => $duplicates,
+            'errorCount' => count($errors),
+            'errors' => $errors,
+        ];
     }
 
     private function canBrowseByFilter(string $itemTypeFilter): bool

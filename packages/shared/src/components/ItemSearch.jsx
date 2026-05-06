@@ -9,12 +9,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Compass,
+  X,
   LoaderCircle,
   Plus,
   Search,
 } from "lucide-react";
 import { searchWatchlistItems } from "@shared/lib/apiClient.js";
-import { createWatchlistItemData } from "@shared/lib/dataSource.js";
+import { createWatchlistItemData, createWatchlistItemsBatchData } from "@shared/lib/dataSource.js";
 
 const ITEM_TYPE_OPTIONS = [
   { value: "all", label: "Alle Typen" },
@@ -143,8 +144,12 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [browseMode, setBrowseMode] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [submittingItem, setSubmittingItem] = useState("");
+  const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
+  const [selectedItems, setSelectedItems] = useState([]);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
+  const isAlreadyInWatchlist = (itemName) =>
+    existingItems.some((item) => item.name === itemName);
 
   const wearEnabled = itemType === "skin";
   const normalizedTerm = normalizeSearchTerm(searchTerm);
@@ -155,10 +160,16 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const isBrowseRequest = effectiveTerm.length === 0 && canBrowseWithoutQuery;
   const shouldSearch = effectiveTerm.length >= 2 || isBrowseRequest;
   const hasMorePages = page < totalPages;
+  const selectableResults = results.filter((candidate) => !isAlreadyInWatchlist(candidate.marketHashName));
 
   useEffect(() => {
     setPage(1);
   }, [searchTerm, itemType, wear, sortBy]);
+
+  useEffect(() => {
+    const selectableNames = new Set(selectableResults.map((entry) => entry.marketHashName));
+    setSelectedItems((current) => current.filter((name) => selectableNames.has(name)));
+  }, [results]);
 
   useEffect(() => {
     const activeWear = effectiveItemType === "skin" ? wear : "all";
@@ -237,9 +248,6 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     };
   }, [effectiveItemType, effectiveTerm, page, shouldSearch, sortBy, wear]);
 
-  const isAlreadyInWatchlist = (itemName) =>
-    existingItems.some((item) => item.name === itemName);
-
   const handleTypeChange = (nextType) => {
     setItemType(nextType);
 
@@ -289,6 +297,52 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       );
     } finally {
       setSubmittingItem("");
+    }
+  };
+
+  const addToSelection = (marketHashName) => {
+    setSelectedItems((current) =>
+      current.includes(marketHashName) ? current : [...current, marketHashName],
+    );
+  };
+
+  const removeFromSelection = (marketHashName) => {
+    setSelectedItems((current) => current.filter((name) => name !== marketHashName));
+  };
+
+  const handleBatchAdd = async () => {
+    const toAdd = results.filter((candidate) => selectedItems.includes(candidate.marketHashName));
+    if (toAdd.length === 0) {
+      return;
+    }
+
+    try {
+      setIsBatchSubmitting(true);
+      setError("");
+      await createWatchlistItemsBatchData(
+        toAdd.map((candidate) => ({
+          marketHashName: candidate.marketHashName,
+          itemType: candidate.itemType || "other",
+          iconUrl: candidate.iconUrl || null,
+        })),
+      );
+
+      setSelectedItems([]);
+      setSearchTerm("");
+      setResults([]);
+      setTotalItems(0);
+      setTotalPages(0);
+      setBrowseMode(false);
+      setPage(1);
+      setWarnings([]);
+
+      if (onAddToWatchlist) {
+        await onAddToWatchlist();
+      }
+    } catch (requestError) {
+      setError(requestError.message || "Fehler beim Batch-Hinzufuegen zur Watchlist.");
+    } finally {
+      setIsBatchSubmitting(false);
     }
   };
 
@@ -449,9 +503,70 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
     return (
       <div className="space-y-2.5">
+        {selectedItems.length > 0 ? (
+          <div className="space-y-2 rounded-lg border px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {selectedItems.length} in Auswahl
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedItems([])}
+                  disabled={isBatchSubmitting || submittingItem !== ""}
+                  className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Auswahl leeren
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchAdd}
+                  disabled={selectedItems.length === 0 || isBatchSubmitting || submittingItem !== ""}
+                  className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isBatchSubmitting ? (
+                    <>
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      Speichert...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Alle hinzufuegen
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedItems.map((marketHashName) => {
+                const item = results.find((entry) => entry.marketHashName === marketHashName);
+                return (
+                  <span
+                    key={marketHashName}
+                    className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px]"
+                  >
+                    <span className="max-w-[180px] truncate">
+                      {item?.displayName || marketHashName}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeFromSelection(marketHashName)}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label={`${item?.displayName || marketHashName} aus Auswahl entfernen`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         {results.map((candidate) => {
           const alreadyAdded = isAlreadyInWatchlist(candidate.marketHashName);
           const isSubmitting = submittingItem === candidate.marketHashName;
+          const isSelected = selectedItems.includes(candidate.marketHashName);
 
           return (
             <div
@@ -500,26 +615,42 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleAddItem(candidate)}
-                disabled={alreadyAdded || isSubmitting || submittingItem !== ""}
-                className="inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Speichert...
-                  </>
-                ) : alreadyAdded ? (
-                  "Bereits drin"
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" />
-                    Hinzufuegen
-                  </>
-                )}
-              </button>
+              <div className="flex min-w-[160px] flex-col items-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleAddItem(candidate)}
+                  disabled={alreadyAdded || isSubmitting || submittingItem !== "" || isBatchSubmitting}
+                  className="inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      Speichert...
+                    </>
+                  ) : alreadyAdded ? (
+                    "Bereits drin"
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Hinzufuegen
+                    </>
+                  )}
+                </button>
+                {!alreadyAdded ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      isSelected
+                        ? removeFromSelection(candidate.marketHashName)
+                        : addToSelection(candidate.marketHashName)
+                    }
+                    disabled={isSubmitting || submittingItem !== "" || isBatchSubmitting}
+                    className="inline-flex min-w-24 items-center justify-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSelected ? "Auswahl entfernen" : "Zur Auswahl"}
+                  </button>
+                ) : null}
+              </div>
             </div>
           );
         })}

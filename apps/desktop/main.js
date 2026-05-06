@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { app, BrowserWindow, ipcMain, shell, safeStorage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, safeStorage } from "electron";
 import { spawn } from "child_process";
 import { randomBytes } from "crypto";
 import fs from "fs/promises";
@@ -7,6 +7,7 @@ import fsSync from "fs";
 import net from "net";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
+import { autoUpdater } from "electron-updater";
 
 // ============================================================
 // Debug / Logging Setup
@@ -66,6 +67,86 @@ let distIndexPath = null; // Will be set when app is ready
 let phpSidecar = null;
 let backendBaseUrl = null;
 let sidecarSecret = null;
+let updateCheckTimer = null;
+const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
+function emitUpdaterStatus(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send("app-updater-status", payload);
+}
+
+function setupAutoUpdater() {
+  if (!app.isPackaged) {
+    console.log("[updater] skipped in development mode");
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("checking-for-update", () => {
+    console.log("[updater] checking for update");
+    emitUpdaterStatus({ state: "checking" });
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    console.log("[updater] update available:", info?.version || "unknown");
+    emitUpdaterStatus({ state: "available", version: info?.version || null, info });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    console.log("[updater] no update available");
+    emitUpdaterStatus({ state: "not-available" });
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    emitUpdaterStatus({
+      state: "downloading",
+      percent: progress?.percent || 0,
+      bytesPerSecond: progress?.bytesPerSecond || 0,
+      transferred: progress?.transferred || 0,
+      total: progress?.total || 0,
+    });
+  });
+
+  autoUpdater.on("error", (error) => {
+    console.error("[updater] error:", error?.message || error);
+    emitUpdaterStatus({ state: "error", message: error?.message || String(error) });
+  });
+
+  autoUpdater.on("update-downloaded", async (info) => {
+    console.log("[updater] update downloaded:", info?.version || "unknown");
+    emitUpdaterStatus({ state: "downloaded", version: info?.version || null, info });
+
+    const result = await dialog.showMessageBox({
+      type: "info",
+      buttons: ["Jetzt neu starten", "Spater"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "Update bereit",
+      message: "Eine neue Version wurde heruntergeladen.",
+      detail: "Jetzt neu starten, um das Update zu installieren?",
+    });
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  const checkForUpdates = async () => {
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch (error) {
+      console.warn("[updater] check failed:", error?.message || error);
+    }
+  };
+
+  setTimeout(checkForUpdates, 15000);
+  updateCheckTimer = setInterval(checkForUpdates, AUTO_UPDATE_INTERVAL_MS);
+}
 
 function resolvePhpBinary() {
   const explicit = String(process.env.PHP_BINARY || "").trim();
@@ -732,6 +813,7 @@ if (!gotTheLock) {
     ({ createLocalStore } = await import(pathToFileURL(localStorePath).href));
 
     createWindow();
+    setupAutoUpdater();
     if (pendingProtocolUrl) {
       handleProtocolUrl(pendingProtocolUrl);
       pendingProtocolUrl = null;
@@ -883,6 +965,32 @@ ipcMain.handle("open-devtools", async () => {
 ipcMain.handle("backend-base-url", async () => {
   return await ensurePhpSidecarForRenderer();
 });
+ipcMain.handle("app-updater-check", async () => {
+  if (!app.isPackaged) {
+    return { ok: false, reason: "not-packaged" };
+  }
+
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return {
+      ok: true,
+      updateInfo: result?.updateInfo || null,
+    };
+  } catch (error) {
+    console.warn("[updater] manual check failed:", error?.message || error);
+    return {
+      ok: false,
+      error: error?.message || String(error),
+    };
+  }
+});
+ipcMain.handle("app-updater-install", async () => {
+  if (!app.isPackaged) {
+    return false;
+  }
+  autoUpdater.quitAndInstall();
+  return true;
+});
 ipcMain.handle("server-config-get", () => getStoredServerConfig());
 ipcMain.handle("server-config-set", async (event, payload) => {
   const config = await writeServerConfig(payload || {});
@@ -998,5 +1106,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  if (updateCheckTimer) {
+    clearInterval(updateCheckTimer);
+    updateCheckTimer = null;
+  }
   stopPhpSidecar();
 });

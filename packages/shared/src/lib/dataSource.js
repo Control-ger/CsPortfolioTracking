@@ -1,5 +1,6 @@
 import {
   createWatchlistItem as createApiWatchlistItem,
+  createWatchlistItemsBatch as createApiWatchlistItemsBatch,
   deleteWatchlistItem as deleteApiWatchlistItem,
   fetchPortfolioComposition as fetchApiPortfolioComposition,
   fetchPortfolioHistory as fetchApiPortfolioHistory,
@@ -457,6 +458,47 @@ export async function createWatchlistItemData(name, type = "skin") {
   }
 
   return created;
+}
+
+export async function createWatchlistItemsBatchData(items = []) {
+  const normalizedItems = Array.isArray(items) ? items : [];
+  const localStore = getDesktopLocalStore();
+
+  if (!localStore) {
+    return createApiWatchlistItemsBatch(normalizedItems);
+  }
+
+  const currentUser = await getCurrentUser();
+  const userId = resolveDesktopUserId(currentUser, 1);
+  const created = [];
+
+  for (const item of normalizedItems) {
+    const name = String(item?.marketHashName || item?.name || "").trim();
+    if (!name) {
+      continue;
+    }
+    const type = String(item?.itemType || item?.type || "skin");
+    const row = unwrapLocalStoreResult(
+      await localStore.upsertWatchlistItem({ name, type, userId }),
+      "local-store-upsert-watchlist-item",
+    );
+    created.push(row);
+  }
+
+  try {
+    await runDesktopSyncNowIfDue({ force: true });
+  } catch (error) {
+    console.warn("[desktop-sync] watchlist batch create sync failed", error);
+  }
+
+  return {
+    created,
+    createdCount: created.length,
+    duplicateCount: 0,
+    duplicates: [],
+    errorCount: 0,
+    errors: [],
+  };
 }
 
 export async function deleteWatchlistItemData(id) {

@@ -23,6 +23,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   backend: {
     getBaseUrl: () => ipcRenderer.invoke("backend-base-url"),
   },
+  updater: {
+    check: () => ipcRenderer.invoke("app-updater-check"),
+    install: () => ipcRenderer.invoke("app-updater-install"),
+    onStatus: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("app-updater-status", listener);
+      return () => ipcRenderer.removeListener("app-updater-status", listener);
+    },
+  },
   serverConfig: {
     get: () => ipcRenderer.invoke("server-config-get"),
     set: (payload) => ipcRenderer.invoke("server-config-set", payload),

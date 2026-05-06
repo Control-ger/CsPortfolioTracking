@@ -24,7 +24,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -292,6 +291,14 @@ export function PortfolioPage({ initialTab = "overview" }) {
     lastSyncedAt: null,
   });
   const [syncNotifications, setSyncNotifications] = useState([]);
+  const [appUpdateNotification, setAppUpdateNotification] = useState({
+    state: "idle",
+    version: null,
+    percent: 0,
+    message: "",
+  });
+  const [appUpdateUnread, setAppUpdateUnread] = useState(false);
+  const [appUpdateChecking, setAppUpdateChecking] = useState(false);
   const [journeyState, setJourneyState] = useState({ skipped: false });
   const [journeyLoading, setJourneyLoading] = useState(true);
   const [journeyUserName, setJourneyUserName] = useState("");
@@ -453,6 +460,37 @@ export function PortfolioPage({ initialTab = "overview" }) {
     };
 
     void loadSyncPreference();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.electronAPI?.updater?.onStatus) {
+      return;
+    }
+
+    const unsubscribe = window.electronAPI.updater.onStatus((payload) => {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+
+      setAppUpdateNotification((current) => ({
+        ...current,
+        ...payload,
+      }));
+
+      const nextState = String(payload.state || "");
+      if (["available", "downloading", "downloaded", "error"].includes(nextState)) {
+        setAppUpdateUnread(true);
+      }
+      if (nextState === "not-available") {
+        setAppUpdateUnread(false);
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const runSteamSync = useCallback(async ({ manual = false } = {}) => {
@@ -841,7 +879,47 @@ export function PortfolioPage({ initialTab = "overview" }) {
       setSavingPriceItemId(null);
     }
   };
-  const unreadNotificationCount = syncNotification.newItemsCount;
+  const appUpdateState = String(appUpdateNotification?.state || "idle");
+  const appUpdateVersionLabel = appUpdateNotification?.version
+    ? `v${appUpdateNotification.version}`
+    : "neue Version";
+  const appUpdateStatusLabel = (() => {
+    if (appUpdateState === "checking") {
+      return "Suche nach Updates...";
+    }
+    if (appUpdateState === "available") {
+      return `${appUpdateVersionLabel} verfuegbar`;
+    }
+    if (appUpdateState === "downloading") {
+      const percent = Number(appUpdateNotification?.percent || 0);
+      return `Download laeuft (${Math.max(0, Math.min(100, Math.round(percent)))}%)`;
+    }
+    if (appUpdateState === "downloaded") {
+      return `${appUpdateVersionLabel} heruntergeladen`;
+    }
+    if (appUpdateState === "not-available") {
+      return "App ist aktuell";
+    }
+    if (appUpdateState === "error") {
+      return appUpdateNotification?.message || "Update-Pruefung fehlgeschlagen";
+    }
+    return "Noch kein Update-Status vorhanden";
+  })();
+  const appUpdateCardClass = (() => {
+    if (appUpdateState === "downloaded") {
+      return "rounded-md border border-emerald-300 bg-emerald-500/10 p-2";
+    }
+    if (appUpdateState === "available" || appUpdateState === "downloading") {
+      return "rounded-md border border-amber-300 bg-amber-500/10 p-2";
+    }
+    if (appUpdateState === "error") {
+      return "rounded-md border border-destructive/50 bg-destructive/10 p-2";
+    }
+    return "rounded-md border p-2";
+  })();
+  const hasUnreadAppUpdate =
+    appUpdateUnread && ["available", "downloading", "downloaded", "error"].includes(appUpdateState);
+  const unreadNotificationCount = syncNotification.newItemsCount + (hasUnreadAppUpdate ? 1 : 0);
   const formatCompactNewCount = (count) => {
     const value = Number(count || 0);
     if (value > 999) {
@@ -868,6 +946,137 @@ export function PortfolioPage({ initialTab = "overview" }) {
     navigate("/?tab=management", { replace: true });
     setCompositionRefreshToken((current) => current + 1);
   };
+  const handleAppUpdateCheck = async () => {
+    if (!window.electronAPI?.updater?.check) {
+      setAppUpdateNotification({
+        state: "not-available",
+        version: null,
+        percent: 0,
+        message: "Update-Service ist in diesem Modus nicht verfuegbar.",
+      });
+      return;
+    }
+
+    setAppUpdateChecking(true);
+    try {
+      const result = await window.electronAPI.updater.check();
+      if (!result?.ok) {
+        if (result?.reason === "not-packaged") {
+          setAppUpdateNotification({
+            state: "not-available",
+            version: null,
+            percent: 0,
+            message: "Updates sind nur in der installierten App verfuegbar.",
+          });
+        } else {
+          setAppUpdateNotification({
+            state: "error",
+            version: null,
+            percent: 0,
+            message: result?.error || "Update-Pruefung fehlgeschlagen.",
+          });
+          setAppUpdateUnread(true);
+        }
+      } else {
+        setAppUpdateUnread(false);
+      }
+    } catch (updateError) {
+      setAppUpdateNotification({
+        state: "error",
+        version: null,
+        percent: 0,
+        message: updateError?.message || "Update-Pruefung fehlgeschlagen.",
+      });
+      setAppUpdateUnread(true);
+    } finally {
+      setAppUpdateChecking(false);
+    }
+  };
+  const handleAppUpdateInstall = async () => {
+    if (!window.electronAPI?.updater?.install) {
+      return;
+    }
+    await window.electronAPI.updater.install();
+  };
+  const renderNotificationsDropdownContent = () => (
+    <>
+      <DropdownMenuLabel>Benachrichtigungen</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <div className="space-y-2 px-2 py-1">
+        <div className={appUpdateCardClass}>
+          <p className="text-xs font-semibold">App Updates</p>
+          <p className="text-[11px] text-muted-foreground">{appUpdateStatusLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={appUpdateChecking}
+              onClick={() => void handleAppUpdateCheck()}
+            >
+              {appUpdateChecking ? "Prueft..." : "Auf Updates pruefen"}
+            </Button>
+            {appUpdateState === "downloaded" ? (
+              <Button size="sm" variant="default" onClick={() => void handleAppUpdateInstall()}>
+                Jetzt installieren
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="rounded-md border p-2">
+          <p className="text-xs font-semibold">Neue Steam Items</p>
+          {syncNotification.newItemsCount === 0 ? (
+            <p className="text-[11px] text-muted-foreground">Keine neuen Items seit letztem App-Start.</p>
+          ) : (
+            <div className="mt-1 space-y-1">
+              {syncNotifications
+                .filter((entry) => entry.category === "steam_sync")
+                .slice(0, 5)
+                .map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => void handleNotificationClick(entry)}
+                    className="w-full rounded-md border px-2 py-1 text-left hover:bg-accent"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{entry.message}</p>
+                      <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        {formatCompactNewCount(entry?.payload?.imported || 0)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Aktion: {resolveNotificationActionTarget().label}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {new Date(entry.createdAt).toLocaleString("de-DE")}
+                    </p>
+                  </button>
+                ))}
+            </div>
+          )}
+          {syncNotification.newItemsCount > 0 ? (
+            <div className="mt-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  const user = await getCurrentUser();
+                  const userId = resolveDesktopRuntimeUserId(user, 1);
+                  if (window.electronAPI?.localStore?.markAllNotificationsRead) {
+                    await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
+                  }
+                  setCompositionRefreshToken((current) => current + 1);
+                }}
+              >
+                Alle als gelesen
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
   const journeySteps = [
     {
       id: "steam",
@@ -974,61 +1183,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel>Neue Steam Items</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {syncNotification.newItemsCount === 0 ? (
-                  <DropdownMenuItem disabled>
-                    Keine neuen Items seit letztem App-Start.
-                  </DropdownMenuItem>
-                ) : (
-                  <div className="space-y-1 px-2 py-1">
-                    {syncNotifications
-                      .filter((entry) => entry.category === "steam_sync")
-                      .slice(0, 5)
-                      .map((entry) => (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          onClick={() => void handleNotificationClick(entry)}
-                          className="w-full rounded-md border px-2 py-1 text-left hover:bg-accent"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-medium">{entry.message}</p>
-                            <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                              {formatCompactNewCount(entry?.payload?.imported || 0)}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            Aktion: {resolveNotificationActionTarget().label}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {new Date(entry.createdAt).toLocaleString("de-DE")}
-                          </p>
-                        </button>
-                      ))}
-                  </div>
-                )}
-                {syncNotification.newItemsCount > 0 ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <div className="p-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={async () => {
-                          const user = await getCurrentUser();
-                          const userId = resolveDesktopRuntimeUserId(user, 1);
-                          if (window.electronAPI?.localStore?.markAllNotificationsRead) {
-                            await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
-                          }
-                          setCompositionRefreshToken((current) => current + 1);
-                        }}
-                      >
-                        Alle als gelesen
-                      </Button>
-                    </div>
-                  </>
-                ) : null}
+                {renderNotificationsDropdownContent()}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1053,62 +1208,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   ) : null}
                 </Button>
               </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuLabel>Neue Steam Items</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                {syncNotification.newItemsCount === 0 ? (
-                  <DropdownMenuItem disabled>
-                    Keine neuen Items seit letztem App-Start.
-                  </DropdownMenuItem>
-                ) : (
-                  <div className="space-y-1 px-2 py-1">
-                    {syncNotifications
-                      .filter((entry) => entry.category === "steam_sync")
-                      .slice(0, 5)
-                      .map((entry) => (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          onClick={() => void handleNotificationClick(entry)}
-                          className="w-full rounded-md border px-2 py-1 text-left hover:bg-accent"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-medium">{entry.message}</p>
-                            <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                              {formatCompactNewCount(entry?.payload?.imported || 0)}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            Aktion: {resolveNotificationActionTarget().label}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {new Date(entry.createdAt).toLocaleString("de-DE")}
-                          </p>
-                        </button>
-                      ))}
-                  </div>
-                )}
-                {syncNotification.newItemsCount > 0 ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <div className="p-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={async () => {
-                          const user = await getCurrentUser();
-                          const userId = resolveDesktopRuntimeUserId(user, 1);
-                          if (window.electronAPI?.localStore?.markAllNotificationsRead) {
-                            await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
-                          }
-                          setCompositionRefreshToken((current) => current + 1);
-                        }}
-                      >
-                        Alle als gelesen
-                      </Button>
-                    </div>
-                  </>
-                ) : null}
+              <DropdownMenuContent align="end" className="w-80">
+                {renderNotificationsDropdownContent()}
               </DropdownMenuContent>
             </DropdownMenu>
             <UserMenu />

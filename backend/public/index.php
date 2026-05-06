@@ -453,7 +453,8 @@ try {
         $watchlistRepository,
         $itemRepository,
         $priceHistoryRepository,
-        $pricingService
+        $pricingService,
+        new SteamMarketClient()
     );
     $scalingShadowReadService = new ScalingShadowReadService($pdo);
     $syncService = new SyncService($pdo);
@@ -494,6 +495,7 @@ try {
     $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
     $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);
     $router->register('POST', '/api/v1/watchlist', [$watchlistController, 'create']);
+    $router->register('POST', '/api/v1/watchlist/batch', [$watchlistController, 'createBatch']);
     $router->register('DELETE', '/api/v1/watchlist/{id}', [$watchlistController, 'delete']);
     $router->register('POST', '/api/v1/watchlist/prices/refresh', [$watchlistController, 'refresh']);
 

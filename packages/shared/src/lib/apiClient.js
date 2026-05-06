@@ -455,6 +455,14 @@ export async function createWatchlistItem(name, type = "skin") {
   });
 }
 
+export async function createWatchlistItemsBatch(items = []) {
+  return request("/api/v1/watchlist/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+}
+
 export async function deleteWatchlistItem(id) {
   return request(`/api/v1/watchlist/${id}`, { method: "DELETE" });
 }

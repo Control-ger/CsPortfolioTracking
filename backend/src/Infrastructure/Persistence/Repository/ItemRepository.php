@@ -8,6 +8,8 @@ use Throwable;
 
 final class ItemRepository
 {
+    private ?bool $priceJoinAvailable = null;
+
     public function __construct(private readonly PDO $pdo)
     {
     }
@@ -219,5 +221,160 @@ final class ItemRepository
             );
             throw $exception;
         }
+    }
+
+    public function searchCatalog(
+        string $query,
+        ?string $itemType = null,
+        ?string $wearKey = null,
+        ?string $sortBy = null,
+        int $limit = 20,
+        int $offset = 0
+    ): array {
+        $resolvedLimit = max(1, min($limit, 100));
+        $resolvedOffset = max(0, $offset);
+
+        $conditions = [];
+        $params = [];
+
+        $normalizedQuery = trim($query);
+        if ($normalizedQuery !== '') {
+            $conditions[] = '(market_hash_name LIKE ? OR name LIKE ?)';
+            $needle = '%' . $normalizedQuery . '%';
+            $params[] = $needle;
+            $params[] = $needle;
+        }
+
+        $normalizedItemType = trim((string) $itemType);
+        if ($normalizedItemType !== '' && strtolower($normalizedItemType) !== 'all') {
+            $conditions[] = '(item_type = ? OR type = ?)';
+            $params[] = $normalizedItemType;
+            $params[] = $normalizedItemType;
+        }
+
+        $normalizedWear = trim((string) $wearKey);
+        if ($normalizedWear !== '' && strtolower($normalizedWear) !== 'all') {
+            $conditions[] = 'wear_key = ?';
+            $params[] = $normalizedWear;
+        }
+
+        $whereSql = $conditions === [] ? '' : ('WHERE ' . implode(' AND ', $conditions));
+        $orderSql = match (trim((string) $sortBy)) {
+            'name_desc' => 'ORDER BY market_hash_name DESC',
+            'price_asc' => 'ORDER BY price_eur ASC, market_hash_name ASC',
+            'price_desc' => 'ORDER BY price_eur DESC, market_hash_name ASC',
+            default => 'ORDER BY market_hash_name ASC',
+        };
+        $selectSql = 'id, name, market_hash_name, image_url, type, item_type, item_type_label, market_type_label, wear_key, wear_label';
+        $joinSql = '';
+        if ($this->supportsPriceJoin()) {
+            $selectSql .= ',
+                    ipl.price_usd,
+                    ipl.price_source,
+                    ipl.fetched_at,
+                    er.usd_to_eur,
+                    CASE WHEN ipl.price_usd IS NOT NULL AND er.usd_to_eur IS NOT NULL
+                        THEN (ipl.price_usd * er.usd_to_eur)
+                        ELSE NULL
+                     END AS price_eur';
+            $joinSql = '
+                LEFT JOIN item_price_latest ipl ON ipl.item_id = items.id
+                LEFT JOIN exchange_rates er ON er.id = ipl.exchange_rate_id';
+        } else {
+            $selectSql .= ',
+                    NULL AS price_usd,
+                    NULL AS price_source,
+                    NULL AS fetched_at,
+                    NULL AS usd_to_eur,
+                    NULL AS price_eur';
+        }
+
+        $sql = "SELECT {$selectSql}
+                FROM items
+                {$joinSql}
+                {$whereSql}
+                {$orderSql}
+                LIMIT {$resolvedLimit} OFFSET {$resolvedOffset}";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['query' => $query, 'itemType' => $itemType, 'wearKey' => $wearKey]
+            );
+            throw $exception;
+        }
+    }
+
+    public function countCatalog(
+        string $query,
+        ?string $itemType = null,
+        ?string $wearKey = null
+    ): int {
+        $conditions = [];
+        $params = [];
+
+        $normalizedQuery = trim($query);
+        if ($normalizedQuery !== '') {
+            $conditions[] = '(market_hash_name LIKE ? OR name LIKE ?)';
+            $needle = '%' . $normalizedQuery . '%';
+            $params[] = $needle;
+            $params[] = $needle;
+        }
+
+        $normalizedItemType = trim((string) $itemType);
+        if ($normalizedItemType !== '' && strtolower($normalizedItemType) !== 'all') {
+            $conditions[] = '(item_type = ? OR type = ?)';
+            $params[] = $normalizedItemType;
+            $params[] = $normalizedItemType;
+        }
+
+        $normalizedWear = trim((string) $wearKey);
+        if ($normalizedWear !== '' && strtolower($normalizedWear) !== 'all') {
+            $conditions[] = 'wear_key = ?';
+            $params[] = $normalizedWear;
+        }
+
+        $whereSql = $conditions === [] ? '' : ('WHERE ' . implode(' AND ', $conditions));
+        $sql = "SELECT COUNT(*) AS total FROM items {$whereSql}";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return (int) ($row['total'] ?? 0);
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['query' => $query, 'itemType' => $itemType, 'wearKey' => $wearKey]
+            );
+            throw $exception;
+        }
+    }
+
+    private function supportsPriceJoin(): bool
+    {
+        if ($this->priceJoinAvailable !== null) {
+            return $this->priceJoinAvailable;
+        }
+
+        try {
+            $itemLatest = $this->pdo->query("SHOW TABLES LIKE 'item_price_latest'")?->fetchColumn();
+            $exchangeRates = $this->pdo->query("SHOW TABLES LIKE 'exchange_rates'")?->fetchColumn();
+            $this->priceJoinAvailable = $itemLatest !== false && $exchangeRates !== false;
+        } catch (Throwable) {
+            $this->priceJoinAvailable = false;
+        }
+
+        return $this->priceJoinAvailable;
     }
 }

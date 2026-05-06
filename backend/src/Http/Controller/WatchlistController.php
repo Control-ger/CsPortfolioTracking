@@ -207,6 +207,55 @@ final class WatchlistController
         return 1;
     }
 
+    public function createBatch(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $items = $request->body['items'] ?? [];
+            if (!is_array($items)) {
+                JsonResponseFactory::error('WATCHLIST_BATCH_INVALID', 'items muss ein Array sein.', [], 400);
+                return;
+            }
+
+            $result = $this->watchlistService->addItemsBatch($userId, $items);
+            foreach ($result['created'] as $created) {
+                $syncPayload = [
+                    'id' => (string) ($created['id'] ?? ''),
+                    'userId' => (string) $userId,
+                    'name' => (string) ($created['name'] ?? ''),
+                    'marketHashName' => (string) ($created['name'] ?? ''),
+                    'type' => (string) ($created['type'] ?? 'skin'),
+                    'imageUrl' => isset($created['imageUrl']) ? (string) $created['imageUrl'] : null,
+                    'itemId' => isset($created['itemId']) ? (string) $created['itemId'] : null,
+                    'serverId' => isset($created['id']) ? (int) $created['id'] : null,
+                    'createdAt' => $created['createdAt'] ?? gmdate('c'),
+                    'updatedAt' => $created['updatedAt'] ?? gmdate('c'),
+                ];
+                $this->syncService->upsertServerEntity(
+                    $userId,
+                    'watchlist_items',
+                    (string) ($created['id'] ?? ''),
+                    $syncPayload
+                );
+            }
+
+            JsonResponseFactory::success(
+                $result,
+                ['warnings' => $this->watchlistService->consumePricingWarnings()],
+                200
+            );
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Watchlist batch create request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('WATCHLIST_BATCH_CREATE_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
     private function shadowReadEnabled(): bool
     {
         $value = getenv('SCALING_SHADOW_READ_ENABLED');

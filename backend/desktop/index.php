@@ -186,15 +186,170 @@ $router->register('GET', '/api/v1/auth/steam/inventory', static function () use 
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/preview', [$csFloatController, 'preview']);
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatController, 'execute']);
 
-// Desktop stubs for routes not yet implemented in the local sidecar
-$router->register('GET', '/api/v1/watchlist/search', static function (Request $request): void {
+// Proxy selected read-only routes to upstream server when configured.
+$resolveUpstreamApiBase = static function (): string {
+    $raw = getenv('UPSTREAM_API_BASE_URL') ?: ($_ENV['UPSTREAM_API_BASE_URL'] ?? '');
+    return rtrim((string) $raw, '/');
+};
+
+$buildUpstreamCandidates = static function (string $baseUrl, string $endpointPath): array {
+    $base = rtrim($baseUrl, '/');
+    $endpoint = '/' . ltrim($endpointPath, '/');
+    $lower = strtolower($base);
+
+    $candidates = [];
+    if (str_ends_with($lower, '/api/index.php')) {
+        $candidates[] = $base . $endpoint;
+        $candidates[] = substr($base, 0, -strlen('/api/index.php')) . $endpoint;
+    } elseif (str_ends_with($lower, '/api')) {
+        $candidates[] = $base . '/index.php' . $endpoint;
+        $candidates[] = substr($base, 0, -strlen('/api')) . $endpoint;
+    } else {
+        $candidates[] = $base . '/api/index.php' . $endpoint;
+        $candidates[] = $base . $endpoint;
+    }
+
+    $deduped = [];
+    foreach ($candidates as $candidate) {
+        $key = strtolower($candidate);
+        if (!isset($deduped[$key])) {
+            $deduped[$key] = $candidate;
+        }
+    }
+
+    return array_values($deduped);
+};
+
+$proxyUpstreamGet = static function (string $endpointPath, array $query = []) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): ?array {
+    $baseUrl = $resolveUpstreamApiBase();
+    if ($baseUrl === '') {
+        return null;
+    }
+
+    $queryString = http_build_query($query);
+    foreach ($buildUpstreamCandidates($baseUrl, $endpointPath) as $candidate) {
+        $url = $candidate . ($queryString !== '' ? ('?' . $queryString) : '');
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || trim($response) === '') {
+            continue;
+        }
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return [
+                'ok' => true,
+                'data' => isset($decoded['data']) ? $decoded['data'] : $decoded,
+                'meta' => isset($decoded['meta']) && is_array($decoded['meta']) ? $decoded['meta'] : [],
+            ];
+        }
+    }
+
+    return [
+        'ok' => false,
+    ];
+};
+
+$router->register('GET', '/api/v1/exchange-rate', static function () use ($proxyUpstreamGet): void {
+    $proxied = $proxyUpstreamGet('/api/v1/exchange-rate');
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success($proxied['data'], array_merge($proxied['meta'] ?? [], ['source' => 'upstream']));
+        return;
+    }
+
+    JsonResponseFactory::success([
+        'base' => 'EUR',
+        'rates' => [
+            'EUR' => 1.0,
+            'USD' => 1.08,
+            'GBP' => 0.85,
+        ],
+        'USD' => 1.08,
+        'GBP' => 0.85,
+        'timestamp' => time(),
+        'fallback' => true,
+    ], ['source' => 'desktop-fallback']);
+});
+
+$router->register('GET', '/api/v1/watchlist/search', static function (Request $request) use ($proxyUpstreamGet): void {
+    $query = [
+        'query' => $request->query['query'] ?? '',
+        'limit' => $request->query['limit'] ?? 6,
+        'page' => $request->query['page'] ?? 1,
+        'itemType' => $request->query['itemType'] ?? '',
+        'wear' => $request->query['wear'] ?? '',
+        'sortBy' => $request->query['sortBy'] ?? '',
+    ];
+
+    $proxied = $proxyUpstreamGet('/api/v1/watchlist/search', $query);
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success($proxied['data'], array_merge($proxied['meta'] ?? [], ['source' => 'upstream']));
+        return;
+    }
+
     JsonResponseFactory::success([
         'items' => [],
-        'total' => 0,
+        'totalItems' => 0,
+        'totalPages' => 0,
         'page' => (int) ($request->query['page'] ?? 1),
         'limit' => (int) ($request->query['limit'] ?? 6),
-        'source' => 'desktop-local',
+        'source' => 'desktop-local-fallback',
     ]);
+});
+
+$router->register('POST', '/api/v1/watchlist/batch', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+    $baseUrl = $resolveUpstreamApiBase();
+    if ($baseUrl === '') {
+        JsonResponseFactory::error('UPSTREAM_NOT_CONFIGURED', 'Server URL nicht konfiguriert.', [], 503);
+        return;
+    }
+
+    $body = json_encode(['items' => $request->body['items'] ?? []], JSON_UNESCAPED_UNICODE);
+    if (!is_string($body)) {
+        JsonResponseFactory::error('WATCHLIST_BATCH_INVALID', 'Ungueltiger Payload.', [], 400);
+        return;
+    }
+
+    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/watchlist/batch') as $candidate) {
+        $ch = curl_init($candidate);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || trim($response) === '') {
+            continue;
+        }
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            JsonResponseFactory::success(
+                isset($decoded['data']) ? $decoded['data'] : $decoded,
+                isset($decoded['meta']) && is_array($decoded['meta']) ? $decoded['meta'] : ['source' => 'upstream']
+            );
+            return;
+        }
+    }
+
+    JsonResponseFactory::error('WATCHLIST_BATCH_UPSTREAM_FAILED', 'Batch-Add konnte nicht an den Server gesendet werden.', [], 502);
 });
 
 $resolveDesktopLogFile = static function (): ?string {

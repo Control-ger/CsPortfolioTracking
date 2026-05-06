@@ -231,7 +231,8 @@ try {
         $watchlistRepository,
         $itemRepository,
         $priceHistoryRepository,
-        $pricingService
+        $pricingService,
+        $steamMarketClient
     );
 
     // Get all unique item names from portfolio holdings.
