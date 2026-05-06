@@ -29,7 +29,10 @@ final class WatchlistController
             $userId = $this->resolveUserId($request);
             $syncLive = filter_var($request->query['syncLive'] ?? false, FILTER_VALIDATE_BOOL);
             $items = $this->watchlistService->listWithMetrics($userId, $syncLive);
-            $meta = ['warnings' => $this->watchlistService->consumePricingWarnings()];
+            $meta = [
+                'warnings' => $this->watchlistService->consumePricingWarnings(),
+                'readPath' => $this->primaryScalingReadEnabled() ? 'scaling_primary' : 'legacy',
+            ];
 
             if ($this->shadowReadEnabled() && $this->scalingShadowReadService !== null) {
                 $shadow = $this->scalingShadowReadService->buildWatchlistStats($userId);
@@ -207,6 +210,16 @@ final class WatchlistController
     private function shadowReadEnabled(): bool
     {
         $value = getenv('SCALING_SHADOW_READ_ENABLED');
+        if ($value === false || $value === null) {
+            return false;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function primaryScalingReadEnabled(): bool
+    {
+        $value = getenv('SCALING_PRIMARY_READ_ENABLED');
         if ($value === false || $value === null) {
             return false;
         }

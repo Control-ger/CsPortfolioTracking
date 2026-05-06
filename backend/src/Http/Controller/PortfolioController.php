@@ -25,7 +25,10 @@ final class PortfolioController
             $rows = $this->portfolioService->getEnrichedInvestments($userId, true);
             JsonResponseFactory::success(
                 $rows,
-                ['warnings' => $this->portfolioService->consumePricingWarnings()]
+                [
+                    'warnings' => $this->portfolioService->consumePricingWarnings(),
+                    'readPath' => $this->primaryScalingReadEnabled() ? 'scaling_primary' : 'legacy',
+                ]
             );
         } catch (Throwable $exception) {
             Logger::event(
