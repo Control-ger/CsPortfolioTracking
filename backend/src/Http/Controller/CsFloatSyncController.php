@@ -119,13 +119,11 @@ final class CsFloatSyncController
             );
 
             $this->syncStatusRepository->ensureTable();
-            $this->syncStatusRepository->recordSync(
-                $result['status'] ?? 'partial',
-                (int) ($result['inserted'] ?? 0),
-                (int) (count($result['errors'] ?? [])),
-                0,
-                $this->buildErrorMessage($result),
-                null
+            $this->syncStatusRepository->updateStatus(
+                $this->resolveUserId($request),
+                'csfloat-trade-sync',
+                (string) ($result['status'] ?? 'partial'),
+                $this->buildErrorMessage($result)
             );
 
             JsonResponseFactory::success($result, [], 201);

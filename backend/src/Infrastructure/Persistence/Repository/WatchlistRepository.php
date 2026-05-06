@@ -42,7 +42,7 @@ final class WatchlistRepository
 
     public function findAll(int $userId): array
     {
-        $sql = 'SELECT w.id, w.alert_price_usd, w.added_at,
+        $sql = 'SELECT w.id, w.item_id, w.alert_price_usd, w.added_at,
                        it.name, it.market_hash_name, it.type, it.image_url
                 FROM watchlist w
                 JOIN items it ON it.id = w.item_id
