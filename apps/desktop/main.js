@@ -964,6 +964,7 @@ ipcMain.handle("open-devtools", async () => {
   }
   return false;
 });
+ipcMain.handle("app-get-version", () => app.getVersion());
 
 ipcMain.handle("backend-base-url", async () => {
   return await ensurePhpSidecarForRenderer();

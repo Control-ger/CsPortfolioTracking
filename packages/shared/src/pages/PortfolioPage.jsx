@@ -297,6 +297,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     percent: 0,
     message: "",
   });
+  const [installedAppVersion, setInstalledAppVersion] = useState("");
   const [appUpdateUnread, setAppUpdateUnread] = useState(false);
   const [appUpdateChecking, setAppUpdateChecking] = useState(false);
   const [journeyState, setJourneyState] = useState({ skipped: false });
@@ -491,6 +492,22 @@ export function PortfolioPage({ initialTab = "overview" }) {
         unsubscribe();
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const loadInstalledVersion = async () => {
+      if (!window.electronAPI?.updater?.getVersion) {
+        return;
+      }
+      try {
+        const value = await window.electronAPI.updater.getVersion();
+        setInstalledAppVersion(String(value || ""));
+      } catch {
+        setInstalledAppVersion("");
+      }
+    };
+
+    void loadInstalledVersion();
   }, []);
 
   const runSteamSync = useCallback(async ({ manual = false } = {}) => {
@@ -1005,6 +1022,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
       <div className="space-y-2 px-2 py-1">
         <div className={appUpdateCardClass}>
           <p className="text-xs font-semibold">App Updates</p>
+          {installedAppVersion ? (
+            <p className="text-[11px] text-muted-foreground">Installiert: v{installedAppVersion}</p>
+          ) : null}
           <p className="text-[11px] text-muted-foreground">{appUpdateStatusLabel}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button

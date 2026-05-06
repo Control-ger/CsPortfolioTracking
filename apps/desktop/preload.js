@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getBaseUrl: () => ipcRenderer.invoke("backend-base-url"),
   },
   updater: {
+    getVersion: () => ipcRenderer.invoke("app-get-version"),
     check: () => ipcRenderer.invoke("app-updater-check"),
     install: () => ipcRenderer.invoke("app-updater-install"),
     onStatus: (handler) => {

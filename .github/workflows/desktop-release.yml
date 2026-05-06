@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   build-and-release:
@@ -33,3 +36,69 @@ jobs:
         run: npx electron-builder --win nsis --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate checksums for release assets
+        id: checksums
+        shell: pwsh
+        run: |
+          $exeFiles = Get-ChildItem -Path "release" -Filter "*.exe" | Sort-Object Name
+          if (-not $exeFiles) {
+            throw "No .exe files found in release directory."
+          }
+
+          $lines = @()
+          foreach ($file in $exeFiles) {
+            $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLower()
+            $lines += "- ``$($file.Name)``"
+            $lines += "  - ``sha256:$hash``"
+          }
+
+          "hash_lines<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $lines | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Create artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: "release/*.exe"
+
+      - name: Update release notes
+        uses: actions/github-script@v7
+        env:
+          HASH_LINES: ${{ steps.checksums.outputs.hash_lines }}
+        with:
+          script: |
+            const tag = context.ref.replace("refs/tags/", "");
+            const { owner, repo } = context.repo;
+
+            const releaseResponse = await github.rest.repos.getReleaseByTag({
+              owner,
+              repo,
+              tag
+            });
+
+            const body = [
+              "## Windows download",
+              "",
+              "Please download the installer asset (`CS-Investor-Hub-Setup-*.exe`), not the source code archives.",
+              "",
+              "## SmartScreen notice (unsigned app)",
+              "",
+              "On first start, Windows may show a SmartScreen warning.",
+              "Click `More info` -> `Run anyway`.",
+              "",
+              "## SHA256 checksums",
+              "",
+              process.env.HASH_LINES || "_No checksums generated._",
+              "",
+              "## Build provenance",
+              "",
+              "This release includes GitHub artifact attestations for the generated installer."
+            ].join("\\n");
+
+            await github.rest.repos.updateRelease({
+              owner,
+              repo,
+              release_id: releaseResponse.data.id,
+              body
+            });
