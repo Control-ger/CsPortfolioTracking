@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   backend: {
     getBaseUrl: () => ipcRenderer.invoke("backend-base-url"),
   },
+  serverConfig: {
+    get: () => ipcRenderer.invoke("server-config-get"),
+    set: (payload) => ipcRenderer.invoke("server-config-set", payload),
+    test: (serverUrl) => ipcRenderer.invoke("server-config-test", serverUrl),
+  },
   secrets: {
     getCsFloatApiKeyStatus: () => ipcRenderer.invoke("secret-csfloat-status"),
     setCsFloatApiKey: (apiKey) => ipcRenderer.invoke("secret-csfloat-set", apiKey),
@@ -45,6 +50,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-upsert-investment", payload),
     deleteInvestment: (id) =>
       ipcRenderer.invoke("local-store-delete-investment", id),
+    deleteInvestmentSilent: (id) =>
+      ipcRenderer.invoke("local-store-delete-investment-silent", id),
     getInvestment: (id) =>
       ipcRenderer.invoke("local-store-get-investment", id),
     listWatchlist: (userId) =>
@@ -55,6 +62,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-upsert-watchlist-item", payload),
     deleteWatchlistItem: (id) =>
       ipcRenderer.invoke("local-store-delete-watchlist-item", id),
+    deleteWatchlistItemSilent: (id) =>
+      ipcRenderer.invoke("local-store-delete-watchlist-item-silent", id),
     listPortfolioSnapshots: (userId, limit) =>
       ipcRenderer.invoke("local-store-list-portfolio-snapshots", userId, limit),
     upsertPortfolioSnapshot: (payload) =>

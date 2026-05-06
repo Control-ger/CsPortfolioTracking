@@ -21,7 +21,6 @@ function resolveConfiguredApiBase() {
 }
 
 const API_BASE = resolveConfiguredApiBase();
-let desktopApiBasePromise = null;
 
 function normalizeApiBase(value) {
   return String(value || '')
@@ -35,8 +34,7 @@ function unwrapApiData(payload) {
 
 async function resolveApiBase() {
   if (isDesktopApp() && window.electronAPI?.backend?.getBaseUrl) {
-    desktopApiBasePromise ||= window.electronAPI.backend.getBaseUrl();
-    const desktopBase = await desktopApiBasePromise;
+    const desktopBase = await window.electronAPI.backend.getBaseUrl();
     if (desktopBase) {
       return normalizeApiBase(desktopBase);
     }
@@ -45,8 +43,37 @@ async function resolveApiBase() {
   return API_BASE;
 }
 
+async function fetchWithDesktopRetry(path, options) {
+  let apiBase = await resolveApiBase();
+  try {
+    return await fetch(`${apiBase}${path}`, options);
+  } catch (error) {
+    const isDesktop = isDesktopApp() && window.electronAPI?.backend?.getBaseUrl;
+    const shouldRetry =
+      isDesktop &&
+      error instanceof TypeError &&
+      String(error?.message || "").toLowerCase().includes("fetch");
+
+    if (!shouldRetry) {
+      throw error;
+    }
+
+    const refreshedBase = await window.electronAPI.backend.getBaseUrl();
+    if (!refreshedBase) {
+      throw error;
+    }
+
+    apiBase = normalizeApiBase(refreshedBase);
+    return await fetch(`${apiBase}${path}`, options);
+  }
+}
+
 // Custom protocol for desktop app callback
 const DESKTOP_PROTOCOL = 'cs-portfolio://auth/steam/callback';
+const WEB_AUTH_TOKEN_KEY = 'auth_token';
+const WEB_AUTH_USER_KEY = 'auth_user';
+const WEB_AUTH_COOKIE_KEY = 'cspt_auth_token';
+const WEB_AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 /**
  * Check if running in Electron Desktop environment
@@ -54,6 +81,41 @@ const DESKTOP_PROTOCOL = 'cs-portfolio://auth/steam/callback';
 function isDesktopApp() {
   return typeof window !== 'undefined' && 
          window.electronAPI !== undefined;
+}
+
+function setWebCookie(name, value, maxAgeSeconds) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
+}
+
+function getWebCookie(name) {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const raw = document.cookie || '';
+  const prefix = `${name}=`;
+  const found = raw
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+
+  if (!found) {
+    return null;
+  }
+
+  return decodeURIComponent(found.slice(prefix.length));
+}
+
+function clearWebCookie(name) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
 /**
@@ -182,10 +244,27 @@ async function initiateDesktopSteamLogin() {
 function initiateWebSteamLogin() {
   // Store current URL to return after login
   sessionStorage.setItem('auth_return_url', window.location.href);
-  
-  // Redirect to backend login endpoint
+
+  // Request Steam redirect URL from backend, then navigate to Steam.
   const returnUrl = `${window.location.origin}/auth/callback`;
-  window.location.href = `${API_BASE}/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+  return resolveApiBase()
+    .then((apiBase) =>
+      fetch(`${apiBase}/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(returnUrl)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    .then(async (response) => {
+      const data = unwrapApiData(await response.json());
+      if (!response.ok || !data?.success || !data?.redirectUrl) {
+        throw new Error(data?.error || 'Failed to initiate Steam login');
+      }
+      window.location.href = data.redirectUrl;
+    })
+    .catch((error) => {
+      console.error('[auth] Web Steam login failed:', error);
+      throw error;
+    });
 }
 
 /**
@@ -232,9 +311,12 @@ function storeSession(token, user) {
     // Desktop: Store encrypted via IPC
     return window.electronAPI.storeSession(token, user);
   } else {
-    // Web: Store in sessionStorage (cleared on tab close)
-    sessionStorage.setItem('auth_token', token);
-    sessionStorage.setItem('auth_user', JSON.stringify(user));
+    // Web: Keep tab session + persistent session (re-login not needed on restart)
+    sessionStorage.setItem(WEB_AUTH_TOKEN_KEY, token);
+    sessionStorage.setItem(WEB_AUTH_USER_KEY, JSON.stringify(user));
+    localStorage.setItem(WEB_AUTH_TOKEN_KEY, token);
+    localStorage.setItem(WEB_AUTH_USER_KEY, JSON.stringify(user));
+    setWebCookie(WEB_AUTH_COOKIE_KEY, token, WEB_AUTH_COOKIE_MAX_AGE_SECONDS);
     return true;
   }
 }
@@ -245,18 +327,66 @@ function storeSession(token, user) {
 export async function getSession() {
   if (isDesktopApp()) {
     try {
-      return await window.electronAPI.getSession();
+      const session = await window.electronAPI.getSession();
+      if (!session || !session.token) {
+        return null;
+      }
+
+      // Some callback paths may persist token-only sessions first.
+      // Hydrate missing user data once via backend validation and persist it.
+      if (!session.user) {
+        const validated = await validateSession(session.token);
+        if (validated?.success && validated.user) {
+          try {
+            await storeSession(session.token, validated.user);
+          } catch {
+            // keep best-effort session enrichment silent
+          }
+
+          return {
+            ...session,
+            user: validated.user,
+          };
+        }
+      }
+
+      return session;
     } catch {
       return null;
     }
   } else {
-    const token = sessionStorage.getItem('auth_token');
-    const userJson = sessionStorage.getItem('auth_user');
-    
-    if (!token || !userJson) return null;
-    
+    const tokenFromSession = sessionStorage.getItem(WEB_AUTH_TOKEN_KEY);
+    const tokenFromLocal = localStorage.getItem(WEB_AUTH_TOKEN_KEY);
+    const tokenFromCookie = getWebCookie(WEB_AUTH_COOKIE_KEY);
+    const token = tokenFromSession || tokenFromLocal || tokenFromCookie;
+
+    const userJsonFromSession = sessionStorage.getItem(WEB_AUTH_USER_KEY);
+    const userJsonFromLocal = localStorage.getItem(WEB_AUTH_USER_KEY);
+    const userJson = userJsonFromSession || userJsonFromLocal;
+
+    if (!token || !userJson) {
+      return null;
+    }
+
     try {
       const user = JSON.parse(userJson);
+      // Hydrate in-memory stores if we resumed from localStorage/cookie.
+      if (!tokenFromSession) {
+        sessionStorage.setItem(WEB_AUTH_TOKEN_KEY, token);
+      }
+      if (!userJsonFromSession) {
+        sessionStorage.setItem(WEB_AUTH_USER_KEY, userJson);
+      }
+      if (!tokenFromLocal) {
+        localStorage.setItem(WEB_AUTH_TOKEN_KEY, token);
+      }
+      if (!userJsonFromLocal) {
+        localStorage.setItem(WEB_AUTH_USER_KEY, userJson);
+      }
+      if (!tokenFromCookie) {
+        setWebCookie(WEB_AUTH_COOKIE_KEY, token, WEB_AUTH_COOKIE_MAX_AGE_SECONDS);
+      }
+
       return { token, user };
     } catch {
       return null;
@@ -287,8 +417,11 @@ export async function logout() {
   if (isDesktopApp()) {
     await window.electronAPI.clearSession();
   } else {
-    sessionStorage.removeItem('auth_token');
-    sessionStorage.removeItem('auth_user');
+    sessionStorage.removeItem(WEB_AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(WEB_AUTH_USER_KEY);
+    localStorage.removeItem(WEB_AUTH_TOKEN_KEY);
+    localStorage.removeItem(WEB_AUTH_USER_KEY);
+    clearWebCookie(WEB_AUTH_COOKIE_KEY);
   }
 }
 
@@ -328,12 +461,12 @@ export async function devModeLogin() {
  */
 export async function validateSession(token) {
   try {
-    const apiBase = await resolveApiBase();
-    const response = await fetch(`${apiBase}/api/v1/auth/session/validate`, {
+    const response = await fetchWithDesktopRetry("/api/v1/auth/session/validate", {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'X-Auth-Token': token,
       },
     });
     
@@ -366,8 +499,7 @@ export async function isDevMode() {
  * Fetch CS2 inventory for current user
  */
 export async function fetchCS2Inventory(steamId) {
-  const apiBase = await resolveApiBase();
-  const response = await fetch(`${apiBase}/api/v1/auth/steam/inventory?steamId=${steamId}`);
+  const response = await fetchWithDesktopRetry(`/api/v1/auth/steam/inventory?steamId=${steamId}`);
   return unwrapApiData(await response.json());
 }
 

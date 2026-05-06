@@ -236,6 +236,14 @@ $router->register('GET', '/api/v1/debug/logs', static function (Request $request
     ]);
 });
 
+$router->register('GET', '/api/v1/debug/csfloat', static function (): void {
+    JsonResponseFactory::success([
+        'source' => 'desktop-local',
+        'available' => true,
+        'message' => 'Desktop sidecar debug endpoint is active.',
+    ]);
+});
+
 $router->register('POST', '/api/v1/observability/frontend-events', static function (): void {
     http_response_code(204);
 });

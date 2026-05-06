@@ -242,6 +242,19 @@ export function createLocalStore(userDataPath) {
     return normalized || "skin";
   }
 
+  function valuesEqual(a, b) {
+    if (a === b) {
+      return true;
+    }
+    if (a === null || a === undefined) {
+      return b === null || b === undefined;
+    }
+    if (b === null || b === undefined) {
+      return false;
+    }
+    return String(a) === String(b);
+  }
+
   function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
     const reasons = [];
     let score = 0;
@@ -329,6 +342,16 @@ export function createLocalStore(userDataPath) {
 
   function mapInvestment(row) {
     const payload = deserialize(row.payload);
+    const excludedFlag = (() => {
+      const value = payload?.excluded ?? payload?.isExcluded;
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return value === 1;
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        return ["1", "true", "yes", "on"].includes(normalized);
+      }
+      return false;
+    })();
     return {
       ...payload,
       id: row.id,
@@ -342,6 +365,8 @@ export function createLocalStore(userDataPath) {
       buyPriceUsd: row.buy_price_usd,
       fundingMode: row.funding_mode,
       imageUrl: payload.imageUrl || payload.image_url || payload.iconUrl || payload.icon_url || null,
+      excluded: excludedFlag,
+      isExcluded: excludedFlag,
       revision: row.revision,
       dirty: Boolean(row.dirty),
       deleted: Boolean(row.deleted),
@@ -366,6 +391,27 @@ export function createLocalStore(userDataPath) {
 
   function mapWatchlistItem(row) {
     const payload = deserialize(row.payload);
+    const resolveImageFromPayload = (value) =>
+      value?.imageUrl || value?.image_url || value?.iconUrl || value?.icon_url || null;
+    let imageUrl = resolveImageFromPayload(payload);
+
+    if (!imageUrl && row?.name) {
+      const fallbackRow = db
+        .prepare(
+          `SELECT payload
+           FROM investments
+           WHERE user_id = ? AND deleted = 0 AND name = ?
+           ORDER BY updated_at DESC
+           LIMIT 1`,
+        )
+        .get(String(row.user_id || "local"), String(row.name));
+
+      if (fallbackRow?.payload) {
+        const fallbackPayload = deserialize(fallbackRow.payload);
+        imageUrl = resolveImageFromPayload(fallbackPayload);
+      }
+    }
+
     return {
       ...payload,
       id: row.id,
@@ -374,7 +420,7 @@ export function createLocalStore(userDataPath) {
       userId: row.user_id,
       name: row.name,
       type: row.type,
-      imageUrl: payload.imageUrl || payload.image_url || payload.iconUrl || payload.icon_url || null,
+      imageUrl,
       revision: row.revision,
       dirty: Boolean(row.dirty),
       deleted: Boolean(row.deleted),
@@ -492,10 +538,41 @@ export function createLocalStore(userDataPath) {
       const id = String(row.id || randomUUID());
       const serverId =
         row.serverId ?? (Number.isFinite(Number(row.id)) ? Number(row.id) : null);
+      const normalizedUserId = String(row.userId || userId || "local");
+      const resolvedName = String(row.name || row.marketHashName || "");
+      const existingRow = db
+        .prepare("SELECT payload FROM watchlist_items WHERE id = ? LIMIT 1")
+        .get(id);
+      const existingPayload = existingRow?.payload ? deserialize(existingRow.payload) : {};
+      const resolveImageFromPayload = (value) =>
+        value?.imageUrl || value?.image_url || value?.iconUrl || value?.icon_url || null;
+      let resolvedImageUrl = resolveImageFromPayload(row) || resolveImageFromPayload(existingPayload);
+
+      if (!resolvedImageUrl && resolvedName) {
+        const fallbackRow = db
+          .prepare(
+            `SELECT payload
+             FROM investments
+             WHERE user_id = ? AND deleted = 0 AND name = ?
+             ORDER BY updated_at DESC
+             LIMIT 1`,
+          )
+          .get(normalizedUserId, resolvedName);
+
+        if (fallbackRow?.payload) {
+          const fallbackPayload = deserialize(fallbackRow.payload);
+          resolvedImageUrl = resolveImageFromPayload(fallbackPayload);
+        }
+      }
+
       const payload = {
+        ...(existingPayload || {}),
         ...row,
         id,
         serverId,
+        userId: normalizedUserId,
+        name: resolvedName,
+        imageUrl: resolvedImageUrl || null,
         importedAt,
       };
 
@@ -503,8 +580,8 @@ export function createLocalStore(userDataPath) {
         id,
         serverId,
         itemId: row.itemId ? String(row.itemId) : null,
-        userId: String(row.userId || userId || "local"),
-        name: String(row.name || ""),
+        userId: normalizedUserId,
+        name: resolvedName,
         type: String(row.type || "skin"),
         payload: serialize(payload),
         revision: Number(row.revision || 1),
@@ -616,9 +693,31 @@ export function createLocalStore(userDataPath) {
           excluded: Boolean(existing?.excluded),
         };
 
-        this.upsertInvestment(upsertPayload);
+        const shouldUpsert =
+          !existing ||
+          !valuesEqual(existing.name, upsertPayload.name) ||
+          !valuesEqual(existing.marketHashName, upsertPayload.marketHashName) ||
+          !valuesEqual(existing.type, upsertPayload.type) ||
+          !valuesEqual(existing.imageUrl, upsertPayload.imageUrl) ||
+          !valuesEqual(existing.classId, upsertPayload.classId) ||
+          !valuesEqual(existing.instanceId, upsertPayload.instanceId) ||
+          !valuesEqual(existing.inspectLink, upsertPayload.inspectLink) ||
+          !valuesEqual(existing.floatValue, upsertPayload.floatValue) ||
+          !valuesEqual(existing.paintSeed, upsertPayload.paintSeed) ||
+          !valuesEqual(existing.tradable, upsertPayload.tradable) ||
+          !valuesEqual(existing.marketable, upsertPayload.marketable) ||
+          existing.inSteamInventory !== true ||
+          String(existing.inventoryStatus || "") !== "active" ||
+          Boolean(existing.lastMissingAt);
+
+        if (shouldUpsert) {
+          this.upsertInvestment(upsertPayload);
+        }
+
         if (existing) {
-          updated += 1;
+          if (shouldUpsert) {
+            updated += 1;
+          }
         } else {
           imported += 1;
           if (importedItems.length < 50) {
@@ -663,19 +762,24 @@ export function createLocalStore(userDataPath) {
         if (incomingIds.has(String(investment.id))) {
           continue;
         }
+        const alreadyMissing =
+          investment.inSteamInventory === false &&
+          String(investment.inventoryStatus || "") === "missing";
 
-        this.upsertInvestment({
-          ...investment,
-          id: investment.id,
-          userId: normalizedUserId,
-          platform: "steam_inventory",
-          source: "steam_inventory",
-          inSteamInventory: false,
-          inventoryStatus: "missing",
-          lastMissingAt: now,
-          lastSeenAt: investment.lastSeenAt || investment.updatedAt || now,
-        });
-        missingMarked += 1;
+        if (!alreadyMissing) {
+          this.upsertInvestment({
+            ...investment,
+            id: investment.id,
+            userId: normalizedUserId,
+            platform: "steam_inventory",
+            source: "steam_inventory",
+            inSteamInventory: false,
+            inventoryStatus: "missing",
+            lastMissingAt: now,
+            lastSeenAt: investment.lastSeenAt || investment.updatedAt || now,
+          });
+          missingMarked += 1;
+        }
 
         db.prepare(
           `INSERT INTO steam_inventory_state (
@@ -879,6 +983,16 @@ export function createLocalStore(userDataPath) {
       return true;
     },
 
+    deleteInvestmentSilent(id) {
+      const updatedAt = nowIso();
+      db.prepare(
+        `UPDATE investments
+         SET deleted = 1, dirty = 0, updated_at = ?
+         WHERE id = ?`,
+      ).run(updatedAt, String(id));
+      return true;
+    },
+
     listWatchlistItems(userId = "local") {
       return db
         .prepare(
@@ -1009,6 +1123,16 @@ export function createLocalStore(userDataPath) {
          WHERE id = ?`,
       ).run(updatedAt, String(id));
       appendOperation("delete", "watchlist_item", String(id), { id, updatedAt });
+      return true;
+    },
+
+    deleteWatchlistItemSilent(id) {
+      const updatedAt = nowIso();
+      db.prepare(
+        `UPDATE watchlist_items
+         SET deleted = 1, dirty = 0, updated_at = ?
+         WHERE id = ?`,
+      ).run(updatedAt, String(id));
       return true;
     },
 

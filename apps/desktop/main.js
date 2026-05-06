@@ -57,6 +57,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const cacheFileName = "cache.json";
 const sessionFileName = "session.json";
+const serverConfigFileName = "server-config.json";
 const secretsDirName = "secrets";
 const csFloatApiKeyFileName = "csfloat-api-key.bin";
 let createLocalStore = null;
@@ -65,6 +66,34 @@ let distIndexPath = null; // Will be set when app is ready
 let phpSidecar = null;
 let backendBaseUrl = null;
 let sidecarSecret = null;
+
+function resolvePhpBinary() {
+  const explicit = String(process.env.PHP_BINARY || "").trim();
+  if (explicit && fsSync.existsSync(explicit)) {
+    return explicit;
+  }
+
+  const candidates = [
+    // Common local install path used in this project environment
+    "C:\\tools\\php85\\php.exe",
+    // Bundle-friendly locations (if we decide to ship php with the app)
+    resolveRuntimePath("php", "php.exe"),
+    path.join(process.resourcesPath || "", "php", "php.exe"),
+    // Last fallback: rely on PATH
+    "php",
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === "php") {
+      return candidate;
+    }
+    if (candidate && fsSync.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "php";
+}
 
 function getLocalStore() {
   if (!localStore) {
@@ -81,6 +110,10 @@ function getSessionFilePath() {
   return path.join(app.getPath("userData"), sessionFileName);
 }
 
+function getServerConfigFilePath() {
+  return path.join(app.getPath("userData"), serverConfigFileName);
+}
+
 function getSecretsDirPath() {
   return path.join(app.getPath("userData"), secretsDirName);
 }
@@ -91,11 +124,24 @@ function getCsFloatApiKeyFilePath() {
 
 function resolveRuntimePath(...segments) {
   const appPath = app.getAppPath();
-  if (appPath.endsWith("app.asar")) {
-    return path.join(process.resourcesPath, ...segments);
+  const candidates = [
+    path.join(process.resourcesPath, "app.asar.unpacked", ...segments),
+    path.join(process.resourcesPath, ...segments),
+    path.join(appPath, ...segments),
+  ];
+
+  for (const candidate of candidates) {
+    if (fsSync.existsSync(candidate)) {
+      return candidate;
+    }
   }
 
-  return path.join(appPath, ...segments);
+  return candidates[0];
+}
+
+function isAsarVirtualPath(targetPath) {
+  const normalized = String(targetPath || "").replace(/\//g, "\\").toLowerCase();
+  return normalized.includes("\\app.asar\\");
 }
 
 function readDotEnvFile(filePath) {
@@ -147,7 +193,135 @@ function buildSidecarEnv() {
     merged.DB_HOST = merged.DESKTOP_DB_HOST;
   }
 
+  const savedServerConfig = getStoredServerConfig();
+  if (savedServerConfig?.serverUrl) {
+    merged.UPSTREAM_API_BASE_URL = savedServerConfig.serverUrl;
+  }
+
   return merged;
+}
+
+function normalizeServerUrl(value) {
+  const normalized = String(value || "").trim().replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+  return normalized;
+}
+
+function getStoredServerConfig() {
+  const filePath = getServerConfigFilePath();
+  if (!fsSync.existsSync(filePath)) {
+    return { configured: false, serverUrl: "" };
+  }
+
+  try {
+    const raw = fsSync.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    const serverUrl = normalizeServerUrl(parsed?.serverUrl || "");
+    return {
+      configured: Boolean(serverUrl),
+      serverUrl,
+      updatedAt: parsed?.updatedAt || null,
+    };
+  } catch (error) {
+    console.warn("[desktop-server-config] failed to read server config", error);
+    return { configured: false, serverUrl: "" };
+  }
+}
+
+async function writeServerConfig(serverConfig) {
+  const nextServerUrl = normalizeServerUrl(serverConfig?.serverUrl || "");
+  if (!nextServerUrl) {
+    throw new Error("Server URL darf nicht leer sein.");
+  }
+
+  try {
+    // Throws if invalid URL.
+    const parsed = new URL(nextServerUrl);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("Server URL muss mit http:// oder https:// beginnen.");
+    }
+  } catch {
+    throw new Error("Server URL ist ungueltig.");
+  }
+
+  const payload = {
+    configured: true,
+    serverUrl: nextServerUrl,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await fs.mkdir(path.dirname(getServerConfigFilePath()), { recursive: true });
+  await fs.writeFile(getServerConfigFilePath(), JSON.stringify(payload, null, 2), "utf8");
+  return payload;
+}
+
+async function testServerConnection(serverUrl) {
+  const baseUrl = normalizeServerUrl(serverUrl);
+  if (!baseUrl) {
+    return { ok: false, message: "Server URL fehlt." };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    return { ok: false, message: "Server URL ist ungueltig." };
+  }
+
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return { ok: false, message: "Nur http:// oder https:// sind erlaubt." };
+  }
+
+  const candidateUrls = Array.from(
+    new Set([
+      `${baseUrl}/api/v1/portfolio/summary`,
+      `${baseUrl}/api/index.php/api/v1/portfolio/summary`,
+    ]),
+  );
+
+  try {
+    for (const testUrl of candidateUrls) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const response = await fetch(testUrl, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+          cache: "no-store",
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          continue;
+        }
+
+        return {
+          ok: response.status >= 200 && response.status < 500,
+          status: response.status,
+          message: response.ok
+            ? "Verbindung erfolgreich."
+            : `Server erreichbar (HTTP ${response.status}).`,
+        };
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          // try next candidate first, timeout only if all fail
+          continue;
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    return { ok: false, message: "Server antwortet, aber nicht mit JSON." };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return { ok: false, message: "Timeout beim Verbindungsaufbau." };
+    }
+    return { ok: false, message: "Server nicht erreichbar." };
+  }
 }
 
 function getStoredCsFloatApiKey() {
@@ -271,6 +445,14 @@ async function startPhpSidecar() {
   const publicRoot = path.join(backendRoot, "desktop");
   const routerScript = path.join(publicRoot, "index.php");
 
+  if (isAsarVirtualPath(backendRoot) || isAsarVirtualPath(publicRoot) || isAsarVirtualPath(routerScript)) {
+    console.warn("[sidecar] backend path resolves to app.asar virtual path; sidecar requires unpacked backend files", {
+      backendRoot,
+      publicRoot,
+      routerScript,
+    });
+  }
+
   if (!fsSync.existsSync(routerScript)) {
     console.warn("[sidecar] backend desktop/index.php not found:", routerScript);
     return null;
@@ -280,7 +462,11 @@ async function startPhpSidecar() {
   sidecarSecret = randomBytes(32).toString("hex");
   backendBaseUrl = `http://127.0.0.1:${port}`;
 
-  const phpBinary = process.env.PHP_BINARY || "php";
+  const phpBinary = resolvePhpBinary();
+  console.log("[sidecar] using php binary:", phpBinary);
+  console.log("[sidecar] backend root:", backendRoot);
+  console.log("[sidecar] sidecar public root:", publicRoot);
+  console.log("[sidecar] sidecar router script:", routerScript);
   phpSidecar = spawn(
     phpBinary,
     [
@@ -309,11 +495,14 @@ async function startPhpSidecar() {
   });
   const currentSidecar = phpSidecar;
   phpSidecar.on("exit", (code, signal) => {
-    console.warn("[sidecar] exited", { code, signal });
+    console.warn(`[sidecar] exited code=${code} signal=${signal}`);
     if (phpSidecar === currentSidecar) {
       phpSidecar = null;
       backendBaseUrl = null;
     }
+  });
+  phpSidecar.on("error", (error) => {
+    console.error("[sidecar] spawn error:", error?.message || error);
   });
 
   console.log("[sidecar] PHP backend started:", backendBaseUrl);
@@ -332,6 +521,13 @@ function stopPhpSidecar() {
 async function restartPhpSidecar() {
   stopPhpSidecar();
   return await startPhpSidecar();
+}
+
+async function ensurePhpSidecarForRenderer() {
+  if (!backendBaseUrl || !phpSidecar || phpSidecar.killed) {
+    await startPhpSidecar();
+  }
+  return backendBaseUrl;
 }
 
 async function readCacheFile() {
@@ -684,7 +880,18 @@ ipcMain.handle("open-devtools", async () => {
   return false;
 });
 
-ipcMain.handle("backend-base-url", () => backendBaseUrl);
+ipcMain.handle("backend-base-url", async () => {
+  return await ensurePhpSidecarForRenderer();
+});
+ipcMain.handle("server-config-get", () => getStoredServerConfig());
+ipcMain.handle("server-config-set", async (event, payload) => {
+  const config = await writeServerConfig(payload || {});
+  await restartPhpSidecar();
+  return config;
+});
+ipcMain.handle("server-config-test", async (event, serverUrl) => {
+  return await testServerConnection(serverUrl);
+});
 ipcMain.handle("secret-csfloat-status", () => getCsFloatApiKeyStatus());
 ipcMain.handle("secret-csfloat-set", async (event, apiKey) => {
   const status = await writeCsFloatApiKey(apiKey);
@@ -729,6 +936,9 @@ safeLocalStoreInvoke("local-store-upsert-investment", (store, payload) =>
 safeLocalStoreInvoke("local-store-delete-investment", (store, id) =>
   store.deleteInvestment(id),
 );
+safeLocalStoreInvoke("local-store-delete-investment-silent", (store, id) =>
+  store.deleteInvestmentSilent(id),
+);
 safeLocalStoreInvoke("local-store-get-investment", (store, id) =>
   store.getInvestment(id),
 );
@@ -743,6 +953,9 @@ safeLocalStoreInvoke("local-store-upsert-watchlist-item", (store, payload) =>
 );
 safeLocalStoreInvoke("local-store-delete-watchlist-item", (store, id) =>
   store.deleteWatchlistItem(id),
+);
+safeLocalStoreInvoke("local-store-delete-watchlist-item-silent", (store, id) =>
+  store.deleteWatchlistItemSilent(id),
 );
 safeLocalStoreInvoke("local-store-list-portfolio-snapshots", (store, userId, limit) =>
   store.listPortfolioSnapshots(userId, limit),

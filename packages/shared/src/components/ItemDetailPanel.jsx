@@ -16,11 +16,18 @@ import { AlertCircle } from "lucide-react";
 import { PortfolioChart } from "./PortfolioChart";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
-export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange }) => {
+export const ItemDetailPanel = ({
+  item,
+  history,
+  historyLoading,
+  onExcludeChange,
+  canToggleExclude = true,
+}) => {
   const { formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const excludeEnabled = canToggleExclude && typeof onExcludeChange === "function";
   if (!item)
     return (
         <div className="flex min-h-50 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-muted-foreground sm:min-h-75 sm:p-8">
@@ -99,7 +106,8 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
                   <Badge variant="outline" className="text-[10px] uppercase">
                     Funding: {item.fundingMode === "cash_in" ? "Cash-In" : "Wallet"}
                   </Badge>
-                  <Button
+                  {excludeEnabled ? (
+                    <Button
                       variant="outline"
                       size="sm"
                       onClick={handleExcludeClick}
@@ -111,7 +119,8 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
                   >
                     <AlertCircle className="mr-1 h-3 w-3" />
                     {item.excluded ? "Einschließen" : "Ausschließen"}
-                  </Button>
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -251,13 +260,15 @@ export const ItemDetailPanel = ({ item, history, historyLoading, onExcludeChange
           </CardContent>
         </Card>
 
-        <ExcludeInvestmentDialog
+        {excludeEnabled ? (
+          <ExcludeInvestmentDialog
             isOpen={excludeDialogOpen}
             onOpenChange={setExcludeDialogOpen}
             investment={item}
             onConfirm={handleExcludeConfirm}
             isLoading={isExcludeLoading}
-        />
+          />
+        ) : null}
       </>
   );
 };

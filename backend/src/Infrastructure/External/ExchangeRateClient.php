@@ -148,4 +148,46 @@ final class ExchangeRateClient
 
         return (float) $json['rates']['EUR'];
     }
+
+    /**
+     * Returns USD-based rates from provider response (1 USD = X).
+     *
+     * @return array{EUR: float, GBP: float}
+     */
+    public function usdRates(): array
+    {
+        $url = 'https://open.er-api.com/v6/latest/USD';
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false || $httpCode !== 200 || !is_string($response) || trim($response) === '') {
+            return [
+                'EUR' => self::FALLBACK_RATE,
+                'GBP' => 0.85 * self::FALLBACK_RATE,
+            ];
+        }
+
+        $json = json_decode($response, true);
+        if (!is_array($json) || !isset($json['rates']) || !is_array($json['rates'])) {
+            return [
+                'EUR' => self::FALLBACK_RATE,
+                'GBP' => 0.85 * self::FALLBACK_RATE,
+            ];
+        }
+
+        $eur = isset($json['rates']['EUR']) && is_numeric($json['rates']['EUR'])
+            ? (float) $json['rates']['EUR']
+            : self::FALLBACK_RATE;
+
+        $gbp = isset($json['rates']['GBP']) && is_numeric($json['rates']['GBP'])
+            ? (float) $json['rates']['GBP']
+            : (0.85 * $eur);
+
+        return ['EUR' => $eur, 'GBP' => $gbp];
+    }
 }

@@ -6,6 +6,25 @@ import { Skeleton } from "./ui/skeleton";
 import { CacheMaintenancePanel } from "./CacheMaintenancePanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
+function normalizeApiBase(value) {
+  return String(value || "").replace(/\/+$/, "").replace(/\/api\/v1$/i, "");
+}
+
+async function resolveDebugEndpoint() {
+  if (typeof window !== "undefined" && window.electronAPI?.backend?.getBaseUrl) {
+    const desktopBase = await window.electronAPI.backend.getBaseUrl();
+    if (desktopBase) {
+      return `${normalizeApiBase(desktopBase)}/api/v1/debug/csfloat`;
+    }
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin && window.location.origin !== "file://") {
+    return `${window.location.origin}/api/index.php/api/v1/debug/csfloat`;
+  }
+
+  return "/api/index.php/api/v1/debug/csfloat";
+}
+
 export function DebugPanel() {
   const [logs, setLogs] = useState({ app: [], proxy: [] });
   const [environment, setEnvironment] = useState(null);
@@ -16,7 +35,8 @@ export function DebugPanel() {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/index.php/api/v1/debug/csfloat");
+      const endpoint = await resolveDebugEndpoint();
+      const response = await fetch(endpoint, { cache: "no-store" });
       const data = await response.json();
       if (data.data) {
         setLogs(data.data.logs || { app: [], proxy: [] });

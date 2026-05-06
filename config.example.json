@@ -1,0 +1,5 @@
+{
+  "serverUrl": "https://your-server-domain.example.com",
+  "notes": "Copy this into your local desktop configuration flow. Do not commit real server URLs or secrets."
+}
+

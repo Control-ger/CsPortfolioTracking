@@ -9,6 +9,7 @@ import {
 } from "./apiClient.js";
 
 import { getCurrentUser, isAuthenticated } from "./auth.js";
+import { runDesktopSyncNowIfDue } from "./desktopSync.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 
 const DEFAULT_STATS = {
@@ -39,6 +40,15 @@ function getDesktopLocalStore() {
   }
 
   return window.electronAPI.localStore;
+}
+
+function resolveDesktopUserId(user, fallback = 1) {
+  const candidate = user?.id ?? user?.userId ?? fallback;
+  const parsed = Number(candidate);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return String(Math.floor(parsed));
+  }
+  return String(fallback);
 }
 
 function calculatePortfolioSummary(rows = []) {
@@ -191,6 +201,21 @@ function clusterDesktopInvestments(rows = []) {
   });
 }
 
+function isExcludedRow(row) {
+  const value = row?.excluded ?? row?.isExcluded;
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value === 1;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return ["1", "true", "yes", "on"].includes(normalized);
+  }
+  return false;
+}
+
 function buildPortfolioComposition(rows = []) {
   const groups = new Map();
   let totalValue = 0;
@@ -228,12 +253,18 @@ function buildPortfolioComposition(rows = []) {
 }
 
 async function fetchDesktopPortfolioData(options = {}) {
+  try {
+    await runDesktopSyncNowIfDue();
+  } catch (error) {
+    console.warn("[desktop-sync] portfolio sync failed", error);
+  }
+
   const localStore = getDesktopLocalStore();
   const rawRows = unwrapLocalStoreResult(
     await localStore.listInvestments(options.userId),
     "local-store-list-investments",
   );
-  const activeRows = rawRows.filter((row) => row?.excluded !== true);
+  const activeRows = rawRows.filter((row) => !isExcludedRow(row));
   let rows = clusterDesktopInvestments(activeRows);
   let meta = {
     source: "desktop-local",
@@ -315,7 +346,9 @@ export async function fetchPortfolioData(options = {}) {
   }
   
   const user = await getCurrentUser();
-  const userId = user?.id || options.userId;
+  const userId = getDesktopLocalStore()
+    ? resolveDesktopUserId(user, options.userId || 1)
+    : user?.id || options.userId;
   
   if (getDesktopLocalStore()) {
     return fetchDesktopPortfolioData({ ...options, userId });
@@ -331,12 +364,12 @@ export async function fetchPortfolioCompositionData() {
   }
 
   const user = await getCurrentUser();
-  const userId = user?.id || "local";
+  const userId = resolveDesktopUserId(user, 1);
   const rawRows = unwrapLocalStoreResult(
     await localStore.listInvestments(userId),
     "local-store-list-investments",
   );
-  const activeRows = rawRows.filter((row) => row?.excluded !== true);
+  const activeRows = rawRows.filter((row) => !isExcludedRow(row));
   const clusteredRows = clusterDesktopInvestments(activeRows);
   return buildPortfolioComposition(clusteredRows);
 }
@@ -353,11 +386,19 @@ export async function fetchWatchlistData(options = {}) {
   }
   
   const user = await getCurrentUser();
-  const userId = user?.id || options.userId;
+  const userId = getDesktopLocalStore()
+    ? resolveDesktopUserId(user, options.userId || 1)
+    : user?.id || options.userId;
   const localStore = getDesktopLocalStore();
 
   if (!localStore) {
     return fetchApiWatchlist(options);
+  }
+
+  try {
+    await runDesktopSyncNowIfDue();
+  } catch (error) {
+    console.warn("[desktop-sync] watchlist sync failed", error);
   }
 
   let items = unwrapLocalStoreResult(
@@ -397,13 +438,25 @@ export async function createWatchlistItemData(name, type = "skin") {
     return createApiWatchlistItem(name, type);
   }
 
-  return unwrapLocalStoreResult(
+  const currentUser = await getCurrentUser();
+  const userId = resolveDesktopUserId(currentUser, 1);
+
+  const created = unwrapLocalStoreResult(
     await localStore.upsertWatchlistItem({
       name,
       type,
+      userId,
     }),
     "local-store-upsert-watchlist-item",
   );
+
+  try {
+    await runDesktopSyncNowIfDue({ force: true });
+  } catch (error) {
+    console.warn("[desktop-sync] watchlist create sync failed", error);
+  }
+
+  return created;
 }
 
 export async function deleteWatchlistItemData(id) {
@@ -413,8 +466,16 @@ export async function deleteWatchlistItemData(id) {
     return deleteApiWatchlistItem(id);
   }
 
-  return unwrapLocalStoreResult(
+  const deleted = unwrapLocalStoreResult(
     await localStore.deleteWatchlistItem(id),
     "local-store-delete-watchlist-item",
   );
+
+  try {
+    await runDesktopSyncNowIfDue({ force: true });
+  } catch (error) {
+    console.warn("[desktop-sync] watchlist delete sync failed", error);
+  }
+
+  return deleted;
 }

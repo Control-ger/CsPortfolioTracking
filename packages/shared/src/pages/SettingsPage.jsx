@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, Wallet, ArrowLeft, Settings, DollarSign } from "lucide-react";
+import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
-import { DebugPanel } from "@shared/components/DebugPanel";
 import { Badge } from "@shared/components/ui/badge";
 import { Button } from "@shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
 import { Input } from "@shared/components/ui/input";
 import { Skeleton } from "@shared/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components";
 import { fetchFeeSettings, updateFeeSettings, fetchCsFloatApiKeyStatus, updateCsFloatApiKey } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
 
@@ -36,7 +35,6 @@ function isDesktopRuntime() {
 }
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("general");
   const [form, setForm] = useState(DEFAULT_FORM);
   const [source, setSource] = useState("defaults");
   const [loading, setLoading] = useState(true);
@@ -54,6 +52,12 @@ export function SettingsPage() {
   const [apiKeyError, setApiKeyError] = useState("");
   const [apiKeySuccess, setApiKeySuccess] = useState("");
   const [encryptionReady, setEncryptionReady] = useState(false);
+  const [serverUrl, setServerUrl] = useState("");
+  const [serverConfigLoading, setServerConfigLoading] = useState(true);
+  const [serverConfigSaving, setServerConfigSaving] = useState(false);
+  const [serverConfigTesting, setServerConfigTesting] = useState(false);
+  const [serverConfigMessage, setServerConfigMessage] = useState("");
+  const [serverConfigError, setServerConfigError] = useState("");
   const desktopRuntime = isDesktopRuntime();
   useEffect(() => {
     const loadSettings = async () => {
@@ -101,6 +105,25 @@ export function SettingsPage() {
 
     void loadSettings();
   }, [desktopRuntime]);
+
+  useEffect(() => {
+    const loadServerConfig = async () => {
+      if (!window.electronAPI?.serverConfig?.get) {
+        setServerConfigLoading(false);
+        return;
+      }
+      try {
+        const config = await window.electronAPI.serverConfig.get();
+        setServerUrl(config?.serverUrl || "");
+      } catch (error) {
+        setServerConfigError(error?.message || "Server-Konfiguration konnte nicht geladen werden.");
+      } finally {
+        setServerConfigLoading(false);
+      }
+    };
+
+    void loadServerConfig();
+  }, []);
 
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -235,32 +258,23 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Datenschutz und Steam API</CardTitle>
-            <CardDescription>
-              Transparenz ueber Datenquellen, Speicherung und Nutzung.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
+        <details className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <summary className="cursor-pointer select-none font-medium text-foreground/90">
+            Datenschutz & Steam API Hinweise
+          </summary>
+          <div className="mt-2 space-y-2 leading-relaxed">
             <p>
               Diese App nutzt Steam als Datenquelle, ist jedoch nicht offiziell von Valve betrieben oder
               unterstuetzt.
             </p>
             <p>
-              Abgerufen werden nur noetige Profildaten und Inventardaten fuer die von dir genutzten Features
-              (z. B. Portfolio-Import und Sync).
+              Abgerufen werden nur noetige Profil- und Inventardaten fuer genutzte Features.
             </p>
             <p>
-              Gespeichert werden portfolio-relevante Itemdaten, Exclude-Status und optional manuell gesetzte
-              Einkaufspreise. Steam-Passwoerter werden nicht gespeichert oder verarbeitet.
+              Gespeichert werden portfolio-relevante Itemdaten und optionale Preise, keine Steam-Passwoerter.
             </p>
-            <p>
-              Auto-Sync ist optional, kann deaktiviert werden und ist zusaetzlich durch ein Intervall begrenzt,
-              um API-Aufrufe zu reduzieren.
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+        </details>
       </div>
     );
   };
@@ -526,6 +540,102 @@ export function SettingsPage() {
     );
   };
 
+  const renderRemoteConnectionsTab = () => {
+    if (!desktopRuntime) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>API & Verbindungen</CardTitle>
+            <CardDescription>
+              Diese Einstellungen sind nur in der Desktop-App verfuegbar.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {window.electronAPI?.serverConfig ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Server Verbindung</CardTitle>
+              <CardDescription>
+                URL fuer Sync und Server-Features. Lokal gespeichert im Desktop-Profil.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {serverConfigError ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  {serverConfigError}
+                </div>
+              ) : null}
+              {serverConfigMessage ? (
+                <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                  {serverConfigMessage}
+                </div>
+              ) : null}
+              <Input
+                value={serverUrl}
+                onChange={(event) => {
+                  setServerUrl(event.target.value);
+                  setServerConfigError("");
+                  setServerConfigMessage("");
+                }}
+                placeholder="https://dein-server.example.com"
+                disabled={serverConfigLoading || serverConfigSaving || serverConfigTesting}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  disabled={serverConfigLoading || serverConfigTesting || !serverUrl.trim()}
+                  onClick={async () => {
+                    try {
+                      setServerConfigTesting(true);
+                      setServerConfigError("");
+                      setServerConfigMessage("");
+                      const result = await window.electronAPI.serverConfig.test(serverUrl.trim());
+                      if (result?.ok) {
+                        setServerConfigMessage(result?.message || "Verbindung erfolgreich.");
+                      } else {
+                        setServerConfigError(result?.message || "Verbindung fehlgeschlagen.");
+                      }
+                    } catch (error) {
+                      setServerConfigError(error?.message || "Verbindungstest fehlgeschlagen.");
+                    } finally {
+                      setServerConfigTesting(false);
+                    }
+                  }}
+                >
+                  {serverConfigTesting ? "Teste..." : "Verbindung testen"}
+                </Button>
+                <Button
+                  disabled={serverConfigLoading || serverConfigSaving || !serverUrl.trim()}
+                  onClick={async () => {
+                    try {
+                      setServerConfigSaving(true);
+                      setServerConfigError("");
+                      setServerConfigMessage("");
+                      await window.electronAPI.serverConfig.set({ serverUrl: serverUrl.trim() });
+                      setServerConfigMessage("Server-URL gespeichert.");
+                    } catch (error) {
+                      setServerConfigError(error?.message || "Server-URL konnte nicht gespeichert werden.");
+                    } finally {
+                      setServerConfigSaving(false);
+                    }
+                  }}
+                >
+                  {serverConfigSaving ? "Speichert..." : "Speichern"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+        {renderApiKeyTab()}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 sm:p-8 font-sans text-foreground pb-20 md:pb-0">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -540,7 +650,7 @@ export function SettingsPage() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
               <p className="text-sm text-muted-foreground">
-                Gebuehren, Waehrung und API Konfiguration
+                Allgemeine Einstellungen und API/Remote-Konfiguration
               </p>
             </div>
           </div>
@@ -552,45 +662,21 @@ export function SettingsPage() {
           </div>
         </header>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="general" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              <span>Allgemein</span>
-            </TabsTrigger>
-            <TabsTrigger value="fees" className="flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              <span>Gebuehren</span>
-            </TabsTrigger>
-            <TabsTrigger value="api" className="flex items-center gap-2">
-              <Key className="h-4 w-4" />
-              <span>API Keys</span>
-              {!apiKeyStatus.configured && (
-                <span className="ml-1 h-2 w-2 rounded-full bg-amber-500" />
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="debug" className="flex items-center gap-2">
-              <span>Debug</span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="general" className="mt-4">
-            {renderGeneralTab()}
-          </TabsContent>
-
-          <TabsContent value="fees" className="mt-4">
-            {renderFeesTab()}
-          </TabsContent>
-
-          <TabsContent value="api" className="mt-4">
-            {renderApiKeyTab()}
-          </TabsContent>
-
-          <TabsContent value="debug" className="mt-4">
-            <DebugPanel />
-          </TabsContent>
-        </Tabs>
+        <div className="space-y-4">
+          <Tabs defaultValue="general" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="general">Allgemein</TabsTrigger>
+              <TabsTrigger value="api-remote">API & Remote</TabsTrigger>
+            </TabsList>
+            <TabsContent value="general" className="space-y-4">
+              {renderGeneralTab()}
+              {renderFeesTab()}
+            </TabsContent>
+            <TabsContent value="api-remote" className="space-y-4">
+              {renderRemoteConnectionsTab()}
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
     </div>
   );

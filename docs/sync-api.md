@@ -72,3 +72,11 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
 - Konflikte werden markiert und nicht still ueberschrieben.
 - Business-Logik bleibt in PHP bzw. `packages/shared`.
 
+## Implementierungsstand (2026-05-05)
+
+- `GET /api/v1/sync/pull` und `POST /api/v1/sync/push` sind in `backend/public/index.php` registriert.
+- Push-Validierung akzeptiert aktuell nur Tabellen `investments` und `watchlist_items`.
+- Idempotency wird serverseitig ueber `(user_id, idempotency_key)` erzwungen.
+- Konflikte werden bei aelterer `clientRevision` als `status: "conflict"` je Change zurueckgegeben.
+- Pull liefert `serverTime`, `changes` und `count`.
+

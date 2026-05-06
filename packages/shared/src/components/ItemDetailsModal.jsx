@@ -48,16 +48,28 @@ function ChangeMetric({ label, percent, euro }) {
   );
 }
 
-export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyLoading = false, onToggleExclude }) {
+export function ItemDetailsModal({
+  isOpen,
+  onClose,
+  item,
+  history = [],
+  historyLoading = false,
+  onToggleExclude,
+  canToggleExclude = true,
+}) {
   const { formatPrice } = useCurrency();
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const excludeEnabled = canToggleExclude && typeof onToggleExclude === "function";
 
   if (!item) return null;
 
   const handleToggleExclude = async () => {
-    if (onToggleExclude) {
-      await onToggleExclude(item.id);
+    if (!excludeEnabled) {
+      return;
     }
+
+    const currentExcluded = Boolean(item.excluded ?? item.isExcluded);
+    await onToggleExclude(item.id, !currentExcluded);
   };
 
   const togglePriceDisplay = () => {
@@ -225,17 +237,17 @@ export function ItemDetailsModal({ isOpen, onClose, item, history = [], historyL
         )}
 
         {/* Exclude Toggle Button */}
-        {onToggleExclude && (
+        {excludeEnabled && (
           <div className="mt-4 border-t pt-4">
             <button
               onClick={handleToggleExclude}
               className={`flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
-                item.isExcluded
+                Boolean(item.excluded ?? item.isExcluded)
                   ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/30 dark:bg-emerald-900/20 dark:text-emerald-300"
                   : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900/30 dark:bg-amber-900/20 dark:text-amber-300"
               }`}
             >
-              {item.isExcluded ? (
+              {Boolean(item.excluded ?? item.isExcluded) ? (
                 <>
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

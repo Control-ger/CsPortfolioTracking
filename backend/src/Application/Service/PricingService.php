@@ -341,6 +341,8 @@ final class PricingService
             return;
         }
 
+        // item_live_cache has a FK to exchange_rates; ensure parent table first.
+        $this->exchangeRateRepository->ensureTable();
         $this->itemRepository->ensureTable();
         $this->itemLiveCacheRepository->ensureTable();
         $this->cacheTablesReady = true;

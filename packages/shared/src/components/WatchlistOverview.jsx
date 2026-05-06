@@ -45,7 +45,10 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
 
   const rankColor = rankColors[rank - 1] || rankColors[1];
   const Icon = isGainer ? TrendingUp : TrendingDown;
-  const derivedPercent = item.priceChangePercent ?? 0;
+  const derivedPercentCandidate = Number(item.priceChangePercent);
+  const derivedPercent = Number.isFinite(derivedPercentCandidate) ? derivedPercentCandidate : 0;
+  const currentPriceCandidate = Number(item.currentPrice);
+  const hasCurrentPrice = Number.isFinite(currentPriceCandidate);
 
   return (
     <button
@@ -69,8 +72,8 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
         </div>
         <div className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-medium">{item.name}</h4>
-          {item.currentPrice !== null && item.currentPrice !== undefined && (
-            <p className="truncate text-xs text-muted-foreground">{item.currentPrice.toFixed(2)} EUR</p>
+          {hasCurrentPrice && (
+            <p className="truncate text-xs text-muted-foreground">{currentPriceCandidate.toFixed(2)} EUR</p>
           )}
         </div>
       </div>

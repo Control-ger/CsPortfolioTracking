@@ -20,7 +20,11 @@ RUN echo '<VirtualHost *:80>\n\
     </Directory>\n\
 </VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
-RUN docker-php-ext-install pdo pdo_mysql
+RUN apt-get update && \
+    apt-get install -y libcurl4-openssl-dev && \
+    docker-php-ext-install pdo pdo_mysql curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Supervisor
 # Falls der Fehler wiederkommt, liegt es an deiner Internetleitung/DNS am Server!

@@ -252,3 +252,13 @@ Change: Lokale Steam-Sync-Verwaltung und Notification-Persistenz erweitert
 - Auto-Sync ist lokal durch Cooldown begrenzt und bleibt manuell triggerbar.
 - Fehlertexte fuer Steam-Import wurden fuer typische Ursachen (Inventory access denied, Rate Limit, invalid response, Netzwerk) konkretisiert.
 - Journey/Onboarding zeigt klaren Schrittfortschritt fuer Steam, Import, CSFloat-Key und Matching-Status.
+
+---
+
+Updated: 2026-05-05
+Change: Server Sync Push/Pull produktiv angebunden
+- Neuer Backend-Service `SyncService` implementiert (`backend/src/Application/Service/SyncService.php`).
+- Neuer HTTP-Controller `SyncController` implementiert (`backend/src/Http/Controller/SyncController.php`).
+- Neue API-Routen registriert: `GET /api/v1/sync/pull`, `POST /api/v1/sync/push`.
+- Serverseitige Idempotency fuer Push-Changes ueber `sync_idempotency` eingefuehrt.
+- Konfliktbehandlung fuer aeltere `clientRevision` auf Change-Ebene eingefuehrt.

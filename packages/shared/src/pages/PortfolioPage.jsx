@@ -44,6 +44,7 @@ import {
 import { BREAKPOINTS, UI } from "@shared/lib";
 import { useKeyboard } from "@shared/hooks";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { runDesktopSyncNowIfDue } from "@shared/lib/desktopSync.js";
 
 function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -88,12 +89,20 @@ function formatRelativeHours(hours) {
   return `${Math.max(1, Math.round(hours))}h`;
 }
 
-const TABS = ["overview", "inventory", "watchlist", "management"];
 const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
+
+function resolveDesktopRuntimeUserId(user, fallback = 1) {
+  const candidate = user?.id ?? user?.userId ?? fallback;
+  const parsed = Number(candidate);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return String(Math.floor(parsed));
+  }
+  return String(fallback);
+}
 
 async function readJourneyState() {
   if (typeof window === "undefined") {
@@ -229,6 +238,10 @@ function formatSteamSyncError(error) {
 }
 
 export function PortfolioPage({ initialTab = "overview" }) {
+  const isDesktopRuntime = typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
+  const runtimeTabs = isDesktopRuntime
+    ? ["overview", "inventory", "watchlist", "management"]
+    : ["overview", "inventory", "watchlist"];
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -281,10 +294,20 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [syncNotifications, setSyncNotifications] = useState([]);
   const [journeyState, setJourneyState] = useState({ skipped: false });
   const [journeyLoading, setJourneyLoading] = useState(true);
+  const [journeyUserName, setJourneyUserName] = useState("");
   const [hasCsFloatKey, setHasCsFloatKey] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [isSteamSyncing, setIsSteamSyncing] = useState(false);
   const [steamSyncError, setSteamSyncError] = useState("");
+  const [serverSetup, setServerSetup] = useState({
+    loading: true,
+    configured: true,
+    serverUrl: "",
+  });
+  const [serverSetupTesting, setServerSetupTesting] = useState(false);
+  const [serverSetupSaving, setServerSetupSaving] = useState(false);
+  const [serverSetupError, setServerSetupError] = useState("");
+  const [serverSetupMessage, setServerSetupMessage] = useState("");
   const autoSyncStartedRef = useRef(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
@@ -295,17 +318,17 @@ export function PortfolioPage({ initialTab = "overview" }) {
   // Keyboard shortcuts for tab navigation and search
   useKeyboard({
     onArrowLeft: () => {
-      const currentIndex = TABS.indexOf(activeTab);
+      const currentIndex = runtimeTabs.indexOf(activeTab);
       if (currentIndex > 0) {
-        const newTab = TABS[currentIndex - 1];
+        const newTab = runtimeTabs[currentIndex - 1];
         setActiveTab(newTab);
         navigate(`/?tab=${newTab}`, { replace: true });
       }
     },
     onArrowRight: () => {
-      const currentIndex = TABS.indexOf(activeTab);
-      if (currentIndex < TABS.length - 1) {
-        const newTab = TABS[currentIndex + 1];
+      const currentIndex = runtimeTabs.indexOf(activeTab);
+      if (currentIndex < runtimeTabs.length - 1) {
+        const newTab = runtimeTabs[currentIndex + 1];
         setActiveTab(newTab);
         navigate(`/?tab=${newTab}`, { replace: true });
       }
@@ -331,11 +354,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
     const loadJourneyState = async () => {
       setJourneyLoading(true);
       try {
-        const [savedJourney, keyStatus] = await Promise.all([
+        const [savedJourney, keyStatus, currentUser] = await Promise.all([
           readJourneyState(),
           fetchCsFloatApiKeyStatus(),
+          getCurrentUser(),
         ]);
         setJourneyState(savedJourney || { skipped: false });
+        setJourneyUserName(String(currentUser?.name || currentUser?.steamName || ""));
         const keyConnected = Boolean(keyStatus?.data?.hasKey || keyStatus?.data?.configured);
         setHasCsFloatKey(keyConnected);
 
@@ -371,7 +396,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
       setMatchingLoading(true);
       try {
         const user = await getCurrentUser();
-        const userId = user?.id || "local";
+        const userId = resolveDesktopRuntimeUserId(user, 1);
         const [items, matches] = await Promise.all([
           window.electronAPI.localStore.listInvestments(userId),
           window.electronAPI.localStore.listSteamCsfloatMatches(userId, null, 300),
@@ -403,7 +428,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
       try {
         const user = await getCurrentUser();
-        const userId = user?.id || "local";
+        const userId = resolveDesktopRuntimeUserId(user, 1);
         const notifications = await window.electronAPI.localStore.listNotifications(userId, { limit: 20 });
         const rows = Array.isArray(notifications) ? notifications : [];
         setSyncNotifications(rows);
@@ -441,7 +466,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     try {
       const user = await getCurrentUser();
       const steamId = user?.steamId;
-      const userId = user?.id || "local";
+      const userId = resolveDesktopRuntimeUserId(user, 1);
       if (!steamId) {
         return;
       }
@@ -464,6 +489,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
       const imported = Number(syncResult?.imported || 0);
       const updated = Number(syncResult?.updated || 0);
       const syncedAt = new Date().toISOString();
+      try {
+        await runDesktopSyncNowIfDue({ force: true });
+      } catch (desktopSyncError) {
+        console.warn("[desktop-sync] steam import sync failed", desktopSyncError);
+      }
 
       await writeLocalState(STEAM_SYNC_META_KEY, { lastRunAt: syncedAt });
       if (imported > 0 && window.electronAPI?.localStore?.createNotification) {
@@ -514,6 +544,29 @@ export function PortfolioPage({ initialTab = "overview" }) {
       setIsSteamSyncing(false);
     }
   }, [authRequired, isSteamSyncing, refreshPortfolio]);
+
+  useEffect(() => {
+    const loadServerSetup = async () => {
+      if (!window.electronAPI?.serverConfig?.get) {
+        setServerSetup({ loading: false, configured: true, serverUrl: "" });
+        return;
+      }
+
+      try {
+        const config = await window.electronAPI.serverConfig.get();
+        const configured = Boolean(String(config?.serverUrl || "").trim());
+        setServerSetup({
+          loading: false,
+          configured,
+          serverUrl: String(config?.serverUrl || ""),
+        });
+      } catch {
+        setServerSetup({ loading: false, configured: false, serverUrl: "" });
+      }
+    };
+
+    void loadServerSetup();
+  }, []);
 
   useEffect(() => {
     const runAutoSteamSync = async () => {
@@ -586,7 +639,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   // Keep this return after all hooks. Returning before the other hooks run changes
   // hook order after login and triggers React's minified error #310.
-  if (authRequired) {
+  if (authRequired && !portfolioLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
         <SteamLoginPrompt onLoginSuccess={refreshPortfolio} />
@@ -607,18 +660,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
   };
 
   const handleSwipeNavigation = (direction) => {
-    const currentIndex = TABS.indexOf(activeTab);
+    const currentIndex = runtimeTabs.indexOf(activeTab);
     if (currentIndex === -1) return;
 
     let nextIndex;
     if (direction === "left") {
-      nextIndex = Math.min(currentIndex + 1, TABS.length - 1);
+      nextIndex = Math.min(currentIndex + 1, runtimeTabs.length - 1);
     } else {
       nextIndex = Math.max(currentIndex - 1, 0);
     }
 
     if (nextIndex !== currentIndex) {
-      const nextTab = TABS[nextIndex];
+      const nextTab = runtimeTabs[nextIndex];
       const path = nextTab === "overview" ? "/" : `/${nextTab}`;
       navigate(path);
       setActiveTab(nextTab);
@@ -843,12 +896,26 @@ export function PortfolioPage({ initialTab = "overview" }) {
     !hasCsFloatKey &&
     !journeyState?.skipped &&
     !journeyState?.completedAt;
+  const showSetupJourney = isDesktopRuntime && showJourneyBanner;
+  const showJourneyBannerLegacy = false;
+  const journeyStarted = Boolean(journeyState?.startedAt);
 
   const handleSkipJourney = async () => {
     const nextState = {
       ...journeyState,
       skipped: true,
       skippedAt: new Date().toISOString(),
+    };
+    setJourneyState(nextState);
+    await writeJourneyState(nextState);
+  };
+  const handleStartJourney = async () => {
+    if (journeyStarted) {
+      return;
+    }
+    const nextState = {
+      ...journeyState,
+      startedAt: new Date().toISOString(),
     };
     setJourneyState(nextState);
     await writeJourneyState(nextState);
@@ -950,7 +1017,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                         variant="ghost"
                         onClick={async () => {
                           const user = await getCurrentUser();
-                          const userId = user?.id || "local";
+                          const userId = resolveDesktopRuntimeUserId(user, 1);
                           if (window.electronAPI?.localStore?.markAllNotificationsRead) {
                             await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
                           }
@@ -1030,7 +1097,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                         variant="ghost"
                         onClick={async () => {
                           const user = await getCurrentUser();
-                          const userId = user?.id || "local";
+                          const userId = resolveDesktopRuntimeUserId(user, 1);
                           if (window.electronAPI?.localStore?.markAllNotificationsRead) {
                             await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
                           }
@@ -1050,7 +1117,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
         <ApiWarnings warnings={warnings} />
 
-        {showJourneyBanner ? (
+        {showJourneyBannerLegacy ? (
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Setup Journey</CardTitle>
@@ -1092,6 +1159,140 @@ export function PortfolioPage({ initialTab = "overview" }) {
           </Card>
         ) : null}
 
+        {showSetupJourney ? (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-xl">Willkommen{journeyUserName ? `, ${journeyUserName}` : ""}</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Deine Steam-Anmeldung ist erfolgreich. Lass uns jetzt die Einrichtung sauber abschliessen.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              {!serverSetup.loading && !serverSetup.configured ? (
+                <div className="space-y-3 rounded-md border border-amber-300/50 bg-amber-500/5 p-3">
+                  <p className="font-medium">Schritt 1: Server-Verbindung einrichten</p>
+                  <p className="text-xs text-muted-foreground">
+                    Fuer Sync und serverseitige Preisdaten benoetigt die Desktop-App eine Server-URL.
+                  </p>
+                  {serverSetupError ? (
+                    <p className="text-xs text-destructive">{serverSetupError}</p>
+                  ) : null}
+                  {serverSetupMessage ? (
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300">{serverSetupMessage}</p>
+                  ) : null}
+                  <input
+                    type="text"
+                    value={serverSetup.serverUrl}
+                    onChange={(event) => {
+                      setServerSetup((current) => ({ ...current, serverUrl: event.target.value }));
+                      setServerSetupError("");
+                      setServerSetupMessage("");
+                    }}
+                    placeholder="https://dein-server.example.com"
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={serverSetupTesting || !serverSetup.serverUrl.trim()}
+                      onClick={async () => {
+                        try {
+                          setServerSetupTesting(true);
+                          setServerSetupError("");
+                          setServerSetupMessage("");
+                          const result = await window.electronAPI.serverConfig.test(serverSetup.serverUrl.trim());
+                          if (result?.ok) {
+                            setServerSetupMessage(result?.message || "Verbindung erfolgreich.");
+                          } else {
+                            setServerSetupError(result?.message || "Verbindung fehlgeschlagen.");
+                          }
+                        } catch (error) {
+                          setServerSetupError(error?.message || "Verbindungstest fehlgeschlagen.");
+                        } finally {
+                          setServerSetupTesting(false);
+                        }
+                      }}
+                    >
+                      {serverSetupTesting ? "Teste..." : "Verbindung testen"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={serverSetupSaving || !serverSetup.serverUrl.trim()}
+                      onClick={async () => {
+                        try {
+                          setServerSetupSaving(true);
+                          setServerSetupError("");
+                          setServerSetupMessage("");
+                          await window.electronAPI.serverConfig.set({
+                            serverUrl: serverSetup.serverUrl.trim(),
+                          });
+                          setServerSetup((current) => ({ ...current, configured: true }));
+                          setServerSetupMessage("Server-URL gespeichert.");
+                        } catch (error) {
+                          setServerSetupError(error?.message || "Server-URL konnte nicht gespeichert werden.");
+                        } finally {
+                          setServerSetupSaving(false);
+                        }
+                      }}
+                    >
+                      {serverSetupSaving ? "Speichert..." : "Speichern"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => navigate("/settings", { replace: true })}
+                    >
+                      Erweiterte Einstellungen
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {!journeyStarted ? (
+                <div className="space-y-3">
+                  <p>Wir fuehren dich durch Steam-Import, CSFloat-Key und Matching-Konfiguration.</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button onClick={() => void handleStartJourney()}>Setup Journey starten</Button>
+                    <Button variant="ghost" onClick={() => void handleSkipJourney()}>
+                      Journey ueberspringen
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p>
+                    Naechster Schritt: CSFloat verbinden:
+                    <span className="font-medium">{" "}CSFloat {"->"} Profile {"->"} Developer {"->"} New Key</span>.
+                  </p>
+                  <div className="space-y-1 rounded-md border bg-background/70 p-2">
+                    <p className="text-xs font-semibold">
+                      Fortschritt: {completedJourneySteps}/{journeySteps.length} Schritte
+                    </p>
+                    {journeySteps.map((step) => (
+                      <p key={step.id} className="text-xs text-muted-foreground">
+                        {step.done ? "[x]" : "[ ]"} {step.label}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="default" onClick={() => navigate("/settings", { replace: true })}>
+                      CSFloat Key hinterlegen
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => void handleRefreshCsFloatStatus()}>
+                      Ich habe verbunden
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => void handleSkipJourney()}>
+                      Journey ueberspringen
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {!showSetupJourney ? (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Tab Navigation - nur auf Desktop sichtbar */}
           <div className="hidden sm:block">
@@ -1100,11 +1301,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 {error}
               </div>
             )}
-            <TabsList className="grid w-full grid-cols-4 gap-1 sm:max-w-200">
+            <TabsList className={`grid w-full gap-1 sm:max-w-200 ${isDesktopRuntime ? "grid-cols-4" : "grid-cols-3"}`}>
               <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
               <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
               <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
-              <TabsTrigger value="management" className="text-xs sm:text-sm">Verwaltung</TabsTrigger>
+              {isDesktopRuntime ? <TabsTrigger value="management" className="text-xs sm:text-sm">Verwaltung</TabsTrigger> : null}
             </TabsList>
           </div>
 
@@ -1234,6 +1435,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           </TabsContent>
 
           <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
+            {isDesktopRuntime ? (
             <div className="md:col-span-2 flex items-center justify-between gap-3 p-3 sm:p-4 sm:rounded-lg sm:border sm:bg-card">
               <div>
                 <h3 className="text-base font-semibold">Inventar importieren</h3>
@@ -1245,6 +1447,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 CSFloat Sync
               </Button>
             </div>
+            ) : null}
 
             <div className="overflow-x-auto md:col-span-1 sm:rounded-lg sm:border sm:bg-card">
               <InventoryTable
@@ -1269,7 +1472,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 item={selectedItem}
                 history={selectedItemHistory}
                 historyLoading={selectedItemHistoryLoading}
-                onExcludeChange={handleExcludeChange}
+                onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
+                canToggleExclude={isDesktopRuntime}
               />
             </div>
 
@@ -1282,7 +1486,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   item={modal.data.item}
                   history={selectedItemHistory}
                   historyLoading={selectedItemHistoryLoading}
-                  onToggleExclude={handleExcludeChange}
+                  onToggleExclude={isDesktopRuntime ? handleExcludeChange : undefined}
+                  canToggleExclude={isDesktopRuntime}
                 />
               ) : null,
             )}
@@ -1292,6 +1497,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
             <Watchlist focusTarget={watchlistFocusTarget} />
           </TabsContent>
 
+          {isDesktopRuntime ? (
           <TabsContent value="management" className="space-y-4 sm:space-y-6">
             {typeof window !== "undefined" && !window.electronAPI?.localStore ? (
               <Card>
@@ -1658,7 +1864,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </>
             )}
           </TabsContent>
+          ) : null}
         </Tabs>
+        ) : null}
 
         <CsFloatTradeSyncModal
           isOpen={isCsFloatSyncOpen}

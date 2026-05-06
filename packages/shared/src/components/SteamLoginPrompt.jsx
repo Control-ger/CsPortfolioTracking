@@ -51,9 +51,15 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     setError("");
 
     try {
+      const isWeb = typeof window !== "undefined" && window.electronAPI === undefined;
       const result = await initiateSteamLogin();
-      
-      if (result.success) {
+
+      // Web flow redirects to Steam in the same tab; no stable result object is guaranteed.
+      if (isWeb && !result) {
+        return;
+      }
+
+      if (result?.success) {
         setUser(result.user);
         
         // Optional: Fetch CS2 inventory and import as investments
@@ -63,7 +69,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         
         onLoginSuccess?.(result.user);
       } else {
-        setError(result.error || "Login failed");
+        setError(result?.error || "Login failed");
       }
     } catch (err) {
       setError(err.message || "Failed to initiate Steam login");
@@ -149,7 +155,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
             <div>
               <p className="font-medium">{user.name}</p>
               <p className="text-sm text-muted-foreground">
-                {user.isDevMode ? "Dev Mode" : `Steam ID: ${user.steamId}`}
+                {user.isDevMode ? "Dev Mode" : "Steam verbunden"}
               </p>
             </div>
           </div>

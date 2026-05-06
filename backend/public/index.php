@@ -6,6 +6,7 @@ use App\Application\Service\FeeSettingsService;
 use App\Application\Service\CsFloatTradeSyncService;
 use App\Application\Service\PricingService;
 use App\Application\Service\WatchlistService;
+use App\Application\Service\SyncService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
 use App\Http\Controller\CsFloatSyncController;
@@ -15,6 +16,7 @@ use App\Http\Controller\PortfolioController;
 use App\Http\Controller\SettingsController;
 use App\Http\Controller\SteamAuthController;
 use App\Http\Controller\SyncStatusController;
+use App\Http\Controller\SyncController;
 use App\Http\Controller\WatchlistController;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\CsFloatTradeClient;
@@ -22,7 +24,7 @@ use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
-use App\Infrastructure\Persistence\Repository\ItemCatalogRepository;
+use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
@@ -297,7 +299,7 @@ $observabilityService = new ObservabilityService(
     eventRepository: null,
     fileSink: new FileSink(),
     contextSanitizer: new ContextSanitizer(),
-    dbWriteEnabled: obs_env_flag('OBSERVABILITY_ENABLED', true)
+    dbWriteEnabled: obs_env_flag('OBSERVABILITY_ENABLED', false)
 );
 Logger::setObservabilityService($observabilityService);
 
@@ -323,7 +325,7 @@ if ($emitStartupEvents) {
         'Active system configuration loaded',
         [
             'debug' => obs_env_flag('DEBUG', false),
-            'observabilityEnabled' => obs_env_flag('OBSERVABILITY_ENABLED', true),
+            'observabilityEnabled' => obs_env_flag('OBSERVABILITY_ENABLED', false),
             'observabilityEventsApiEnabled' => obs_env_flag('OBSERVABILITY_EVENTS_API_ENABLED', false),
             'observabilityFrontendTelemetryEnabled' => obs_env_flag('OBSERVABILITY_FRONTEND_TELEMETRY_ENABLED', false),
             'observabilityRetentionDays' => obs_env_int('OBSERVABILITY_RETENTION_DAYS', 30),
@@ -405,12 +407,17 @@ try {
     $watchlistRepository = new WatchlistRepository($pdo);
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
     $itemRepository = new ItemRepository($pdo);
-    $itemCatalogRepository = new ItemCatalogRepository($pdo);
+    $exchangeRateRepository = new ExchangeRateRepository($pdo);
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
     $userRepository = new UserRepository($pdo);
     $userRepository->ensureDefaultUser();
+    // Ensure core schema in a deterministic order on fresh databases.
+    // This prevents first-request failures when foreign-key dependent tables
+    // are created lazily in a different order.
+    $itemRepository->ensureTable();
+    $investmentRepository->ensureTable();
     
     // Initialize auth state tokens table for Steam OpenID
     (new AuthStateRepository($pdo))->ensureTable();
@@ -421,7 +428,8 @@ try {
         new ExchangeRateClient(),
         new SteamMarketClient(),
         new MarketItemClassifier(),
-        $itemCatalogRepository,
+        $itemRepository,
+        $exchangeRateRepository,
         $itemLiveCacheRepository
     );
     $csFloatTradeSyncService = new CsFloatTradeSyncService(
@@ -433,21 +441,29 @@ try {
     );
     $portfolioService = new PortfolioService(
         $investmentRepository,
+        $exchangeRateRepository,
         $positionHistoryRepository,
         $portfolioHistoryRepository,
         $priceHistoryRepository,
         $pricingService,
         $feeSettingsService
     );
-    $watchlistService = new WatchlistService($watchlistRepository, $priceHistoryRepository, $pricingService);
+    $watchlistService = new WatchlistService(
+        $watchlistRepository,
+        $itemRepository,
+        $priceHistoryRepository,
+        $pricingService
+    );
+    $syncService = new SyncService($pdo);
     $settingsController = new SettingsController($feeSettingsService);
 
     $portfolioController = new PortfolioController($portfolioService);
-    $watchlistController = new WatchlistController($watchlistService);
+    $watchlistController = new WatchlistController($watchlistService, $syncService);
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);
     $frontendTelemetryController = new FrontendTelemetryController();
     $syncStatusController = new SyncStatusController($syncStatusRepository);
+    $syncController = new SyncController($syncService);
     $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
     $exchangeRateController = new ExchangeRateController(new ExchangeRateClient());
     $steamAuthController = new SteamAuthController($pdo, $userRepository);
@@ -465,6 +481,8 @@ try {
     $router->register('GET', '/api/v1/portfolio/sync-status', [$syncStatusController, 'status']);
     $router->register('GET', '/api/v1/portfolio/sync-history', [$syncStatusController, 'history']);
     $router->register('GET', '/api/v1/portfolio/sync-stats', [$syncStatusController, 'stats']);
+    $router->register('GET', '/api/v1/sync/pull', [$syncController, 'pull']);
+    $router->register('POST', '/api/v1/sync/push', [$syncController, 'push']);
     $router->register('GET', '/api/v1/settings/fees', [$settingsController, 'fees']);
     $router->register('PUT', '/api/v1/settings/fees', [$settingsController, 'updateFees']);
     $router->register('GET', '/api/v1/settings/csfloat-api-key', [$settingsController, 'getCsFloatApiKeyStatus']);
@@ -493,10 +511,12 @@ try {
     $router->register('POST', '/api/v1/observability/frontend-events', [$frontendTelemetryController, 'ingest']);
 
     // Steam Authentication Routes
-    $router->register('POST', '/api/v1/auth/steam/login', function () use ($steamAuthController) {
+    $steamLoginHandler = function () use ($steamAuthController) {
         $result = $steamAuthController->login($_GET, $_SERVER);
         JsonResponseFactory::success($result, [], $result['success'] ? 200 : 400);
-    });
+    };
+    $router->register('POST', '/api/v1/auth/steam/login', $steamLoginHandler);
+    $router->register('GET', '/api/v1/auth/steam/login', $steamLoginHandler);
     $router->register('GET', '/api/v1/auth/steam/callback', function () use ($steamAuthController) {
         $result = $steamAuthController->callback($_GET, $_SERVER);
         

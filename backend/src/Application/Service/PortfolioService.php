@@ -39,6 +39,11 @@ final class PortfolioService
         $snapshotTime = $this->currentHourBucket();
 
         foreach ($investments as $investment) {
+            $excluded = $this->isExcludedInvestment($investment);
+            if ($excluded) {
+                continue;
+            }
+
             $itemId = (int) ($investment['item_id'] ?? 0);
             $name = (string) ($investment['name'] ?? '');
             $buyPriceUsd = isset($investment['buy_price_usd']) ? (float) $investment['buy_price_usd'] : null;
@@ -128,6 +133,7 @@ final class PortfolioService
                 'priceAgeSeconds' => $priceAgeSeconds,
                 'freshnessStatus' => $freshnessStatus,
                 'freshnessLabel' => $this->resolveFreshnessLabel($freshnessStatus, $priceAgeSeconds),
+                'excluded' => $excluded,
             ];
         }
 
@@ -358,6 +364,8 @@ final class PortfolioService
             return;
         }
 
+        // price_history references exchange_rates via FK; ensure parent table first.
+        $this->exchangeRateRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
         $this->priceHistoryReady = true;
     }
@@ -702,6 +710,37 @@ final class PortfolioService
 
     public function toggleExcludeInvestment(int $userId = 1, int $id = 0, bool $exclude = false): bool
     {
+        if ($id <= 0) {
+            return false;
+        }
+
+        return $this->investmentRepository->updateExcludedFlag($userId, $id, $exclude);
+    }
+
+    private function isExcludedInvestment(array $investment): bool
+    {
+        $rawPayload = $investment['raw_payload_json'] ?? null;
+        if (!is_string($rawPayload) || trim($rawPayload) === '') {
+            return false;
+        }
+
+        $decoded = json_decode($rawPayload, true);
+        if (!is_array($decoded)) {
+            return false;
+        }
+
+        $value = $decoded['excluded'] ?? $decoded['isExcluded'] ?? false;
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+
         return false;
     }
 }

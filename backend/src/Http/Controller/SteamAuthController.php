@@ -152,7 +152,7 @@ final class SteamAuthController
                 'avatar' => $profile['avatar'] ?? $user['steam_avatar'],
             ],
             'sessionToken' => $sessionToken,
-            'redirectUrl' => $storedData['returnUrl']
+            'redirectUrl' => (string) ($storedData['returnUrl'] ?? $storedData['return_url'] ?? '')
         ];
     }
     
@@ -228,8 +228,13 @@ final class SteamAuthController
     {
         $scheme = $this->isSecureConnection($server) ? 'https' : 'http';
         $host = $server['HTTP_HOST'] ?? 'localhost';
-        
-        return "{$scheme}://{$host}/api/v1/auth/steam/callback?state={$state}";
+
+        $scriptName = (string) ($server['SCRIPT_NAME'] ?? '');
+        $basePath = str_ends_with($scriptName, '/api/index.php')
+            ? '/api/index.php'
+            : '/api/index.php';
+
+        return "{$scheme}://{$host}{$basePath}/api/v1/auth/steam/callback?state={$state}";
     }
     
     private function getRealm(array $server): string
@@ -242,8 +247,15 @@ final class SteamAuthController
     
     private function verifyOpenIDResponse(array $query): ?string
     {
-        // Validate OpenID signature by making verification request to Steam
-        $params = $query;
+        // PHP normalizes query keys with dots to underscores (openid.ns -> openid_ns).
+        // Steam requires dot notation for signature verification payload.
+        $params = [];
+        foreach ($query as $key => $value) {
+            $normalizedKey = str_starts_with((string) $key, 'openid_')
+                ? str_replace('openid_', 'openid.', (string) $key)
+                : (string) $key;
+            $params[$normalizedKey] = $value;
+        }
         $params['openid.mode'] = 'check_authentication';
         
         $ch = curl_init(self::STEAM_OPENID_URL);
@@ -276,7 +288,7 @@ final class SteamAuthController
         $apiKey = $_ENV[self::STEAM_API_KEY_ENV] ?? null;
         
         if (!$apiKey) {
-            return [];
+            return $this->fetchSteamProfileFromPublicXml($steamId64);
         }
         
         $url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
@@ -294,13 +306,50 @@ final class SteamAuthController
         $player = $data['response']['players'][0] ?? null;
         
         if (!$player) {
-            return [];
+            return $this->fetchSteamProfileFromPublicXml($steamId64);
         }
         
         return [
             'name' => $player['personaname'] ?? null,
             'avatar' => $player['avatarfull'] ?? null,
         ];
+    }
+
+    private function fetchSteamProfileFromPublicXml(string $steamId64): array
+    {
+        $url = "https://steamcommunity.com/profiles/{$steamId64}/?xml=1";
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'CS-Portfolio-Tracker/1.0');
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !is_string($response) || trim($response) === '') {
+            return [];
+        }
+
+        try {
+            $xml = @simplexml_load_string($response);
+            if ($xml === false) {
+                return [];
+            }
+
+            $name = isset($xml->steamID) ? trim((string) $xml->steamID) : null;
+            $avatar = isset($xml->avatarFull) ? trim((string) $xml->avatarFull) : null;
+
+            return [
+                'name' => $name !== '' ? $name : null,
+                'avatar' => $avatar !== '' ? $avatar : null,
+            ];
+        } catch (\Throwable) {
+            return [];
+        }
     }
     
     private function fetchPublicInventory(string $steamId64): array

@@ -17,17 +17,15 @@ final class ExchangeRateController
     public function getRates(Request $request): void
     {
         try {
-            // Get USD to EUR rate (returns how many EUR you get for 1 USD)
-            $usdToEur = $this->exchangeRateClient->usdToEur();
-            
-            // Calculate rates relative to EUR (how many X you get for 1 EUR)
-            // If 1 USD = 0.92 EUR, then 1 EUR = 1/0.92 USD ≈ 1.087 USD
+            // Provider gives USD-based rates (1 USD = X).
+            $usdRates = $this->exchangeRateClient->usdRates();
+            $usdToEur = (float) ($usdRates['EUR'] ?? 0.92);
+            $usdToGbp = (float) ($usdRates['GBP'] ?? (0.85 * $usdToEur));
+
+            // Convert to EUR-based rates (1 EUR = X).
             $eurToUsd = $usdToEur > 0 ? round(1 / $usdToEur, 4) : 1.08;
-            
-            // For now, use approximate rates for GBP
-            // In production, you might want to fetch these from an API as well
-            $eurToGbp = 0.85; // Approximate: 1 EUR = 0.85 GBP
-            
+            $eurToGbp = $usdToEur > 0 ? round($usdToGbp / $usdToEur, 4) : 0.85;
+
             JsonResponseFactory::success([
                 'base' => 'EUR',
                 'rates' => [
@@ -40,7 +38,7 @@ final class ExchangeRateController
                 'timestamp' => time(),
             ]);
         } catch (Throwable $exception) {
-            // Return fallback rates on error
+            // Return fallback rates on error.
             JsonResponseFactory::success([
                 'base' => 'EUR',
                 'rates' => [

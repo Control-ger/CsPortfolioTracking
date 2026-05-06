@@ -81,6 +81,7 @@ export const Watchlist = ({ focusTarget = null }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const itemRefs = useRef(new Map());
+  const hasFiniteNumber = (value) => Number.isFinite(Number(value));
 
   const loadWatchlistData = async () => {
     try {
@@ -295,10 +296,10 @@ export const Watchlist = ({ focusTarget = null }) => {
                         <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
                           Interaktiver Preisverlauf
                         </p>
-                        {selectedItem.currentPrice !== null && (
+                        {hasFiniteNumber(selectedItem.currentPrice) && (
                           <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-muted-foreground">
                             <p>
-                              Aktuell: {selectedItem.currentPrice.toFixed(2)} EUR
+                              Aktuell: {Number(selectedItem.currentPrice).toFixed(2)} EUR
                             </p>
                             <PriceSourceBadge
                               priceSource={selectedItem.priceSource}

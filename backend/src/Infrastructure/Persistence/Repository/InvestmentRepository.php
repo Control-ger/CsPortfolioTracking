@@ -146,7 +146,7 @@ final class InvestmentRepository
         $this->ensureTable();
 
         $sql = 'SELECT i.id, i.user_id, i.item_id, i.buy_price_usd, i.quantity,
-                       i.funding_mode, i.platform, i.external_trade_id, i.purchased_at,
+                       i.funding_mode, i.platform, i.external_trade_id, i.purchased_at, i.raw_payload_json,
                        it.name, it.market_hash_name, it.type, it.image_url
                 FROM investments i
                 JOIN items it ON it.id = i.item_id
@@ -370,5 +370,42 @@ final class InvestmentRepository
             );
             throw $exception;
         }
+    }
+
+    public function updateExcludedFlag(int $userId, int $investmentId, bool $exclude): bool
+    {
+        $this->ensureTable();
+
+        $selectSql = 'SELECT raw_payload_json FROM investments WHERE user_id = ? AND id = ? LIMIT 1';
+        $selectStmt = $this->pdo->prepare($selectSql);
+        $selectStmt->execute([$userId, $investmentId]);
+        $row = $selectStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row === false) {
+            return false;
+        }
+
+        $payload = [];
+        $rawPayload = $row['raw_payload_json'] ?? null;
+        if (is_string($rawPayload) && trim($rawPayload) !== '') {
+            $decoded = json_decode($rawPayload, true);
+            if (is_array($decoded)) {
+                $payload = $decoded;
+            }
+        }
+
+        $payload['excluded'] = $exclude;
+        $payload['isExcluded'] = $exclude;
+        $payload['updatedAt'] = gmdate('c');
+
+        $updateSql = 'UPDATE investments SET raw_payload_json = ? WHERE user_id = ? AND id = ?';
+        $updateStmt = $this->pdo->prepare($updateSql);
+        $updateStmt->execute([
+            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            $userId,
+            $investmentId,
+        ]);
+
+        return true;
     }
 }

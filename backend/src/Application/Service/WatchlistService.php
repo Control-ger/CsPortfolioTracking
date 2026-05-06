@@ -161,6 +161,11 @@ final class WatchlistService
         $this->priceHistoryRepository->ensureTable();
 
         $itemId = $this->itemRepository->findOrCreateByName($trimmedName, $type);
+        $item = $this->itemRepository->findById($itemId);
+        $imageUrl = is_array($item) ? (string) ($item['image_url'] ?? '') : '';
+        if ($imageUrl === '') {
+            $imageUrl = (string) ($this->pricingService->getItemImageUrl($trimmedName) ?? '');
+        }
 
         if ($this->watchlistRepository->existsByItemId($userId, $itemId)) {
             throw new \RuntimeException('Item ist bereits in der Watchlist vorhanden.');
@@ -185,6 +190,13 @@ final class WatchlistService
 
         return [
             'id' => $id,
+            'userId' => $userId,
+            'itemId' => $itemId,
+            'name' => $trimmedName,
+            'type' => $type,
+            'imageUrl' => $imageUrl !== '' ? $imageUrl : null,
+            'createdAt' => gmdate('c'),
+            'updatedAt' => gmdate('c'),
             'currentPrice' => $liveSnapshot['priceEur'] ?? null,
             'isLiveSynced' => $liveSnapshot !== null,
         ];

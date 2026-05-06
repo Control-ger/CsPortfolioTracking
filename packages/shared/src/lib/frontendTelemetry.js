@@ -1,6 +1,6 @@
 const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`
-const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE
-const TELEMETRY_ENDPOINT = `${API_BASE}/api/v1/observability/frontend-events`
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE)
+const FRONTEND_TELEMETRY_ENABLED = false
 
 const MAX_EVENTS_PER_MINUTE = 20
 const MAX_PAYLOAD_BYTES = 8 * 1024
@@ -9,6 +9,26 @@ const MAX_STACK_LINES = 20
 let telemetryWindowStartedAt = Date.now()
 let telemetryEventsInWindow = 0
 let handlersInstalled = false
+
+function normalizeApiBase(value) {
+  return String(value || "")
+    .replace(/\/+$/, "")
+    .replace(/\/api\/v1$/i, "")
+}
+
+async function resolveTelemetryEndpoint() {
+  if (
+    typeof window !== "undefined" &&
+    window.electronAPI?.backend?.getBaseUrl
+  ) {
+    const desktopBase = await window.electronAPI.backend.getBaseUrl()
+    if (desktopBase) {
+      return `${normalizeApiBase(desktopBase)}/api/v1/observability/frontend-events`
+    }
+  }
+
+  return `${API_BASE}/api/v1/observability/frontend-events`
+}
 
 function normalizeLevel(level) {
   const value = String(level || "").toLowerCase().trim()
@@ -116,10 +136,12 @@ function buildPayloadJson(payload) {
 }
 
 async function dispatchPayload(payloadJson) {
+  const telemetryEndpoint = await resolveTelemetryEndpoint()
+
   if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
     try {
       const blob = new Blob([payloadJson], { type: "application/json" })
-      if (navigator.sendBeacon(TELEMETRY_ENDPOINT, blob)) {
+      if (navigator.sendBeacon(telemetryEndpoint, blob)) {
         return true
       }
     } catch {
@@ -128,7 +150,7 @@ async function dispatchPayload(payloadJson) {
   }
 
   try {
-    const response = await fetch(TELEMETRY_ENDPOINT, {
+    const response = await fetch(telemetryEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payloadJson,
@@ -162,6 +184,10 @@ export function errorToContext(error) {
 }
 
 export async function sendFrontendTelemetryEvent(input) {
+  if (!FRONTEND_TELEMETRY_ENABLED) {
+    return false
+  }
+
   if (typeof window === "undefined" || !input) {
     return false
   }
@@ -190,6 +216,10 @@ export async function sendFrontendTelemetryEvent(input) {
 }
 
 export function installFrontendTelemetryHandlers() {
+  if (!FRONTEND_TELEMETRY_ENABLED) {
+    return
+  }
+
   if (handlersInstalled || typeof window === "undefined") {
     return
   }

@@ -3,12 +3,12 @@ import {
   sendFrontendTelemetryEvent,
 } from "./frontendTelemetry";
 import { getCurrentUser } from "./auth.js";
+import { runDesktopSyncNowIfDue } from "./desktopSync.js";
 import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 
 const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`;
 const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE);
-let desktopApiBasePromise = null;
 
 function normalizeApiBase(value) {
   return String(value || "")
@@ -21,18 +21,13 @@ async function resolveApiBase() {
     typeof window !== "undefined" &&
     window.electronAPI?.backend?.getBaseUrl
   ) {
-    desktopApiBasePromise ||= window.electronAPI.backend.getBaseUrl();
-    const desktopBase = await desktopApiBasePromise;
+    const desktopBase = await window.electronAPI.backend.getBaseUrl();
     if (desktopBase) {
       return normalizeApiBase(desktopBase);
     }
   }
 
   return API_BASE;
-}
-
-function resetDesktopApiBase() {
-  desktopApiBasePromise = null;
 }
 
 function getDesktopSecrets() {
@@ -131,34 +126,58 @@ function buildApiError(path, response, payload, apiBase = API_BASE) {
 async function requestPayload(path, options = {}) {
   const method = String(options?.method || "GET").toUpperCase();
   const cacheKey = getCacheKey(path, method);
-  const apiBase = await resolveApiBase();
+  let apiBase = await resolveApiBase();
   let response;
 
   try {
     response = await fetch(`${apiBase}${path}`, options);
   } catch (fetchError) {
+    const isDesktop = typeof window !== "undefined" && Boolean(window.electronAPI?.backend?.getBaseUrl);
+    const shouldRetry =
+      isDesktop &&
+      fetchError instanceof TypeError &&
+      String(fetchError?.message || "").toLowerCase().includes("fetch");
+
+    if (shouldRetry) {
+      try {
+        const refreshedBase = await window.electronAPI.backend.getBaseUrl();
+        if (refreshedBase) {
+          apiBase = normalizeApiBase(refreshedBase);
+          response = await fetch(`${apiBase}${path}`, options);
+        } else {
+          throw fetchError;
+        }
+      } catch {
+        // ignore and continue with normal fallback + error path
+      }
+    }
+
+    if (response) {
+      // Retry succeeded, continue regular response parsing path.
+    } else {
     // Don't report abort errors as they're intentional
-    if (fetchError.name === "AbortError") {
+      if (fetchError.name === "AbortError") {
+        throw fetchError;
+      }
+      void sendFrontendTelemetryEvent({
+        level: "error",
+        event: "frontend.fetch_error",
+        message: "Fetch request failed",
+        context: {
+          method,
+          path,
+          apiBase,
+          ...errorToContext(fetchError),
+        },
+      });
+
+      const cachedPayload = await readCachedPayload(cacheKey);
+      if (cachedPayload) {
+        return cachedPayload;
+      }
+
       throw fetchError;
     }
-    void sendFrontendTelemetryEvent({
-      level: "error",
-      event: "frontend.fetch_error",
-      message: "Fetch request failed",
-      context: {
-        method,
-        path,
-        apiBase,
-        ...errorToContext(fetchError),
-      },
-    });
-
-    const cachedPayload = await readCachedPayload(cacheKey);
-    if (cachedPayload) {
-      return cachedPayload;
-    }
-
-    throw fetchError;
   }
 
   const contentType = response.headers.get("content-type") || "";
@@ -240,12 +259,39 @@ function getDesktopLocalStore() {
   return window.electronAPI.localStore;
 }
 
+function resolveDesktopLocalUserId(user) {
+  const candidate = user?.id ?? user?.userId ?? 1;
+  const parsed = Number(candidate);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return String(Math.floor(parsed));
+  }
+  return "1";
+}
+
+function stableHash(value) {
+  const input = String(value || "");
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(16);
+}
+
 function mapCsFloatPreviewTradeToInvestment(trade) {
   const name = trade?.marketHashName || trade?.name || "Unknown Item";
   const buyPriceUsd = Number(trade?.buyPriceUsd ?? trade?.buyPrice ?? 0);
+  const fallbackKey = `fallback-${stableHash(
+    `${name}|${trade?.purchasedAt || ""}|${buyPriceUsd}|${Number(trade?.quantity || 1)}`,
+  )}`;
+  const stableTradeKey = String(
+    trade?.externalTradeId ||
+      trade?.id ||
+      trade?.tradeId ||
+      fallbackKey,
+  );
 
   return {
-    id: trade?.externalTradeId ? `csfloat-${trade.externalTradeId}` : undefined,
+    id: `csfloat-${stableTradeKey}`,
     name,
     marketHashName: name,
     type: trade?.type || "skin",
@@ -255,11 +301,11 @@ function mapCsFloatPreviewTradeToInvestment(trade) {
     fundingMode: trade?.fundingMode || "wallet_funded",
     imageUrl: trade?.imageUrl || null,
     platform: "csfloat",
-    externalTradeId: trade?.externalTradeId || null,
+    externalTradeId: trade?.externalTradeId || stableTradeKey,
     purchasedAt: trade?.purchasedAt || null,
     floatValue: trade?.floatValue ?? trade?.float ?? null,
     paintSeed: trade?.paintSeed ?? trade?.patternSeed ?? null,
-    notes: `Imported from CSFloat trade ${trade?.externalTradeId || ""}`.trim(),
+    notes: `Imported from CSFloat trade ${trade?.externalTradeId || stableTradeKey}`.trim(),
   };
 }
 
@@ -293,6 +339,10 @@ export async function fetchPortfolioComposition() {
   return request("/api/v1/portfolio/composition");
 }
 
+export async function fetchExchangeRate() {
+  return request("/api/v1/exchange-rate");
+}
+
 export async function savePortfolioDailyValue(totalValue) {
   return request("/api/v1/portfolio/daily-value", {
     method: "PUT",
@@ -318,25 +368,55 @@ export async function executeCsFloatTradeSync(payload = {}) {
   if (localStore) {
     const preview = await fetchCsFloatTradeSyncPreview(payload);
     const currentUser = await getCurrentUser();
-    const userId = currentUser?.id || currentUser?.steamId || "local";
+    const userId = resolveDesktopLocalUserId(currentUser);
     const trades = Array.isArray(preview?.data?.importTrades)
       ? preview.data.importTrades
       : Array.isArray(preview?.data?.sampleTrades)
         ? preview.data.sampleTrades
       : [];
     const rows = trades.map(mapCsFloatPreviewTradeToInvestment);
-    const result = unwrapLocalStoreResult(
-      await localStore.importInvestments(rows, userId),
-      "local-store-import-investments",
-    );
+    let inserted = 0;
+    let duplicates = 0;
+
+    for (const row of rows) {
+      const investmentId = String(row?.id || "");
+      const existing = investmentId
+        ? unwrapLocalStoreResult(
+            await localStore.getInvestment(investmentId),
+            "local-store-get-investment",
+          )
+        : null;
+
+      unwrapLocalStoreResult(
+        await localStore.upsertInvestment({
+          ...(existing || {}),
+          ...row,
+          userId,
+          excluded: Boolean(existing?.excluded),
+        }),
+        "local-store-upsert-investment",
+      );
+
+      if (existing) {
+        duplicates += 1;
+      } else {
+        inserted += 1;
+      }
+    }
+
+    try {
+      await runDesktopSyncNowIfDue({ force: true });
+    } catch (syncError) {
+      console.warn("[desktop-sync] csfloat execute sync failed", syncError);
+    }
 
     return {
       data: {
         ...(preview?.data || {}),
         mode: "execute",
         status: "success",
-        inserted: result?.imported || rows.length,
-        duplicates: 0,
+        inserted,
+        duplicates,
         skippedDuringInsert: 0,
         errors: [],
         desktopLocal: true,
@@ -439,7 +519,6 @@ export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
   const desktopSecrets = getDesktopSecrets();
   if (desktopSecrets?.setCsFloatApiKey) {
     const result = await desktopSecrets.setCsFloatApiKey(apiKeyOrEncryptedKey);
-    resetDesktopApiBase();
 
     return {
       data: result?.status || result,
@@ -476,6 +555,12 @@ export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds =
         }),
         "local-store-upsert-investment",
       );
+    }
+
+    try {
+      await runDesktopSyncNowIfDue({ force: true });
+    } catch (syncError) {
+      console.warn("[desktop-sync] exclude sync failed", syncError);
     }
 
     return {

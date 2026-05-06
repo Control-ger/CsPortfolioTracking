@@ -39,8 +39,9 @@ use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\CacheMaintenanceRepository;
+use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
-use App\Infrastructure\Persistence\Repository\ItemCatalogRepository;
+use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
@@ -59,6 +60,17 @@ $errorMessage = null;
 $snapshotSaved = false;
 $snapshotTime = null;
 $syncStatusRepository = null;
+$syncSource = 'hourly-price-sync';
+$syncUserId = 1;
+
+function cleanupSyncIdempotency(\PDO $pdo, int $retentionDays): int
+{
+    $resolvedDays = max(1, min($retentionDays, 365));
+    $sql = "DELETE FROM sync_idempotency WHERE created_at < (NOW() - INTERVAL {$resolvedDays} DAY)";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount();
+}
 
 try {
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Starting CSFloat price sync...\n");
@@ -68,7 +80,8 @@ try {
     $pdo = (new DatabaseConnectionFactory($dbConfig))->create();
 
     // Initialize repositories
-    $itemCatalogRepository = new ItemCatalogRepository($pdo);
+    $itemRepository = new ItemRepository($pdo);
+    $exchangeRateRepository = new ExchangeRateRepository($pdo);
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $investmentRepository = new InvestmentRepository($pdo);
     $portfolioHistoryRepository = new PortfolioHistoryRepository($pdo);
@@ -80,9 +93,17 @@ try {
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
 
     // Ensure tables exist with new schema
-    $itemCatalogRepository->ensureTable();
+    $itemRepository->ensureTable();
     $itemLiveCacheRepository->ensureTable();
     $syncStatusRepository->ensureTable();
+
+    $idempotencyRetentionDaysRaw = getenv('SYNC_IDEMPOTENCY_RETENTION_DAYS');
+    $idempotencyRetentionDays = is_numeric($idempotencyRetentionDaysRaw) ? (int) $idempotencyRetentionDaysRaw : 30;
+    $idempotencyDeletedRows = cleanupSyncIdempotency($pdo, $idempotencyRetentionDays);
+    fwrite(
+        STDOUT,
+        "[" . date('Y-m-d H:i:s') . "] sync_idempotency cleanup: deleted {$idempotencyDeletedRows} rows (retention {$idempotencyRetentionDays}d)\n"
+    );
 
     // Run cache maintenance (cleanup old entries)
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Running cache maintenance...\n");
@@ -109,7 +130,8 @@ try {
         $exchangeRateClient,
         $steamMarketClient,
         $marketItemClassifier,
-        $itemCatalogRepository,
+        $itemRepository,
+        $exchangeRateRepository,
         $itemLiveCacheRepository
     );
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
@@ -123,6 +145,7 @@ try {
     );
     $watchlistService = new WatchlistService(
         $watchlistRepository,
+        $itemRepository,
         $priceHistoryRepository,
         $pricingService
     );
@@ -200,7 +223,12 @@ try {
     fwrite(STDOUT, "  Status: {$status}, Portfolio synced: {$syncedCount}, Watchlist synced: {$watchlistSyncedCount}, Snapshot: " . ($snapshotSaved ? 'saved' : 'failed') . ", Errors: {$errorCount}, Rate-limited: {$rateLimitedCount}, Duration: {$duration}s\n");
 
     // Log to database
-    $syncStatusRepository->recordSync($status, $syncedCount, $errorCount, $rateLimitedCount, $errorMessage, $duration);
+    $syncStatusRepository->updateStatus(
+        $syncUserId,
+        $syncSource,
+        $status,
+        $errorMessage
+    );
 
     exit(0);
 
@@ -212,7 +240,12 @@ try {
     try {
         $duration = round(microtime(true) - $startTime, 2);
         if ($syncStatusRepository !== null) {
-            $syncStatusRepository->recordSync('failed', $syncedCount, $errorCount, $rateLimitedCount, $errorMessage, $duration);
+            $syncStatusRepository->updateStatus(
+                $syncUserId,
+                $syncSource,
+                'failed',
+                $errorMessage
+            );
         }
     } catch (Throwable $logError) {
         fwrite(STDERR, "Failed to log error: " . $logError->getMessage() . "\n");
