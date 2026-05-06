@@ -69,6 +69,7 @@ let backendBaseUrl = null;
 let sidecarSecret = null;
 let updateCheckTimer = null;
 const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const shouldAutoOpenDevTools = !app.isPackaged || process.env.DEBUG === "1";
 
 function emitUpdaterStatus(payload) {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -709,7 +710,6 @@ function createWindow() {
     webPreferences: {
       preload: path.join(app.getAppPath(), "apps", "desktop", "preload.js"),
       contextIsolation: true,
-      // Enable DevTools
       devTools: true,
     },
     icon: path.join(__dirname, "icon.ico"),
@@ -719,9 +719,10 @@ function createWindow() {
   mainWindow.maximize(); // Startet das Fenster in "Fullscreen-Window" Modus
   mainWindow.show(); // Jetzt anzeigen
 
-  // Always open DevTools for debugging
-  mainWindow.webContents.openDevTools({ mode: "detach" });
-  console.log("[main] DevTools opened in detach mode");
+  if (shouldAutoOpenDevTools) {
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+    console.log("[main] DevTools opened in detach mode");
+  }
 
   // Log renderer console messages to file
   mainWindow.webContents.on("console-message", (...args) => {
