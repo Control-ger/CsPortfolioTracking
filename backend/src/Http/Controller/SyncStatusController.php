@@ -19,15 +19,14 @@ final class SyncStatusController
     {
         try {
             $userId = $this->resolveUserId($request);
-            $lastSync = $this->syncStatusRepository->getLastSync($userId);
+            $source = (string) ($request->queryParam('source') ?? 'hourly-price-sync');
+            $lastSync = $this->syncStatusRepository->getLastSync($userId, $source);
 
             if ($lastSync === null) {
                 JsonResponseFactory::success([
                     'lastSync' => null,
+                    'source' => $source,
                     'status' => 'never',
-                    'itemsSynced' => 0,
-                    'itemsFailed' => 0,
-                    'rateLimited' => 0,
                     'nextSync' => null,
                     'message' => 'No sync history found',
                 ]);
@@ -35,19 +34,20 @@ final class SyncStatusController
             }
 
             // Calculate next sync time (hourly, so last sync + 1h)
-            $lastSyncTime = strtotime($lastSync['sync_date']);
-            $nextSyncTime = $lastSyncTime + 3600; // +1 hour
+            $lastSyncRaw = (string) ($lastSync['last_sync_at'] ?? '');
+            $lastSyncTime = strtotime($lastSyncRaw);
+            if ($lastSyncTime === false) {
+                $lastSyncTime = time();
+            }
+            $nextSyncTime = $lastSyncTime + 3600;
             $now = time();
             $nextSync = date('Y-m-d H:i:s', $nextSyncTime);
             $minutesUntilNext = ceil(($nextSyncTime - $now) / 60);
 
             JsonResponseFactory::success([
-                'lastSync' => $lastSync['sync_date'],
+                'source' => (string) ($lastSync['source'] ?? $source),
+                'lastSync' => $lastSyncRaw !== '' ? $lastSyncRaw : null,
                 'status' => $lastSync['status'],
-                'itemsSynced' => (int) $lastSync['items_synced'],
-                'itemsFailed' => (int) $lastSync['items_failed'],
-                'rateLimited' => (int) $lastSync['rate_limited'],
-                'durationSeconds' => $lastSync['duration_seconds'],
                 'errorMessage' => $lastSync['error_message'],
                 'nextSync' => $nextSync,
                 'minutesUntilNext' => max(0, $minutesUntilNext),
@@ -92,21 +92,30 @@ final class SyncStatusController
     public function stats(Request $request): void
     {
         try {
-            $hoursBack = (int) ($request->queryParam('hoursBack') ?? 24);
-            $hoursBack = min(max($hoursBack, 1), 1440); // Clamp between 1 and 1440 hours (60 days)
+            // sync_status stores latest state per source/user, not a full event history.
+            // Expose a compact source-level health snapshot from current rows.
+            $rows = $this->syncStatusRepository->getLatestSyncs($this->resolveUserId($request), 100);
+            $success = 0;
+            $failed = 0;
+            $partial = 0;
 
-            $stats = $this->syncStatusRepository->getSyncStats($hoursBack);
+            foreach ($rows as $row) {
+                $state = (string) ($row['status'] ?? '');
+                if ($state === 'success') {
+                    $success++;
+                } elseif ($state === 'failed') {
+                    $failed++;
+                } elseif ($state === 'partial') {
+                    $partial++;
+                }
+            }
 
             JsonResponseFactory::success([
-                'hoursBack' => $hoursBack,
                 'stats' => [
-                    'totalSyncs' => (int) ($stats['total_syncs'] ?? 0),
-                    'successfulSyncs' => (int) ($stats['successful_syncs'] ?? 0),
-                    'failedSyncs' => (int) ($stats['failed_syncs'] ?? 0),
-                    'partialSyncs' => (int) ($stats['partial_syncs'] ?? 0),
-                    'totalItemsSynced' => (int) ($stats['total_items_synced'] ?? 0),
-                    'totalItemsFailed' => (int) ($stats['total_items_failed'] ?? 0),
-                    'avgDurationSeconds' => $stats['avg_duration_seconds'],
+                    'trackedSources' => count($rows),
+                    'successfulSources' => $success,
+                    'failedSources' => $failed,
+                    'partialSources' => $partial,
                 ],
             ]);
         } catch (Throwable $exception) {

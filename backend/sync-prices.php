@@ -74,6 +74,84 @@ function cleanupSyncIdempotency(\PDO $pdo, int $retentionDays): int
     return $stmt->rowCount();
 }
 
+/**
+ * Mirrors current live cache prices into scalable pricing tables.
+ * Safe no-op when scalable tables are not present yet.
+ *
+ * @return array{skipped:bool,latestUpserts:int,hourlyUpserts:int,error:?string}
+ */
+function mirrorScalablePriceTables(\PDO $pdo): array
+{
+    try {
+        $latestExists = (bool) ($pdo->query("SHOW TABLES LIKE 'item_price_latest'")?->fetchColumn() ?: false);
+        $hourlyExists = (bool) ($pdo->query("SHOW TABLES LIKE 'item_price_history_hourly'")?->fetchColumn() ?: false);
+
+        if (!$latestExists || !$hourlyExists) {
+            return [
+                'skipped' => true,
+                'latestUpserts' => 0,
+                'hourlyUpserts' => 0,
+                'error' => null,
+            ];
+        }
+
+        $latestSql = "INSERT INTO item_price_latest (
+                item_id, price_usd, exchange_rate_id, price_source, provider_timestamp, fetched_at
+            )
+            SELECT
+                ilc.item_id,
+                ilc.price_usd,
+                ilc.exchange_rate_id,
+                COALESCE(ilc.price_source, 'sync'),
+                ilc.fetched_at,
+                ilc.fetched_at
+            FROM item_live_cache ilc
+            ON DUPLICATE KEY UPDATE
+                price_usd = VALUES(price_usd),
+                exchange_rate_id = VALUES(exchange_rate_id),
+                price_source = VALUES(price_source),
+                provider_timestamp = VALUES(provider_timestamp),
+                fetched_at = VALUES(fetched_at)";
+        $latestStmt = $pdo->prepare($latestSql);
+        $latestStmt->execute();
+        $latestAffected = $latestStmt->rowCount();
+
+        $hourlySql = "INSERT INTO item_price_history_hourly (
+                item_id, bucket_start, price_usd, exchange_rate_id, price_source, provider_timestamp
+            )
+            SELECT
+                ilc.item_id,
+                DATE_FORMAT(ilc.fetched_at, '%Y-%m-%d %H:00:00'),
+                ilc.price_usd,
+                ilc.exchange_rate_id,
+                COALESCE(ilc.price_source, 'sync'),
+                ilc.fetched_at
+            FROM item_live_cache ilc
+            ON DUPLICATE KEY UPDATE
+                price_usd = VALUES(price_usd),
+                exchange_rate_id = VALUES(exchange_rate_id),
+                price_source = VALUES(price_source),
+                provider_timestamp = VALUES(provider_timestamp)";
+        $hourlyStmt = $pdo->prepare($hourlySql);
+        $hourlyStmt->execute();
+        $hourlyAffected = $hourlyStmt->rowCount();
+
+        return [
+            'skipped' => false,
+            'latestUpserts' => $latestAffected,
+            'hourlyUpserts' => $hourlyAffected,
+            'error' => null,
+        ];
+    } catch (Throwable $exception) {
+        return [
+            'skipped' => false,
+            'latestUpserts' => 0,
+            'hourlyUpserts' => 0,
+            'error' => $exception->getMessage(),
+        ];
+    }
+}
+
 try {
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Starting CSFloat price sync...\n");
 
@@ -142,6 +220,7 @@ try {
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
     $portfolioService = new PortfolioService(
         $investmentRepository,
+        $exchangeRateRepository,
         $positionHistoryRepository,
         $portfolioHistoryRepository,
         $priceHistoryRepository,
@@ -234,6 +313,19 @@ try {
             fwrite(STDERR, "  ⚠ Rate limited ({$rateLimitedCount} items affected)\n");
             $status = 'partial';
         }
+    }
+
+    $scalableMirror = mirrorScalablePriceTables($pdo);
+    if ($scalableMirror['skipped']) {
+        fwrite(STDOUT, "  i Scalable price mirror skipped (tables not present)\n");
+    } elseif ($scalableMirror['error'] !== null) {
+        $errorCount++;
+        fwrite(STDERR, "  x Scalable price mirror failed: {$scalableMirror['error']}\n");
+    } else {
+        fwrite(
+            STDOUT,
+            "  ok Scalable price mirror: latest={$scalableMirror['latestUpserts']}, hourly={$scalableMirror['hourlyUpserts']}\n"
+        );
     }
 
     // Determine final status
