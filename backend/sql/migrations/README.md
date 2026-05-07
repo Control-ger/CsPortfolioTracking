@@ -6,6 +6,7 @@ Execution order:
 2. `2026_05_06_002_backfill_foundation.sql`
 3. `2026_05_06_003_prepare_deprecation.sql`
 4. `2026_05_06_004_retention_controls.sql`
+5. `2026_05_07_001_price_queue_hourly_history.sql`
 
 Notes:
 

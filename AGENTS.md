@@ -263,3 +263,13 @@ Change: Server Sync Push/Pull produktiv angebunden
 - Neue API-Routen registriert: `GET /api/v1/sync/pull`, `POST /api/v1/sync/push`.
 - Serverseitige Idempotency fuer Push-Changes ueber `sync_idempotency` eingefuehrt.
 - Konfliktbehandlung fuer aeltere `clientRevision` auf Change-Ebene eingefuehrt.
+
+---
+
+Updated: 2026-05-07
+Change: Queue-basierte Preis-Historie mit Prioritaeten fuer Server-Cron erweitert
+- Neuer Service `PriceRefreshQueueService` (`backend/src/Application/Service/PriceRefreshQueueService.php`) plant stündliche Queue-Slots fuer alle `items`.
+- Prioritaetsstufen: Investments (P1) vor Watchlist (P2) vor Katalog-Rest (P3).
+- Neuer Worker-Entry `backend/sync-price-queue-worker.php` verarbeitet due-Items in kleinen Batches mit Backoff bei Rate-Limits.
+- `price_history.date` wurde auf `DATETIME` umgestellt, damit stündliche Buckets pro Item persistiert werden koennen.
+- Supervisor-Konfiguration erweitert um `csportfolio-price-queue-worker` (alle 3 Minuten).

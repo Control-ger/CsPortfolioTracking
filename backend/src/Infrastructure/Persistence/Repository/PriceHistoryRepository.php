@@ -17,7 +17,7 @@ final class PriceHistoryRepository
         $sql = "CREATE TABLE IF NOT EXISTS price_history (
             id               INT AUTO_INCREMENT PRIMARY KEY,
             item_id          INT            NOT NULL,
-            date             DATE           NOT NULL,
+            date             DATETIME       NOT NULL,
             price_usd        DECIMAL(10,2)  NOT NULL,
             exchange_rate_id INT            NOT NULL,
             price_source     VARCHAR(64),
@@ -30,6 +30,7 @@ final class PriceHistoryRepository
 
         try {
             $this->pdo->exec($sql);
+            $this->ensureDateTimeColumn();
             RepositoryObservability::schemaEnsured(self::class, 'price_history');
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -146,6 +147,26 @@ final class PriceHistoryRepository
             );
             throw $exception;
         }
+    }
+
+    private function ensureDateTimeColumn(): void
+    {
+        $query = "SELECT DATA_TYPE
+                  FROM information_schema.COLUMNS
+                  WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'price_history'
+                    AND COLUMN_NAME = 'date'
+                  LIMIT 1";
+        $stmt = $this->pdo->query($query);
+        $dataType = strtolower((string) ($stmt?->fetchColumn() ?: ''));
+        if ($dataType === 'datetime') {
+            return;
+        }
+
+        $this->pdo->exec(
+            "ALTER TABLE price_history
+             MODIFY COLUMN date DATETIME NOT NULL"
+        );
     }
 
     public function findHistoryMapByItemIds(array $itemIds, string $fromDate): array

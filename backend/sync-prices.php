@@ -4,8 +4,8 @@ declare(strict_types=1);
 /**
  * CSFloat Price Sync CLI Script
  * 
- * Syncs all portfolio item prices from CSFloat and caches them in the database.
- * Runs hourly via Supervisor to ensure always-fresh cache.
+ * Plans the hourly prioritized price-refresh queue and persists portfolio snapshots.
+ * Runs hourly via Supervisor. Queue worker processes due items in small batches.
  * Logs all results to sync_status table for monitoring.
  * 
  * Usage: php sync-prices.php
@@ -31,9 +31,9 @@ require_once $bootstrapPath;
 
 use App\Application\Service\PortfolioService;
 use App\Application\Service\FeeSettingsService;
+use App\Application\Service\PriceRefreshQueueService;
 use App\Application\Service\PricingService;
 use App\Application\Service\SyncService;
-use App\Application\Service\WatchlistService;
 use App\Config\DatabaseConfig;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\ExchangeRateClient;
@@ -54,7 +54,6 @@ use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 
 $startTime = microtime(true);
 $syncedCount = 0;
-$watchlistSyncedCount = 0;
 $errorCount = 0;
 $rateLimitedCount = 0;
 $status = 'success';
@@ -169,14 +168,15 @@ try {
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
-    $watchlistRepository = new WatchlistRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
     $userRepository = new UserRepository($pdo);
+    $watchlistRepository = new WatchlistRepository($pdo);
 
     // Ensure tables exist with new schema
     $itemRepository->ensureTable();
     $itemLiveCacheRepository->ensureTable();
     $syncStatusRepository->ensureTable();
+    $watchlistRepository->ensureTable();
     $userRepository->ensureDefaultUser();
     (new SyncService($pdo))->ensureTables();
 
@@ -227,42 +227,31 @@ try {
         $pricingService,
         $feeSettingsService
     );
-    $watchlistService = new WatchlistService(
-        $watchlistRepository,
-        $itemRepository,
-        $priceHistoryRepository,
+    $queueService = new PriceRefreshQueueService(
+        $pdo,
         $pricingService,
-        $steamMarketClient
+        $priceHistoryRepository
+    );
+    $planStats = $queueService->planHourlyQueue();
+    fwrite(
+        STDOUT,
+        "[" . date('Y-m-d H:i:s') . "] Planned queue: total={$planStats['total']}, " .
+        "P1={$planStats['priority1']}, P2={$planStats['priority2']}, P3={$planStats['priority3']}\n"
     );
 
-    // Get all unique item names from portfolio holdings.
-    $sql = 'SELECT DISTINCT it.market_hash_name
-            FROM investments inv
-            INNER JOIN items it ON it.id = inv.item_id
-            WHERE it.market_hash_name IS NOT NULL AND it.market_hash_name <> ""';
-    $stmt = $pdo->query($sql);
-    $items = $stmt->fetchAll(\PDO::FETCH_COLUMN, 0);
-
-    if (empty($items)) {
-        fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] No portfolio items found. Continuing with watchlist and snapshot tasks.\n");
+    $kickoffBatchRaw = getenv('PRICE_QUEUE_KICKOFF_BATCH');
+    $kickoffBatch = is_numeric($kickoffBatchRaw) ? (int) $kickoffBatchRaw : 8;
+    if ($kickoffBatch > 0) {
+        $kickoffResult = $queueService->processDueQueue($kickoffBatch);
+        $syncedCount = (int) ($kickoffResult['success'] ?? 0);
+        $rateLimitedCount += (int) ($kickoffResult['rateLimited'] ?? 0);
+        $errorCount += (int) ($kickoffResult['failed'] ?? 0);
+        fwrite(
+            STDOUT,
+            "[" . date('Y-m-d H:i:s') . "] Queue kickoff: processed={$kickoffResult['processed']}, " .
+            "success={$kickoffResult['success']}, rateLimited={$kickoffResult['rateLimited']}, failed={$kickoffResult['failed']}\n"
+        );
     }
-
-    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Found " . count($items) . " unique portfolio items to sync.\n");
-
-    // Sync each item
-    foreach ($items as $itemName) {
-        try {
-            $snapshot = $pricingService->getLivePriceSnapshot($itemName);
-            if ($snapshot !== null) {
-                $syncedCount++;
-                fwrite(STDOUT, "  ✓ {$itemName}\n");
-            }
-        } catch (Throwable $e) {
-            $errorCount++;
-            fwrite(STDERR, "  ✗ {$itemName}: {$e->getMessage()}\n");
-        }
-    }
-
     $userIds = $pdo->query('SELECT id FROM users WHERE is_active = 1')
         ?->fetchAll(\PDO::FETCH_COLUMN, 0) ?: [];
     if ($userIds === []) {
@@ -270,19 +259,9 @@ try {
     }
     $userIds = array_values(array_unique(array_map('intval', $userIds)));
 
-    // Sync watchlist prices and persist snapshots per user.
-    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Syncing watchlist + snapshots for " . count($userIds) . " users...\n");
+    // Persist portfolio snapshots per user using queued/cached prices.
+    fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Saving snapshots for " . count($userIds) . " users...\n");
     foreach ($userIds as $userId) {
-        try {
-            $watchlistSyncResult = $watchlistService->refreshPrices($userId);
-            $watchlistSyncedCount += (int) ($watchlistSyncResult['updated'] ?? 0);
-            $watchlistTotalItems = (int) ($watchlistSyncResult['totalItems'] ?? 0);
-            fwrite(STDOUT, "  User {$userId} watchlist synced: " . (int) ($watchlistSyncResult['updated'] ?? 0) . "/{$watchlistTotalItems}\n");
-        } catch (Throwable $watchlistError) {
-            $errorCount++;
-            fwrite(STDERR, "  User {$userId} watchlist sync failed: {$watchlistError->getMessage()}\n");
-        }
-
         try {
             $snapshotResult = $portfolioService->saveDailyValue($userId);
             $snapshotSaved = true;
@@ -335,12 +314,12 @@ try {
         $errorMessage = "All items failed to sync. Error count: {$errorCount}";
     } elseif ($errorCount > 0 || $rateLimitedCount > 0) {
         $status = 'partial';
-        $errorMessage = "Partial sync: {$syncedCount} portfolio items synced, {$watchlistSyncedCount} watchlist items synced, {$errorCount} errors, {$rateLimitedCount} rate-limited";
+        $errorMessage = "Partial sync: queue success {$syncedCount}, {$errorCount} errors, {$rateLimitedCount} rate-limited";
     }
 
     $duration = round(microtime(true) - $startTime, 2);
     fwrite(STDOUT, "[" . date('Y-m-d H:i:s') . "] Sync complete!\n");
-    fwrite(STDOUT, "  Status: {$status}, Portfolio synced: {$syncedCount}, Watchlist synced: {$watchlistSyncedCount}, Snapshot: " . ($snapshotSaved ? 'saved' : 'failed') . ", Errors: {$errorCount}, Rate-limited: {$rateLimitedCount}, Duration: {$duration}s\n");
+    fwrite(STDOUT, "  Status: {$status}, Queue synced: {$syncedCount}, Snapshot: " . ($snapshotSaved ? 'saved' : 'failed') . ", Errors: {$errorCount}, Rate-limited: {$rateLimitedCount}, Duration: {$duration}s\n");
 
     // Log global status snapshot as compatibility row.
     $syncStatusRepository->updateStatus(
@@ -373,4 +352,5 @@ try {
     
     exit(1);
 }
+
 
