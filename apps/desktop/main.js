@@ -499,6 +499,8 @@ async function testServerConnection(serverUrl) {
       `${baseUrl}/api/v1/portfolio/summary`,
       `${baseUrl}/api/index.php/api/v1/portfolio/summary`,
       `${baseUrl}/api/index.php?route=${encodeURIComponent("/api/v1/portfolio/summary")}`,
+      `${baseUrl}/index.php/api/v1/portfolio/summary`,
+      `${baseUrl}/index.php?route=${encodeURIComponent("/api/v1/portfolio/summary")}`,
     ]),
   );
 

@@ -107,6 +107,8 @@ function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
     candidates.push(joinWithQuery(`${normalizedBase}${endpoint}`, endpointQuery));
     candidates.push(joinWithQuery(`${normalizedBase}/api/index.php${endpoint}`, endpointQuery));
     candidates.push(joinWithQuery(`${normalizedBase}/api/index.php`, routeWithQuery));
+    candidates.push(joinWithQuery(`${normalizedBase}/index.php${endpoint}`, endpointQuery));
+    candidates.push(joinWithQuery(`${normalizedBase}/index.php`, routeWithQuery));
   }
 
   return Array.from(new Set(candidates));
