@@ -23,7 +23,16 @@ final class DesktopSteamAuthController
         }
 
         $state = bin2hex(random_bytes(32));
-        $this->storeState($state, $returnUrl);
+        try {
+            $this->storeState($state, $returnUrl);
+        } catch (\Throwable $e) {
+            error_log('[desktop-auth] Failed to persist auth state: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Failed to initialize auth session',
+                'code' => 'AUTH_STATE_STORE_FAILED',
+            ];
+        }
 
         $openidParams = [
             'openid.ns' => 'http://specs.openid.net/auth/2.0',
@@ -53,8 +62,18 @@ final class DesktopSteamAuthController
         }
 
         $state = (string) ($query['state'] ?? '');
-        $storedState = $this->retrieveAndClearState($state);
+        try {
+            $storedState = $this->retrieveAndClearState($state);
+        } catch (\Throwable $e) {
+            error_log('[desktop-auth] Failed to read auth state: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Failed to read auth session',
+                'code' => 'AUTH_STATE_READ_FAILED',
+            ];
+        }
         if ($storedState === null) {
+            error_log('[desktop-auth] Missing or expired auth state for state=' . $state . ' path=' . $this->stateFilePath());
             return [
                 'success' => false,
                 'error' => 'Invalid or expired session',
@@ -80,13 +99,22 @@ final class DesktopSteamAuthController
         ];
         $sessionToken = $this->generateSessionToken($user);
 
-        $this->storeAuthResult($state, [
-            'success' => true,
-            'user' => $user,
-            'sessionToken' => $sessionToken,
-            'createdAt' => time(),
-            'expiresAt' => time() + 300,
-        ]);
+        try {
+            $this->storeAuthResult($state, [
+                'success' => true,
+                'user' => $user,
+                'sessionToken' => $sessionToken,
+                'createdAt' => time(),
+                'expiresAt' => time() + 300,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[desktop-auth] Failed to persist auth result: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Failed to persist login result',
+                'code' => 'AUTH_RESULT_STORE_FAILED',
+            ];
+        }
 
         return [
             'success' => true,
@@ -185,7 +213,15 @@ final class DesktopSteamAuthController
     {
         $path = $this->stateFilePath();
         @mkdir(dirname($path), 0755, true);
-        file_put_contents($path, json_encode($states, JSON_UNESCAPED_SLASHES));
+        $encoded = json_encode($states, JSON_UNESCAPED_SLASHES);
+        if (!is_string($encoded)) {
+            throw new \RuntimeException('Failed to encode auth states');
+        }
+
+        $bytes = @file_put_contents($path, $encoded, LOCK_EX);
+        if ($bytes === false) {
+            throw new \RuntimeException('Failed to write auth state file at ' . $path);
+        }
     }
 
     private function readAuthResults(): array
@@ -203,7 +239,15 @@ final class DesktopSteamAuthController
     {
         $path = $this->authResultFilePath();
         @mkdir(dirname($path), 0755, true);
-        file_put_contents($path, json_encode($results, JSON_UNESCAPED_SLASHES));
+        $encoded = json_encode($results, JSON_UNESCAPED_SLASHES);
+        if (!is_string($encoded)) {
+            throw new \RuntimeException('Failed to encode auth results');
+        }
+
+        $bytes = @file_put_contents($path, $encoded, LOCK_EX);
+        if ($bytes === false) {
+            throw new \RuntimeException('Failed to write auth result file at ' . $path);
+        }
     }
 
     private function storeState(string $state, string $returnUrl): void

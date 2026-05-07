@@ -22,17 +22,7 @@ function isDesktopWithLocalStore() {
 }
 
 function normalizeServerBaseUrl(rawUrl) {
-  const base = String(rawUrl || "").trim().replace(/\/+$/, "");
-  if (!base) {
-    return "";
-  }
-  if (base.toLowerCase().endsWith("/api/index.php")) {
-    return base;
-  }
-  if (base.toLowerCase().endsWith("/api")) {
-    return `${base}/index.php`;
-  }
-  return `${base}/api/index.php`;
+  return String(rawUrl || "").trim().replace(/\/+$/, "");
 }
 
 function resolveAccessBaseUrl(serverBaseUrl) {
@@ -64,7 +54,7 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
     },
   });
 
-  if (response.status === 404) {
+  if (response.status === 404 || response.status === 400) {
     // Access is not active for this host.
     return true;
   }
@@ -79,6 +69,53 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
 
   const payload = await response.json().catch(() => null);
   return Boolean(payload && typeof payload === "object");
+}
+
+function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
+  const normalizedBase = String(serverBaseUrl || "").trim().replace(/\/+$/, "");
+  const endpoint = String(endpointPath || "").startsWith("/")
+    ? String(endpointPath)
+    : `/${String(endpointPath || "")}`;
+
+  if (!normalizedBase || !endpoint) {
+    return [];
+  }
+
+  const lower = normalizedBase.toLowerCase();
+  const candidates = [];
+
+  if (lower.endsWith("/api/index.php")) {
+    candidates.push(`${normalizedBase}${endpoint}`);
+    candidates.push(`${normalizedBase.slice(0, -"/api/index.php".length)}${endpoint}`);
+  } else if (lower.endsWith("/api")) {
+    candidates.push(`${normalizedBase}${endpoint}`);
+    candidates.push(`${normalizedBase}/index.php${endpoint}`);
+    candidates.push(`${normalizedBase.slice(0, -"/api".length)}${endpoint}`);
+  } else {
+    candidates.push(`${normalizedBase}${endpoint}`);
+    candidates.push(`${normalizedBase}/api/index.php${endpoint}`);
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, options) {
+  const candidates = buildSyncEndpointCandidates(serverBaseUrl, endpointPath);
+  if (candidates.length === 0) {
+    throw new Error("Sync endpoint URL konnte nicht aufgebaut werden.");
+  }
+
+  let lastResponse = null;
+  for (const url of candidates) {
+    const response = await fetchWithCloudflareAccess(url, options, serverBaseUrl);
+    if (response.status === 404) {
+      lastResponse = response;
+      continue;
+    }
+    return response;
+  }
+
+  return lastResponse;
 }
 
 async function ensureCloudflareAccessSession(serverBaseUrl) {
@@ -307,7 +344,7 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
     return;
   }
 
-  const response = await fetchWithCloudflareAccess(`${serverBaseUrl}/api/v1/sync/push`, {
+  const response = await fetchSyncEndpointWithFallback(serverBaseUrl, "/api/v1/sync/push", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -324,10 +361,12 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
         clientRevision: operation.clientRevision,
       })),
     }),
-  }, serverBaseUrl);
+  });
 
-  if (!response.ok) {
-    throw new Error(`Sync push failed with status ${response.status}`);
+  if (!response || !response.ok) {
+    const status = response?.status ?? "unknown";
+    const body = response ? await response.text().catch(() => "") : "";
+    throw new Error(`Sync push failed with status ${status}${body ? ` response: ${body}` : ""}`);
   }
 
   const data = unwrapApiData(await response.json());
@@ -444,20 +483,27 @@ async function applyPulledChanges(changes, localStore, userId) {
 
 async function pullServerChanges(serverBaseUrl, userId, token, localStore) {
   const lastPulledAt = (await cacheGet(SYNC_CURSOR_CACHE_KEY)) || "1970-01-01T00:00:00.000Z";
-  const url = new URL(`${serverBaseUrl}/api/v1/sync/pull`);
-  url.searchParams.set("userId", String(userId));
-  url.searchParams.set("since", withSafetyWindow(lastPulledAt));
-  url.searchParams.set("limit", String(DEFAULT_PULL_LIMIT));
+  const queryParams = new URLSearchParams({
+    userId: String(userId),
+    since: withSafetyWindow(lastPulledAt),
+    limit: String(DEFAULT_PULL_LIMIT),
+  });
 
-  const response = await fetchWithCloudflareAccess(url.toString(), {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const response = await fetchSyncEndpointWithFallback(
+    serverBaseUrl,
+    `/api/v1/sync/pull?${queryParams.toString()}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  }, serverBaseUrl);
+  );
 
-  if (!response.ok) {
-    throw new Error(`Sync pull failed with status ${response.status}`);
+  if (!response || !response.ok) {
+    const status = response?.status ?? "unknown";
+    const body = response ? await response.text().catch(() => "") : "";
+    throw new Error(`Sync pull failed with status ${status}${body ? ` response: ${body}` : ""}`);
   }
 
   const data = unwrapApiData(await response.json());

@@ -268,6 +268,7 @@ function buildSidecarEnv() {
   merged.APP_ENV = merged.APP_ENV || "desktop";
   merged.DESKTOP_SIDECAR_SECRET = sidecarSecret;
   merged.DESKTOP_LOG_FILE = LOG_FILE;
+  merged.DESKTOP_STATE_DIR = app.getPath("userData");
   if (localCsFloatApiKey) {
     merged.CSFLOAT_API_KEY = localCsFloatApiKey;
   }
