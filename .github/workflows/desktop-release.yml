@@ -32,10 +32,8 @@ jobs:
       - name: Build web bundle
         run: npm run build:web
 
-      - name: Build and publish desktop release
-        run: npx electron-builder --win nsis --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build desktop artifacts
+        run: npx electron-builder --win nsis --publish never
 
       - name: Generate checksums for release assets
         id: checksums
@@ -62,43 +60,31 @@ jobs:
         with:
           subject-path: "release/*.exe"
 
-      - name: Update release notes
-        uses: actions/github-script@v7
-        env:
-          HASH_LINES: ${{ steps.checksums.outputs.hash_lines }}
+      - name: Create or update GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
-          script: |
-            const tag = context.ref.replace("refs/tags/", "");
-            const { owner, repo } = context.repo;
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          append_body: true
+          body: |
+            ## Windows download
 
-            const releaseResponse = await github.rest.repos.getReleaseByTag({
-              owner,
-              repo,
-              tag
-            });
+            Please download the installer asset (`CS-Investor-Hub-Setup-*.exe`), not the source code archives.
 
-            const body = [
-              "## Windows download",
-              "",
-              "Please download the installer asset (`CS-Investor-Hub-Setup-*.exe`), not the source code archives.",
-              "",
-              "## SmartScreen notice (unsigned app)",
-              "",
-              "On first start, Windows may show a SmartScreen warning.",
-              "Click `More info` -> `Run anyway`.",
-              "",
-              "## SHA256 checksums",
-              "",
-              process.env.HASH_LINES || "_No checksums generated._",
-              "",
-              "## Build provenance",
-              "",
-              "This release includes GitHub artifact attestations for the generated installer."
-            ].join("\\n");
+            ## SmartScreen notice (unsigned app)
 
-            await github.rest.repos.updateRelease({
-              owner,
-              repo,
-              release_id: releaseResponse.data.id,
-              body
-            });
+            On first start, Windows may show a SmartScreen warning.
+            Click `More info` -> `Run anyway`.
+
+            ## SHA256 checksums
+
+            ${{ steps.checksums.outputs.hash_lines }}
+
+            ## Build provenance
+
+            This release includes GitHub artifact attestations for the generated installer.
+          files: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest*.yml
