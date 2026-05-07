@@ -498,6 +498,7 @@ async function testServerConnection(serverUrl) {
     new Set([
       `${baseUrl}/api/v1/portfolio/summary`,
       `${baseUrl}/api/index.php/api/v1/portfolio/summary`,
+      `${baseUrl}/api/index.php?route=${encodeURIComponent("/api/v1/portfolio/summary")}`,
     ]),
   );
 

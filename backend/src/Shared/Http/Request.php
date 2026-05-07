@@ -19,8 +19,7 @@ final class Request
     public static function fromGlobals(?string $requestId = null, ?array $headers = null): self
     {
         $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-        $basePos = strpos($uriPath, '/api/v1/');
-        $path = $basePos === false ? $uriPath : substr($uriPath, $basePos);
+        $path = self::resolveRoutePath($uriPath, $_GET);
         $resolvedHeaders = $headers ?? self::collectHeaders();
 
         $rawBody = (string) file_get_contents('php://input');
@@ -46,6 +45,33 @@ final class Request
             requestId: $requestId,
             jsonDecodeError: $jsonDecodeError
         );
+    }
+
+    private static function resolveRoutePath(string $uriPath, array $query): string
+    {
+        foreach (['route', 'path', '_route', 'r'] as $queryKey) {
+            $candidate = $query[$queryKey] ?? null;
+            if (!is_string($candidate)) {
+                continue;
+            }
+
+            $trimmed = trim($candidate);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            if (!str_starts_with($trimmed, '/')) {
+                $trimmed = '/' . $trimmed;
+            }
+
+            $routePos = strpos($trimmed, '/api/v1/');
+            if ($routePos !== false) {
+                return substr($trimmed, $routePos);
+            }
+        }
+
+        $basePos = strpos($uriPath, '/api/v1/');
+        return $basePos === false ? $uriPath : substr($uriPath, $basePos);
     }
 
     private static function collectHeaders(): array

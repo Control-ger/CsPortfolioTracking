@@ -73,9 +73,11 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
 
 function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
   const normalizedBase = String(serverBaseUrl || "").trim().replace(/\/+$/, "");
-  const endpoint = String(endpointPath || "").startsWith("/")
-    ? String(endpointPath)
-    : `/${String(endpointPath || "")}`;
+  const rawEndpoint = String(endpointPath || "");
+  const queryStart = rawEndpoint.indexOf("?");
+  const endpointPathOnly = queryStart >= 0 ? rawEndpoint.slice(0, queryStart) : rawEndpoint;
+  const endpointQuery = queryStart >= 0 ? rawEndpoint.slice(queryStart + 1) : "";
+  const endpoint = endpointPathOnly.startsWith("/") ? endpointPathOnly : `/${endpointPathOnly}`;
 
   if (!normalizedBase || !endpoint) {
     return [];
@@ -83,17 +85,28 @@ function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
 
   const lower = normalizedBase.toLowerCase();
   const candidates = [];
+  const joinWithQuery = (baseUrl, queryTail) => {
+    if (!queryTail) {
+      return baseUrl;
+    }
+    return `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${queryTail}`;
+  };
+  const routeParam = `route=${encodeURIComponent(endpoint)}`;
+  const routeWithQuery = endpointQuery ? `${routeParam}&${endpointQuery}` : routeParam;
 
   if (lower.endsWith("/api/index.php")) {
-    candidates.push(`${normalizedBase}${endpoint}`);
-    candidates.push(`${normalizedBase.slice(0, -"/api/index.php".length)}${endpoint}`);
+    candidates.push(joinWithQuery(`${normalizedBase}${endpoint}`, endpointQuery));
+    candidates.push(joinWithQuery(`${normalizedBase.slice(0, -"/api/index.php".length)}${endpoint}`, endpointQuery));
+    candidates.push(joinWithQuery(normalizedBase, routeWithQuery));
   } else if (lower.endsWith("/api")) {
-    candidates.push(`${normalizedBase}${endpoint}`);
-    candidates.push(`${normalizedBase}/index.php${endpoint}`);
-    candidates.push(`${normalizedBase.slice(0, -"/api".length)}${endpoint}`);
+    candidates.push(joinWithQuery(`${normalizedBase}${endpoint}`, endpointQuery));
+    candidates.push(joinWithQuery(`${normalizedBase}/index.php${endpoint}`, endpointQuery));
+    candidates.push(joinWithQuery(`${normalizedBase}/index.php`, routeWithQuery));
+    candidates.push(joinWithQuery(`${normalizedBase.slice(0, -"/api".length)}${endpoint}`, endpointQuery));
   } else {
-    candidates.push(`${normalizedBase}${endpoint}`);
-    candidates.push(`${normalizedBase}/api/index.php${endpoint}`);
+    candidates.push(joinWithQuery(`${normalizedBase}${endpoint}`, endpointQuery));
+    candidates.push(joinWithQuery(`${normalizedBase}/api/index.php${endpoint}`, endpointQuery));
+    candidates.push(joinWithQuery(`${normalizedBase}/api/index.php`, routeWithQuery));
   }
 
   return Array.from(new Set(candidates));
