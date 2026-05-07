@@ -35,6 +35,134 @@ function normalizeServerBaseUrl(rawUrl) {
   return `${base}/api/index.php`;
 }
 
+function resolveAccessBaseUrl(serverBaseUrl) {
+  const normalized = String(serverBaseUrl || "").trim().replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+
+  const lower = normalized.toLowerCase();
+  if (lower.endsWith("/api/index.php")) {
+    return normalized.slice(0, -"/api/index.php".length);
+  }
+  if (lower.endsWith("/api")) {
+    return normalized.slice(0, -"/api".length);
+  }
+  return normalized;
+}
+
+async function hasCloudflareAccessIdentity(accessBaseUrl) {
+  if (!accessBaseUrl) {
+    return true;
+  }
+
+  const response = await fetch(`${accessBaseUrl}/cdn-cgi/access/get-identity`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (response.status === 404) {
+    // Access is not active for this host.
+    return true;
+  }
+  if (response.status === 401 || response.status === 403) {
+    return false;
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    return false;
+  }
+
+  const payload = await response.json().catch(() => null);
+  return Boolean(payload && typeof payload === "object");
+}
+
+async function ensureCloudflareAccessSession(serverBaseUrl) {
+  const accessBaseUrl = resolveAccessBaseUrl(serverBaseUrl);
+  if (!accessBaseUrl) {
+    return;
+  }
+
+  const hasIdentity = await hasCloudflareAccessIdentity(accessBaseUrl).catch(() => false);
+  if (hasIdentity) {
+    return;
+  }
+
+  if (!window.electronAPI?.cloudflareAccess?.login) {
+    throw new Error("Cloudflare Access Session fehlt und Login-Fenster ist nicht verfuegbar.");
+  }
+
+  const loginResult = await window.electronAPI.cloudflareAccess.login(accessBaseUrl);
+  if (!loginResult?.ok) {
+    throw new Error(loginResult?.error || "Cloudflare Access Anmeldung fehlgeschlagen.");
+  }
+
+  const hasIdentityAfterLogin = await hasCloudflareAccessIdentity(accessBaseUrl).catch(() => true);
+  if (!hasIdentityAfterLogin) {
+    throw new Error("Cloudflare Access Session konnte nicht bestaetigt werden.");
+  }
+}
+
+function isCloudflareAccessChallengeResponse(response) {
+  const url = String(response?.url || "");
+  if (url.includes("/cdn-cgi/access/")) {
+    return true;
+  }
+
+  const deniedReason = String(response?.headers?.get?.("cf-access-denied-reason") || "").trim();
+  if (deniedReason) {
+    return true;
+  }
+
+  if (response?.status !== 401 && response?.status !== 403) {
+    return false;
+  }
+
+  const contentType = String(response?.headers?.get?.("content-type") || "").toLowerCase();
+  const serverHeader = String(response?.headers?.get?.("server") || "").toLowerCase();
+  const challengeHint = String(response?.headers?.get?.("cf-mitigated") || "").toLowerCase();
+
+  if (challengeHint.includes("challenge")) {
+    return true;
+  }
+
+  // Avoid false positives for normal API auth errors (JSON 401/403).
+  return contentType.includes("text/html") && serverHeader.includes("cloudflare");
+}
+
+async function fetchWithCloudflareAccess(url, options, serverBaseUrl) {
+  await ensureCloudflareAccessSession(serverBaseUrl);
+
+  let response = await fetch(url, {
+    ...options,
+    credentials: "include",
+  });
+
+  if (!isCloudflareAccessChallengeResponse(response)) {
+    return response;
+  }
+
+  if (!window.electronAPI?.cloudflareAccess?.login) {
+    return response;
+  }
+
+  const loginResult = await window.electronAPI.cloudflareAccess.login(resolveAccessBaseUrl(serverBaseUrl));
+  if (!loginResult?.ok) {
+    return response;
+  }
+
+  response = await fetch(url, {
+    ...options,
+    credentials: "include",
+  });
+
+  return response;
+}
+
 function unwrapApiData(payload) {
   return payload?.data && typeof payload.data === "object" ? payload.data : payload;
 }
@@ -179,7 +307,7 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
     return;
   }
 
-  const response = await fetch(`${serverBaseUrl}/api/v1/sync/push`, {
+  const response = await fetchWithCloudflareAccess(`${serverBaseUrl}/api/v1/sync/push`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -196,7 +324,7 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
         clientRevision: operation.clientRevision,
       })),
     }),
-  });
+  }, serverBaseUrl);
 
   if (!response.ok) {
     throw new Error(`Sync push failed with status ${response.status}`);
@@ -321,12 +449,12 @@ async function pullServerChanges(serverBaseUrl, userId, token, localStore) {
   url.searchParams.set("since", withSafetyWindow(lastPulledAt));
   url.searchParams.set("limit", String(DEFAULT_PULL_LIMIT));
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithCloudflareAccess(url.toString(), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  });
+  }, serverBaseUrl);
 
   if (!response.ok) {
     throw new Error(`Sync pull failed with status ${response.status}`);

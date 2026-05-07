@@ -70,6 +70,7 @@ let phpSidecar = null;
 let backendBaseUrl = null;
 let sidecarSecret = null;
 let updateCheckTimer = null;
+let cloudflareAccessLoginPromise = null;
 const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const shouldAutoOpenDevTools = !app.isPackaged || process.env.DEBUG === "1";
 
@@ -291,6 +292,140 @@ function normalizeServerUrl(value) {
     return "";
   }
   return normalized;
+}
+
+function normalizeCloudflareAccessTarget(rawUrl) {
+  const normalized = normalizeServerUrl(rawUrl);
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return "";
+    }
+    parsed.pathname = "/";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function isCloudflareAccessPath(pathname) {
+  return pathname.startsWith("/cdn-cgi/access/");
+}
+
+async function openCloudflareAccessLoginWindow(rawTargetUrl) {
+  const targetUrl = normalizeCloudflareAccessTarget(rawTargetUrl);
+  if (!targetUrl) {
+    throw new Error("Cloudflare Access target URL ist ungueltig.");
+  }
+
+  if (cloudflareAccessLoginPromise) {
+    return await cloudflareAccessLoginPromise;
+  }
+
+  cloudflareAccessLoginPromise = new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (handler, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cloudflareAccessLoginPromise = null;
+      handler(value);
+    };
+
+    const loginWindow = new BrowserWindow({
+      width: 980,
+      height: 760,
+      title: "Cloudflare Access Anmeldung",
+      autoHideMenuBar: true,
+      parent: mainWindow || undefined,
+      modal: Boolean(mainWindow),
+      webPreferences: {
+        contextIsolation: true,
+        sandbox: true,
+      },
+    });
+
+    const timeoutId = setTimeout(() => {
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.close();
+      }
+      finish(reject, new Error("Cloudflare Access Anmeldung hat ein Timeout erreicht."));
+    }, 5 * 60 * 1000);
+
+    const evaluateNavigation = (url) => {
+      try {
+        const parsed = new URL(String(url || ""));
+        const target = new URL(targetUrl);
+        const sameHost = parsed.host.toLowerCase() === target.host.toLowerCase();
+        if (!sameHost) {
+          return;
+        }
+
+        if (parsed.pathname.startsWith("/cdn-cgi/access/denied")) {
+          clearTimeout(timeoutId);
+          if (!loginWindow.isDestroyed()) {
+            loginWindow.close();
+          }
+          finish(reject, new Error("Cloudflare Access Zugriff wurde verweigert."));
+          return;
+        }
+
+        if (!isCloudflareAccessPath(parsed.pathname)) {
+          clearTimeout(timeoutId);
+          if (!loginWindow.isDestroyed()) {
+            loginWindow.close();
+          }
+          finish(resolve, { ok: true });
+        }
+      } catch {
+        // Ignore malformed interim URLs.
+      }
+    };
+
+    loginWindow.webContents.on("did-navigate", (_event, url) => {
+      evaluateNavigation(url);
+    });
+    loginWindow.webContents.on("will-redirect", (_event, url) => {
+      evaluateNavigation(url);
+    });
+    loginWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
+      if (errorCode === -3) {
+        return;
+      }
+      clearTimeout(timeoutId);
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.close();
+      }
+      finish(
+        reject,
+        new Error(`Cloudflare Access Fenster konnte nicht geladen werden (${errorDescription || errorCode}).`),
+      );
+    });
+
+    loginWindow.on("closed", () => {
+      clearTimeout(timeoutId);
+      if (!settled) {
+        finish(reject, new Error("Cloudflare Access Anmeldung wurde abgebrochen."));
+      }
+    });
+
+    loginWindow.loadURL(targetUrl).catch((error) => {
+      clearTimeout(timeoutId);
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.close();
+      }
+      finish(reject, new Error(error?.message || "Cloudflare Access Fenster konnte nicht geoeffnet werden."));
+    });
+  });
+
+  return await cloudflareAccessLoginPromise;
 }
 
 function getStoredServerConfig() {
@@ -965,6 +1100,20 @@ ipcMain.handle("open-devtools", async () => {
   return false;
 });
 ipcMain.handle("app-get-version", () => app.getVersion());
+ipcMain.handle("cloudflare-access-login", async (event, serverUrl) => {
+  try {
+    const result = await openCloudflareAccessLoginWindow(serverUrl);
+    return {
+      ok: true,
+      ...result,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || String(error),
+    };
+  }
+});
 
 ipcMain.handle("backend-base-url", async () => {
   return await ensurePhpSidecarForRenderer();

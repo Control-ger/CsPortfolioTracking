@@ -548,6 +548,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
         await runDesktopSyncNowIfDue({ force: true });
       } catch (desktopSyncError) {
         console.warn("[desktop-sync] steam import sync failed", desktopSyncError);
+        const syncMessage = String(desktopSyncError?.message || "");
+        if (syncMessage.toLowerCase().includes("cloudflare access")) {
+          setSteamSyncError(
+            "Cloudflare Access Anmeldung erforderlich. Bitte melde dich im Login-Fenster an und starte den Sync erneut.",
+          );
+        }
       }
 
       await writeLocalState(STEAM_SYNC_META_KEY, { lastRunAt: syncedAt });

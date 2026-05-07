@@ -270,6 +270,7 @@ if (!$isCorsOriginAllowed($requestOrigin, $requestHost, (string) $corsAllowedOri
 
 if ($requestOrigin !== '') {
     header('Access-Control-Allow-Origin: ' . $requestOrigin);
+    header('Access-Control-Allow-Credentials: true');
     header('Vary: Origin');
 }
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');

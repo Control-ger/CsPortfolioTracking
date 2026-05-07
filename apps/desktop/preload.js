@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   backend: {
     getBaseUrl: () => ipcRenderer.invoke("backend-base-url"),
   },
+  cloudflareAccess: {
+    login: (serverUrl) => ipcRenderer.invoke("cloudflare-access-login", serverUrl),
+  },
   updater: {
     getVersion: () => ipcRenderer.invoke("app-get-version"),
     check: () => ipcRenderer.invoke("app-updater-check"),
