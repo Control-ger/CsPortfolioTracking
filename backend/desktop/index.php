@@ -201,11 +201,14 @@ $buildUpstreamCandidates = static function (string $baseUrl, string $endpointPat
     if (str_ends_with($lower, '/api/index.php')) {
         $candidates[] = $base . $endpoint;
         $candidates[] = substr($base, 0, -strlen('/api/index.php')) . $endpoint;
+        $candidates[] = $base . '?route=' . rawurlencode($endpoint);
     } elseif (str_ends_with($lower, '/api')) {
         $candidates[] = $base . '/index.php' . $endpoint;
+        $candidates[] = $base . '/index.php?route=' . rawurlencode($endpoint);
         $candidates[] = substr($base, 0, -strlen('/api')) . $endpoint;
     } else {
         $candidates[] = $base . '/api/index.php' . $endpoint;
+        $candidates[] = $base . '/api/index.php?route=' . rawurlencode($endpoint);
         $candidates[] = $base . $endpoint;
     }
 
@@ -226,24 +229,111 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = []) us
         return null;
     }
 
-    $queryString = http_build_query($query);
-    foreach ($buildUpstreamCandidates($baseUrl, $endpointPath) as $candidate) {
-        $url = $candidate . ($queryString !== '' ? ('?' . $queryString) : '');
+    $upstreamCookieHeader = trim((string) (getenv('UPSTREAM_COOKIE_HEADER') ?: ($_ENV['UPSTREAM_COOKIE_HEADER'] ?? '')));
+    $upstreamCaBundlePath = trim((string) (getenv('UPSTREAM_CA_BUNDLE_PATH') ?: ($_ENV['UPSTREAM_CA_BUNDLE_PATH'] ?? '')));
+    $allowInsecureTlsFallback = in_array(
+        strtolower(trim((string) (getenv('UPSTREAM_INSECURE_TLS_FALLBACK') ?: ($_ENV['UPSTREAM_INSECURE_TLS_FALLBACK'] ?? '1')))),
+        ['1', 'true', 'yes', 'on'],
+        true
+    );
+
+    $executeRequest = static function (string $url, bool $insecureTls = false) use ($upstreamCookieHeader, $upstreamCaBundlePath): array {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+        $headers = ['Accept: application/json'];
+        if ($upstreamCookieHeader !== '') {
+            $headers[] = 'Cookie: ' . $upstreamCookieHeader;
+        }
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+        if ($insecureTls) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        } elseif ($upstreamCaBundlePath !== '' && is_file($upstreamCaBundlePath)) {
+            curl_setopt($ch, CURLOPT_CAINFO, $upstreamCaBundlePath);
+        }
 
         $response = curl_exec($ch);
         $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
 
+        return [
+            'response' => $response,
+            'httpCode' => $httpCode,
+            'curlError' => $curlError,
+            'insecureTls' => $insecureTls,
+        ];
+    };
+
+    $queryString = http_build_query($query);
+    $attempts = [];
+    foreach ($buildUpstreamCandidates($baseUrl, $endpointPath) as $candidate) {
+        $separator = str_contains($candidate, '?') ? '&' : '?';
+        $url = $candidate . ($queryString !== '' ? ($separator . $queryString) : '');
+        $result = $executeRequest($url, false);
+        $response = $result['response'];
+        $httpCode = (int) ($result['httpCode'] ?? 0);
+        $curlError = (string) ($result['curlError'] ?? '');
+
         if (!is_string($response) || trim($response) === '') {
+            $certificateIssue = str_contains(strtolower($curlError), 'certificate')
+                || str_contains(strtolower($curlError), 'issuer certificate')
+                || str_contains(strtolower($curlError), 'ssl');
+            if ($certificateIssue && $allowInsecureTlsFallback) {
+                $retry = $executeRequest($url, true);
+                $retryResponse = $retry['response'];
+                $retryHttpCode = (int) ($retry['httpCode'] ?? 0);
+                $retryCurlError = (string) ($retry['curlError'] ?? '');
+
+                if (is_string($retryResponse) && trim($retryResponse) !== '') {
+                    $retryDecoded = json_decode($retryResponse, true);
+                    if (is_array($retryDecoded) && $retryHttpCode >= 200 && $retryHttpCode < 300) {
+                        return [
+                            'ok' => true,
+                            'data' => isset($retryDecoded['data']) ? $retryDecoded['data'] : $retryDecoded,
+                            'meta' => isset($retryDecoded['meta']) && is_array($retryDecoded['meta']) ? $retryDecoded['meta'] : [],
+                            'attempts' => array_merge($attempts, [[
+                                'url' => $url,
+                                'httpCode' => $httpCode,
+                                'curlError' => $curlError,
+                                'responseType' => 'empty',
+                            ]]),
+                            'insecureTlsUsed' => true,
+                        ];
+                    }
+                }
+
+                $attempts[] = [
+                    'url' => $url,
+                    'httpCode' => $retryHttpCode,
+                    'curlError' => $retryCurlError,
+                    'responseType' => 'empty_insecure_retry',
+                    'insecureTls' => true,
+                ];
+                continue;
+            }
+
+            $attempts[] = [
+                'url' => $url,
+                'httpCode' => $httpCode,
+                'curlError' => $curlError,
+                'responseType' => 'empty',
+            ];
             continue;
         }
 
         $decoded = json_decode($response, true);
         if (!is_array($decoded)) {
+            $attempts[] = [
+                'url' => $url,
+                'httpCode' => $httpCode,
+                'curlError' => $curlError,
+                'responseType' => 'non_json',
+                'bodyPreview' => substr(trim($response), 0, 180),
+            ];
             continue;
         }
 
@@ -252,12 +342,74 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = []) us
                 'ok' => true,
                 'data' => isset($decoded['data']) ? $decoded['data'] : $decoded,
                 'meta' => isset($decoded['meta']) && is_array($decoded['meta']) ? $decoded['meta'] : [],
+                'attempts' => $attempts,
+            ];
+        }
+
+        $attempts[] = [
+            'url' => $url,
+            'httpCode' => $httpCode,
+            'curlError' => $curlError,
+            'responseType' => 'json_non_2xx',
+            'errorCode' => $decoded['error']['code'] ?? null,
+            'errorMessage' => $decoded['error']['message'] ?? null,
+        ];
+    }
+
+    return [
+        'ok' => false,
+        'attempts' => $attempts,
+    ];
+};
+
+$summarizeProxyIssue = static function (array $attempts): array {
+    foreach ($attempts as $attempt) {
+        if (!is_array($attempt)) {
+            continue;
+        }
+        $curlError = strtolower((string) ($attempt['curlError'] ?? ''));
+        if ($curlError !== '' && (str_contains($curlError, 'issuer certificate') || str_contains($curlError, 'certificate'))) {
+            return [
+                'code' => 'UPSTREAM_TLS_CERTIFICATE_ERROR',
+                'message' => 'TLS certificate chain could not be verified by the desktop sidecar.',
+            ];
+        }
+    }
+
+    foreach ($attempts as $attempt) {
+        if (!is_array($attempt)) {
+            continue;
+        }
+        $status = (int) ($attempt['httpCode'] ?? 0);
+        if (in_array($status, [301, 302, 307, 308], true)) {
+            return [
+                'code' => 'UPSTREAM_REDIRECT',
+                'message' => 'Upstream returned an HTTP redirect (often Cloudflare Access or auth redirect).',
+            ];
+        }
+        if (in_array($status, [401, 403], true)) {
+            return [
+                'code' => 'UPSTREAM_ACCESS_DENIED',
+                'message' => 'Upstream denied access. Cloudflare/session login may be required.',
+            ];
+        }
+        if ($status >= 500) {
+            return [
+                'code' => 'UPSTREAM_SERVER_ERROR',
+                'message' => 'Upstream returned a server error (5xx).',
+            ];
+        }
+        if ($status === 404) {
+            return [
+                'code' => 'UPSTREAM_ROUTE_NOT_FOUND',
+                'message' => 'Upstream route not found (404).',
             ];
         }
     }
 
     return [
-        'ok' => false,
+        'code' => 'UPSTREAM_UNAVAILABLE',
+        'message' => 'Upstream did not return a usable JSON response.',
     ];
 };
 
@@ -282,15 +434,18 @@ $router->register('GET', '/api/v1/exchange-rate', static function () use ($proxy
     ], ['source' => 'desktop-fallback']);
 });
 
-$router->register('GET', '/api/v1/watchlist/search', static function (Request $request) use ($proxyUpstreamGet): void {
+$router->register('GET', '/api/v1/watchlist/search', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
     $query = [
         'query' => $request->query['query'] ?? '',
         'limit' => $request->query['limit'] ?? 6,
         'page' => $request->query['page'] ?? 1,
-        'itemType' => $request->query['itemType'] ?? '',
-        'wear' => $request->query['wear'] ?? '',
-        'sortBy' => $request->query['sortBy'] ?? '',
     ];
+    foreach (['itemType', 'wear', 'sortBy'] as $optional) {
+        $value = trim((string) ($request->query[$optional] ?? ''));
+        if ($value !== '') {
+            $query[$optional] = $value;
+        }
+    }
 
     $proxied = $proxyUpstreamGet('/api/v1/watchlist/search', $query);
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
@@ -305,6 +460,151 @@ $router->register('GET', '/api/v1/watchlist/search', static function (Request $r
         'page' => (int) ($request->query['page'] ?? 1),
         'limit' => (int) ($request->query['limit'] ?? 6),
         'source' => 'desktop-local-fallback',
+    ], [
+        'proxyAttempts' => $proxied['attempts'] ?? [],
+        'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? []),
+    ]);
+});
+
+$router->register('GET', '/api/v1/portfolio/investments/{key}/history', static function (Request $request, string $itemId) use ($proxyUpstreamGet): void {
+    if ($itemId === '') {
+        JsonResponseFactory::error('ITEM_ID_REQUIRED', 'Item-ID erforderlich.', [], 400);
+        return;
+    }
+
+    $query = [];
+    if (isset($request->query['itemName'])) {
+        $query['itemName'] = (string) $request->query['itemName'];
+    }
+
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments/' . rawurlencode($itemId) . '/history', $query);
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success($proxied['data'], array_merge($proxied['meta'] ?? [], ['source' => 'upstream']));
+        return;
+    }
+
+    JsonResponseFactory::success([
+        'itemId' => $itemId,
+        'itemName' => (string) ($request->query['itemName'] ?? ''),
+        'history' => [],
+        'source' => 'desktop-local-fallback',
+    ]);
+});
+
+$router->register('GET', '/api/v1/items/{id}/price-history', static function (Request $request, int $itemId) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
+    if ($itemId <= 0) {
+        JsonResponseFactory::error('ITEM_ID_REQUIRED', 'Item-ID erforderlich.', [], 400);
+        return;
+    }
+
+    $query = [];
+    if (isset($request->query['fromDate'])) {
+        $query['fromDate'] = (string) $request->query['fromDate'];
+    }
+    $itemName = trim((string) ($request->query['itemName'] ?? ''));
+
+    $proxied = $proxyUpstreamGet('/api/v1/items/' . $itemId . '/price-history', $query);
+    if (
+        $proxied !== null
+        && ($proxied['ok'] ?? false) === true
+        && is_array($proxied['data'] ?? null)
+        && count($proxied['data']) > 0
+    ) {
+        JsonResponseFactory::success($proxied['data'], array_merge($proxied['meta'] ?? [], ['source' => 'upstream']));
+        return;
+    }
+
+    if ($itemName !== '') {
+        $normalizedName = mb_strtolower($itemName);
+
+        $resolveFromPortfolioInvestments = static function (string $targetName) use ($proxyUpstreamGet): int {
+            $portfolio = $proxyUpstreamGet('/api/v1/portfolio/investments');
+            if ($portfolio === null || ($portfolio['ok'] ?? false) !== true || !is_array($portfolio['data'] ?? null)) {
+                return 0;
+            }
+
+            $rows = $portfolio['data'];
+            $fallback = 0;
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $candidateName = trim((string) ($row['marketHashName'] ?? $row['name'] ?? $row['itemName'] ?? ''));
+                $candidateItemId = (int) ($row['itemId'] ?? $row['item_id'] ?? 0);
+                if ($candidateItemId <= 0) {
+                    continue;
+                }
+
+                if ($fallback <= 0) {
+                    $fallback = $candidateItemId;
+                }
+
+                if ($candidateName !== '' && mb_strtolower($candidateName) === $targetName) {
+                    return $candidateItemId;
+                }
+            }
+
+            return $fallback;
+        };
+
+        $resolvedItemId = $resolveFromPortfolioInvestments($normalizedName);
+        if ($resolvedItemId > 0) {
+            $retry = $proxyUpstreamGet('/api/v1/items/' . $resolvedItemId . '/price-history', $query);
+            if ($retry !== null && ($retry['ok'] ?? false) === true) {
+                JsonResponseFactory::success($retry['data'], array_merge($retry['meta'] ?? [], [
+                    'source' => 'upstream-portfolio-name-resolved',
+                    'resolvedItemId' => $resolvedItemId,
+                ]));
+                return;
+            }
+        }
+
+        $search = $proxyUpstreamGet('/api/v1/watchlist/search', ['query' => $itemName, 'limit' => 10, 'page' => 1]);
+        if ($search !== null && ($search['ok'] ?? false) === true) {
+            $items = $search['data']['items'] ?? [];
+            if (is_array($items)) {
+                $resolvedItemId = 0;
+                foreach ($items as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $candidateName = trim((string) ($row['marketHashName'] ?? $row['name'] ?? ''));
+                    if ($candidateName !== '' && mb_strtolower($candidateName) === $normalizedName) {
+                        $resolvedItemId = (int) ($row['id'] ?? 0);
+                        break;
+                    }
+                }
+                if ($resolvedItemId <= 0) {
+                    foreach ($items as $row) {
+                        if (!is_array($row)) {
+                            continue;
+                        }
+                        $resolvedItemId = (int) ($row['id'] ?? 0);
+                        if ($resolvedItemId > 0) {
+                            break;
+                        }
+                    }
+                }
+
+                if ($resolvedItemId > 0) {
+                    $retry = $proxyUpstreamGet('/api/v1/items/' . $resolvedItemId . '/price-history', $query);
+                    if ($retry !== null && ($retry['ok'] ?? false) === true) {
+                        JsonResponseFactory::success($retry['data'], array_merge($retry['meta'] ?? [], [
+                            'source' => 'upstream-name-resolved',
+                            'resolvedItemId' => $resolvedItemId,
+                        ]));
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    JsonResponseFactory::success([], [
+        'source' => 'desktop-local-fallback',
+        'proxyAttempts' => $proxied['attempts'] ?? [],
+        'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? []),
     ]);
 });
 

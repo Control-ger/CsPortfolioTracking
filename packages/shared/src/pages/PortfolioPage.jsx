@@ -31,9 +31,12 @@ import {
 import { Skeleton } from "@shared/components";
 import { usePortfolio } from "@shared/hooks";
 import { usePortfolioComposition } from "@shared/hooks";
+import {
+  fetchItemPriceHistory,
+  fetchPortfolioInvestmentHistory,
+} from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
-  fetchPortfolioInvestmentHistory,
   fetchCS2Inventory,
   getCurrentUser,
   importInventoryAsInvestments,
@@ -670,19 +673,29 @@ export function PortfolioPage({ initialTab = "overview" }) {
         return;
       }
 
-      const isDesktopLocal =
-        typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
-      const isClustered =
-        typeof selectedItemWithLive.id === "string" && selectedItemWithLive.id.startsWith("cluster-");
-
-      if (isDesktopLocal || isClustered) {
-        setSelectedItemHistory([]);
-        setSelectedItemHistoryLoading(false);
-        return;
-      }
-
       setSelectedItemHistoryLoading(true);
       try {
+        const isDesktopLocal =
+          typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
+        const itemId = Number(selectedItemWithLive.itemId ?? selectedItemWithLive.item_id ?? 0);
+
+        if (isDesktopLocal && itemId > 0) {
+          const history = await window.electronAPI.localStore.listPriceHistory(itemId);
+          if (Array.isArray(history) && history.length > 0) {
+            setSelectedItemHistory(history);
+            return;
+          }
+        }
+
+        if (itemId > 0) {
+          const history = await fetchItemPriceHistory(itemId, {
+            itemName: selectedItemWithLive.name,
+          });
+          setSelectedItemHistory(history || []);
+          return;
+        }
+
+        // Fallback: keep old position-history endpoint for legacy items
         const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id, {
           itemName: selectedItemWithLive.name,
         });
@@ -774,29 +787,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
     touchStartY.current = null;
     touchEndX.current = null;
     touchEndY.current = null;
-  };
-
-  const loadItemHistory = async (itemId, itemName) => {
-    const isDesktopLocal =
-      typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
-    const isClustered = typeof itemId === "string" && itemId.startsWith("cluster-");
-
-    if (isDesktopLocal || isClustered) {
-      setSelectedItemHistory([]);
-      setSelectedItemHistoryLoading(false);
-      return;
-    }
-
-    setSelectedItemHistoryLoading(true);
-    try {
-      const history = await fetchPortfolioInvestmentHistory(itemId, { itemName });
-      setSelectedItemHistory(history || []);
-    } catch (historyError) {
-      console.error("Fehler beim Laden der Positionshistorie:", historyError);
-      setSelectedItemHistory([]);
-    } finally {
-      setSelectedItemHistoryLoading(false);
-    }
   };
 
   const liveItems = Number(stats.liveItemsCount || 0);
@@ -1581,14 +1571,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 investments={enrichedInvestments}
                 onSelectItem={(item) => {
                   setSelectedItem(item);
-                  const historyItem = enrichedInvestments.find((inv) => inv.id === item.id);
-                  if (historyItem) {
-                    loadItemHistory(historyItem.id, historyItem.name).then(() => {
-                      // Auf Mobile: Modal öffnen (nach Geschichtsdaten geladen)
-                      if (window.innerWidth < BREAKPOINTS.MOBILE) {
-                        openModal("itemDetail", { item });
-                      }
-                    });
+                  if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                    openModal("itemDetail", { item });
                   }
                 }}
               />

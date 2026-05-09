@@ -264,6 +264,21 @@ final class PortfolioService
         );
     }
 
+    public function getItemPriceHistory(int $itemId, ?string $fromDate = null): array
+    {
+        $this->ensurePriceHistoryTable();
+
+        if ($itemId <= 0) {
+            return [];
+        }
+
+        $resolvedFromDate = is_string($fromDate) && trim($fromDate) !== ''
+            ? $fromDate
+            : date('Y-m-d H:i:s', strtotime('-370 days'));
+
+        return $this->priceHistoryRepository->findHistoryByItemId($itemId, $resolvedFromDate);
+    }
+
     public function getInvestmentHistory(int $userId = 1, int $itemId = 0): array
     {
         $this->positionHistoryRepository->ensureTable();

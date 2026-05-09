@@ -82,6 +82,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     upsertPortfolioSnapshot: (payload) =>
       ipcRenderer.invoke("local-store-upsert-portfolio-snapshot", payload),
     upsertPrice: (payload) => ipcRenderer.invoke("local-store-upsert-price", payload),
+    listPriceHistory: (itemId, limitDays) =>
+      ipcRenderer.invoke("local-store-list-price-history", itemId, limitDays),
     listPendingOperations: (limit) =>
       ipcRenderer.invoke("local-store-list-pending-operations", limit),
     listSteamCsfloatMatches: (userId, status, limit) =>

@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { app, BrowserWindow, dialog, ipcMain, shell, safeStorage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, session } from "electron";
 import { spawn } from "child_process";
 import { randomBytes } from "crypto";
 import fs from "fs/promises";
@@ -257,7 +257,7 @@ function readDotEnvFile(filePath) {
   return values;
 }
 
-function buildSidecarEnv() {
+function buildSidecarEnv(extraEnv = {}) {
   const envFileValues = readDotEnvFile(resolveRuntimePath(".env"));
   const merged = {
     ...envFileValues,
@@ -284,21 +284,22 @@ function buildSidecarEnv() {
     merged.UPSTREAM_API_BASE_URL = savedServerConfig.serverUrl;
   }
 
-  return merged;
+  return {
+    ...merged,
+    ...extraEnv,
+  };
 }
 
-function normalizeServerUrl(value) {
+function normalizeServerConfigValue(value) {
   const normalized = String(value || "").trim().replace(/\/+$/, "");
   if (!normalized) {
     return "";
   }
-  return normalized;
-}
 
-function normalizeCloudflareAccessTarget(rawUrl) {
-  const normalized = normalizeServerUrl(rawUrl);
-  if (!normalized) {
-    return "";
+  // Legacy compatibility: older configs may contain only a hostname.
+  const hostOnly = normalizeServerHost(normalized);
+  if (hostOnly) {
+    return buildServerBaseUrl(hostOnly);
   }
 
   try {
@@ -306,127 +307,197 @@ function normalizeCloudflareAccessTarget(rawUrl) {
     if (!["http:", "https:"].includes(parsed.protocol)) {
       return "";
     }
-    parsed.pathname = "/";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString().replace(/\/$/, "");
+    return parsed.toString().replace(/\/+$/, "");
   } catch {
     return "";
   }
 }
 
-function isCloudflareAccessPath(pathname) {
-  return pathname.startsWith("/cdn-cgi/access/");
+function normalizeServerHost(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.includes("://") || /[\\/]/.test(trimmed)) {
+    return "";
+  }
+  return trimmed;
 }
 
-async function openCloudflareAccessLoginWindow(rawTargetUrl) {
-  const targetUrl = normalizeCloudflareAccessTarget(rawTargetUrl);
-  if (!targetUrl) {
-    throw new Error("Cloudflare Access target URL ist ungueltig.");
+function buildServerBaseUrl(hostname) {
+  const trimmed = String(hostname || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  return `https://${trimmed}/api/index.php`;
+}
+
+function resolveAccessBaseUrl(serverBaseUrl) {
+  const normalized = String(serverBaseUrl || "").trim().replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+
+  const lower = normalized.toLowerCase();
+  if (lower.endsWith("/api/index.php")) {
+    return normalized.slice(0, -"/api/index.php".length);
+  }
+  if (lower.endsWith("/api")) {
+    return normalized.slice(0, -"/api".length);
+  }
+  return normalized;
+}
+
+async function getAccessCookieHeader(accessBaseUrl) {
+  const baseUrl = String(accessBaseUrl || "").trim();
+  if (!baseUrl) {
+    return "";
+  }
+
+  try {
+    const cookies = await session.defaultSession.cookies.get({ url: baseUrl });
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      return "";
+    }
+    return cookies
+      .map((cookie) => `${cookie.name}=${cookie.value}`)
+      .join("; ");
+  } catch (error) {
+    console.warn("[cloudflare-access] failed to read cookies", error);
+    return "";
+  }
+}
+
+async function hasCloudflareAccessIdentity(accessBaseUrl) {
+  if (!accessBaseUrl) {
+    return true;
+  }
+
+  const url = `${accessBaseUrl.replace(/\/+$/, "")}/cdn-cgi/access/get-identity`;
+  const headers = { Accept: "application/json" };
+  const cookieHeader = await getAccessCookieHeader(accessBaseUrl);
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader;
+  }
+
+  try {
+    const response = await fetch(url, { method: "GET", headers });
+    if (response.status === 404 || response.status === 400) {
+      return true;
+    }
+    if (response.status === 401 || response.status === 403) {
+      return false;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || !contentType.includes("application/json")) {
+      return false;
+    }
+
+    const payload = await response.json().catch(() => null);
+    return Boolean(payload && typeof payload === "object");
+  } catch (error) {
+    console.warn("[cloudflare-access] identity check failed", error);
+    return false;
+  }
+}
+
+async function openCloudflareAccessLoginWindow(accessBaseUrl) {
+  const baseUrl = String(accessBaseUrl || "").trim().replace(/\/+$/, "");
+  if (!baseUrl) {
+    throw new Error("Cloudflare Access URL fehlt.");
   }
 
   if (cloudflareAccessLoginPromise) {
-    return await cloudflareAccessLoginPromise;
+    return cloudflareAccessLoginPromise;
   }
 
   cloudflareAccessLoginPromise = new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (handler, value) => {
-      if (settled) {
+    let loginWindow = null;
+    let finished = false;
+
+    const finish = (handler) => {
+      if (finished) {
         return;
       }
-      settled = true;
+      finished = true;
+      if (loginWindow && !loginWindow.isDestroyed()) {
+        loginWindow.close();
+      }
+      loginWindow = null;
       cloudflareAccessLoginPromise = null;
-      handler(value);
+      handler();
     };
-
-    const loginWindow = new BrowserWindow({
-      width: 980,
-      height: 760,
-      title: "Cloudflare Access Anmeldung",
-      autoHideMenuBar: true,
-      parent: mainWindow || undefined,
-      modal: Boolean(mainWindow),
-      webPreferences: {
-        contextIsolation: true,
-        sandbox: true,
-      },
-    });
 
     const timeoutId = setTimeout(() => {
-      if (!loginWindow.isDestroyed()) {
-        loginWindow.close();
-      }
-      finish(reject, new Error("Cloudflare Access Anmeldung hat ein Timeout erreicht."));
-    }, 5 * 60 * 1000);
+      finish(() => reject(new Error("Cloudflare Access Login Timeout.")));
+    }, 120000);
 
-    const evaluateNavigation = (url) => {
-      try {
-        const parsed = new URL(String(url || ""));
-        const target = new URL(targetUrl);
-        const sameHost = parsed.host.toLowerCase() === target.host.toLowerCase();
-        if (!sameHost) {
+    const start = async () => {
+      loginWindow = new BrowserWindow({
+        parent: mainWindow || undefined,
+        modal: false,
+        width: 520,
+        height: 720,
+        show: true,
+        webPreferences: {
+          contextIsolation: true,
+        },
+      });
+
+      loginWindow.on("closed", () => {
+        clearTimeout(timeoutId);
+        finish(() => reject(new Error("Cloudflare Access Login wurde geschlossen.")));
+      });
+
+      await loginWindow.loadURL(baseUrl);
+
+      const pollIdentity = async () => {
+        if (finished) {
           return;
         }
-
-        if (parsed.pathname.startsWith("/cdn-cgi/access/denied")) {
+        const hasIdentity = await hasCloudflareAccessIdentity(baseUrl);
+        if (hasIdentity) {
           clearTimeout(timeoutId);
-          if (!loginWindow.isDestroyed()) {
-            loginWindow.close();
-          }
-          finish(reject, new Error("Cloudflare Access Zugriff wurde verweigert."));
+          finish(() => resolve({ ok: true }));
           return;
         }
+        setTimeout(pollIdentity, 1500);
+      };
 
-        if (!isCloudflareAccessPath(parsed.pathname)) {
-          clearTimeout(timeoutId);
-          if (!loginWindow.isDestroyed()) {
-            loginWindow.close();
-          }
-          finish(resolve, { ok: true });
-        }
-      } catch {
-        // Ignore malformed interim URLs.
-      }
+      pollIdentity();
     };
 
-    loginWindow.webContents.on("did-navigate", (_event, url) => {
-      evaluateNavigation(url);
-    });
-    loginWindow.webContents.on("will-redirect", (_event, url) => {
-      evaluateNavigation(url);
-    });
-    loginWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
-      if (errorCode === -3) {
-        return;
-      }
+    start().catch((error) => {
       clearTimeout(timeoutId);
-      if (!loginWindow.isDestroyed()) {
-        loginWindow.close();
-      }
-      finish(
-        reject,
-        new Error(`Cloudflare Access Fenster konnte nicht geladen werden (${errorDescription || errorCode}).`),
-      );
-    });
-
-    loginWindow.on("closed", () => {
-      clearTimeout(timeoutId);
-      if (!settled) {
-        finish(reject, new Error("Cloudflare Access Anmeldung wurde abgebrochen."));
-      }
-    });
-
-    loginWindow.loadURL(targetUrl).catch((error) => {
-      clearTimeout(timeoutId);
-      if (!loginWindow.isDestroyed()) {
-        loginWindow.close();
-      }
-      finish(reject, new Error(error?.message || "Cloudflare Access Fenster konnte nicht geoeffnet werden."));
+      finish(() => reject(error));
     });
   });
 
-  return await cloudflareAccessLoginPromise;
+  return cloudflareAccessLoginPromise;
+}
+
+async function ensureCloudflareAccessSession(accessBaseUrl) {
+  const hasIdentity = await hasCloudflareAccessIdentity(accessBaseUrl);
+  if (hasIdentity) {
+    return { ok: true };
+  }
+
+  try {
+    await openCloudflareAccessLoginWindow(accessBaseUrl);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error?.message || "Cloudflare Access Anmeldung fehlgeschlagen.",
+    };
+  }
+
+  const hasIdentityAfter = await hasCloudflareAccessIdentity(accessBaseUrl);
+  if (!hasIdentityAfter) {
+    return { ok: false, message: "Cloudflare Access Session konnte nicht bestaetigt werden." };
+  }
+
+  return { ok: true };
 }
 
 function getStoredServerConfig() {
@@ -438,7 +509,7 @@ function getStoredServerConfig() {
   try {
     const raw = fsSync.readFileSync(filePath, "utf8");
     const parsed = JSON.parse(raw);
-    const serverUrl = normalizeServerUrl(parsed?.serverUrl || "");
+    const serverUrl = normalizeServerConfigValue(parsed?.serverUrl || "");
     return {
       configured: Boolean(serverUrl),
       serverUrl,
@@ -451,16 +522,21 @@ function getStoredServerConfig() {
 }
 
 async function writeServerConfig(serverConfig) {
-  const nextServerUrl = normalizeServerUrl(serverConfig?.serverUrl || "");
-  if (!nextServerUrl) {
+  const hostOnly = normalizeServerHost(serverConfig?.serverUrl || "");
+  if (!hostOnly) {
+    const rawInput = String(serverConfig?.serverUrl || "").trim();
+    if (rawInput) {
+      throw new Error("Bitte nur den Hostnamen ohne Protokoll oder Pfad eingeben (z.B. cs.tracking).");
+    }
     throw new Error("Server URL darf nicht leer sein.");
   }
 
+  const nextServerUrl = buildServerBaseUrl(hostOnly);
+
   try {
-    // Throws if invalid URL.
     const parsed = new URL(nextServerUrl);
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      throw new Error("Server URL muss mit http:// oder https:// beginnen.");
+    if (parsed.protocol !== "https:") {
+      throw new Error("Server URL muss https verwenden.");
     }
   } catch {
     throw new Error("Server URL ist ungueltig.");
@@ -478,10 +554,19 @@ async function writeServerConfig(serverConfig) {
 }
 
 async function testServerConnection(serverUrl) {
-  const baseUrl = normalizeServerUrl(serverUrl);
-  if (!baseUrl) {
-    return { ok: false, message: "Server URL fehlt." };
+  const hostOnly = normalizeServerHost(serverUrl);
+  if (!hostOnly) {
+    const rawInput = String(serverUrl || "").trim();
+    return {
+      ok: false,
+      message: rawInput
+        ? "Bitte nur den Hostnamen ohne Protokoll oder Pfad eingeben (z.B. cs.tracking)."
+        : "Server URL fehlt.",
+    };
   }
+
+  const baseUrl = buildServerBaseUrl(hostOnly);
+  const accessBaseUrl = resolveAccessBaseUrl(baseUrl);
 
   let parsed;
   try {
@@ -490,8 +575,9 @@ async function testServerConnection(serverUrl) {
     return { ok: false, message: "Server URL ist ungueltig." };
   }
 
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    return { ok: false, message: "Nur http:// oder https:// sind erlaubt." };
+  const accessCheck = await ensureCloudflareAccessSession(accessBaseUrl);
+  if (!accessCheck.ok) {
+    return { ok: false, message: accessCheck.message || "Cloudflare Access Anmeldung fehlgeschlagen." };
   }
 
   const candidateUrls = Array.from(
@@ -509,9 +595,13 @@ async function testServerConnection(serverUrl) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
       try {
+        const cookieHeader = await getAccessCookieHeader(accessBaseUrl);
         const response = await fetch(testUrl, {
           method: "GET",
-          headers: { Accept: "application/json" },
+          headers: {
+            Accept: "application/json",
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          },
           signal: controller.signal,
           cache: "no-store",
         });
@@ -686,6 +776,19 @@ async function startPhpSidecar() {
   backendBaseUrl = `http://127.0.0.1:${port}`;
 
   const phpBinary = resolvePhpBinary();
+  const sidecarEnvExtras = {};
+  const savedServerConfig = getStoredServerConfig();
+  if (savedServerConfig?.serverUrl) {
+    const accessBaseUrl = resolveAccessBaseUrl(savedServerConfig.serverUrl);
+    const cookieHeader = await getAccessCookieHeader(accessBaseUrl);
+    if (cookieHeader) {
+      sidecarEnvExtras.UPSTREAM_COOKIE_HEADER = cookieHeader;
+      console.log("[sidecar] upstream access cookies detected and forwarded to sidecar");
+    } else {
+      console.warn("[sidecar] no upstream access cookies found; protected upstream may return redirects");
+    }
+  }
+
   console.log("[sidecar] using php binary:", phpBinary);
   console.log("[sidecar] backend root:", backendRoot);
   console.log("[sidecar] sidecar public root:", publicRoot);
@@ -706,7 +809,7 @@ async function startPhpSidecar() {
     {
       cwd: backendRoot,
       windowsHide: true,
-      env: buildSidecarEnv(),
+      env: buildSidecarEnv(sidecarEnvExtras),
     },
   );
 
@@ -1107,6 +1210,9 @@ ipcMain.handle("app-get-version", () => app.getVersion());
 ipcMain.handle("cloudflare-access-login", async (event, serverUrl) => {
   try {
     const result = await openCloudflareAccessLoginWindow(serverUrl);
+    await restartPhpSidecar().catch((error) => {
+      console.warn("[sidecar] restart after cloudflare login failed", error);
+    });
     return {
       ok: true,
       ...result,
@@ -1230,6 +1336,9 @@ safeLocalStoreInvoke("local-store-upsert-portfolio-snapshot", (store, payload) =
 );
 safeLocalStoreInvoke("local-store-upsert-price", (store, payload) =>
   store.upsertPrice(payload),
+);
+safeLocalStoreInvoke("local-store-list-price-history", (store, itemId, limitDays) =>
+  store.listPriceHistory(itemId, limitDays),
 );
 safeLocalStoreInvoke("local-store-list-pending-operations", (store, limit) =>
   store.listPendingOperations(limit),

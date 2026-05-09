@@ -153,6 +153,28 @@ final class PortfolioController
         }
     }
 
+    public function itemPriceHistory(Request $request, int $id): void
+    {
+        try {
+            $fromDate = null;
+            if (isset($request->query['fromDate']) && is_string($request->query['fromDate'])) {
+                $fromDate = (string) $request->query['fromDate'];
+            }
+            // userId currently unused, but keep resolution consistent with other endpoints.
+            $this->resolveUserId($request);
+            JsonResponseFactory::success($this->portfolioService->getItemPriceHistory($id, $fromDate));
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Item price history request failed',
+                ['statusCode' => 500, 'itemId' => $id, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('ITEM_PRICE_HISTORY_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
     public function saveDailyValue(Request $request): void
     {
         try {

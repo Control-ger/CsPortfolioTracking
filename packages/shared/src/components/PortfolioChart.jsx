@@ -109,7 +109,13 @@ function normalizeHistory(history) {
   return history
     .map((entry, index) => {
       const timestamp = parseDateToTimestamp(entry?.date);
-      const wert = Number(entry?.wert);
+      const rawValue =
+        entry?.wert ??
+        entry?.priceEur ??
+        entry?.price_eur ??
+        entry?.price ??
+        entry?.value;
+      const wert = Number(rawValue);
 
       if (timestamp === null || !Number.isFinite(wert)) {
         return null;

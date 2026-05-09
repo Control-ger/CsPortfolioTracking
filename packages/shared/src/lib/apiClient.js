@@ -227,6 +227,22 @@ async function requestPayload(path, options = {}) {
 
   const normalizedPayload = payload || { data: null, meta: {} };
 
+  const upstreamHint = normalizedPayload?.meta?.upstreamHint;
+  if (upstreamHint?.code) {
+    console.warn("[apiClient] upstream hint", upstreamHint);
+    void sendFrontendTelemetryEvent({
+      level: "warning",
+      event: "frontend.upstream_fallback_hint",
+      message: "Upstream fallback hint reported by sidecar",
+      context: {
+        method,
+        path,
+        hintCode: String(upstreamHint.code || "UNKNOWN"),
+        hintMessage: String(upstreamHint.message || ""),
+      },
+    });
+  }
+
   if (cacheKey) {
     void localCache.set(cacheKey, normalizedPayload);
   }
@@ -321,6 +337,15 @@ export async function fetchPortfolioInvestmentHistory(id, options = {}) {
       itemName: options.itemName,
     }),
   );
+}
+
+export async function fetchItemPriceHistory(itemId, options = {}) {
+  return request(buildPath(`/api/v1/items/${itemId}/price-history`, {
+    fromDate: options.fromDate,
+    itemName: options.itemName,
+  }), {
+    signal: options.signal,
+  });
 }
 
 export async function fetchPortfolioSummary(options = {}) {

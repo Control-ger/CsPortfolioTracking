@@ -117,7 +117,7 @@ final class WatchlistService
             ];
         }
 
-        if ($normalizedQuery !== '' && mb_strlen($normalizedQuery) < 2) {
+        if ($normalizedQuery !== '' && $this->stringLength($normalizedQuery) < 2) {
             return [
                 'items' => [],
                 'page' => $resolvedPage,
@@ -151,6 +151,8 @@ final class WatchlistService
 
         $items = array_map(static function (array $row): array {
             return [
+                'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                'itemId' => isset($row['id']) ? (int) $row['id'] : 0,
                 'marketHashName' => (string) ($row['market_hash_name'] ?? ''),
                 'displayName' => (string) (($row['name'] ?? '') ?: ($row['market_hash_name'] ?? '')),
                 'itemType' => (string) (($row['item_type'] ?? '') ?: ($row['type'] ?? 'other')),
@@ -182,6 +184,15 @@ final class WatchlistService
             'sortBy' => $normalizedSortBy,
             'browseMode' => $browseMode,
         ];
+    }
+
+    private function stringLength(string $value): int
+    {
+        if (function_exists('mb_strlen')) {
+            return mb_strlen($value);
+        }
+
+        return strlen($value);
     }
 
     private function buildSteamPriceMapForQuery(string $query, int $limit, int $offset): array

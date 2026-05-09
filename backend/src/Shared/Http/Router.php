@@ -38,6 +38,21 @@ final class Router
             return;
         }
 
+        foreach ($this->routes as $routeKey => $handler) {
+            [$method, $routePath] = explode(' ', $routeKey, 2);
+            if ($method !== $request->method || !str_contains($routePath, '{key}')) {
+                continue;
+            }
+
+            $pattern = '#^' . str_replace('\{key\}', '([^/]+)', preg_quote($routePath, '#')) . '$#';
+            if (preg_match($pattern, $request->path, $matches) !== 1) {
+                continue;
+            }
+
+            $handler($request, urldecode((string) $matches[1]));
+            return;
+        }
+
         Logger::event(
             'warning',
             'error',

@@ -1183,6 +1183,32 @@ export function createLocalStore(userDataPath) {
       return { itemId, fetchedAt };
     },
 
+    listPriceHistory(itemId, limitDays = 370) {
+      const resolvedItemId = String(itemId || "");
+      if (!resolvedItemId) {
+        return [];
+      }
+
+      const days = Math.max(1, Number(limitDays || 370));
+      const fromTimestamp = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+      return db
+        .prepare(
+          `SELECT captured_at, price_usd, price_eur, exchange_rate, source
+           FROM price_history
+           WHERE item_id = ? AND captured_at >= ?
+           ORDER BY captured_at ASC`,
+        )
+        .all(resolvedItemId, fromTimestamp)
+        .map((row) => ({
+          date: row.captured_at,
+          priceUsd: row.price_usd ?? null,
+          priceEur: row.price_eur ?? null,
+          exchangeRate: row.exchange_rate ?? null,
+          source: row.source ?? null,
+        }));
+    },
+
     listPendingOperations(limit = 100) {
       return db
         .prepare(

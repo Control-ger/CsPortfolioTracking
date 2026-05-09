@@ -163,6 +163,13 @@ function clusterDesktopInvestments(rows = []) {
     group.totalInvestedUsd += totalCostUsd;
     group.totalInvested = group.totalInvestedUsd;
 
+    const rowItemId = Number(row.itemId ?? row.item_id ?? 0);
+    const groupItemId = Number(group.itemId ?? group.item_id ?? 0);
+    if (rowItemId > 0 && groupItemId <= 0) {
+      group.itemId = rowItemId;
+      group.item_id = rowItemId;
+    }
+
     if (!group.imageUrl && row.imageUrl) {
       group.imageUrl = row.imageUrl;
     }

@@ -34,6 +34,19 @@ function isDesktopRuntime() {
   return typeof window !== "undefined" && Boolean(window.electronAPI?.secrets);
 }
 
+function extractServerHostInput(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.host;
+  } catch {
+    return trimmed.replace(/[\\/].*$/, "");
+  }
+}
+
 export function SettingsPage() {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [source, setSource] = useState("defaults");
@@ -114,7 +127,7 @@ export function SettingsPage() {
       }
       try {
         const config = await window.electronAPI.serverConfig.get();
-        setServerUrl(config?.serverUrl || "");
+        setServerUrl(extractServerHostInput(config?.serverUrl || ""));
       } catch (error) {
         setServerConfigError(error?.message || "Server-Konfiguration konnte nicht geladen werden.");
       } finally {
@@ -582,7 +595,7 @@ export function SettingsPage() {
                   setServerConfigError("");
                   setServerConfigMessage("");
                 }}
-                placeholder="https://dein-server.example.com"
+                placeholder="cs.tracking"
                 disabled={serverConfigLoading || serverConfigSaving || serverConfigTesting}
               />
               <div className="flex flex-wrap items-center gap-2">
