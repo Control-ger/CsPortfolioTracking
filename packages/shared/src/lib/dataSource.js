@@ -302,6 +302,21 @@ async function fetchDesktopPortfolioData(options = {}) {
     };
   });
 
+  if (history.length <= 1) {
+    try {
+      const upstreamHistory = await fetchApiPortfolioHistory({ signal: options.signal });
+      if (Array.isArray(upstreamHistory) && upstreamHistory.length > history.length) {
+        history = upstreamHistory;
+        meta = {
+          ...meta,
+          historySource: "upstream",
+        };
+      }
+    } catch (error) {
+      console.warn("[desktop-history] upstream portfolio history unavailable", error);
+    }
+  }
+
   if (history.length === 0 && rows.length > 0) {
     const summary = calculatePortfolioSummary(rows);
     history = [

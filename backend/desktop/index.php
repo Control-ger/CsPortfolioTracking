@@ -413,6 +413,22 @@ $summarizeProxyIssue = static function (array $attempts): array {
     ];
 };
 
+$router->register('GET', '/api/v1/portfolio/history', static function () use ($proxyUpstreamGet): void {
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/history');
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            $proxied['data'],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success([], [
+        'source' => 'desktop-local-fallback',
+        'proxyAttempts' => $proxied['attempts'] ?? [],
+    ]);
+});
+
 $router->register('GET', '/api/v1/exchange-rate', static function () use ($proxyUpstreamGet): void {
     $proxied = $proxyUpstreamGet('/api/v1/exchange-rate');
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
