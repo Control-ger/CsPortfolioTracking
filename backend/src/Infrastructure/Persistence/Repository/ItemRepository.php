@@ -239,7 +239,7 @@ final class ItemRepository
 
         $normalizedQuery = trim($query);
         if ($normalizedQuery !== '') {
-            $conditions[] = '(market_hash_name LIKE ? OR name LIKE ?)';
+            $conditions[] = '(i.market_hash_name LIKE ? OR i.name LIKE ?)';
             $needle = '%' . $normalizedQuery . '%';
             $params[] = $needle;
             $params[] = $needle;
@@ -247,25 +247,25 @@ final class ItemRepository
 
         $normalizedItemType = trim((string) $itemType);
         if ($normalizedItemType !== '' && strtolower($normalizedItemType) !== 'all') {
-            $conditions[] = '(item_type = ? OR type = ?)';
+            $conditions[] = '(i.item_type = ? OR i.type = ?)';
             $params[] = $normalizedItemType;
             $params[] = $normalizedItemType;
         }
 
         $normalizedWear = trim((string) $wearKey);
         if ($normalizedWear !== '' && strtolower($normalizedWear) !== 'all') {
-            $conditions[] = 'wear_key = ?';
+            $conditions[] = 'i.wear_key = ?';
             $params[] = $normalizedWear;
         }
 
         $whereSql = $conditions === [] ? '' : ('WHERE ' . implode(' AND ', $conditions));
         $orderSql = match (trim((string) $sortBy)) {
-            'name_desc' => 'ORDER BY market_hash_name DESC',
-            'price_asc' => 'ORDER BY price_eur ASC, market_hash_name ASC',
-            'price_desc' => 'ORDER BY price_eur DESC, market_hash_name ASC',
-            default => 'ORDER BY market_hash_name ASC',
+            'name_desc' => 'ORDER BY i.market_hash_name DESC',
+            'price_asc' => 'ORDER BY price_eur ASC, i.market_hash_name ASC',
+            'price_desc' => 'ORDER BY price_eur DESC, i.market_hash_name ASC',
+            default => 'ORDER BY i.market_hash_name ASC',
         };
-        $selectSql = 'id, name, market_hash_name, image_url, type, item_type, item_type_label, market_type_label, wear_key, wear_label';
+        $selectSql = 'i.id, i.name, i.market_hash_name, i.image_url, i.type, i.item_type, i.item_type_label, i.market_type_label, i.wear_key, i.wear_label';
         $joinSql = '';
         if ($this->supportsPriceJoin()) {
             $selectSql .= ',
@@ -278,7 +278,7 @@ final class ItemRepository
                         ELSE NULL
                      END AS price_eur';
             $joinSql = '
-                LEFT JOIN item_price_latest ipl ON ipl.item_id = items.id
+                LEFT JOIN item_price_latest ipl ON ipl.item_id = i.id
                 LEFT JOIN exchange_rates er ON er.id = ipl.exchange_rate_id';
         } else {
             $selectSql .= ',
@@ -290,7 +290,7 @@ final class ItemRepository
         }
 
         $sql = "SELECT {$selectSql}
-                FROM items
+                FROM items i
                 {$joinSql}
                 {$whereSql}
                 {$orderSql}
