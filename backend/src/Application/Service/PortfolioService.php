@@ -773,6 +773,49 @@ final class PortfolioService
         return $this->investmentRepository->updateExcludedFlag($userId, $id, $exclude);
     }
 
+    public function buildInvestmentSyncPayload(int $userId, int $id, bool $excluded): ?array
+    {
+        $row = $this->investmentRepository->findByUserAndId($userId, $id);
+        if ($row === null) {
+            return null;
+        }
+
+        $rawPayload = $row['raw_payload_json'] ?? null;
+        $payload = [];
+        if (is_string($rawPayload) && trim($rawPayload) !== '') {
+            $decoded = json_decode($rawPayload, true);
+            if (is_array($decoded)) {
+                $payload = $decoded;
+            }
+        }
+
+        $resolvedName = trim((string) ($row['name'] ?? ''));
+        $resolvedType = trim((string) ($row['type'] ?? 'skin'));
+        if ($resolvedType === '') {
+            $resolvedType = 'skin';
+        }
+
+        return array_merge($payload, [
+            'id' => (string) $id,
+            'userId' => (string) $userId,
+            'itemId' => isset($row['item_id']) ? (string) ((int) $row['item_id']) : null,
+            'name' => $resolvedName,
+            'marketHashName' => $resolvedName !== '' ? $resolvedName : (string) ($row['market_hash_name'] ?? ''),
+            'type' => $resolvedType,
+            'quantity' => max(1, (int) ($row['quantity'] ?? 1)),
+            'buyPriceUsd' => isset($row['buy_price_usd']) ? (float) $row['buy_price_usd'] : 0.0,
+            'fundingMode' => $this->normalizeFundingMode($row['funding_mode'] ?? null),
+            'platform' => (string) ($row['platform'] ?? 'desktop_sync'),
+            'externalTradeId' => (string) ($row['external_trade_id'] ?? $id),
+            'purchasedAt' => (string) ($row['purchased_at'] ?? gmdate('c')),
+            'imageUrl' => isset($row['image_url']) ? (string) $row['image_url'] : null,
+            'serverId' => $id,
+            'excluded' => $excluded,
+            'isExcluded' => $excluded,
+            'updatedAt' => gmdate('c'),
+        ]);
+    }
+
     private function isExcludedInvestment(array $investment): bool
     {
         $rawPayload = $investment['raw_payload_json'] ?? null;

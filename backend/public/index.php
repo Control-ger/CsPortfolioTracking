@@ -461,7 +461,7 @@ try {
     $syncService = new SyncService($pdo);
     $settingsController = new SettingsController($feeSettingsService);
 
-    $portfolioController = new PortfolioController($portfolioService, $scalingShadowReadService);
+    $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService);
     $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService);
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);

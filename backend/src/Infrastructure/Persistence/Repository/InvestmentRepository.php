@@ -193,6 +193,31 @@ final class InvestmentRepository
         }
     }
 
+    public function findByUserAndId(int $userId, int $id): ?array
+    {
+        $sql = 'SELECT i.*, it.name, it.market_hash_name, it.type, it.image_url
+                FROM investments i
+                JOIN items it ON it.id = i.item_id
+                WHERE i.user_id = ? AND i.id = ?
+                LIMIT 1';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$userId, $id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $row !== false ? $row : null;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['userId' => $userId, 'id' => $id]
+            );
+            throw $exception;
+        }
+    }
+
     public function findByItemId(int $userId, int $itemId): array
     {
         $sql = 'SELECT i.*, it.name, it.market_hash_name

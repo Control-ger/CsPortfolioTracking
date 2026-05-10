@@ -130,6 +130,87 @@ function getInvestmentGroupKey(row) {
     .toLowerCase();
 }
 
+function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []) {
+  if (!Array.isArray(localRows) || localRows.length === 0) {
+    return [];
+  }
+  if (!Array.isArray(upstreamRows) || upstreamRows.length === 0) {
+    return localRows;
+  }
+
+  const upstreamByKey = new Map();
+  upstreamRows.forEach((row) => {
+    const key = getInvestmentGroupKey(row);
+    if (!key) {
+      return;
+    }
+    upstreamByKey.set(key, row);
+  });
+
+  return localRows.map((row) => {
+    const key = getInvestmentGroupKey(row);
+    if (!key || !upstreamByKey.has(key)) {
+      return row;
+    }
+
+    const upstream = upstreamByKey.get(key);
+    const quantity = Number(row.quantity || 0);
+    const fallbackDisplayPrice = Number(row.displayPrice ?? row.livePrice ?? row.buyPrice ?? 0);
+    const fallbackCurrentValue = Number(row.currentValue ?? fallbackDisplayPrice * quantity);
+    const liveDisplayPrice = Number(upstream.displayPrice ?? upstream.livePrice);
+    const hasLiveDisplayPrice = Number.isFinite(liveDisplayPrice) && liveDisplayPrice > 0;
+    const mergedDisplayPrice = hasLiveDisplayPrice ? liveDisplayPrice : fallbackDisplayPrice;
+    const mergedCurrentValue = Number.isFinite(Number(upstream.currentValue))
+      ? Number(upstream.currentValue)
+      : mergedDisplayPrice * quantity;
+
+    return {
+      ...row,
+      livePrice: upstream.livePrice ?? row.livePrice ?? null,
+      displayPrice: mergedDisplayPrice,
+      currentValue: Number.isFinite(mergedCurrentValue) ? mergedCurrentValue : fallbackCurrentValue,
+      totalInvested:
+        Number.isFinite(Number(upstream.totalInvested))
+          ? Number(upstream.totalInvested)
+          : row.totalInvested,
+      isLive: upstream.isLive === true || row.isLive === true,
+      pricingStatus: upstream.pricingStatus ?? row.pricingStatus ?? "fallback",
+      priceSource: upstream.priceSource ?? row.priceSource ?? null,
+      roi: Number.isFinite(Number(upstream.roi)) ? Number(upstream.roi) : row.roi,
+      profitEuro: Number.isFinite(Number(upstream.profitEuro))
+        ? Number(upstream.profitEuro)
+        : row.profitEuro,
+      isProfitPositive:
+        typeof upstream.isProfitPositive === "boolean"
+          ? upstream.isProfitPositive
+          : row.isProfitPositive,
+      change24hEuro: upstream.change24hEuro ?? row.change24hEuro,
+      change24hPercent: upstream.change24hPercent ?? row.change24hPercent,
+      change7dEuro: upstream.change7dEuro ?? row.change7dEuro,
+      change7dPercent: upstream.change7dPercent ?? row.change7dPercent,
+      change30dEuro: upstream.change30dEuro ?? row.change30dEuro,
+      change30dPercent: upstream.change30dPercent ?? row.change30dPercent,
+      changes: upstream.changes ?? row.changes,
+      lastPriceUpdateAt: upstream.lastPriceUpdateAt ?? row.lastPriceUpdateAt,
+      priceAgeSeconds: upstream.priceAgeSeconds ?? row.priceAgeSeconds,
+      freshnessStatus: upstream.freshnessStatus ?? row.freshnessStatus,
+      freshnessLabel: upstream.freshnessLabel ?? row.freshnessLabel,
+      marketTypeLabel: upstream.marketTypeLabel ?? row.marketTypeLabel,
+      wearName: upstream.wearName ?? row.wearName,
+      breakEvenPrice: upstream.breakEvenPrice ?? row.breakEvenPrice,
+      breakEvenDeltaEuro: upstream.breakEvenDeltaEuro ?? row.breakEvenDeltaEuro,
+      breakEvenDeltaPercent: upstream.breakEvenDeltaPercent ?? row.breakEvenDeltaPercent,
+      costBasisTotal: upstream.costBasisTotal ?? row.costBasisTotal,
+      costBasisUnit: upstream.costBasisUnit ?? row.costBasisUnit,
+      netPositionValue: upstream.netPositionValue ?? row.netPositionValue,
+      netProfitEuro: upstream.netProfitEuro ?? row.netProfitEuro,
+      netRoiPercent: upstream.netRoiPercent ?? row.netRoiPercent,
+      breakEvenPriceNet: upstream.breakEvenPriceNet ?? row.breakEvenPriceNet,
+      appliedFees: upstream.appliedFees ?? row.appliedFees,
+    };
+  });
+}
+
 function clusterDesktopInvestments(rows = []) {
   const groups = new Map();
 
@@ -279,6 +360,22 @@ async function fetchDesktopPortfolioData(options = {}) {
     rawInvestmentCount: rawRows.length,
     warnings: [],
   };
+
+  try {
+    const upstreamRowsResponse = await fetchApiPortfolioInvestments({ signal: options.signal });
+    const upstreamRows = Array.isArray(upstreamRowsResponse?.data)
+      ? upstreamRowsResponse.data
+      : [];
+    if (upstreamRows.length > 0) {
+      rows = enrichDesktopRowsWithUpstreamLiveData(rows, upstreamRows);
+      meta = {
+        ...meta,
+        livePricingSource: "upstream",
+      };
+    }
+  } catch (error) {
+    console.warn("[desktop-live-pricing] upstream investments unavailable", error);
+  }
 
   // No server seeding - user must import from CS2 inventory first
   // Empty local DB means user hasn't imported items yet

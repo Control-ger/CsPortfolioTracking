@@ -429,6 +429,23 @@ $router->register('GET', '/api/v1/portfolio/history', static function () use ($p
     ]);
 });
 
+$router->register('GET', '/api/v1/portfolio/investments', static function () use ($proxyUpstreamGet, $summarizeProxyIssue): void {
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments');
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            $proxied['data'],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success([], [
+        'source' => 'desktop-local-fallback',
+        'proxyAttempts' => $proxied['attempts'] ?? [],
+        'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? []),
+    ]);
+});
+
 $router->register('GET', '/api/v1/exchange-rate', static function () use ($proxyUpstreamGet): void {
     $proxied = $proxyUpstreamGet('/api/v1/exchange-rate');
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {

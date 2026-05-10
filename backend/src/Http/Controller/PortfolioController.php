@@ -5,6 +5,7 @@ namespace App\Http\Controller;
 
 use App\Application\Service\PortfolioService;
 use App\Application\Service\ScalingShadowReadService;
+use App\Application\Service\SyncService;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Logger;
@@ -14,6 +15,7 @@ final class PortfolioController
 {
     public function __construct(
         private readonly PortfolioService $portfolioService,
+        private readonly SyncService $syncService,
         private readonly ?ScalingShadowReadService $scalingShadowReadService = null
     ) {
     }
@@ -216,8 +218,9 @@ final class PortfolioController
     public function toggleExcludeInvestment(Request $request, int $id): void
     {
         try {
+            $userId = $this->resolveUserId($request);
             $exclude = filter_var($request->body['exclude'] ?? false, FILTER_VALIDATE_BOOL);
-            $success = $this->portfolioService->toggleExcludeInvestment($this->resolveUserId($request), $id, $exclude);
+            $success = $this->portfolioService->toggleExcludeInvestment($userId, $id, $exclude);
 
             if (!$success) {
                 JsonResponseFactory::error(
@@ -236,6 +239,16 @@ final class PortfolioController
                 'Investment exclude flag toggled',
                 ['investmentId' => $id, 'exclude' => $exclude]
             );
+
+            $syncPayload = $this->portfolioService->buildInvestmentSyncPayload($userId, $id, $exclude);
+            if (is_array($syncPayload)) {
+                $this->syncService->upsertServerEntity(
+                    $userId,
+                    'investments',
+                    (string) $id,
+                    $syncPayload
+                );
+            }
 
             JsonResponseFactory::success(
                 ['success' => true, 'investmentId' => $id, 'excluded' => $exclude],
