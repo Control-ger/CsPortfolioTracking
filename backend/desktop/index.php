@@ -111,12 +111,27 @@ $router->register('POST', '/api/v1/settings/csfloat-api-key', static function ()
 });
 
 $router->register('POST', '/api/v1/auth/steam/login', static function () use ($steamAuthController): void {
-    $result = $steamAuthController->login($_GET, $_SERVER);
+    try {
+        $result = $steamAuthController->login($_GET, $_SERVER);
+    } catch (\Throwable $e) {
+        error_log('[desktop-auth-login] Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        JsonResponseFactory::error('AUTH_LOGIN_ERROR', $e->getMessage(), [], 500);
+        return;
+    }
     JsonResponseFactory::success($result, [], ($result['success'] ?? false) ? 200 : 400);
 });
 
 $router->register('GET', '/api/v1/auth/steam/callback', static function () use ($steamAuthController): void {
-    $result = $steamAuthController->callback($_GET, $_SERVER);
+    try {
+        $result = $steamAuthController->callback($_GET, $_SERVER);
+    } catch (\Throwable $e) {
+        error_log('[desktop-auth-callback] Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        http_response_code(500);
+        header('Content-Type: text/html');
+        echo '<h1>Authentication Error</h1><p>' . htmlspecialchars($e->getMessage()) . '</p><p>Check ENCRYPTION_KEY is set.</p>';
+        return;
+    }
+
     if (!($result['success'] ?? false)) {
         http_response_code(400);
         header('Content-Type: text/html');

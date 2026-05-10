@@ -63,6 +63,7 @@ const sessionFileName = "session.json";
 const serverConfigFileName = "server-config.json";
 const secretsDirName = "secrets";
 const csFloatApiKeyFileName = "csfloat-api-key.bin";
+const encryptionKeyFileName = "encryption-key.bin";
 let createLocalStore = null;
 let localStore = null;
 let distIndexPath = null; // Will be set when app is ready
@@ -207,6 +208,46 @@ function getCsFloatApiKeyFilePath() {
   return path.join(getSecretsDirPath(), csFloatApiKeyFileName);
 }
 
+function getEncryptionKeyFilePath() {
+  return path.join(getSecretsDirPath(), encryptionKeyFileName);
+}
+
+function getOrCreateEncryptionKey() {
+  const filePath = getEncryptionKeyFilePath();
+
+  // Try to read existing key
+  if (fsSync.existsSync(filePath)) {
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.warn("[desktop-secrets] safeStorage unavailable; cannot decrypt encryption key");
+      return null;
+    }
+    try {
+      const encrypted = fsSync.readFileSync(filePath);
+      return safeStorage.decryptString(encrypted);
+    } catch (error) {
+      console.warn("[desktop-secrets] failed to decrypt encryption key, regenerating", error);
+    }
+  }
+
+  // Generate new key if needed
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn("[desktop-secrets] safeStorage unavailable; cannot store encryption key");
+    return null;
+  }
+
+  try {
+    const newKey = randomBytes(32).toString("hex");
+    const encrypted = safeStorage.encryptString(newKey);
+    fsSync.mkdirSync(getSecretsDirPath(), { recursive: true });
+    fsSync.writeFileSync(filePath, encrypted);
+    console.log("[desktop-secrets] generated new encryption key for session tokens");
+    return newKey;
+  } catch (error) {
+    console.error("[desktop-secrets] failed to create encryption key", error);
+    return null;
+  }
+}
+
 function resolveRuntimePath(...segments) {
   const appPath = app.getAppPath();
   const candidates = [
@@ -264,6 +305,7 @@ function buildSidecarEnv(extraEnv = {}) {
     ...process.env,
   };
   const localCsFloatApiKey = getStoredCsFloatApiKey();
+  const encryptionKey = getOrCreateEncryptionKey();
 
   merged.APP_ENV = merged.APP_ENV || "desktop";
   merged.DESKTOP_SIDECAR_SECRET = sidecarSecret;
@@ -271,6 +313,9 @@ function buildSidecarEnv(extraEnv = {}) {
   merged.DESKTOP_STATE_DIR = app.getPath("userData");
   if (localCsFloatApiKey) {
     merged.CSFLOAT_API_KEY = localCsFloatApiKey;
+  }
+  if (encryptionKey) {
+    merged.ENCRYPTION_KEY = encryptionKey;
   }
 
   if (!merged.DESKTOP_DB_HOST && merged.DB_HOST === "db") {
