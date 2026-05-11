@@ -1,6 +1,6 @@
 {
   "name": "cs-portfolio-web",
-  "version": "0.1.2",
+  "version": "0.1.11",
   "type": "module",
   "description": "CS Portfolio Tracking - Web/PWA version (read-only)",
   "scripts": {

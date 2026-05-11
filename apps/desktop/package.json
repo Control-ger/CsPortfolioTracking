@@ -1,6 +1,6 @@
 {
   "name": "cs-portfolio-desktop",
-  "version": "0.1.2",
+  "version": "0.1.11",
   "type": "module",
   "main": "main.js",
   "description": "CS Portfolio Tracking - Electron Desktop version",
