@@ -13,6 +13,7 @@ import { Skeleton } from "@shared/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components";
 import { fetchFeeSettings, updateFeeSettings, fetchCsFloatApiKeyStatus, updateCsFloatApiKey } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
+import { getPortfolioPreferences, updatePortfolioPreferences } from "@shared/lib/portfolioPreferences";
 
 const DEFAULT_FORM = {
   fxFeePercent: "0",
@@ -71,6 +72,16 @@ export function SettingsPage() {
   const [serverConfigTesting, setServerConfigTesting] = useState(false);
   const [serverConfigMessage, setServerConfigMessage] = useState("");
   const [serverConfigError, setServerConfigError] = useState("");
+  const [portfolioPrefsLoading, setPortfolioPrefsLoading] = useState(true);
+  const [portfolioPrefsSaving, setPortfolioPrefsSaving] = useState(false);
+  const [portfolioPrefsError, setPortfolioPrefsError] = useState("");
+  const [portfolioPrefsSuccess, setPortfolioPrefsSuccess] = useState("");
+  const [portfolioPrefs, setPortfolioPrefs] = useState({
+    steamImportBucket: "inventory",
+    csfloatImportBucket: "investment",
+    metricsDisplayMode: "toggle_mode",
+    metricsScopeDefault: "investments",
+  });
   const desktopRuntime = isDesktopRuntime();
   useEffect(() => {
     const loadSettings = async () => {
@@ -138,6 +149,27 @@ export function SettingsPage() {
     void loadServerConfig();
   }, []);
 
+  useEffect(() => {
+    const loadPortfolioPrefs = async () => {
+      if (!desktopRuntime) {
+        setPortfolioPrefsLoading(false);
+        return;
+      }
+
+      try {
+        const preferences = await getPortfolioPreferences();
+        setPortfolioPrefs(preferences);
+        setPortfolioPrefsError("");
+      } catch (error) {
+        setPortfolioPrefsError(error?.message || "Portfolio-Preferences konnten nicht geladen werden.");
+      } finally {
+        setPortfolioPrefsLoading(false);
+      }
+    };
+
+    void loadPortfolioPrefs();
+  }, [desktopRuntime]);
+
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
     setSuccess("");
@@ -147,6 +179,23 @@ export function SettingsPage() {
     setApiKey(event.target.value);
     setApiKeyError("");
     setApiKeySuccess("");
+  };
+
+  const handlePortfolioPreferenceChange = async (field, value) => {
+    try {
+      setPortfolioPrefsSaving(true);
+      setPortfolioPrefsError("");
+      setPortfolioPrefsSuccess("");
+      const updated = await updatePortfolioPreferences({
+        [field]: value,
+      });
+      setPortfolioPrefs(updated);
+      setPortfolioPrefsSuccess("Portfolio-Preferences gespeichert.");
+    } catch (error) {
+      setPortfolioPrefsError(error?.message || "Portfolio-Preferences konnten nicht gespeichert werden.");
+    } finally {
+      setPortfolioPrefsSaving(false);
+    }
   };
 
   const handleUpdateCsFloatApiKey = async () => {
@@ -267,6 +316,80 @@ export function SettingsPage() {
                   Kurse werden taeglich aktualisiert.
                 </p>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Portfolio-Modus</CardTitle>
+            <CardDescription>
+              Lege Standard-Zuordnungen fuer Importe und KPI-Berechnung fest.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!desktopRuntime ? (
+              <p className="text-sm text-muted-foreground">
+                Diese Einstellungen sind in der Desktop-App verfuegbar.
+              </p>
+            ) : portfolioPrefsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ) : (
+              <>
+                {portfolioPrefsError ? (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                    {portfolioPrefsError}
+                  </div>
+                ) : null}
+                {portfolioPrefsSuccess ? (
+                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                    {portfolioPrefsSuccess}
+                  </div>
+                ) : null}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Steam-Import Standard</label>
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={portfolioPrefs.steamImportBucket}
+                      disabled={portfolioPrefsSaving}
+                      onChange={(event) => void handlePortfolioPreferenceChange("steamImportBucket", event.target.value)}
+                    >
+                      <option value="inventory">In Inventar einsortieren</option>
+                      <option value="investment">In Investments einsortieren</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">CSFloat-Import Standard</label>
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={portfolioPrefs.csfloatImportBucket}
+                      disabled={portfolioPrefsSaving}
+                      onChange={(event) => void handlePortfolioPreferenceChange("csfloatImportBucket", event.target.value)}
+                    >
+                      <option value="investment">In Investments einsortieren</option>
+                      <option value="inventory">In Inventar einsortieren</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Portfolio-Kennzahlen</label>
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    value={portfolioPrefs.metricsDisplayMode}
+                    disabled={portfolioPrefsSaving}
+                    onChange={(event) => void handlePortfolioPreferenceChange("metricsDisplayMode", event.target.value)}
+                  >
+                    <option value="toggle_mode">Umschaltbar (Investments / Alles)</option>
+                    <option value="investments_only">Immer nur Investments</option>
+                    <option value="always_all">Immer alles zusammen</option>
+                  </select>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

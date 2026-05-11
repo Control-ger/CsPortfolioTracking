@@ -100,6 +100,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-mark-all-notifications-read", userId, category),
     markOperationApplied: (id) =>
       ipcRenderer.invoke("local-store-mark-operation-applied", id),
+    getPortfolioPreferences: (userId) =>
+      ipcRenderer.invoke("local-store-get-portfolio-preferences", userId),
+    updatePortfolioPreferences: (userId, patch) =>
+      ipcRenderer.invoke("local-store-update-portfolio-preferences", userId, patch),
   },
   nodeVersion: () => process.versions.node,
   chromeVersion: () => process.versions.chrome,

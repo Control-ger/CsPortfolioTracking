@@ -506,11 +506,33 @@ export async function fetchCS2Inventory(steamId) {
 /**
  * Import CS2 inventory items as investments
  */
-export async function importInventoryAsInvestments(items, userId) {
+export async function importInventoryAsInvestments(items, userId, options = {}) {
   // Use local store if available (Desktop)
   if (isDesktopApp() && window.electronAPI.localStore) {
+    const resolvedUserId = String(userId || "1");
+    let targetBucket = String(options?.bucket || "").trim().toLowerCase();
+    if (!targetBucket && window.electronAPI.localStore.getPortfolioPreferences) {
+      try {
+        const preferences = unwrapLocalStoreResult(
+          await window.electronAPI.localStore.getPortfolioPreferences(resolvedUserId),
+          "local-store-get-portfolio-preferences",
+        );
+        targetBucket = String(preferences?.steamImportBucket || "").trim().toLowerCase();
+      } catch (error) {
+        console.warn("Failed to resolve steam import bucket preference", error);
+      }
+    }
+    if (targetBucket !== "inventory" && targetBucket !== "investment") {
+      targetBucket = "inventory";
+    }
+
+    const normalizedItems = (Array.isArray(items) ? items : []).map((item) => ({
+      ...item,
+      bucket: targetBucket,
+    }));
+
     const result = unwrapLocalStoreResult(
-      await window.electronAPI.localStore.syncSteamInventory(items, userId),
+      await window.electronAPI.localStore.syncSteamInventory(normalizedItems, resolvedUserId),
       "local-store-sync-steam-inventory",
     );
 

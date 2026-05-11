@@ -34,14 +34,18 @@ import { usePortfolioComposition } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
   fetchPortfolioInvestmentHistory,
+  updateInvestmentBucket,
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
   fetchCS2Inventory,
+  getPortfolioPreferences,
   getCurrentUser,
   importInventoryAsInvestments,
+  resolveMetricsScopeFromPreferences,
   fetchCsFloatApiKeyStatus,
   toggleExcludeInvestment,
+  updatePortfolioPreferences,
 } from "@shared/lib";
 import { BREAKPOINTS, UI } from "@shared/lib";
 import { useKeyboard } from "@shared/hooks";
@@ -96,6 +100,19 @@ const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
+
+function normalizeBucket(value, fallback = "investment") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "inventory") {
+    return "inventory";
+  }
+  if (normalized === "investment") {
+    return "investment";
+  }
+  return fallback === "inventory" ? "inventory" : "investment";
+}
 
 function resolveDesktopRuntimeUserId(user, fallback = 1) {
   const candidate = user?.id ?? user?.userId ?? fallback;
@@ -174,6 +191,12 @@ function getClusterKey(item) {
     .toLowerCase();
 }
 
+function getItemNameKey(item) {
+  return String(item?.marketHashName || item?.name || item?.itemName || "")
+    .trim()
+    .toLowerCase();
+}
+
 function buildManagementClusters(items = []) {
   const groups = new Map();
   items.forEach((item) => {
@@ -201,6 +224,9 @@ function buildManagementClusters(items = []) {
       buyPriceUsd: Number(item.buyPriceUsd ?? item.buyPrice ?? 0),
       externalTradeId: item.externalTradeId || null,
       purchasedAt: item.purchasedAt || null,
+      platform: String(item.platform || item.source || "").toLowerCase(),
+      steamAssetId: item.steamAssetId ? String(item.steamAssetId) : null,
+      bucket: normalizeBucket(item.bucket),
       excluded: Boolean(item.excluded),
     });
   });
@@ -248,6 +274,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const resolvedInitialTab = searchParams.get("tab") || initialTab;
+  const [portfolioPreferences, setPortfolioPreferences] = useState({
+    steamImportBucket: "inventory",
+    csfloatImportBucket: "investment",
+    metricsDisplayMode: "toggle_mode",
+    metricsScopeDefault: "investments",
+  });
+  const [selectedMetricsScope, setSelectedMetricsScope] = useState("investments");
+  const [inventoryScope, setInventoryScope] = useState("investment");
+  const metricsScope = resolveMetricsScopeFromPreferences(
+    portfolioPreferences,
+    selectedMetricsScope,
+  );
   const {
     enrichedInvestments,
     isLoading: portfolioLoading,
@@ -259,7 +297,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     refreshPortfolio,
     removeInvestmentFromView,
   } =
-    usePortfolio();
+    usePortfolio({ scope: metricsScope, rowScope: "all" });
   const {
     latestItem: latestCsUpdate,
     latestItemAgeHours: latestCsUpdateAgeHours,
@@ -270,7 +308,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     data: compositionData,
     loading: compositionLoading,
     error: compositionError,
-  } = usePortfolioComposition(compositionRefreshToken);
+  } = usePortfolioComposition(compositionRefreshToken, { scope: metricsScope });
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
@@ -302,7 +340,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
   });
   const [installedAppVersion, setInstalledAppVersion] = useState("");
   const [appUpdateUnread, setAppUpdateUnread] = useState(false);
-  const [appUpdateChecking, setAppUpdateChecking] = useState(false);
   const [journeyState, setJourneyState] = useState({ skipped: false });
   const [journeyLoading, setJourneyLoading] = useState(true);
   const [journeyUserName, setJourneyUserName] = useState("");
@@ -393,6 +430,24 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     void loadJourneyState();
   }, []);
+
+  useEffect(() => {
+    const loadPortfolioPreferences = async () => {
+      if (!isDesktopRuntime) {
+        return;
+      }
+
+      try {
+        const preferences = await getPortfolioPreferences();
+        setPortfolioPreferences(preferences);
+        setSelectedMetricsScope(preferences.metricsScopeDefault || "investments");
+      } catch (preferenceError) {
+        console.warn("Failed to load portfolio preferences", preferenceError);
+      }
+    };
+
+    void loadPortfolioPreferences();
+  }, [isDesktopRuntime]);
 
   useEffect(() => {
     const loadManagementInvestments = async () => {
@@ -543,7 +598,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
       }
 
       const marketableItems = inventoryResult.items.filter((item) => item?.marketable);
-      const syncResult = await importInventoryAsInvestments(marketableItems, userId);
+      const syncResult = await importInventoryAsInvestments(marketableItems, userId, {
+        bucket: portfolioPreferences.steamImportBucket,
+      });
       const imported = Number(syncResult?.imported || 0);
       const updated = Number(syncResult?.updated || 0);
       const syncedAt = new Date().toISOString();
@@ -607,7 +664,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     } finally {
       setIsSteamSyncing(false);
     }
-  }, [authRequired, isSteamSyncing, refreshPortfolio]);
+  }, [authRequired, isSteamSyncing, portfolioPreferences.steamImportBucket, refreshPortfolio]);
 
   useEffect(() => {
     const loadServerSetup = async () => {
@@ -821,11 +878,57 @@ export function PortfolioPage({ initialTab = "overview" }) {
     }
     return managementClusters;
   })();
-  const matchingSuggestedCount = matchingRows.filter((row) => row.status === "suggested").length;
+  const pendingMatchingRows = matchingRows.filter((row) => row.status === "suggested");
+  const confirmedOrAutoMatchByCsfloatId = new Map();
+  matchingRows.forEach((row) => {
+    const status = String(row?.status || "").toLowerCase();
+    if (!["manual_confirmed", "auto_linked"].includes(status)) {
+      return;
+    }
+    const csfloatId = String(row?.csfloatInvestmentId || "").trim();
+    const steamId = String(row?.steamAssetId || "").trim();
+    if (!csfloatId || !steamId) {
+      return;
+    }
+    confirmedOrAutoMatchByCsfloatId.set(csfloatId, steamId);
+  });
+  const matchingSuggestedCount = pendingMatchingRows.length;
+  const inventoryTabItems = enrichedInvestments.filter((item) => {
+    const bucket = normalizeBucket(
+      item?.bucket,
+      String(item?.platform || item?.source || "").toLowerCase() === "steam_inventory"
+        ? "inventory"
+        : "investment",
+    );
+    if (inventoryScope === "all") {
+      return true;
+    }
+    return bucket === inventoryScope;
+  });
   const steamInventoryItems = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     return platform === "steam_inventory" || Boolean(item.steamAssetId);
   });
+  const suggestedPriceByNameKey = (() => {
+    const nextMap = new Map();
+
+    enrichedInvestments.forEach((item) => {
+      const key = getItemNameKey(item);
+      if (!key || nextMap.has(key)) {
+        return;
+      }
+
+      const livePrice = Number(item.livePrice);
+      if (Number.isFinite(livePrice) && livePrice > 0) {
+        nextMap.set(key, {
+          value: livePrice,
+          source: item.priceSource || "live",
+        });
+      }
+    });
+
+    return nextMap;
+  })();
   const priceMissingCount = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     if (!(platform === "steam_inventory" || item.steamAssetId)) {
@@ -848,10 +951,26 @@ export function PortfolioPage({ initialTab = "overview" }) {
     setCompositionRefreshToken((current) => current + 1);
   };
 
+  const handleManagementBucketToggle = async (investmentId, bucket) => {
+    await updateInvestmentBucket(investmentId, bucket);
+    await refreshPortfolio();
+    setCompositionRefreshToken((current) => current + 1);
+  };
+
   const handleManagementClusterToggle = async (cluster, exclude) => {
     await toggleExcludeInvestment(
       cluster.id,
       exclude,
+      cluster.positions.map((position) => position.id),
+    );
+    await refreshPortfolio();
+    setCompositionRefreshToken((current) => current + 1);
+  };
+
+  const handleManagementClusterBucketToggle = async (cluster, bucket) => {
+    await updateInvestmentBucket(
+      cluster.id,
+      bucket,
       cluster.positions.map((position) => position.id),
     );
     await refreshPortfolio();
@@ -872,8 +991,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
     }));
   };
 
-  const handleSaveSteamItemPrice = async (item) => {
-    const draftValue = priceDrafts[item.id];
+  const handleSaveSteamItemPrice = async (item, explicitPrice = null) => {
+    const draftValue = explicitPrice ?? priceDrafts[item.id];
     const nextPrice = Number(draftValue);
     if (!Number.isFinite(nextPrice) || nextPrice < 0) {
       return;
@@ -886,6 +1005,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
         id: item.id,
         buyPriceUsd: nextPrice,
         buyPrice: nextPrice,
+        priceSetMode: "user_confirmed",
         platform: "steam_inventory",
         source: "steam_inventory",
       });
@@ -896,6 +1016,19 @@ export function PortfolioPage({ initialTab = "overview" }) {
     } finally {
       setSavingPriceItemId(null);
     }
+  };
+  const handleAcceptSuggestedPrice = async (item, suggestedPriceUsd) => {
+    const normalizedSuggestion = Number(suggestedPriceUsd);
+    if (!Number.isFinite(normalizedSuggestion) || normalizedSuggestion <= 0) {
+      return;
+    }
+
+    setPriceDrafts((current) => ({
+      ...current,
+      [item.id]: normalizedSuggestion.toFixed(2),
+    }));
+
+    await handleSaveSteamItemPrice(item, normalizedSuggestion);
   };
   const appUpdateState = String(appUpdateNotification?.state || "idle");
   const appUpdateVersionLabel = appUpdateNotification?.version
@@ -923,18 +1056,37 @@ export function PortfolioPage({ initialTab = "overview" }) {
     }
     return "Noch kein Update-Status vorhanden";
   })();
-  const appUpdateCardClass = (() => {
+  const appUpdateNotificationClass = (() => {
     if (appUpdateState === "downloaded") {
-      return "rounded-md border border-emerald-300 bg-emerald-500/10 p-2";
+      return "w-full rounded-md border border-emerald-300 bg-emerald-500/10 px-2 py-2 text-left hover:bg-emerald-500/20";
     }
-    if (appUpdateState === "available" || appUpdateState === "downloading") {
-      return "rounded-md border border-amber-300 bg-amber-500/10 p-2";
+    if (appUpdateState === "downloading") {
+      return "w-full rounded-md border border-blue-300 bg-blue-500/10 px-2 py-2 text-left hover:bg-blue-500/20";
+    }
+    if (appUpdateState === "available") {
+      return "w-full rounded-md border border-amber-300 bg-amber-500/10 px-2 py-2 text-left hover:bg-amber-500/20";
     }
     if (appUpdateState === "error") {
-      return "rounded-md border border-destructive/50 bg-destructive/10 p-2";
+      return "w-full rounded-md border border-destructive/60 bg-destructive/10 px-2 py-2 text-left hover:bg-destructive/20";
     }
-    return "rounded-md border p-2";
+    return "w-full rounded-md border px-2 py-2 text-left hover:bg-accent";
   })();
+  const appUpdateHintLabel = (() => {
+    if (appUpdateState === "downloaded") {
+      return "Klick: Jetzt updaten.";
+    }
+    if (appUpdateState === "downloading") {
+      return "Klick: Download-Status ansehen.";
+    }
+    if (appUpdateState === "available") {
+      return "Klick: Update-Info ansehen.";
+    }
+    if (appUpdateState === "error") {
+      return "Klick: Fehlerdetails ansehen.";
+    }
+    return "Klick: Update-Status ansehen.";
+  })();
+  const hasVisibleAppUpdateNotification = ["available", "downloading", "downloaded", "error"].includes(appUpdateState);
   const hasUnreadAppUpdate =
     appUpdateUnread && ["available", "downloading", "downloaded", "error"].includes(appUpdateState);
   const unreadNotificationCount = syncNotification.newItemsCount + (hasUnreadAppUpdate ? 1 : 0);
@@ -964,85 +1116,64 @@ export function PortfolioPage({ initialTab = "overview" }) {
     navigate("/?tab=management", { replace: true });
     setCompositionRefreshToken((current) => current + 1);
   };
-  const handleAppUpdateCheck = async () => {
-    if (!window.electronAPI?.updater?.check) {
-      setAppUpdateNotification({
-        state: "not-available",
-        version: null,
-        percent: 0,
-        message: "Update-Service ist in diesem Modus nicht verfuegbar.",
-      });
-      return;
-    }
-
-    setAppUpdateChecking(true);
-    try {
-      const result = await window.electronAPI.updater.check();
-      if (!result?.ok) {
-        if (result?.reason === "not-packaged") {
-          setAppUpdateNotification({
-            state: "not-available",
-            version: null,
-            percent: 0,
-            message: "Updates sind nur in der installierten App verfuegbar.",
-          });
-        } else {
-          setAppUpdateNotification({
-            state: "error",
-            version: null,
-            percent: 0,
-            message: result?.error || "Update-Pruefung fehlgeschlagen.",
-          });
-          setAppUpdateUnread(true);
-        }
-      } else {
-        setAppUpdateUnread(false);
-      }
-    } catch (updateError) {
-      setAppUpdateNotification({
-        state: "error",
-        version: null,
-        percent: 0,
-        message: updateError?.message || "Update-Pruefung fehlgeschlagen.",
-      });
-      setAppUpdateUnread(true);
-    } finally {
-      setAppUpdateChecking(false);
-    }
-  };
   const handleAppUpdateInstall = async () => {
     if (!window.electronAPI?.updater?.install) {
       return;
     }
     await window.electronAPI.updater.install();
   };
+  const handleAppUpdateNotificationClick = async () => {
+    if (appUpdateState === "downloaded") {
+      const shouldInstallNow = window.confirm(
+        `${appUpdateVersionLabel} ist heruntergeladen. Jetzt neu starten und installieren?`,
+      );
+      if (shouldInstallNow) {
+        await handleAppUpdateInstall();
+        return;
+      }
+      setAppUpdateUnread(false);
+      return;
+    }
+
+    if (appUpdateState === "available" || appUpdateState === "downloading") {
+      window.alert(
+        `${appUpdateVersionLabel} ist verfuegbar. Der Download laeuft im Hintergrund; sobald er fertig ist, kannst du direkt installieren.`,
+      );
+      setAppUpdateUnread(false);
+      return;
+    }
+
+    if (appUpdateState === "error") {
+      window.alert(appUpdateStatusLabel);
+      setAppUpdateUnread(false);
+    }
+  };
   const renderNotificationsDropdownContent = () => (
     <>
       <DropdownMenuLabel>Benachrichtigungen</DropdownMenuLabel>
       <DropdownMenuSeparator />
       <div className="space-y-2 px-2 py-1">
-        <div className={appUpdateCardClass}>
-          <p className="text-xs font-semibold">App Updates</p>
-          {installedAppVersion ? (
-            <p className="text-[11px] text-muted-foreground">Installiert: v{installedAppVersion}</p>
-          ) : null}
-          <p className="text-[11px] text-muted-foreground">{appUpdateStatusLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={appUpdateChecking}
-              onClick={() => void handleAppUpdateCheck()}
-            >
-              {appUpdateChecking ? "Prueft..." : "Auf Updates pruefen"}
-            </Button>
-            {appUpdateState === "downloaded" ? (
-              <Button size="sm" variant="default" onClick={() => void handleAppUpdateInstall()}>
-                Jetzt installieren
-              </Button>
+        {hasVisibleAppUpdateNotification ? (
+          <button
+            type="button"
+            onClick={() => void handleAppUpdateNotificationClick()}
+            className={appUpdateNotificationClass}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">App Update</p>
+              {hasUnreadAppUpdate ? (
+                <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  neu
+                </span>
+              ) : null}
+            </div>
+            {installedAppVersion ? (
+              <p className="text-[11px] text-muted-foreground">Installiert: v{installedAppVersion}</p>
             ) : null}
-          </div>
-        </div>
+            <p className="text-[11px] text-muted-foreground">{appUpdateStatusLabel}</p>
+            <p className="text-[11px] text-muted-foreground">{appUpdateHintLabel}</p>
+          </button>
+        ) : null}
 
         <div className="rounded-md border p-2">
           <p className="text-xs font-semibold">Neue Steam Items</p>
@@ -1177,6 +1308,32 @@ export function PortfolioPage({ initialTab = "overview" }) {
       autoSyncStartedRef.current = false;
       await runSteamSync({ manual: false });
     }
+  };
+
+  const handleMetricsScopeChange = async (nextScope) => {
+    const normalizedScope = nextScope === "all" ? "all" : "investments";
+    setSelectedMetricsScope(normalizedScope);
+
+    if (isDesktopRuntime && portfolioPreferences.metricsDisplayMode === "toggle_mode") {
+      try {
+        const updated = await updatePortfolioPreferences({
+          metricsScopeDefault: normalizedScope,
+        });
+        setPortfolioPreferences(updated);
+      } catch (preferenceError) {
+        console.warn("Failed to persist metrics scope preference", preferenceError);
+      }
+    }
+  };
+
+  const handleMoveItemBucket = async (item, bucket) => {
+    const normalizedBucket = bucket === "inventory" ? "inventory" : "investment";
+    const sourceIds = Array.isArray(item?.sourceInvestmentIds) && item.sourceInvestmentIds.length > 0
+      ? item.sourceInvestmentIds
+      : [];
+    await updateInvestmentBucket(item.id, normalizedBucket, sourceIds);
+    await refreshPortfolio();
+    setCompositionRefreshToken((current) => current + 1);
   };
 
   return (
@@ -1410,6 +1567,62 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   </div>
                 </div>
               )}
+              <div className="space-y-2 rounded-md border bg-background/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Import- und KPI-Defaults
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Steam-Import</label>
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={portfolioPreferences.steamImportBucket}
+                      onChange={async (event) => {
+                        const updated = await updatePortfolioPreferences({
+                          steamImportBucket: event.target.value,
+                        });
+                        setPortfolioPreferences(updated);
+                      }}
+                    >
+                      <option value="inventory">In Inventar einsortieren</option>
+                      <option value="investment">In Investments einsortieren</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">CSFloat-Import</label>
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={portfolioPreferences.csfloatImportBucket}
+                      onChange={async (event) => {
+                        const updated = await updatePortfolioPreferences({
+                          csfloatImportBucket: event.target.value,
+                        });
+                        setPortfolioPreferences(updated);
+                      }}
+                    >
+                      <option value="investment">In Investments einsortieren</option>
+                      <option value="inventory">In Inventar einsortieren</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Portfolio-Kennzahlen</label>
+                  <select
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    value={portfolioPreferences.metricsDisplayMode}
+                    onChange={async (event) => {
+                      const updated = await updatePortfolioPreferences({
+                        metricsDisplayMode: event.target.value,
+                      });
+                      setPortfolioPreferences(updated);
+                    }}
+                  >
+                    <option value="toggle_mode">Im Dashboard umschaltbar</option>
+                    <option value="investments_only">Immer nur Investments</option>
+                    <option value="always_all">Immer alles zusammen</option>
+                  </select>
+                </div>
+              </div>
             </CardContent>
           </Card>
         ) : null}
@@ -1432,6 +1645,34 @@ export function PortfolioPage({ initialTab = "overview" }) {
           </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+            {portfolioPreferences.metricsDisplayMode === "toggle_mode" ? (
+              <Card>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
+                  <div>
+                    <p className="text-sm font-semibold">Kennzahlen-Scope</p>
+                    <p className="text-xs text-muted-foreground">
+                      Waehle, ob Portfolio-KPIs nur Investments oder alle Items enthalten.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant={metricsScope === "investments" ? "default" : "outline"}
+                      onClick={() => void handleMetricsScopeChange("investments")}
+                    >
+                      Nur Investments
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={metricsScope === "all" ? "default" : "outline"}
+                      onClick={() => void handleMetricsScopeChange("all")}
+                    >
+                      Alles
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
             {/* Mobile: PortfolioHeaderCard oben, Desktop: Alte Stats-Cards */}
             <div className="sm:hidden">
               <PortfolioHeaderCard
@@ -1455,10 +1696,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               />
               <StatCard
                 title="Gesamt Zuwachs"
-                value={`${stats.isPositive ? "+" : ""}${formatPrice(Math.abs(stats.totalProfitEuro || 0), {
-                  useUsd: true,
-                  buyPriceUsd: Math.abs(stats.totalProfitEuro || 0),
-                })}`}
+                value={`${(stats.totalProfitEuro || 0) >= 0 ? "+" : "-"}${formatPrice(Math.abs(stats.totalProfitEuro || 0))}`}
                 subValue={`${(stats.totalRoiPercent || 0) >= 0 ? "+" : ""}${(stats.totalRoiPercent || 0).toFixed(2)}%`}
                 isPositive={stats.isPositive}
               />
@@ -1557,23 +1795,42 @@ export function PortfolioPage({ initialTab = "overview" }) {
           </TabsContent>
 
           <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
-            {isDesktopRuntime ? (
-            <div className="md:col-span-2 flex items-center justify-between gap-3 p-3 sm:p-4 sm:rounded-lg sm:border sm:bg-card">
-              <div>
-                <h3 className="text-base font-semibold">Inventar importieren</h3>
-                <p className="text-xs text-muted-foreground">
+            {/*
+            
                   Manueller CSFloat-Sync: zuerst Preview prüfen, dann Import starten.
-                </p>
+
+
+            */}
+            <div className="md:col-span-2 space-y-2">
+              <h3 className="text-base font-semibold">Ansicht</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={inventoryScope === "investment" ? "default" : "outline"}
+                  onClick={() => setInventoryScope("investment")}
+                >
+                  Investments
+                </Button>
+                <Button
+                  size="sm"
+                  variant={inventoryScope === "inventory" ? "default" : "outline"}
+                  onClick={() => setInventoryScope("inventory")}
+                >
+                  Inventar
+                </Button>
+                <Button
+                  size="sm"
+                  variant={inventoryScope === "all" ? "default" : "outline"}
+                  onClick={() => setInventoryScope("all")}
+                >
+                  Alles
+                </Button>
               </div>
-              <Button type="button" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
-                CSFloat Sync
-              </Button>
             </div>
-            ) : null}
 
             <div className="overflow-x-auto md:col-span-1 sm:rounded-lg sm:border sm:bg-card">
               <InventoryTable
-                investments={enrichedInvestments}
+                investments={inventoryTabItems}
                 onSelectItem={(item) => {
                   setSelectedItem(item);
                   if (window.innerWidth < BREAKPOINTS.MOBILE) {
@@ -1589,6 +1846,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 history={selectedItemHistory}
                 historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
+                onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
                 canToggleExclude={isDesktopRuntime}
               />
             </div>
@@ -1603,6 +1861,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   history={selectedItemHistory}
                   historyLoading={selectedItemHistoryLoading}
                   onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
+                  onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
                   canToggleExclude={isDesktopRuntime}
                 />
               ) : null,
@@ -1673,6 +1932,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => setManagementSection("exclude")}>
                       Exclude pruefen
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
+                      CSFloat Sync
                     </Button>
                   </div>
                   {steamSyncError ? (
@@ -1750,6 +2012,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
                           <div className="space-y-2">
                             {steamInventoryItems.map((item) => {
                               const currentPrice = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
+                              const nameKey = getItemNameKey(item);
+                              const suggestion = suggestedPriceByNameKey.get(nameKey) || null;
+                              const suggestedPrice = Number(suggestion?.value ?? 0);
+                              const hasSuggestion = Number.isFinite(suggestedPrice) && suggestedPrice > 0;
                               const draftValue = priceDrafts[item.id] ?? String(currentPrice > 0 ? currentPrice : "");
                               return (
                                 <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-md border p-2">
@@ -1758,6 +2024,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                     <p className="text-[11px] text-muted-foreground">
                                       Aktuell: {currentPrice > 0 ? `${currentPrice.toFixed(2)} USD` : "kein Preis gesetzt"}
                                     </p>
+                                    {hasSuggestion ? (
+                                      <p className="text-[11px] text-muted-foreground">
+                                        Vorschlag: {suggestedPrice.toFixed(2)} USD ({String(suggestion?.source || "live")})
+                                      </p>
+                                    ) : null}
                                   </div>
                                   <input
                                     type="number"
@@ -1766,7 +2037,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                     value={draftValue}
                                     onChange={(event) => handlePriceDraftChange(item.id, event.target.value)}
                                     className="h-9 w-28 rounded-md border border-input bg-background px-2 text-sm"
-                                    placeholder="USD"
+                                    placeholder={hasSuggestion ? `${suggestedPrice.toFixed(2)} USD` : "USD"}
                                   />
                                   <Button
                                     size="sm"
@@ -1776,6 +2047,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                   >
                                     {savingPriceItemId === item.id ? "Speichert..." : "Speichern"}
                                   </Button>
+                                  {hasSuggestion ? (
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      disabled={savingPriceItemId === item.id}
+                                      onClick={() => void handleAcceptSuggestedPrice(item, suggestedPrice)}
+                                    >
+                                      Vorschlag annehmen
+                                    </Button>
+                                  ) : null}
                                 </div>
                               );
                             })}
@@ -1830,6 +2111,22 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   <div className="space-y-3">
                     {filteredManagementClusters.map((cluster) => {
                       const isExpanded = Boolean(expandedClusters[cluster.id]);
+                      const steamIdsInCluster = new Set(
+                        cluster.positions
+                          .filter((position) =>
+                            position.platform === "steam_inventory" ||
+                            Boolean(position.steamAssetId),
+                          )
+                          .map((position) => String(position.id)),
+                      );
+                      const visiblePositions = cluster.positions.filter((position) => {
+                        const positionId = String(position.id);
+                        const matchedSteamId = confirmedOrAutoMatchByCsfloatId.get(positionId);
+                        if (!matchedSteamId) {
+                          return true;
+                        }
+                        return !steamIdsInCluster.has(String(matchedSteamId));
+                      });
                       return (
                         <Card key={cluster.id}>
                           <CardContent className="space-y-3 p-3 sm:p-4">
@@ -1854,6 +2151,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                   <p className="truncate text-sm font-semibold">{cluster.name}</p>
                                   <p className="text-xs text-muted-foreground">
                                     {cluster.totalCount} Stueck | excluded: {cluster.excludedCount} | aktiv: {cluster.activeCount}
+                                    {visiblePositions.length !== cluster.positions.length
+                                      ? ` | ${cluster.positions.length - visiblePositions.length} gematchte Duplikate ausgeblendet`
+                                      : ""}
                                   </p>
                                 </div>
                               </div>
@@ -1879,12 +2179,26 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                 >
                                   Cluster einschliessen
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void handleManagementClusterBucketToggle(cluster, "investment")}
+                                >
+                                  Cluster zu Investments
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void handleManagementClusterBucketToggle(cluster, "inventory")}
+                                >
+                                  Cluster zu Inventar
+                                </Button>
                               </div>
                             </div>
 
                             {isExpanded ? (
                               <div className="space-y-2 rounded-md border p-2 sm:p-3">
-                                {cluster.positions.map((position) => (
+                                {visiblePositions.map((position) => (
                                   <div
                                     key={position.id}
                                     className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2"
@@ -1901,6 +2215,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                      <Badge variant="secondary">
+                                        {position.bucket === "inventory" ? "Inventar" : "Investment"}
+                                      </Badge>
                                       <Badge variant={position.excluded ? "destructive" : "outline"}>
                                         {position.excluded ? "excluded" : "aktiv"}
                                       </Badge>
@@ -1915,6 +2232,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                         }
                                       >
                                         {position.excluded ? "Einschliessen" : "Excluden"}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          void handleManagementBucketToggle(
+                                            position.id,
+                                            position.bucket === "inventory" ? "investment" : "inventory",
+                                          )
+                                        }
+                                      >
+                                        {position.bucket === "inventory" ? "Zu Investments" : "Zu Inventar"}
                                       </Button>
                                     </div>
                                   </div>
@@ -1940,12 +2269,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
                         <Skeleton className="h-14 w-full" />
                         <Skeleton className="h-14 w-full" />
                       </div>
-                    ) : matchingRows.length === 0 ? (
+                    ) : pendingMatchingRows.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        Noch keine Matching-Vorschlaege vorhanden.
+                        Keine offenen Matching-Vorschlaege vorhanden.
                       </p>
                     ) : (
-                      matchingRows.slice(0, 40).map((row) => (
+                      pendingMatchingRows.slice(0, 40).map((row) => (
                         <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
                           <div className="min-w-0">
                             <p className="truncate text-xs font-semibold">

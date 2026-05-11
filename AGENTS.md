@@ -273,3 +273,11 @@ Change: Queue-basierte Preis-Historie mit Prioritaeten fuer Server-Cron erweiter
 - Neuer Worker-Entry `backend/sync-price-queue-worker.php` verarbeitet due-Items in kleinen Batches mit Backoff bei Rate-Limits.
 - `price_history.date` wurde auf `DATETIME` umgestellt, damit stündliche Buckets pro Item persistiert werden koennen.
 - Supervisor-Konfiguration erweitert um `csportfolio-price-queue-worker` (alle 3 Minuten).
+
+---
+
+Updated: 2026-05-11
+Change: Investment/Inventar-Bucket als verbindliche Datenmodell-Regel eingefuehrt
+- Jede lokale/gesyncte Position fuehrt `bucket` (`investment` | `inventory`) im Payload.
+- KPI-Scope ist standardmaessig `investments_only`; optional `toggle_mode` oder `always_all` ueber Portfolio-Preferences.
+- Import-Defaults sind quellbasiert konfigurierbar (Steam/CSFloat) und werden in Desktop-Preferences gespeichert.

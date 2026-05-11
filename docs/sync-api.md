@@ -71,6 +71,7 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
 - Sync muss idempotent sein.
 - Konflikte werden markiert und nicht still ueberschrieben.
 - Business-Logik bleibt in PHP bzw. `packages/shared`.
+- `investments.payload.bucket` (`investment`|`inventory`) wird als fachliche Zuordnung mitgesynct.
 
 ## Implementierungsstand (2026-05-05)
 

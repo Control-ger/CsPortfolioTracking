@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { app, BrowserWindow, dialog, ipcMain, shell, safeStorage, session } from "electron";
+import { app, BrowserWindow, ipcMain, shell, safeStorage, session } from "electron";
 import { spawn } from "child_process";
 import { randomBytes } from "crypto";
 import fs from "fs/promises";
@@ -125,20 +125,6 @@ function setupAutoUpdater() {
   autoUpdater.on("update-downloaded", async (info) => {
     console.log("[updater] update downloaded:", info?.version || "unknown");
     emitUpdaterStatus({ state: "downloaded", version: info?.version || null, info });
-
-    const result = await dialog.showMessageBox({
-      type: "info",
-      buttons: ["Jetzt neu starten", "Spater"],
-      defaultId: 0,
-      cancelId: 1,
-      title: "Update bereit",
-      message: "Eine neue Version wurde heruntergeladen.",
-      detail: "Jetzt neu starten, um das Update zu installieren?",
-    });
-
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall();
-    }
   });
 
   const checkForUpdates = async () => {
@@ -1443,6 +1429,12 @@ safeLocalStoreInvoke("local-store-mark-all-notifications-read", (store, userId, 
 );
 safeLocalStoreInvoke("local-store-mark-operation-applied", (store, id) =>
   store.markOperationApplied(id),
+);
+safeLocalStoreInvoke("local-store-get-portfolio-preferences", (store, userId) =>
+  store.getPortfolioPreferences(userId),
+);
+safeLocalStoreInvoke("local-store-update-portfolio-preferences", (store, userId, patch) =>
+  store.updatePortfolioPreferences(userId, patch),
 );
 
 app.on("window-all-closed", () => {

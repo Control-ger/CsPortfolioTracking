@@ -37,7 +37,7 @@ function mergeWarnings(...warningGroups) {
   return Array.from(warningsByKey.values());
 }
 
-export function usePortfolio() {
+export function usePortfolio(options = {}) {
   const abortControllerRef = useRef(null);
   const [investments, setInvestments] = useState([]);
   const [authRequired, setAuthRequired] = useState(true); // Default to auth required until checked
@@ -74,7 +74,11 @@ export function usePortfolio() {
     setIsLoading(true);
     try {
       const { rows: rowsResponse, summary: summaryResponse, history, requiresAuth } =
-        await fetchPortfolioData({ signal });
+        await fetchPortfolioData({
+          signal,
+          scope: options.scope,
+          rowScope: options.rowScope,
+        });
 
       // Don't update state if request was aborted
       if (signal.aborted) return;
@@ -99,7 +103,7 @@ export function usePortfolio() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [options.rowScope, options.scope]);
 
   // Cleanup on unmount
   useEffect(() => {

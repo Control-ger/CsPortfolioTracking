@@ -3,11 +3,18 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 function nowIso() {
   return new Date().toISOString();
 }
+
+const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
+  steamImportBucket: "inventory",
+  csfloatImportBucket: "investment",
+  metricsDisplayMode: "toggle_mode",
+  metricsScopeDefault: "investments",
+});
 
 function serialize(value) {
   return JSON.stringify(value ?? {});
@@ -24,6 +31,65 @@ function deserialize(value, fallback = {}) {
     console.warn("[local-store] failed to parse JSON payload", error);
     return fallback;
   }
+}
+
+function normalizeBucket(value, fallback = "investment") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (normalized === "inventory") {
+    return "inventory";
+  }
+  if (normalized === "investment") {
+    return "investment";
+  }
+
+  return fallback === "inventory" ? "inventory" : "investment";
+}
+
+function normalizeMetricsDisplayMode(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (normalized === "always_all") {
+    return "always_all";
+  }
+  if (normalized === "investments_only") {
+    return "investments_only";
+  }
+  return "toggle_mode";
+}
+
+function normalizeMetricsScope(value, fallback = "investments") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "all") {
+    return "all";
+  }
+  return fallback === "all" ? "all" : "investments";
+}
+
+function normalizePortfolioPreferences(input = {}) {
+  return {
+    steamImportBucket: normalizeBucket(
+      input.steamImportBucket,
+      DEFAULT_PORTFOLIO_PREFERENCES.steamImportBucket,
+    ),
+    csfloatImportBucket: normalizeBucket(
+      input.csfloatImportBucket,
+      DEFAULT_PORTFOLIO_PREFERENCES.csfloatImportBucket,
+    ),
+    metricsDisplayMode: normalizeMetricsDisplayMode(
+      input.metricsDisplayMode ?? input.kpiDisplayMode,
+    ),
+    metricsScopeDefault: normalizeMetricsScope(
+      input.metricsScopeDefault,
+      DEFAULT_PORTFOLIO_PREFERENCES.metricsScopeDefault,
+    ),
+  };
 }
 
 function resolveDbPath(userDataPath) {
@@ -255,25 +321,107 @@ export function createLocalStore(userDataPath) {
     return String(a) === String(b);
   }
 
+  function normalizeNameForMatching(value) {
+    const normalized = normalizeMarketName(value)
+      .replace(/\bstattrak\u2122?\b/g, " ")
+      .replace(/\bsouvenir\b/g, " ")
+      .replace(/\b(factory new|minimal wear|field-tested|well-worn|battle-scarred)\b/g, " ")
+      .replace(/[^a-z0-9|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return normalized;
+  }
+
+  function extractWearKey(value) {
+    const normalized = normalizeMarketName(value);
+    if (normalized.includes("factory new")) return "fn";
+    if (normalized.includes("minimal wear")) return "mw";
+    if (normalized.includes("field-tested")) return "ft";
+    if (normalized.includes("well-worn")) return "ww";
+    if (normalized.includes("battle-scarred")) return "bs";
+    return null;
+  }
+
+  function splitNameTokens(value) {
+    const normalized = normalizeNameForMatching(value);
+    if (!normalized) {
+      return [];
+    }
+    return normalized
+      .split(" ")
+      .map((token) => token.trim())
+      .filter(Boolean);
+  }
+
+  function buildTokenSet(tokens = []) {
+    return new Set(tokens);
+  }
+
+  function calculateTokenOverlap(aTokens = [], bTokens = []) {
+    if (aTokens.length === 0 || bTokens.length === 0) {
+      return 0;
+    }
+    const aSet = buildTokenSet(aTokens);
+    const bSet = buildTokenSet(bTokens);
+    let intersection = 0;
+    aSet.forEach((token) => {
+      if (bSet.has(token)) {
+        intersection += 1;
+      }
+    });
+    const union = new Set([...aSet, ...bSet]).size;
+    if (union <= 0) {
+      return 0;
+    }
+    return intersection / union;
+  }
+
   function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
     const reasons = [];
     let score = 0;
 
-    const steamName = normalizeMarketName(steamItem.marketHashName || steamItem.name);
-    const csfloatName = normalizeMarketName(csfloatItem.marketHashName || csfloatItem.name);
-    if (steamName && csfloatName && steamName === csfloatName) {
-      score += 60;
-      reasons.push("exact_name");
-    } else if (steamName && csfloatName && (steamName.includes(csfloatName) || csfloatName.includes(steamName))) {
-      score += 25;
-      reasons.push("partial_name");
-    }
-
     const steamType = normalizeType(steamItem.type);
     const csfloatType = normalizeType(csfloatItem.type);
-    if (steamType === csfloatType) {
-      score += 15;
-      reasons.push("same_type");
+    if (steamType !== csfloatType) {
+      return null;
+    }
+    score += 12;
+    reasons.push("same_type");
+
+    const steamName = normalizeMarketName(steamItem.marketHashName || steamItem.name);
+    const csfloatName = normalizeMarketName(csfloatItem.marketHashName || csfloatItem.name);
+    const steamCoreName = normalizeNameForMatching(steamName);
+    const csfloatCoreName = normalizeNameForMatching(csfloatName);
+    if (steamCoreName && csfloatCoreName && steamCoreName === csfloatCoreName) {
+      score += 50;
+      reasons.push("exact_core_name");
+    } else {
+      const overlap = calculateTokenOverlap(
+        splitNameTokens(steamCoreName),
+        splitNameTokens(csfloatCoreName),
+      );
+      if (overlap >= 0.8) {
+        score += 36;
+        reasons.push("token_overlap_high");
+      } else if (overlap >= 0.6) {
+        score += 24;
+        reasons.push("token_overlap_medium");
+      } else if (overlap >= 0.4) {
+        score += 12;
+        reasons.push("token_overlap_low");
+      } else {
+        return null;
+      }
+    }
+
+    const steamWear = extractWearKey(steamName);
+    const csfloatWear = extractWearKey(csfloatName);
+    if (steamWear && csfloatWear) {
+      if (steamWear !== csfloatWear) {
+        return null;
+      }
+      score += 8;
+      reasons.push("wear_exact");
     }
 
     const steamFloat = toFiniteNumber(steamItem.floatValue ?? steamItem.float ?? steamItem.wearFloat);
@@ -281,20 +429,29 @@ export function createLocalStore(userDataPath) {
     let hasFloatMatch = false;
     if (steamFloat !== null && csfloatFloat !== null) {
       const floatDiff = Math.abs(steamFloat - csfloatFloat);
+      if (floatDiff > 0.03) {
+        return null;
+      }
       if (floatDiff <= 0.00001) {
-        score += 20;
+        score += 22;
         hasFloatMatch = true;
         reasons.push("float_exact");
-      } else if (floatDiff <= 0.0001) {
-        score += 12;
+      } else if (floatDiff <= 0.0005) {
+        score += 14;
         reasons.push("float_near");
+      } else {
+        score += 6;
+        reasons.push("float_loose");
       }
     }
 
     const steamSeed = toFiniteNumber(steamItem.paintSeed ?? steamItem.patternSeed);
     const csfloatSeed = toFiniteNumber(csfloatItem.paintSeed ?? csfloatItem.patternSeed);
     let hasSeedMatch = false;
-    if (steamSeed !== null && csfloatSeed !== null && steamSeed === csfloatSeed) {
+    if (steamSeed !== null && csfloatSeed !== null) {
+      if (steamSeed !== csfloatSeed) {
+        return null;
+      }
       score += 20;
       hasSeedMatch = true;
       reasons.push("seed_exact");
@@ -303,11 +460,12 @@ export function createLocalStore(userDataPath) {
     const steamPrice = toFiniteNumber(steamItem.buyPriceUsd);
     const csfloatPrice = toFiniteNumber(csfloatItem.buyPriceUsd);
     if (steamPrice !== null && csfloatPrice !== null && steamPrice > 0 && csfloatPrice > 0) {
-      const priceDiff = Math.abs(steamPrice - csfloatPrice);
-      if (priceDiff <= 1.5) {
+      const avgPrice = (steamPrice + csfloatPrice) / 2;
+      const priceDiffRatio = avgPrice > 0 ? Math.abs(steamPrice - csfloatPrice) / avgPrice : 1;
+      if (priceDiffRatio <= 0.03) {
         score += 10;
         reasons.push("price_near");
-      } else if (priceDiff <= 6) {
+      } else if (priceDiffRatio <= 0.1) {
         score += 5;
         reasons.push("price_loose");
       }
@@ -317,9 +475,12 @@ export function createLocalStore(userDataPath) {
     const csfloatTime = toTimestamp(csfloatItem.purchasedAt ?? csfloatItem.createdAt);
     if (steamTime !== null && csfloatTime !== null) {
       const dayDiff = Math.abs(steamTime - csfloatTime) / (24 * 60 * 60 * 1000);
-      if (dayDiff <= 3) {
-        score += 10;
+      if (dayDiff <= 2) {
+        score += 12;
         reasons.push("time_near");
+      } else if (dayDiff <= 7) {
+        score += 7;
+        reasons.push("time_medium");
       } else if (dayDiff <= 14) {
         score += 5;
         reasons.push("time_loose");
@@ -327,9 +488,9 @@ export function createLocalStore(userDataPath) {
     }
 
     let confidence = "low";
-    if ((hasFloatMatch && hasSeedMatch) || score >= 85) {
+    if ((hasFloatMatch && hasSeedMatch) || score >= 88) {
       confidence = "high";
-    } else if (score >= 65) {
+    } else if (score >= 68) {
       confidence = "medium";
     }
 
@@ -342,6 +503,14 @@ export function createLocalStore(userDataPath) {
 
   function mapInvestment(row) {
     const payload = deserialize(row.payload);
+    const platform = String(payload?.platform || payload?.source || "").toLowerCase();
+    const derivedBucket =
+      platform === "steam_inventory"
+        ? "inventory"
+        : platform === "csfloat"
+          ? "investment"
+          : "investment";
+    const bucket = normalizeBucket(payload?.bucket, derivedBucket);
     const excludedFlag = (() => {
       const value = payload?.excluded ?? payload?.isExcluded;
       if (typeof value === "boolean") return value;
@@ -365,6 +534,7 @@ export function createLocalStore(userDataPath) {
       buyPriceUsd: row.buy_price_usd,
       fundingMode: row.funding_mode,
       imageUrl: payload.imageUrl || payload.image_url || payload.iconUrl || payload.icon_url || null,
+      bucket,
       excluded: excludedFlag,
       isExcluded: excludedFlag,
       revision: row.revision,
@@ -487,10 +657,20 @@ export function createLocalStore(userDataPath) {
       const id = String(row.id || randomUUID());
       const serverId =
         row.serverId ?? (Number.isFinite(Number(row.id)) ? Number(row.id) : null);
+      const existingRow = db
+        .prepare("SELECT payload FROM investments WHERE id = ? LIMIT 1")
+        .get(id);
+      const existingPayload = existingRow?.payload ? deserialize(existingRow.payload) : {};
+      const platform = String(
+        row.platform || row.source || existingPayload.platform || existingPayload.source || "",
+      ).toLowerCase();
+      const defaultBucket = platform === "steam_inventory" ? "inventory" : "investment";
       const payload = {
+        ...existingPayload,
         ...row,
         id,
         serverId,
+        bucket: normalizeBucket(row.bucket ?? existingPayload.bucket, defaultBucket),
         importedAt,
       };
 
@@ -622,6 +802,11 @@ export function createLocalStore(userDataPath) {
     syncSteamInventory(items = [], userId = "local") {
       const normalizedUserId = String(userId || "local");
       const now = nowIso();
+      const preferences = this.getPortfolioPreferences(normalizedUserId);
+      const steamDefaultBucket = normalizeBucket(
+        preferences.steamImportBucket,
+        DEFAULT_PORTFOLIO_PREFERENCES.steamImportBucket,
+      );
       const incoming = (Array.isArray(items) ? items : [])
         .map((item) => {
           const steamAssetId = String(item.assetId || item.id || "").trim();
@@ -690,6 +875,7 @@ export function createLocalStore(userDataPath) {
           firstSeenAt: existing?.firstSeenAt || now,
           lastSeenAt: now,
           lastMissingAt: null,
+          bucket: normalizeBucket(existing?.bucket, steamDefaultBucket),
           excluded: Boolean(existing?.excluded),
         };
 
@@ -777,6 +963,7 @@ export function createLocalStore(userDataPath) {
             inventoryStatus: "missing",
             lastMissingAt: now,
             lastSeenAt: investment.lastSeenAt || investment.updatedAt || now,
+            bucket: normalizeBucket(investment?.bucket, steamDefaultBucket),
           });
           missingMarked += 1;
         }
@@ -810,52 +997,80 @@ export function createLocalStore(userDataPath) {
         return platform === "csfloat" || String(investment.id || "").startsWith("csfloat-");
       });
 
-      let matchesSuggested = 0;
-      for (const steamItem of incoming) {
-        const existingConfirmed = db
+      const confidenceRank = { high: 3, medium: 2, low: 1 };
+      const blockedSteamAssetIds = new Set(
+        db
           .prepare(
-            `SELECT id FROM steam_csfloat_matches
-             WHERE user_id = ? AND steam_asset_id = ? AND status IN ('manual_confirmed', 'auto_linked')
-             LIMIT 1`,
+            `SELECT steam_asset_id
+             FROM steam_csfloat_matches
+             WHERE user_id = ? AND status IN ('manual_confirmed', 'auto_linked')`,
           )
-          .get(normalizedUserId, steamItem.steamAssetId);
-        if (existingConfirmed) {
+          .all(normalizedUserId)
+          .map((row) => String(row.steam_asset_id || "")),
+      );
+
+      const candidateEdges = [];
+      for (const steamItem of incoming) {
+        if (blockedSteamAssetIds.has(String(steamItem.steamAssetId || ""))) {
           continue;
         }
-
-        let bestMatch = null;
         for (const csfloatItem of csfloatCandidates) {
           const calculated = calculateSteamCsfloatMatch(steamItem, csfloatItem);
-          if (calculated.score < 45) {
+          if (!calculated || calculated.score < 48) {
             continue;
           }
-          if (!bestMatch || calculated.score > bestMatch.score) {
-            bestMatch = {
-              csfloatItem,
-              ...calculated,
-            };
-          }
+          candidateEdges.push({
+            steamItem,
+            csfloatItem,
+            score: calculated.score,
+            confidence: calculated.confidence,
+            reasons: calculated.reasons,
+          });
         }
+      }
 
-        if (!bestMatch) {
+      candidateEdges.sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+        const confidenceDelta =
+          (confidenceRank[b.confidence] || 0) - (confidenceRank[a.confidence] || 0);
+        if (confidenceDelta !== 0) {
+          return confidenceDelta;
+        }
+        return String(a.steamItem.steamAssetId || "").localeCompare(String(b.steamItem.steamAssetId || ""));
+      });
+
+      const assignedSteam = new Set();
+      const assignedCsfloat = new Set();
+      let matchesSuggested = 0;
+      for (const edge of candidateEdges) {
+        const steamAssetId = String(edge.steamItem.steamAssetId || "");
+        const csfloatInvestmentId = String(edge.csfloatItem.id || "");
+        if (!steamAssetId || !csfloatInvestmentId) {
+          continue;
+        }
+        if (assignedSteam.has(steamAssetId) || assignedCsfloat.has(csfloatInvestmentId)) {
           continue;
         }
 
-        const csfloatInvestmentId = String(bestMatch.csfloatItem.id);
         const existingMatch = db
           .prepare(
             `SELECT id, status FROM steam_csfloat_matches
              WHERE user_id = ? AND steam_asset_id = ? AND csfloat_investment_id = ?
              LIMIT 1`,
           )
-          .get(normalizedUserId, steamItem.steamAssetId, csfloatInvestmentId);
+          .get(normalizedUserId, steamAssetId, csfloatInvestmentId);
 
         if (existingMatch?.status === "manual_confirmed" || existingMatch?.status === "rejected") {
           continue;
         }
 
-        const status = bestMatch.confidence === "high" ? "auto_linked" : "suggested";
-        const reason = bestMatch.reasons.join(",");
+        assignedSteam.add(steamAssetId);
+        assignedCsfloat.add(csfloatInvestmentId);
+
+        const status = edge.confidence === "high" ? "auto_linked" : "suggested";
+        const reason = edge.reasons.join(",");
         db.prepare(
           `INSERT INTO steam_csfloat_matches (
             id, user_id, steam_asset_id, steam_item_name, csfloat_investment_id, csfloat_trade_id,
@@ -879,12 +1094,12 @@ export function createLocalStore(userDataPath) {
         ).run({
           id: existingMatch?.id || randomUUID(),
           userId: normalizedUserId,
-          steamAssetId: steamItem.steamAssetId,
-          steamItemName: steamItem.marketHashName || steamItem.name,
+          steamAssetId,
+          steamItemName: edge.steamItem.marketHashName || edge.steamItem.name,
           csfloatInvestmentId,
-          csfloatTradeId: bestMatch.csfloatItem.externalTradeId || null,
-          matchScore: bestMatch.score,
-          confidence: bestMatch.confidence,
+          csfloatTradeId: edge.csfloatItem.externalTradeId || null,
+          matchScore: edge.score,
+          confidence: edge.confidence,
           status,
           reason,
           createdAt: existingMatch ? now : now,
@@ -916,9 +1131,18 @@ export function createLocalStore(userDataPath) {
       const id = String(input.id || randomUUID());
       const createdAt = input.createdAt || nowIso();
       const updatedAt = nowIso();
+      const platform = String(input.platform || input.source || "").trim().toLowerCase();
+      const defaultBucket =
+        platform === "steam_inventory"
+          ? "inventory"
+          : platform === "csfloat"
+            ? "investment"
+            : "investment";
+      const bucket = normalizeBucket(input.bucket, defaultBucket);
       const payload = {
         ...input,
         id,
+        bucket,
         updatedAt,
       };
 
@@ -970,6 +1194,73 @@ export function createLocalStore(userDataPath) {
     getInvestment(id) {
       const row = db.prepare("SELECT * FROM investments WHERE id = ?").get(String(id));
       return row ? mapInvestment(row) : null;
+    },
+
+    getMetaValue(key, fallback = null) {
+      const row = db
+        .prepare("SELECT value FROM meta WHERE key = ? LIMIT 1")
+        .get(String(key));
+      if (!row || typeof row.value !== "string") {
+        return fallback;
+      }
+      return row.value;
+    },
+
+    setMetaValue(key, value) {
+      db.prepare(
+        `INSERT INTO meta (key, value, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      ).run(String(key), String(value), nowIso());
+      return true;
+    },
+
+    getPortfolioPreferences(userId = "local") {
+      const normalizedUserId = String(userId || "local");
+      const prefix = `portfolio_pref:${normalizedUserId}:`;
+      const rows = db
+        .prepare(
+          `SELECT key, value
+           FROM meta
+           WHERE key LIKE ?`,
+        )
+        .all(`${prefix}%`);
+
+      const parsed = {};
+      rows.forEach((row) => {
+        const key = String(row.key || "");
+        if (!key.startsWith(prefix)) {
+          return;
+        }
+        const preferenceKey = key.slice(prefix.length);
+        parsed[preferenceKey] = String(row.value || "");
+      });
+
+      return normalizePortfolioPreferences(parsed);
+    },
+
+    updatePortfolioPreferences(userId = "local", patch = {}) {
+      const normalizedUserId = String(userId || "local");
+      const current = this.getPortfolioPreferences(normalizedUserId);
+      const next = normalizePortfolioPreferences({
+        ...current,
+        ...(patch || {}),
+      });
+      const prefix = `portfolio_pref:${normalizedUserId}:`;
+      const updatedAt = nowIso();
+
+      const upsert = db.prepare(
+        `INSERT INTO meta (key, value, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      );
+
+      upsert.run(`${prefix}steamImportBucket`, next.steamImportBucket, updatedAt);
+      upsert.run(`${prefix}csfloatImportBucket`, next.csfloatImportBucket, updatedAt);
+      upsert.run(`${prefix}metricsDisplayMode`, next.metricsDisplayMode, updatedAt);
+      upsert.run(`${prefix}metricsScopeDefault`, next.metricsScopeDefault, updatedAt);
+
+      return next;
     },
 
     deleteInvestment(id) {

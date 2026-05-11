@@ -6,6 +6,7 @@ import { getCurrentUser } from "./auth.js";
 import { runDesktopSyncNowIfDue } from "./desktopSync.js";
 import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
+import { getPortfolioPreferences } from "./portfolioPreferences.js";
 
 const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`;
 const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE);
@@ -326,7 +327,9 @@ function mapCsFloatPreviewTradeToInvestment(trade) {
 }
 
 export async function fetchPortfolioInvestments(options = {}) {
-  return requestWithMeta("/api/v1/portfolio/investments", {
+  return requestWithMeta(buildPath("/api/v1/portfolio/investments", {
+    scope: options.scope,
+  }), {
     signal: options.signal,
   });
 }
@@ -349,19 +352,25 @@ export async function fetchItemPriceHistory(itemId, options = {}) {
 }
 
 export async function fetchPortfolioSummary(options = {}) {
-  return requestWithMeta("/api/v1/portfolio/summary", {
+  return requestWithMeta(buildPath("/api/v1/portfolio/summary", {
+    scope: options.scope,
+  }), {
     signal: options.signal,
   });
 }
 
 export async function fetchPortfolioHistory(options = {}) {
-  return request("/api/v1/portfolio/history", {
+  return request(buildPath("/api/v1/portfolio/history", {
+    scope: options.scope,
+  }), {
     signal: options.signal,
   });
 }
 
-export async function fetchPortfolioComposition() {
-  return request("/api/v1/portfolio/composition");
+export async function fetchPortfolioComposition(options = {}) {
+  return request(buildPath("/api/v1/portfolio/composition", {
+    scope: options.scope,
+  }));
 }
 
 export async function fetchExchangeRate() {
@@ -392,6 +401,8 @@ export async function executeCsFloatTradeSync(payload = {}) {
   const localStore = getDesktopLocalStore();
   if (localStore) {
     const preview = await fetchCsFloatTradeSyncPreview(payload);
+    const preferences = await getPortfolioPreferences();
+    const targetBucket = preferences.csfloatImportBucket === "inventory" ? "inventory" : "investment";
     const currentUser = await getCurrentUser();
     const userId = resolveDesktopLocalUserId(currentUser);
     const trades = Array.isArray(preview?.data?.importTrades)
@@ -399,7 +410,10 @@ export async function executeCsFloatTradeSync(payload = {}) {
       : Array.isArray(preview?.data?.sampleTrades)
         ? preview.data.sampleTrades
       : [];
-    const rows = trades.map(mapCsFloatPreviewTradeToInvestment);
+    const rows = trades.map((trade) => ({
+      ...mapCsFloatPreviewTradeToInvestment(trade),
+      bucket: targetBucket,
+    }));
     let inserted = 0;
     let duplicates = 0;
 
@@ -621,6 +635,68 @@ export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds =
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ exclude }),
+  });
+}
+
+export async function updateInvestmentBucket(id, bucket, sourceInvestmentIds = []) {
+  const normalizedBucket = String(bucket || "").trim().toLowerCase() === "inventory"
+    ? "inventory"
+    : "investment";
+  const localStore = getDesktopLocalStore();
+  if (localStore) {
+    const candidateIds = Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
+      ? sourceInvestmentIds
+      : [id];
+    let updatedCount = 0;
+
+    for (const candidateId of candidateIds) {
+      const existing = unwrapLocalStoreResult(
+        await localStore.getInvestment(candidateId),
+        "local-store-get-investment",
+      );
+
+      if (!existing) {
+        continue;
+      }
+
+      unwrapLocalStoreResult(
+        await localStore.upsertInvestment({
+          ...existing,
+          bucket: normalizedBucket,
+        }),
+        "local-store-upsert-investment",
+      );
+      updatedCount += 1;
+    }
+
+    if (updatedCount === 0) {
+      throw new Error(
+        `Bucket update skipped: no local investment found for id=${String(id)}`,
+      );
+    }
+
+    try {
+      await runDesktopSyncNowIfDue({ force: true });
+    } catch (syncError) {
+      console.warn("[desktop-sync] bucket update sync failed", syncError);
+    }
+
+    return {
+      data: {
+        success: true,
+        investmentId: id,
+        bucket: normalizedBucket,
+      },
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
+  return requestWithMeta(`/api/v1/portfolio/investments/${id}/bucket`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bucket: normalizedBucket }),
   });
 }
 

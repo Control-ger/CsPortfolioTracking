@@ -55,11 +55,13 @@ export function ItemDetailsModal({
   history = [],
   historyLoading = false,
   onToggleExclude,
+  onBucketChange,
   canToggleExclude = true,
 }) {
   const { formatPrice } = useCurrency();
   const [showAbsolute, setShowAbsolute] = useState(false);
   const excludeEnabled = canToggleExclude && typeof onToggleExclude === "function";
+  const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
 
   if (!item) return null;
 
@@ -70,6 +72,17 @@ export function ItemDetailsModal({
 
     const currentExcluded = Boolean(item.excluded ?? item.isExcluded);
     await onToggleExclude(item.id, !currentExcluded, item.sourceInvestmentIds || []);
+  };
+
+  const handleToggleBucket = async () => {
+    if (!bucketToggleEnabled) {
+      return;
+    }
+    const currentBucket = String(item?.bucket || "investment").toLowerCase() === "inventory"
+      ? "inventory"
+      : "investment";
+    const nextBucket = currentBucket === "investment" ? "inventory" : "investment";
+    await onBucketChange(item, nextBucket);
   };
 
   const togglePriceDisplay = () => {
@@ -109,6 +122,9 @@ export function ItemDetailsModal({
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <PriceSourceBadge priceSource={item.priceSource} />
+              <Badge variant="outline">
+                Bucket: {String(item?.bucket || "investment").toLowerCase() === "inventory" ? "Inventar" : "Investment"}
+              </Badge>
               <Badge variant="outline">
                 Funding: {item.fundingMode === "cash_in" ? "Cash-In" : "Wallet"}
               </Badge>
@@ -242,12 +258,12 @@ export function ItemDetailsModal({
             <button
               onClick={handleToggleExclude}
               className={`flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
-                Boolean(item.excluded ?? item.isExcluded)
+                (item.excluded ?? item.isExcluded)
                   ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/30 dark:bg-emerald-900/20 dark:text-emerald-300"
                   : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900/30 dark:bg-amber-900/20 dark:text-amber-300"
               }`}
             >
-              {Boolean(item.excluded ?? item.isExcluded) ? (
+              {(item.excluded ?? item.isExcluded) ? (
                 <>
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -263,6 +279,16 @@ export function ItemDetailsModal({
                 </>
               )}
             </button>
+            {bucketToggleEnabled ? (
+              <button
+                onClick={() => void handleToggleBucket()}
+                className="mt-2 flex w-full items-center justify-center rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                {String(item?.bucket || "investment").toLowerCase() === "inventory"
+                  ? "Zu Investments verschieben"
+                  : "Zum Inventar verschieben"}
+              </button>
+            ) : null}
           </div>
         )}
       </div>

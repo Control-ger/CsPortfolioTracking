@@ -373,6 +373,7 @@ final class SyncService
             'fundingMode' => $fundingMode,
             'platform' => $platform,
             'externalTradeId' => $externalTradeId,
+            'bucket' => $this->normalizeBucket((string) ($mergedPayload['bucket'] ?? 'investment')),
             'purchasedAt' => $purchasedAt,
             'serverId' => $serverId,
             'updatedAt' => gmdate('c'),
@@ -420,6 +421,17 @@ final class SyncService
         }
         if (!array_key_exists('externalTradeId', $merged) || trim((string) $merged['externalTradeId']) === '') {
             $merged['externalTradeId'] = $externalTradeId;
+        }
+        if (!array_key_exists('bucket', $merged)) {
+            if (array_key_exists('bucket', $existingPayload)) {
+                $merged['bucket'] = $this->normalizeBucket((string) $existingPayload['bucket']);
+            } elseif (array_key_exists('bucket', $existingRowPayload)) {
+                $merged['bucket'] = $this->normalizeBucket((string) $existingRowPayload['bucket']);
+            } else {
+                $merged['bucket'] = $platform === 'steam_inventory' ? 'inventory' : 'investment';
+            }
+        } else {
+            $merged['bucket'] = $this->normalizeBucket((string) $merged['bucket']);
         }
 
         return $merged;
@@ -701,6 +713,12 @@ final class SyncService
     {
         $normalized = strtolower(trim($fundingMode));
         return $normalized === 'cash_in' ? 'cash_in' : 'wallet_funded';
+    }
+
+    private function normalizeBucket(string $bucket): string
+    {
+        $normalized = strtolower(trim($bucket));
+        return $normalized === 'inventory' ? 'inventory' : 'investment';
     }
 
     private function normalizePriceUsd(array $payload, array $existingPayload): float

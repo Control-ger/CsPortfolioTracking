@@ -459,9 +459,48 @@ final class InvestmentRepository
             if (array_key_exists('isExcluded', $existingPayload) && !array_key_exists('isExcluded', $incomingPayload)) {
                 $incomingPayload['isExcluded'] = (bool) $existingPayload['isExcluded'];
             }
+            if (array_key_exists('bucket', $existingPayload) && !array_key_exists('bucket', $incomingPayload)) {
+                $incomingPayload['bucket'] = (string) $existingPayload['bucket'];
+            }
         }
 
         return json_encode($incomingPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function updateBucket(int $userId, int $investmentId, string $bucket): bool
+    {
+        $this->ensureTable();
+
+        $selectSql = 'SELECT raw_payload_json FROM investments WHERE user_id = ? AND id = ? LIMIT 1';
+        $selectStmt = $this->pdo->prepare($selectSql);
+        $selectStmt->execute([$userId, $investmentId]);
+        $row = $selectStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row === false) {
+            return false;
+        }
+
+        $payload = [];
+        $rawPayload = $row['raw_payload_json'] ?? null;
+        if (is_string($rawPayload) && trim($rawPayload) !== '') {
+            $decoded = json_decode($rawPayload, true);
+            if (is_array($decoded)) {
+                $payload = $decoded;
+            }
+        }
+
+        $payload['bucket'] = strtolower(trim($bucket)) === 'inventory' ? 'inventory' : 'investment';
+        $payload['updatedAt'] = gmdate('c');
+
+        $updateSql = 'UPDATE investments SET raw_payload_json = ? WHERE user_id = ? AND id = ?';
+        $updateStmt = $this->pdo->prepare($updateSql);
+        $updateStmt->execute([
+            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            $userId,
+            $investmentId,
+        ]);
+
+        return true;
     }
 
     private function findExistingRawPayloadForExternalTrade(int $userId, string $platform, string $externalTradeId): ?array

@@ -9,6 +9,7 @@ export * as localCache from "./localCache.js";
 
 // Runtime Data Source
 export * from "./dataSource.js";
+export * from "./portfolioPreferences.js";
 
 // Constants
 export * from "./constants.js";

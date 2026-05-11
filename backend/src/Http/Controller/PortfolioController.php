@@ -24,11 +24,13 @@ final class PortfolioController
     {
         try {
             $userId = $this->resolveUserId($request);
-            $rows = $this->portfolioService->getEnrichedInvestments($userId, true);
+            $scope = $this->resolveScope($request);
+            $rows = $this->portfolioService->getEnrichedInvestments($userId, true, $scope);
             JsonResponseFactory::success(
                 $rows,
                 [
                     'warnings' => $this->portfolioService->consumePricingWarnings(),
+                    'scope' => $scope,
                     'readPath' => $this->primaryScalingReadEnabled() ? 'scaling_primary' : 'legacy',
                 ]
             );
@@ -48,7 +50,10 @@ final class PortfolioController
     {
         try {
             $userId = $this->resolveUserId($request);
-            $usePrimaryScalingRead = $this->primaryScalingReadEnabled() && $this->scalingShadowReadService !== null;
+            $scope = $this->resolveScope($request);
+            $usePrimaryScalingRead = $scope === 'all'
+                && $this->primaryScalingReadEnabled()
+                && $this->scalingShadowReadService !== null;
             $summary = [];
             $meta = ['warnings' => []];
 
@@ -76,11 +81,12 @@ final class PortfolioController
                 ];
                 $meta['readPath'] = 'scaling_primary';
             } else {
-                $rows = $this->portfolioService->getEnrichedInvestments($userId);
+                $rows = $this->portfolioService->getEnrichedInvestments($userId, false, $scope);
                 $summary = $this->portfolioService->getSummary($rows)->toArray();
                 $meta = ['warnings' => $this->portfolioService->consumePricingWarnings()];
                 $meta['readPath'] = 'legacy';
             }
+            $meta['scope'] = $scope;
 
             if ($this->shadowReadEnabled() && $this->scalingShadowReadService !== null) {
                 $shadow = $this->scalingShadowReadService->buildPortfolioSummary($userId);
@@ -202,7 +208,11 @@ final class PortfolioController
     public function composition(Request $request): void
     {
         try {
-            JsonResponseFactory::success($this->portfolioService->getComposition($this->resolveUserId($request)));
+            $scope = $this->resolveScope($request);
+            JsonResponseFactory::success(
+                $this->portfolioService->getComposition($this->resolveUserId($request), $scope),
+                ['scope' => $scope]
+            );
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -240,7 +250,7 @@ final class PortfolioController
                 ['investmentId' => $id, 'exclude' => $exclude]
             );
 
-            $syncPayload = $this->portfolioService->buildInvestmentSyncPayload($userId, $id, $exclude);
+            $syncPayload = $this->portfolioService->buildInvestmentSyncPayload($userId, $id, $exclude, null);
             if (is_array($syncPayload)) {
                 $this->syncService->upsertServerEntity(
                     $userId,
@@ -267,6 +277,59 @@ final class PortfolioController
         }
     }
 
+    public function updateInvestmentBucket(Request $request, int $id): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $bucket = strtolower(trim((string) ($request->body['bucket'] ?? 'investment')));
+            if (!in_array($bucket, ['investment', 'inventory'], true)) {
+                JsonResponseFactory::error(
+                    'INVALID_BUCKET',
+                    'Bucket muss investment oder inventory sein.',
+                    ['bucket' => $bucket],
+                    400
+                );
+                return;
+            }
+
+            $success = $this->portfolioService->updateInvestmentBucket($userId, $id, $bucket);
+            if (!$success) {
+                JsonResponseFactory::error(
+                    'INVESTMENT_NOT_FOUND',
+                    'Investition mit dieser ID nicht gefunden.',
+                    ['id' => $id],
+                    404
+                );
+                return;
+            }
+
+            $syncPayload = $this->portfolioService->buildInvestmentSyncPayload($userId, $id, null, $bucket);
+            if (is_array($syncPayload)) {
+                $this->syncService->upsertServerEntity(
+                    $userId,
+                    'investments',
+                    (string) $id,
+                    $syncPayload
+                );
+            }
+
+            JsonResponseFactory::success(
+                ['success' => true, 'investmentId' => $id, 'bucket' => $bucket],
+                [],
+                200
+            );
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio update investment bucket failed',
+                ['statusCode' => 500, 'investmentId' => $id, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('PORTFOLIO_UPDATE_BUCKET_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
     private function resolveUserId(Request $request): int
     {
         foreach (['x-user-id', 'user-id'] as $header) {
@@ -285,6 +348,12 @@ final class PortfolioController
         }
 
         return 1;
+    }
+
+    private function resolveScope(Request $request): string
+    {
+        $scope = strtolower(trim((string) ($request->query['scope'] ?? 'investments')));
+        return $scope === 'all' ? 'all' : 'investments';
     }
 
     private function shadowReadEnabled(): bool

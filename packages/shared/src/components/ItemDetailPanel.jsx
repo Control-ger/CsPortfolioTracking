@@ -21,6 +21,7 @@ export const ItemDetailPanel = ({
   history,
   historyLoading,
   onExcludeChange,
+  onBucketChange,
   canToggleExclude = true,
 }) => {
   const { formatPrice } = useCurrency();
@@ -28,6 +29,7 @@ export const ItemDetailPanel = ({
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const excludeEnabled = canToggleExclude && typeof onExcludeChange === "function";
+  const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
   if (!item)
     return (
         <div className="flex min-h-50 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-muted-foreground sm:min-h-75 sm:p-8">
@@ -60,6 +62,17 @@ export const ItemDetailPanel = ({
     } finally {
       setIsExcludeLoading(false);
     }
+  };
+
+  const handleBucketToggle = async () => {
+    if (!bucketToggleEnabled) {
+      return;
+    }
+    const currentBucket = String(item?.bucket || "investment").toLowerCase() === "inventory"
+      ? "inventory"
+      : "investment";
+    const nextBucket = currentBucket === "investment" ? "inventory" : "investment";
+    await onBucketChange(item, nextBucket);
   };
 
   const stats6m = item.details?.stats6m;
@@ -104,6 +117,9 @@ export const ItemDetailPanel = ({
                 </CardDescription>
                 <div className="mt-2 flex gap-2">
                   <Badge variant="outline" className="text-[10px] uppercase">
+                    Bucket: {String(item?.bucket || "investment").toLowerCase() === "inventory" ? "Inventar" : "Investment"}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] uppercase">
                     Funding: {item.fundingMode === "cash_in" ? "Cash-In" : "Wallet"}
                   </Badge>
                   {excludeEnabled ? (
@@ -119,6 +135,18 @@ export const ItemDetailPanel = ({
                   >
                     <AlertCircle className="mr-1 h-3 w-3" />
                     {item.excluded ? "Einschließen" : "Ausschließen"}
+                    </Button>
+                  ) : null}
+                  {bucketToggleEnabled ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleBucketToggle()}
+                      className="h-7 rounded-md border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow"
+                    >
+                      {String(item?.bucket || "investment").toLowerCase() === "inventory"
+                        ? "Zu Investments"
+                        : "Zum Inventar"}
                     </Button>
                   ) : null}
                 </div>

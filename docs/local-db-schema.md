@@ -10,7 +10,7 @@ Ziel: Electron ist local-first. Schreibende Portfolio- und Watchlist-Aktionen la
 
 ## Tabellen
 
-- `meta`: Schema-/Client-Metadaten.
+- `meta`: Schema-/Client-Metadaten sowie userbezogene Portfolio-Preferences (`portfolio_pref:<userId>:*`).
 - `items`: Lokale Item-Stammdaten und optionale Server-ID.
 - `investments`: Lokale Investments mit `dirty`, `revision`, `deleted` fuer Sync.
 - `watchlist_items`: Lokale Watchlist mit `dirty`, `revision`, `deleted` fuer Sync.
@@ -41,6 +41,7 @@ Ziel: Electron ist local-first. Schreibende Portfolio- und Watchlist-Aktionen la
 
 - Renderer darf SQLite nie direkt oeffnen.
 - Lokale Schreibaktionen erzeugen immer einen `operations_log`-Eintrag.
+- `investments.payload.bucket` ist die fachliche Zuordnung pro Position (`investment` oder `inventory`).
 - Server-IDs sind optional; lokale IDs sind stabile UUIDs.
 - Deletes sind soft deletes (`deleted = 1`), damit Sync sie pushen kann.
 - Preise sind server-/providerseitige Daten und werden lokal nur gespiegelt.

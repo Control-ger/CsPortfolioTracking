@@ -29,14 +29,18 @@ final class PortfolioService
     ) {
     }
 
-    public function getEnrichedInvestments(int $userId = 1, bool $aggregateByName = false): array
+    public function getEnrichedInvestments(int $userId = 1, bool $aggregateByName = false, string $scope = 'investments'): array
     {
         $this->ensurePriceHistoryTable();
 
+        $resolvedScope = $this->normalizeScope($scope);
         $investments = $this->investmentRepository->findAll($userId);
         $activeInvestments = [];
         foreach ($investments as $investment) {
             if ($this->isExcludedInvestment($investment)) {
+                continue;
+            }
+            if ($resolvedScope === 'investments' && $this->resolveInvestmentBucket($investment) !== 'investment') {
                 continue;
             }
             $activeInvestments[] = $investment;
@@ -101,6 +105,7 @@ final class PortfolioService
                 $baseline7d,
                 $baseline30d
             );
+            $bucket = $this->resolveInvestmentBucket($investment);
 
             $fetchedAt = isset($presentation['fetchedAt']) ? (string) $presentation['fetchedAt'] : null;
             $priceAgeSeconds = $this->resolveFreshnessSeconds($fetchedAt);
@@ -119,6 +124,7 @@ final class PortfolioService
                 'itemId' => $itemId,
                 'name' => $name,
                 'type' => (string) $investment['type'],
+                'bucket' => $bucket,
                 'imageUrl' => $presentation['iconUrl'] ?? null,
                 'marketTypeLabel' => $presentation['marketTypeLabel'] ?? null,
                 'wearName' => $presentation['wearLabel'] ?? null,
@@ -183,17 +189,34 @@ final class PortfolioService
         $totalCostBasis = 0.0;
         $totalQuantity = 0;
         $totalNetValue = 0.0;
+        $comparableValue = 0.0;
+        $comparableInvested = 0.0;
+        $comparableNetValue = 0.0;
+        $comparableCostBasis = 0.0;
         $liveItemsCount = 0;
         $staleLiveItemsCount = 0;
         $freshestDataAgeSeconds = null;
         $oldestDataAgeSeconds = null;
 
         foreach ($rows as $row) {
-            $totalValue += ((float) $row['displayPrice']) * ((int) $row['quantity']);
-            $totalInvested += ((float) $row['buyPrice']) * ((int) $row['quantity']);
-            $totalCostBasis += (float) ($row['costBasisTotal'] ?? (((float) $row['buyPrice']) * ((int) $row['quantity'])));
+            $rowValue = ((float) $row['displayPrice']) * ((int) $row['quantity']);
+            $rowInvested = ((float) $row['buyPrice']) * ((int) $row['quantity']);
+            $rowCostBasis = (float) ($row['costBasisTotal'] ?? $rowInvested);
+            $rowNetValue = (float) ($row['netPositionValue'] ?? $rowValue);
+
+            $totalValue += $rowValue;
+            $totalInvested += $rowInvested;
+            $totalCostBasis += $rowCostBasis;
             $totalQuantity += (int) $row['quantity'];
-            $totalNetValue += (float) ($row['netPositionValue'] ?? (((float) $row['displayPrice']) * ((int) $row['quantity'])));
+            $totalNetValue += $rowNetValue;
+
+            // Relative growth should only include rows with known cost basis.
+            if ($rowInvested > 0.0 || $rowCostBasis > 0.0) {
+                $comparableValue += $rowValue;
+                $comparableInvested += $rowInvested;
+                $comparableCostBasis += $rowCostBasis;
+                $comparableNetValue += $rowNetValue;
+            }
 
             if (($row['isLive'] ?? false) !== true) {
                 continue;
@@ -217,10 +240,10 @@ final class PortfolioService
             }
         }
 
-        $totalProfitEuro = $totalValue - $totalInvested;
-        $totalRoiPercent = $totalInvested > 0 ? ($totalProfitEuro / $totalInvested) * 100 : 0.0;
-        $totalNetProfitEuro = $totalNetValue - $totalCostBasis;
-        $totalNetRoiPercent = $totalCostBasis > 0 ? ($totalNetProfitEuro / $totalCostBasis) * 100 : 0.0;
+        $totalProfitEuro = $comparableValue - $comparableInvested;
+        $totalRoiPercent = $comparableInvested > 0 ? ($totalProfitEuro / $comparableInvested) * 100 : 0.0;
+        $totalNetProfitEuro = $comparableNetValue - $comparableCostBasis;
+        $totalNetRoiPercent = $comparableCostBasis > 0 ? ($totalNetProfitEuro / $comparableCostBasis) * 100 : 0.0;
         $isPositive = $totalProfitEuro >= 0;
         $staleLiveItemsRatioPercent = $liveItemsCount > 0
             ? ($staleLiveItemsCount / $liveItemsCount) * 100
@@ -343,9 +366,9 @@ final class PortfolioService
         return ['date' => $snapshotTime, 'totalValue' => $totalValue, 'growthPercent' => $portfolioGrowthPercent];
     }
 
-    public function getComposition(int $userId = 1): array
+    public function getComposition(int $userId = 1, string $scope = 'investments'): array
     {
-        $investments = $this->getEnrichedInvestments($userId);
+        $investments = $this->getEnrichedInvestments($userId, false, $scope);
         $composition = [];
         $totalValue = 0.0;
 
@@ -535,7 +558,8 @@ final class PortfolioService
 
         foreach ($rows as $row) {
             $name = trim((string) ($row['name'] ?? ''));
-            $key = strtolower($name !== '' ? $name : ('id_' . (string) ($row['id'] ?? '0')));
+            $bucket = strtolower(trim((string) ($row['bucket'] ?? 'investment')));
+            $key = $bucket . ':' . strtolower($name !== '' ? $name : ('id_' . (string) ($row['id'] ?? '0')));
 
             $quantity = max(0, (int) ($row['quantity'] ?? 0));
             $totalInvested = (float) ($row['totalInvested'] ?? (((float) ($row['buyPrice'] ?? 0.0)) * $quantity));
@@ -773,7 +797,16 @@ final class PortfolioService
         return $this->investmentRepository->updateExcludedFlag($userId, $id, $exclude);
     }
 
-    public function buildInvestmentSyncPayload(int $userId, int $id, bool $excluded): ?array
+    public function updateInvestmentBucket(int $userId = 1, int $id = 0, string $bucket = 'investment'): bool
+    {
+        if ($id <= 0) {
+            return false;
+        }
+
+        return $this->investmentRepository->updateBucket($userId, $id, $this->normalizeBucket($bucket));
+    }
+
+    public function buildInvestmentSyncPayload(int $userId, int $id, ?bool $excluded = null, ?string $bucket = null): ?array
     {
         $row = $this->investmentRepository->findByUserAndId($userId, $id);
         if ($row === null) {
@@ -795,6 +828,11 @@ final class PortfolioService
             $resolvedType = 'skin';
         }
 
+        $resolvedBucket = $bucket !== null
+            ? $this->normalizeBucket($bucket)
+            : $this->resolveInvestmentBucket($row);
+        $resolvedExcluded = $excluded ?? $this->isExcludedInvestment($row);
+
         return array_merge($payload, [
             'id' => (string) $id,
             'userId' => (string) $userId,
@@ -809,9 +847,10 @@ final class PortfolioService
             'externalTradeId' => (string) ($row['external_trade_id'] ?? $id),
             'purchasedAt' => (string) ($row['purchased_at'] ?? gmdate('c')),
             'imageUrl' => isset($row['image_url']) ? (string) $row['image_url'] : null,
+            'bucket' => $resolvedBucket,
             'serverId' => $id,
-            'excluded' => $excluded,
-            'isExcluded' => $excluded,
+            'excluded' => $resolvedExcluded,
+            'isExcluded' => $resolvedExcluded,
             'updatedAt' => gmdate('c'),
         ]);
     }
@@ -841,5 +880,37 @@ final class PortfolioService
         }
 
         return false;
+    }
+
+    private function resolveInvestmentBucket(array $investment): string
+    {
+        $rawPayload = $investment['raw_payload_json'] ?? null;
+        if (is_string($rawPayload) && trim($rawPayload) !== '') {
+            $decoded = json_decode($rawPayload, true);
+            if (is_array($decoded)) {
+                $bucket = strtolower(trim((string) ($decoded['bucket'] ?? '')));
+                if ($bucket === 'inventory' || $bucket === 'investment') {
+                    return $bucket;
+                }
+            }
+        }
+
+        $platform = strtolower(trim((string) ($investment['platform'] ?? '')));
+        if ($platform === 'steam_inventory') {
+            return 'inventory';
+        }
+        return 'investment';
+    }
+
+    private function normalizeBucket(string $bucket): string
+    {
+        $normalized = strtolower(trim($bucket));
+        return $normalized === 'inventory' ? 'inventory' : 'investment';
+    }
+
+    private function normalizeScope(string $scope): string
+    {
+        $normalized = strtolower(trim($scope));
+        return $normalized === 'all' ? 'all' : 'investments';
     }
 }

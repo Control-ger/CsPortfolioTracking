@@ -139,7 +139,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
           <CardDescription>
             {user.isDevMode
               ? "Running in dev mode. Add items manually to your portfolio."
-              : "Your Steam account is connected. Your CS2 inventory has been imported as investments."
+              : "Your Steam account is connected. Your CS2 inventory has been imported using your configured default category."
             }
           </CardDescription>
         </CardHeader>

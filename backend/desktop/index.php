@@ -428,8 +428,12 @@ $summarizeProxyIssue = static function (array $attempts): array {
     ];
 };
 
-$router->register('GET', '/api/v1/portfolio/history', static function () use ($proxyUpstreamGet): void {
-    $proxied = $proxyUpstreamGet('/api/v1/portfolio/history');
+$router->register('GET', '/api/v1/portfolio/history', static function (Request $request) use ($proxyUpstreamGet): void {
+    $query = [];
+    if (isset($request->query['scope'])) {
+        $query['scope'] = (string) $request->query['scope'];
+    }
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/history', $query);
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             $proxied['data'],
@@ -444,8 +448,12 @@ $router->register('GET', '/api/v1/portfolio/history', static function () use ($p
     ]);
 });
 
-$router->register('GET', '/api/v1/portfolio/investments', static function () use ($proxyUpstreamGet, $summarizeProxyIssue): void {
-    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments');
+$router->register('GET', '/api/v1/portfolio/investments', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
+    $query = [];
+    if (isset($request->query['scope'])) {
+        $query['scope'] = (string) $request->query['scope'];
+    }
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments', $query);
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             $proxied['data'],
@@ -509,6 +517,28 @@ $router->register('GET', '/api/v1/watchlist/search', static function (Request $r
         'limit' => (int) ($request->query['limit'] ?? 6),
         'source' => 'desktop-local-fallback',
     ], [
+        'proxyAttempts' => $proxied['attempts'] ?? [],
+        'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? []),
+    ]);
+});
+
+$router->register('GET', '/api/v1/watchlist', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
+    $query = [];
+    if (isset($request->query['syncLive'])) {
+        $query['syncLive'] = (string) $request->query['syncLive'];
+    }
+
+    $proxied = $proxyUpstreamGet('/api/v1/watchlist', $query);
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($proxied['data'] ?? null) ? $proxied['data'] : [],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success([], [
+        'source' => 'desktop-local-fallback',
         'proxyAttempts' => $proxied['attempts'] ?? [],
         'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? []),
     ]);

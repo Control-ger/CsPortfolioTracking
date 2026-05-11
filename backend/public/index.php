@@ -477,6 +477,7 @@ try {
     $router->register('GET', '/api/v1/portfolio/investments/{id}/history', [$portfolioController, 'investmentHistory']);
     $router->register('GET', '/api/v1/items/{id}/price-history', [$portfolioController, 'itemPriceHistory']);
     $router->register('PUT', '/api/v1/portfolio/investments/{id}/exclude', [$portfolioController, 'toggleExcludeInvestment']);
+    $router->register('PUT', '/api/v1/portfolio/investments/{id}/bucket', [$portfolioController, 'updateInvestmentBucket']);
     $router->register('GET', '/api/v1/portfolio/summary', [$portfolioController, 'summary']);
     $router->register('GET', '/api/v1/portfolio/history', [$portfolioController, 'history']);
     $router->register('GET', '/api/v1/portfolio/composition', [$portfolioController, 'composition']);

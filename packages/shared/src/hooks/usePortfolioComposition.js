@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchPortfolioCompositionData } from '../lib/dataSource.js';
 
-export function usePortfolioComposition(refreshToken = 0) {
+export function usePortfolioComposition(refreshToken = 0, options = {}) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -9,7 +9,7 @@ export function usePortfolioComposition(refreshToken = 0) {
   useEffect(() => {
     const loadComposition = async () => {
       try {
-        const result = await fetchPortfolioCompositionData();
+        const result = await fetchPortfolioCompositionData({ scope: options.scope });
         setData(result || []);
         setError('');
       } catch (err) {
@@ -21,7 +21,7 @@ export function usePortfolioComposition(refreshToken = 0) {
     };
 
     loadComposition();
-  }, [refreshToken]);
+  }, [options.scope, refreshToken]);
 
   return { data, loading, error };
 }
