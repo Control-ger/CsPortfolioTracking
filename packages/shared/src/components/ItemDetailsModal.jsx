@@ -69,7 +69,7 @@ export function ItemDetailsModal({
     }
 
     const currentExcluded = Boolean(item.excluded ?? item.isExcluded);
-    await onToggleExclude(item.id, !currentExcluded);
+    await onToggleExclude(item.id, !currentExcluded, item.sourceInvestmentIds || []);
   };
 
   const togglePriceDisplay = () => {

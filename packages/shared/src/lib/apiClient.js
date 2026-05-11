@@ -570,6 +570,7 @@ export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds =
     const candidateIds = Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
       ? sourceInvestmentIds
       : [id];
+    let updatedCount = 0;
 
     for (const candidateId of candidateIds) {
       const existing = unwrapLocalStoreResult(
@@ -585,8 +586,16 @@ export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds =
         await localStore.upsertInvestment({
           ...existing,
           excluded: Boolean(exclude),
+          isExcluded: Boolean(exclude),
         }),
         "local-store-upsert-investment",
+      );
+      updatedCount += 1;
+    }
+
+    if (updatedCount === 0) {
+      throw new Error(
+        `Exclude toggle skipped: no local investment found for id=${String(id)}`,
       );
     }
 

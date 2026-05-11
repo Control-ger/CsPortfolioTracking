@@ -54,7 +54,7 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
     },
   });
 
-  if (response.status === 404 || response.status === 400) {
+  if (response.status === 404) {
     // Access is not active for this host.
     return true;
   }
@@ -63,12 +63,19 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
   }
 
   const contentType = response.headers.get("content-type") || "";
-  if (!response.ok || !contentType.includes("application/json")) {
+  if (!contentType.includes("application/json")) {
     return false;
   }
 
   const payload = await response.json().catch(() => null);
-  return Boolean(payload && typeof payload === "object");
+  
+  // Check for error in body (e.g., {"err":"no app token set"})
+  if (payload && payload.err) {
+    console.log("[desktop-sync] CF Access error:", payload.err);
+    return false;
+  }
+  
+  return Boolean(payload && typeof payload === "object" && !payload.err);
 }
 
 function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
@@ -153,7 +160,7 @@ async function ensureCloudflareAccessSession(serverBaseUrl) {
     throw new Error(loginResult?.error || "Cloudflare Access Anmeldung fehlgeschlagen.");
   }
 
-  const hasIdentityAfterLogin = await hasCloudflareAccessIdentity(accessBaseUrl).catch(() => true);
+  const hasIdentityAfterLogin = await hasCloudflareAccessIdentity(accessBaseUrl).catch(() => false);
   if (!hasIdentityAfterLogin) {
     throw new Error("Cloudflare Access Session konnte nicht bestaetigt werden.");
   }

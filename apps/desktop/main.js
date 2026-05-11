@@ -401,8 +401,18 @@ async function getAccessCookieHeader(accessBaseUrl) {
 
   try {
     const cookies = await session.defaultSession.cookies.get({ url: baseUrl });
+    console.log("[cloudflare-access] cookies found:", cookies.length);
+    cookies.forEach(c => {
+      console.log(`[cloudflare-access] cookie: ${c.name}, domain: ${c.domain}, path: ${c.path}, httpOnly: ${c.httpOnly}, secure: ${c.secure}`);
+    });
+    
     if (!Array.isArray(cookies) || cookies.length === 0) {
       return "";
+    }
+    const cfCookie = cookies.find(c => c.name === "CF_Authorization");
+    console.log("[cloudflare-access] CF_Authorization present:", !!cfCookie);
+    if (cfCookie) {
+      console.log("[cloudflare-access] CF_Authorization domain:", cfCookie.domain, "path:", cfCookie.path);
     }
     return cookies
       .map((cookie) => `${cookie.name}=${cookie.value}`)
@@ -427,20 +437,35 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
 
   try {
     const response = await fetch(url, { method: "GET", headers });
-    if (response.status === 404 || response.status === 400) {
+    console.log("[cloudflare-access] get-identity status:", response.status);
+    
+    if (response.status === 404) {
+      // Access is not active for this host
       return true;
+    }
+    if (response.status === 400) {
+      // Missing token - user needs to authenticate
+      return false;
     }
     if (response.status === 401 || response.status === 403) {
       return false;
     }
 
     const contentType = response.headers.get("content-type") || "";
-    if (!response.ok || !contentType.includes("application/json")) {
+    if (!contentType.includes("application/json")) {
       return false;
     }
 
     const payload = await response.json().catch(() => null);
-    return Boolean(payload && typeof payload === "object");
+    console.log("[cloudflare-access] get-identity response:", payload);
+    
+    // Check for error in body (e.g., {"err":"no app token set"})
+    if (payload && payload.err) {
+      console.log("[cloudflare-access] error in response:", payload.err);
+      return false;
+    }
+    
+    return Boolean(payload && typeof payload === "object" && !payload.err);
   } catch (error) {
     console.warn("[cloudflare-access] identity check failed", error);
     return false;
@@ -484,7 +509,7 @@ async function openCloudflareAccessLoginWindow(accessBaseUrl) {
         modal: false,
         width: 520,
         height: 720,
-        show: true,
+        show: false,
         webPreferences: {
           contextIsolation: true,
         },
@@ -497,15 +522,25 @@ async function openCloudflareAccessLoginWindow(accessBaseUrl) {
 
       await loginWindow.loadURL(baseUrl);
 
+      // Wait for page to fully load and cookies to be set before first check
+      await delay(1500);
+
       const pollIdentity = async () => {
         if (finished) {
           return;
         }
+        console.log("[cloudflare-access] polling identity...");
         const hasIdentity = await hasCloudflareAccessIdentity(baseUrl);
+        console.log("[cloudflare-access] identity check result:", hasIdentity);
         if (hasIdentity) {
           clearTimeout(timeoutId);
           finish(() => resolve({ ok: true }));
           return;
+        }
+        // User needs to authenticate - show the window now
+        if (!loginWindow.isDestroyed()) {
+          console.log("[cloudflare-access] showing login window");
+          loginWindow.show();
         }
         setTimeout(pollIdentity, 1500);
       };

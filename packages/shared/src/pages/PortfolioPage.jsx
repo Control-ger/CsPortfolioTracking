@@ -657,6 +657,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
     setCompositionRefreshToken((current) => current + 1);
   };
 
+  const handleModalExcludeToggle = async (itemId, excluded, sourceInvestmentIds = []) => {
+    await toggleExcludeInvestment(itemId, excluded, sourceInvestmentIds);
+    await handleExcludeChange(itemId, excluded);
+  };
+
   const selectedItemWithLive = useMemo(() => {
     if (!selectedItem) {
       return null;
@@ -1597,7 +1602,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   item={modal.data.item}
                   history={selectedItemHistory}
                   historyLoading={selectedItemHistoryLoading}
-                  onToggleExclude={isDesktopRuntime ? handleExcludeChange : undefined}
+                  onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
                   canToggleExclude={isDesktopRuntime}
                 />
               ) : null,

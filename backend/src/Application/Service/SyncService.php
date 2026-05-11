@@ -50,6 +50,10 @@ final class SyncService
     public function push(int $userId, array $changes): array
     {
         $this->ensureTables();
+        $this->ensureItemsTable();
+        $this->ensureInvestmentsTable();
+        $this->ensureWatchlistTable();
+
         $normalizedChanges = $this->normalizeChanges($changes);
         $results = [];
 
@@ -259,8 +263,6 @@ final class SyncService
         array $payload,
         array $existingPayload
     ): array {
-        $this->ensureItemsTable();
-        $this->ensureInvestmentsTable();
 
         if ($op === 'delete') {
             $this->deleteInvestmentForSync($userId, $entityId, $payload, $existingPayload);
@@ -277,6 +279,13 @@ final class SyncService
             $resolvedType = 'skin';
         }
 
+        $candidateServerId = $this->extractPositiveInt($payload['serverId'] ?? null)
+            ?? $this->extractPositiveInt($existingPayload['serverId'] ?? null)
+            ?? $this->extractPositiveInt($entityId);
+        $targetInvestment = $candidateServerId !== null
+            ? $this->findInvestmentByIdForUser($userId, $candidateServerId)
+            : null;
+
         $itemId = $this->resolveItemIdForSync($payload, $resolvedName, $resolvedType);
         $platform = $this->normalizePlatform((string) ($payload['platform'] ?? $payload['source'] ?? $existingPayload['platform'] ?? 'desktop_sync'));
         $externalTradeId = $this->resolveExternalTradeId($entityId, $payload, $existingPayload);
@@ -284,45 +293,75 @@ final class SyncService
         $quantity = max(1, (int) ($payload['quantity'] ?? $existingPayload['quantity'] ?? 1));
         $buyPriceUsd = $this->normalizePriceUsd($payload, $existingPayload);
         $purchasedAt = $this->normalizeDateTime((string) ($payload['purchasedAt'] ?? $existingPayload['purchasedAt'] ?? ''));
-
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO investments (
-                user_id,
-                item_id,
-                buy_price_usd,
-                quantity,
-                funding_mode,
-                platform,
-                external_trade_id,
-                purchased_at,
-                raw_payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                user_id = VALUES(user_id),
-                item_id = VALUES(item_id),
-                buy_price_usd = VALUES(buy_price_usd),
-                quantity = VALUES(quantity),
-                funding_mode = VALUES(funding_mode),
-                purchased_at = VALUES(purchased_at),
-                raw_payload_json = VALUES(raw_payload_json)'
-        );
-        $stmt->execute([
-            $userId,
-            $itemId,
-            $buyPriceUsd,
-            $quantity,
-            $fundingMode,
+        $mergedPayload = $this->mergeExcludedFlagsForInvestmentSync(
+            $payload,
+            $existingPayload,
+            $targetInvestment,
             $platform,
-            $externalTradeId,
-            $purchasedAt,
-            $this->encodePayload($payload),
-        ]);
+            $externalTradeId
+        );
 
-        $row = $this->findInvestmentByExternalTrade($userId, $platform, $externalTradeId);
+        if ($targetInvestment !== null) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE investments
+                 SET item_id = ?, buy_price_usd = ?, quantity = ?, funding_mode = ?,
+                     platform = ?, external_trade_id = ?, purchased_at = ?, raw_payload_json = ?
+                 WHERE user_id = ? AND id = ?'
+            );
+            $stmt->execute([
+                $itemId,
+                $buyPriceUsd,
+                $quantity,
+                $fundingMode,
+                $platform,
+                $externalTradeId,
+                $purchasedAt,
+                $this->encodePayload($mergedPayload),
+                $userId,
+                (int) $targetInvestment['id'],
+            ]);
+            $row = $this->findInvestmentByIdForUser($userId, (int) $targetInvestment['id']);
+        } else {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO investments (
+                    user_id,
+                    item_id,
+                    buy_price_usd,
+                    quantity,
+                    funding_mode,
+                    platform,
+                    external_trade_id,
+                    purchased_at,
+                    raw_payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    user_id = VALUES(user_id),
+                    item_id = VALUES(item_id),
+                    buy_price_usd = VALUES(buy_price_usd),
+                    quantity = VALUES(quantity),
+                    funding_mode = VALUES(funding_mode),
+                    platform = VALUES(platform),
+                    external_trade_id = VALUES(external_trade_id),
+                    purchased_at = VALUES(purchased_at),
+                    raw_payload_json = VALUES(raw_payload_json)'
+            );
+            $stmt->execute([
+                $userId,
+                $itemId,
+                $buyPriceUsd,
+                $quantity,
+                $fundingMode,
+                $platform,
+                $externalTradeId,
+                $purchasedAt,
+                $this->encodePayload($mergedPayload),
+            ]);
+            $row = $this->findInvestmentByExternalTrade($userId, $platform, $externalTradeId);
+        }
         $serverId = $row ? (int) ($row['id'] ?? 0) : null;
 
         return [
-            ...$payload,
+            ...$mergedPayload,
             'id' => $entityId,
             'userId' => (string) $userId,
             'itemId' => (string) $itemId,
@@ -340,6 +379,52 @@ final class SyncService
         ];
     }
 
+    private function mergeExcludedFlagsForInvestmentSync(
+        array $payload,
+        array $existingPayload,
+        ?array $existingInvestmentRow,
+        string $platform,
+        string $externalTradeId
+    ): array {
+        $merged = $payload;
+        $existingRowPayload = $this->decodePayload((string) ($existingInvestmentRow['raw_payload_json'] ?? '{}'));
+
+        if (!array_key_exists('excluded', $merged)) {
+            if (array_key_exists('excluded', $existingPayload)) {
+                $merged['excluded'] = $this->toBooleanFlag($existingPayload['excluded']);
+            } elseif (array_key_exists('excluded', $existingRowPayload)) {
+                $merged['excluded'] = $this->toBooleanFlag($existingRowPayload['excluded']);
+            }
+        }
+
+        if (!array_key_exists('isExcluded', $merged)) {
+            if (array_key_exists('isExcluded', $existingPayload)) {
+                $merged['isExcluded'] = $this->toBooleanFlag($existingPayload['isExcluded']);
+            } elseif (array_key_exists('isExcluded', $existingRowPayload)) {
+                $merged['isExcluded'] = $this->toBooleanFlag($existingRowPayload['isExcluded']);
+            }
+        }
+
+        if (array_key_exists('excluded', $merged) && !array_key_exists('isExcluded', $merged)) {
+            $merged['isExcluded'] = $this->toBooleanFlag($merged['excluded']);
+        } elseif (!array_key_exists('excluded', $merged) && array_key_exists('isExcluded', $merged)) {
+            $merged['excluded'] = $this->toBooleanFlag($merged['isExcluded']);
+        } elseif (array_key_exists('excluded', $merged) && array_key_exists('isExcluded', $merged)) {
+            $normalized = $this->toBooleanFlag($merged['excluded']);
+            $merged['excluded'] = $normalized;
+            $merged['isExcluded'] = $normalized;
+        }
+
+        if (!array_key_exists('platform', $merged) || trim((string) $merged['platform']) === '') {
+            $merged['platform'] = $platform;
+        }
+        if (!array_key_exists('externalTradeId', $merged) || trim((string) $merged['externalTradeId']) === '') {
+            $merged['externalTradeId'] = $externalTradeId;
+        }
+
+        return $merged;
+    }
+
     private function applyWatchlistChange(
         int $userId,
         string $op,
@@ -347,8 +432,6 @@ final class SyncService
         array $payload,
         array $existingPayload
     ): array {
-        $this->ensureItemsTable();
-        $this->ensureWatchlistTable();
 
         if ($op === 'delete') {
             $this->deleteWatchlistForSync($userId, $entityId, $payload, $existingPayload);
@@ -656,6 +739,19 @@ final class SyncService
         return $row !== false ? $row : null;
     }
 
+    private function findInvestmentByIdForUser(int $userId, int $investmentId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, raw_payload_json
+             FROM investments
+             WHERE user_id = ? AND id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$userId, $investmentId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row !== false ? $row : null;
+    }
+
     private function findWatchlistByUserAndItem(int $userId, int $itemId): ?array
     {
         $stmt = $this->pdo->prepare('SELECT id FROM watchlist WHERE user_id = ? AND item_id = ? LIMIT 1');
@@ -678,6 +774,21 @@ final class SyncService
             return $parsed > 0 ? $parsed : null;
         }
         return null;
+    }
+
+    private function toBooleanFlag(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+        return false;
     }
 
     private function storeServerEntity(int $userId, string $table, string $id, bool $deleted, array $payload): array
