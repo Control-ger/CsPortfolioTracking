@@ -66,7 +66,24 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
     void loadPreview();
   }, [isOpen]);
 
-  const sampleRows = useMemo(() => preview?.sampleTrades || [], [preview]);
+  const sampleRows = useMemo(() => {
+    const rows = Array.isArray(preview?.importTrades)
+      ? preview.importTrades
+      : Array.isArray(preview?.sampleTrades)
+        ? preview.sampleTrades
+        : [];
+
+    return rows.filter((trade) => String(trade?.status || "new") !== "duplicate");
+  }, [preview]);
+  const hiddenDuplicateCount = useMemo(() => {
+    const rows = Array.isArray(preview?.importTrades)
+      ? preview.importTrades
+      : Array.isArray(preview?.sampleTrades)
+        ? preview.sampleTrades
+        : [];
+
+    return rows.filter((trade) => String(trade?.status || "") === "duplicate").length;
+  }, [preview]);
   const skipReasons = useMemo(() => preview?.skipReasons || {}, [preview]);
   const skipReasonEntries = useMemo(() => Object.entries(skipReasons).sort((a, b) => b[1] - a[1]), [skipReasons]);
   const hasPreview = Boolean(preview);
@@ -159,10 +176,10 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 ))}
               </div>
             ) : sampleRows.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Keine Trades gefunden oder keine importierbaren Eintraege.</div>
+              <div className="text-sm text-muted-foreground">Keine neuen Cluster zum Import gefunden.</div>
             ) : (
               <div className="h-full space-y-2 overflow-y-auto pr-1">
-                {sampleRows.map((trade) => (
+                {sampleRows.slice(0, 20).map((trade) => (
                   <div
                     key={trade.externalTradeId}
                     className="grid gap-2 rounded-md border bg-background p-3 text-sm md:grid-cols-[1.2fr_0.5fr_0.6fr_0.7fr_0.8fr] md:items-center"
@@ -189,6 +206,11 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 ))}
               </div>
             )}
+            {hiddenDuplicateCount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {hiddenDuplicateCount} Duplikate in der Preview ausgeblendet.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
 

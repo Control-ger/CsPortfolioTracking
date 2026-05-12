@@ -326,6 +326,75 @@ function mapCsFloatPreviewTradeToInvestment(trade) {
   };
 }
 
+async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
+  const localStore = getDesktopLocalStore();
+  if (!localStore) {
+    return previewResponse;
+  }
+
+  const previewData = previewResponse?.data;
+  if (!previewData || typeof previewData !== "object") {
+    return previewResponse;
+  }
+
+  const importTrades = Array.isArray(previewData.importTrades)
+    ? previewData.importTrades
+    : [];
+  if (importTrades.length === 0) {
+    return previewResponse;
+  }
+
+  try {
+    const currentUser = await getCurrentUser();
+    const userId = resolveDesktopLocalUserId(currentUser);
+    const investments = unwrapLocalStoreResult(
+      await localStore.listInvestments(userId),
+      "local-store-list-investments",
+    );
+    const existingInvestmentIds = new Set(
+      (Array.isArray(investments) ? investments : []).map((entry) =>
+        String(entry?.id || "").trim(),
+      ),
+    );
+
+    const enrichedImportTrades = importTrades.map((trade) => {
+      const mapped = mapCsFloatPreviewTradeToInvestment(trade);
+      const candidateIds = [String(mapped.id || "").trim()];
+      const legacyExternalTradeId = String(trade?.legacyExternalTradeId || "").trim();
+      if (legacyExternalTradeId) {
+        candidateIds.push(`csfloat-${legacyExternalTradeId}`);
+      }
+
+      const isDuplicate = candidateIds.some(
+        (candidateId) => candidateId !== "" && existingInvestmentIds.has(candidateId),
+      );
+      return {
+        ...trade,
+        status: isDuplicate ? "duplicate" : "new",
+      };
+    });
+
+    const localDuplicates = enrichedImportTrades.filter(
+      (trade) => String(trade?.status || "") === "duplicate",
+    ).length;
+    const localInsertable = Math.max(0, enrichedImportTrades.length - localDuplicates);
+
+    return {
+      ...previewResponse,
+      data: {
+        ...previewData,
+        insertable: localInsertable,
+        duplicates: localDuplicates,
+        sampleTrades: enrichedImportTrades.slice(0, 20),
+        importTrades: enrichedImportTrades,
+      },
+    };
+  } catch (error) {
+    console.warn("[csfloat-preview] local deduplication failed", error);
+    return previewResponse;
+  }
+}
+
 export async function fetchPortfolioInvestments(options = {}) {
   return requestWithMeta(buildPath("/api/v1/portfolio/investments", {
     scope: options.scope,
@@ -386,7 +455,7 @@ export async function savePortfolioDailyValue(totalValue) {
 }
 
 export async function fetchCsFloatTradeSyncPreview(payload = {}) {
-  return requestWithMeta("/api/v1/portfolio/sync/csfloat/preview", {
+  const previewResponse = await requestWithMeta("/api/v1/portfolio/sync/csfloat/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -395,6 +464,7 @@ export async function fetchCsFloatTradeSyncPreview(payload = {}) {
       maxPages: payload.maxPages || 10,
     }),
   });
+  return applyDesktopCsFloatPreviewDeduplication(previewResponse);
 }
 
 export async function executeCsFloatTradeSync(payload = {}) {
