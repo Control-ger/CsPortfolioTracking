@@ -95,11 +95,49 @@ function formatRelativeHours(hours) {
   return `${Math.max(1, Math.round(hours))}h`;
 }
 
+function formatDateSafe(value) {
+  if (!value) {
+    return "-";
+  }
+  const timestamp = Date.parse(String(value));
+  if (!Number.isFinite(timestamp)) {
+    return String(value);
+  }
+  return new Date(timestamp).toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
+const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
+
+function readStartupWelcomeDismissed() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return sessionStorage.getItem(STARTUP_WELCOME_DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeStartupWelcomeDismissed() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    sessionStorage.setItem(STARTUP_WELCOME_DISMISS_KEY, "1");
+  } catch {
+    // Ignore storage failures; welcome fallback remains functional.
+  }
+}
 
 function normalizeBucket(value, fallback = "investment") {
   const normalized = String(value || "")
@@ -266,7 +304,8 @@ function formatSteamSyncError(error) {
 }
 
 export function PortfolioPage({ initialTab = "overview" }) {
-  const isDesktopRuntime = typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
+  const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
+  const isDesktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
   const runtimeTabs = isDesktopRuntime
     ? ["overview", "inventory", "watchlist", "management"]
     : ["overview", "inventory", "watchlist"];
@@ -274,6 +313,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const resolvedInitialTab = searchParams.get("tab") || initialTab;
+  const [showStartupWelcome, setShowStartupWelcome] = useState(
+    () => isElectronRuntime && !readStartupWelcomeDismissed(),
+  );
   const [portfolioPreferences, setPortfolioPreferences] = useState({
     steamImportBucket: "inventory",
     csfloatImportBucket: "investment",
@@ -327,6 +369,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [managementSection, setManagementSection] = useState("matching");
   const [priceDrafts, setPriceDrafts] = useState({});
   const [savingPriceItemId, setSavingPriceItemId] = useState(null);
+  const [manualItemDraft, setManualItemDraft] = useState({
+    name: "",
+    buyPriceUsd: "",
+    quantity: "1",
+    platform: "manual",
+    fundingMode: "wallet_funded",
+    type: "skin",
+    bucket: "investment",
+  });
+  const [manualItemSaving, setManualItemSaving] = useState(false);
   const [syncNotification, setSyncNotification] = useState({
     newItemsCount: 0,
     lastSyncedAt: null,
@@ -397,6 +449,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
   useEffect(() => {
     setActiveTab(resolvedInitialTab);
   }, [resolvedInitialTab]);
+
+  useEffect(() => {
+    if (!isElectronRuntime || !showStartupWelcome) {
+      return;
+    }
+
+    return () => {
+      writeStartupWelcomeDismissed();
+    };
+  }, [isElectronRuntime, showStartupWelcome]);
 
   useEffect(() => {
     const loadJourneyState = async () => {
@@ -775,6 +837,20 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   // Keep this return after all hooks. Returning before the other hooks run changes
   // hook order after login and triggers React's minified error #310.
+  if (isElectronRuntime && showStartupWelcome) {
+    return (
+      <div className="steam-startup-shell flex min-h-screen items-center justify-center p-4">
+        <SteamLoginPrompt
+          onLoginSuccess={async () => {
+            await refreshPortfolio();
+            writeStartupWelcomeDismissed();
+            setShowStartupWelcome(false);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (authRequired && !portfolioLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
@@ -868,6 +944,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
     useUsd: true,
     buyPriceUsd: stats.totalValue || 0,
   });
+  const headerPortfolioValueLabel = formatPrice(headerPortfolioValue || 0, {
+    useUsd: true,
+    buyPriceUsd: headerPortfolioValue || 0,
+  });
+  const headerProfitEuro = hoveredChartData
+    ? (headerPortfolioValue || 0) - Number(stats.totalInvested || 0)
+    : Number(stats.totalProfitEuro || 0);
+  const headerProfitPercent = hoveredChartData
+    ? Number(headerPortfolioPercent || 0)
+    : Number(stats.totalRoiPercent || 0);
   const managementClusters = buildManagementClusters(managementInvestments);
   const filteredManagementClusters = (() => {
     if (managementFilter === "excluded") {
@@ -1029,6 +1115,89 @@ export function PortfolioPage({ initialTab = "overview" }) {
     }));
 
     await handleSaveSteamItemPrice(item, normalizedSuggestion);
+  };
+  const handleManualItemDraftChange = (key, value) => {
+    setManualItemDraft((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+  const handleCreateManualInvestment = async () => {
+    if (!window.electronAPI?.localStore?.upsertInvestment) {
+      return;
+    }
+
+    const name = String(manualItemDraft.name || "").trim();
+    const quantity = Number(manualItemDraft.quantity);
+    const buyPriceUsd = Number(manualItemDraft.buyPriceUsd);
+    const bucket = manualItemDraft.bucket === "inventory" ? "inventory" : "investment";
+    const platform = String(manualItemDraft.platform || "manual").trim().toLowerCase() || "manual";
+    const fundingMode =
+      String(manualItemDraft.fundingMode || "wallet_funded").trim().toLowerCase() === "balance_funded"
+        ? "balance_funded"
+        : "wallet_funded";
+    const type = String(manualItemDraft.type || "skin").trim().toLowerCase() || "skin";
+
+    if (!name) {
+      setManagementError("Bitte einen Item-Namen angeben.");
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setManagementError("Bitte eine gueltige Menge > 0 angeben.");
+      return;
+    }
+    if (!Number.isFinite(buyPriceUsd) || buyPriceUsd < 0) {
+      setManagementError("Bitte einen gueltigen USD-Einkaufspreis angeben.");
+      return;
+    }
+
+    const user = await getCurrentUser();
+    const userId = resolveDesktopRuntimeUserId(user, 1);
+    const generatedId = window.crypto?.randomUUID
+      ? `manual-${window.crypto.randomUUID()}`
+      : `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    setManualItemSaving(true);
+    setManagementError("");
+    try {
+      await window.electronAPI.localStore.upsertInvestment({
+        id: generatedId,
+        userId,
+        name,
+        marketHashName: name,
+        type,
+        quantity: Math.max(1, Math.floor(quantity)),
+        buyPriceUsd,
+        buyPrice: buyPriceUsd,
+        fundingMode,
+        platform,
+        source: platform,
+        bucket,
+        createdManually: true,
+        createdAt: new Date().toISOString(),
+      });
+      try {
+        await runDesktopSyncNowIfDue({ force: true });
+      } catch (syncError) {
+        console.warn("[desktop-sync] manual investment sync failed", syncError);
+      }
+      await refreshPortfolio();
+      setCompositionRefreshToken((current) => current + 1);
+      setManualItemDraft({
+        name: "",
+        buyPriceUsd: "",
+        quantity: "1",
+        platform: "manual",
+        fundingMode: "wallet_funded",
+        type: "skin",
+        bucket: "investment",
+      });
+      setManagementSection("exclude");
+    } catch (createError) {
+      setManagementError(createError?.message || "Item konnte nicht erstellt werden.");
+    } finally {
+      setManualItemSaving(false);
+    }
   };
   const appUpdateState = String(appUpdateNotification?.state || "idle");
   const appUpdateVersionLabel = appUpdateNotification?.version
@@ -1691,14 +1860,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
             <div className="hidden sm:grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
               <StatCard
                 title="Portfolio Wert (Live)"
-                value={portfolioValueLabel}
-                isPositive={stats.isPositive}
+                value={headerPortfolioValueLabel}
+                isPositive={headerPortfolioPositive}
               />
               <StatCard
                 title="Gesamt Zuwachs"
-                value={`${(stats.totalProfitEuro || 0) >= 0 ? "+" : "-"}${formatPrice(Math.abs(stats.totalProfitEuro || 0))}`}
-                subValue={`${(stats.totalRoiPercent || 0) >= 0 ? "+" : ""}${(stats.totalRoiPercent || 0).toFixed(2)}%`}
-                isPositive={stats.isPositive}
+                value={`${headerProfitEuro >= 0 ? "+" : "-"}${formatPrice(Math.abs(headerProfitEuro))}`}
+                subValue={`${headerProfitPercent >= 0 ? "+" : ""}${headerProfitPercent.toFixed(2)}%${
+                  hoveredChartData?.date ? ` | ${formatDateSafe(hoveredChartData.date)}` : ""
+                }`}
+                isPositive={headerPortfolioPositive}
               />
               <StatCard title="Items im Bestand" value={`${stats.totalQuantity} Stueck`} />
               <Card>
@@ -1840,7 +2011,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               />
             </div>
 
-            <div className="hidden md:block md:col-span-1">
+            <div className="hidden md:col-span-1 md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
               <ItemDetailPanel
                 item={selectedItem}
                 history={selectedItemHistory}
@@ -1986,6 +2157,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   >
                     Exclude
                   </Button>
+                  <Button
+                    variant={managementSection === "create" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setManagementSection("create")}
+                  >
+                    Hinzufuegen
+                  </Button>
                 </div>
 
                 {managementError ? (
@@ -2067,6 +2245,92 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   </Card>
                 ) : null}
 
+                {managementSection === "create" ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Item manuell hinzufuegen</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Fuege Positionen direkt in der Verwaltung hinzu (Preis, Quelle, Menge, Bucket).
+                      </p>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <input
+                          type="text"
+                          value={manualItemDraft.name}
+                          onChange={(event) => handleManualItemDraftChange("name", event.target.value)}
+                          placeholder="Item Name (z. B. Karambit | Doppler)"
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={manualItemDraft.buyPriceUsd}
+                          onChange={(event) => handleManualItemDraftChange("buyPriceUsd", event.target.value)}
+                          placeholder="Einkaufspreis USD"
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={manualItemDraft.quantity}
+                          onChange={(event) => handleManualItemDraftChange("quantity", event.target.value)}
+                          placeholder="Menge"
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        />
+                        <select
+                          value={manualItemDraft.platform}
+                          onChange={(event) => handleManualItemDraftChange("platform", event.target.value)}
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="manual">Quelle: Manual</option>
+                          <option value="csfloat">Quelle: CSFloat</option>
+                          <option value="steam_inventory">Quelle: Steam Inventory</option>
+                          <option value="other">Quelle: Other</option>
+                        </select>
+                        <select
+                          value={manualItemDraft.bucket}
+                          onChange={(event) => handleManualItemDraftChange("bucket", event.target.value)}
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="investment">Bucket: Investment</option>
+                          <option value="inventory">Bucket: Inventory</option>
+                        </select>
+                        <select
+                          value={manualItemDraft.fundingMode}
+                          onChange={(event) => handleManualItemDraftChange("fundingMode", event.target.value)}
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="wallet_funded">Funding: Wallet</option>
+                          <option value="balance_funded">Funding: Balance</option>
+                        </select>
+                        <select
+                          value={manualItemDraft.type}
+                          onChange={(event) => handleManualItemDraftChange("type", event.target.value)}
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm md:col-span-2"
+                        >
+                          <option value="skin">Typ: Skin</option>
+                          <option value="case">Typ: Case</option>
+                          <option value="sticker">Typ: Sticker</option>
+                          <option value="agent">Typ: Agent</option>
+                          <option value="other">Typ: Other</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          disabled={manualItemSaving}
+                          onClick={() => void handleCreateManualInvestment()}
+                        >
+                          {manualItemSaving ? "Speichert..." : "Item anlegen"}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
                 {managementSection === "exclude" && managementLoading ? (
                   <div className="space-y-3">
                     <Skeleton className="h-16 w-full" />
@@ -2127,6 +2391,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                         }
                         return !steamIdsInCluster.has(String(matchedSteamId));
                       });
+                      const visibleExcludedCount = visiblePositions.filter((position) => position.excluded).length;
+                      const visibleActiveCount = Math.max(0, visiblePositions.length - visibleExcludedCount);
                       return (
                         <Card key={cluster.id}>
                           <CardContent className="space-y-3 p-3 sm:p-4">
@@ -2150,7 +2416,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                                 <div className="min-w-0">
                                   <p className="truncate text-sm font-semibold">{cluster.name}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    {cluster.totalCount} Stueck | excluded: {cluster.excludedCount} | aktiv: {cluster.activeCount}
+                                    {visiblePositions.length} Stueck | excluded: {visibleExcludedCount} | aktiv: {visibleActiveCount}
                                     {visiblePositions.length !== cluster.positions.length
                                       ? ` | ${cluster.positions.length - visiblePositions.length} gematchte Duplikate ausgeblendet`
                                       : ""}

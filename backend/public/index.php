@@ -590,6 +590,7 @@ try {
                 'steamId' => $user['steamId'],
                 'name' => $user['name'] ?? null,
                 'avatar' => $user['avatar'] ?? null,
+                'animatedAvatar' => $user['animatedAvatar'] ?? null,
             ]
         ]);
     });

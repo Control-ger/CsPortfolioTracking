@@ -9,6 +9,15 @@ import { installFrontendTelemetryHandlers } from '@shared/lib'
 
 installFrontendTelemetryHandlers()
 
+// Only register ServiceWorker for web runtime, never for Electron file://.
+if (typeof window !== "undefined" && "serviceWorker" in navigator && window.location.protocol !== "file:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((error) => {
+      console.debug("[SW] Registration failed:", error);
+    });
+  });
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <HashRouter>

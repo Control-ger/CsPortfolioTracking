@@ -20,6 +20,24 @@ function serialize(value) {
   return JSON.stringify(value ?? {});
 }
 
+function stableSerialize(value) {
+  if (value === null || value === undefined) {
+    return "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableSerialize(entry)).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+    return `{${entries
+      .map(([key, entryValue]) => `${JSON.stringify(key)}:${stableSerialize(entryValue)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function deserialize(value, fallback = {}) {
   if (!value) {
     return fallback;
@@ -628,6 +646,91 @@ export function createLocalStore(userDataPath) {
     };
   }
 
+  function applySteamCsfloatMatchLink(userId, steamAssetId, csfloatInvestmentId) {
+    const steamRow = db
+      .prepare(
+        `SELECT * FROM investments
+         WHERE user_id = ? AND id = ? AND deleted = 0
+         LIMIT 1`,
+      )
+      .get(String(userId || "local"), String(steamAssetId || ""));
+    const csfloatRow = db
+      .prepare(
+        `SELECT * FROM investments
+         WHERE user_id = ? AND id = ? AND deleted = 0
+         LIMIT 1`,
+      )
+      .get(String(userId || "local"), String(csfloatInvestmentId || ""));
+
+    if (!steamRow || !csfloatRow) {
+      return false;
+    }
+
+    const steamInvestment = mapInvestment(steamRow);
+    const csfloatInvestment = mapInvestment(csfloatRow);
+
+    const steamPrice = toFiniteNumber(steamInvestment.buyPriceUsd ?? steamInvestment.buyPrice);
+    const csfloatPrice = toFiniteNumber(csfloatInvestment.buyPriceUsd ?? csfloatInvestment.buyPrice);
+
+    let changed = false;
+
+    // Preserve manually set Steam prices; only fill missing/zero values from CSFloat.
+    if ((steamPrice === null || steamPrice <= 0) && csfloatPrice !== null && csfloatPrice > 0) {
+      this.upsertInvestment({
+        ...steamInvestment,
+        id: steamInvestment.id,
+        userId: steamInvestment.userId,
+        buyPriceUsd: csfloatPrice,
+        buyPrice: csfloatPrice,
+        priceSetMode: "matched_csfloat",
+        matchedCsfloatInvestmentId: String(csfloatInvestmentId),
+      });
+      changed = true;
+    }
+
+    const csfloatExcluded = Boolean(csfloatInvestment.excluded || csfloatInvestment.isExcluded);
+    if (!csfloatExcluded) {
+      this.upsertInvestment({
+        ...csfloatInvestment,
+        id: csfloatInvestment.id,
+        userId: csfloatInvestment.userId,
+        excluded: true,
+        isExcluded: true,
+        matchedSteamAssetId: String(steamAssetId),
+        duplicateResolvedBy: "steam_csfloat_match",
+      });
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  function applyResolvedSteamCsfloatMatches(userId = "local") {
+    const normalizedUserId = String(userId || "local");
+    const rows = db
+      .prepare(
+        `SELECT steam_asset_id, csfloat_investment_id
+         FROM steam_csfloat_matches
+         WHERE user_id = ? AND status IN ('manual_confirmed', 'auto_linked')`,
+      )
+      .all(normalizedUserId);
+
+    let changedCount = 0;
+    rows.forEach((row) => {
+      const didChange = applySteamCsfloatMatchLink.call(
+        this,
+        normalizedUserId,
+        String(row.steam_asset_id || ""),
+        String(row.csfloat_investment_id || ""),
+      );
+      if (didChange) {
+        changedCount += 1;
+      }
+    });
+
+    return changedCount;
+  }
+
   const importInvestmentRows = db.transaction((rows, userId) => {
     const importedAt = nowIso();
     const statement = db.prepare(
@@ -1113,6 +1216,7 @@ export function createLocalStore(userDataPath) {
         updated,
         missingMarked,
         matchesSuggested,
+        matchesApplied: applyResolvedSteamCsfloatMatches.call(this, normalizedUserId),
         totalIncoming: incoming.length,
         importedItems,
       };
@@ -1553,7 +1657,40 @@ export function createLocalStore(userDataPath) {
       const title = String(input.title || "Neue Synchronisation");
       const message = String(input.message || "");
       const createdAt = input.createdAt || nowIso();
-      const payload = serialize(input.payload || {});
+      const payloadObject = input.payload || {};
+      const payload = serialize(payloadObject);
+      const dedupeWindowHours = Number(input.dedupeWindowHours ?? 24);
+      const dedupeWindowMs =
+        Number.isFinite(dedupeWindowHours) && dedupeWindowHours > 0
+          ? dedupeWindowHours * 60 * 60 * 1000
+          : 24 * 60 * 60 * 1000;
+
+      const incomingPayloadStable = stableSerialize(payloadObject);
+      const existingRows = db
+        .prepare(
+          `SELECT *
+           FROM sync_notifications
+           WHERE user_id = ? AND category = ? AND title = ? AND message = ?
+           ORDER BY created_at DESC
+           LIMIT 50`,
+        )
+        .all(userId, category, title, message);
+
+      for (const row of existingRows) {
+        const existingCreatedAtMs = Date.parse(String(row.created_at || ""));
+        if (!Number.isFinite(existingCreatedAtMs)) {
+          continue;
+        }
+        if (Date.now() - existingCreatedAtMs > dedupeWindowMs) {
+          continue;
+        }
+
+        const existingPayloadStable = stableSerialize(deserialize(row.payload, {}));
+        if (existingPayloadStable === incomingPayloadStable) {
+          return mapNotification(row);
+        }
+      }
+
       db.prepare(
         `INSERT INTO sync_notifications (
           id, user_id, category, title, message, payload, created_at, read_at
@@ -1624,11 +1761,33 @@ export function createLocalStore(userDataPath) {
 
     updateSteamCsfloatMatchStatus(matchId, status = "manual_confirmed") {
       const updatedAt = nowIso();
+      const normalizedStatus = String(status || "manual_confirmed");
+      const matchRow = db
+        .prepare(
+          `SELECT user_id, steam_asset_id, csfloat_investment_id
+           FROM steam_csfloat_matches
+           WHERE id = ?
+           LIMIT 1`,
+        )
+        .get(String(matchId));
+
       db.prepare(
         `UPDATE steam_csfloat_matches
          SET status = ?, updated_at = ?
          WHERE id = ?`,
-      ).run(String(status), updatedAt, String(matchId));
+      ).run(normalizedStatus, updatedAt, String(matchId));
+
+      if (
+        matchRow &&
+        (normalizedStatus === "manual_confirmed" || normalizedStatus === "auto_linked")
+      ) {
+        applySteamCsfloatMatchLink.call(
+          this,
+          String(matchRow.user_id || "local"),
+          String(matchRow.steam_asset_id || ""),
+          String(matchRow.csfloat_investment_id || ""),
+        );
+      }
       return true;
     },
 

@@ -183,6 +183,7 @@ $router->register('GET', '/api/v1/auth/session/validate', static function () use
             'steamId' => $user['steamId'],
             'name' => $user['name'] ?? null,
             'avatar' => $user['avatar'] ?? null,
+            'animatedAvatar' => $user['animatedAvatar'] ?? null,
         ],
     ]);
 });

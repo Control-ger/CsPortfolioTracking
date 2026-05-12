@@ -272,7 +272,7 @@ export const Watchlist = ({ focusTarget = null }) => {
              </Card>
            </div>
 
-          <div className="hidden md:block">
+          <div className="hidden md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
             {selectedItem ? (
               <Card>
                 <CardHeader className="pb-2 sm:pb-4">

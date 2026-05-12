@@ -219,9 +219,11 @@ export const ItemDetailPanel = ({
                 <p className="mt-2 text-xs sm:text-sm font-bold">
                   {typeof item.costBasisTotal === "number" ? formatPrice(item.costBasisTotal) : "N/A"}
                 </p>
-                <h4 className="mt-3 text-xs font-semibold text-muted-foreground">
-                  Trends (6 Monate) (Work in Progress)
-                </h4>
+                {stats6m?.length > 0 ? (
+                    <h4 className="mt-3 text-xs font-semibold text-muted-foreground">
+                      Trends (6 Monate)
+                    </h4>
+                ) : null}
                 {stats6m?.length > 0 ? (
                     <div className="h-45 w-full">
                       <ResponsiveContainer width="100%" height="100%">
@@ -247,9 +249,7 @@ export const ItemDetailPanel = ({
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
-                ) : (
-                    <p className="mt-2 text-[10px] text-muted-foreground">Keine Trenddaten verfügbar</p>
-                )}
+                ) : null}
               </div>
             </div>
 

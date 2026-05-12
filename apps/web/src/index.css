@@ -170,3 +170,89 @@
   display: none;
 }
 
+@keyframes steamBackdropDrift {
+  0% { transform: translate3d(-2%, -1%, 0) scale(1); opacity: 0.74; }
+  50% { transform: translate3d(2%, 2%, 0) scale(1.06); opacity: 0.92; }
+  100% { transform: translate3d(-2%, -1%, 0) scale(1); opacity: 0.74; }
+}
+
+@keyframes steamAuraFloatA {
+  0% { transform: translate3d(-5%, -3%, 0) scale(1.02); }
+  50% { transform: translate3d(8%, 7%, 0) scale(1.16); }
+  100% { transform: translate3d(-5%, -3%, 0) scale(1.02); }
+}
+
+@keyframes steamAuraFloatB {
+  0% { transform: translate3d(7%, 4%, 0) scale(1.05); }
+  50% { transform: translate3d(-7%, -8%, 0) scale(1.18); }
+  100% { transform: translate3d(7%, 4%, 0) scale(1.05); }
+}
+
+@keyframes steamAuraFloatC {
+  0% { transform: translate3d(-2%, 8%, 0) scale(1.03); }
+  50% { transform: translate3d(7%, -6%, 0) scale(1.14); }
+  100% { transform: translate3d(-2%, 8%, 0) scale(1.03); }
+}
+
+@keyframes steamProgressPulse {
+  0% { opacity: 0.82; }
+  50% { opacity: 1; }
+  100% { opacity: 0.82; }
+}
+
+.steam-startup-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100vh;
+  width: 100%;
+  background: #02050b;
+}
+
+.steam-startup-shell::before {
+  content: "";
+  position: absolute;
+  inset: -22%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 18% 26%, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.24)), transparent 56%),
+    radial-gradient(circle at 74% 70%, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.18)), transparent 58%),
+    radial-gradient(circle at 58% 18%, var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.14)), transparent 54%);
+  filter: blur(48px) saturate(1.05);
+  opacity: 0.82;
+  animation: steamBackdropDrift 22s ease-in-out infinite;
+}
+
+.steam-startup-shell::after {
+  content: "";
+  position: absolute;
+  inset: -26%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 26% 72%, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.16)), transparent 60%),
+    radial-gradient(circle at 82% 30%, var(--steam-shell-color-d, hsla(32, 42%, 46%, 0.14)), transparent 58%),
+    radial-gradient(circle at 44% 42%, var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.12)), transparent 62%);
+  filter: blur(56px) saturate(1.02);
+  opacity: 0.72;
+  animation: steamAuraFloatB 26s ease-in-out infinite;
+}
+
+.steam-startup-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.steam-progress-pulse {
+  animation: steamProgressPulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steam-startup-shell::before,
+  .steam-startup-shell::after,
+  .steam-progress-pulse {
+    animation: none;
+  }
+}
+

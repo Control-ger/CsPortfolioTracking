@@ -96,6 +96,7 @@ final class DesktopSteamAuthController
             'steamId' => $steamId,
             'name' => $profile['name'] ?? 'Steam User',
             'avatar' => $profile['avatar'] ?? null,
+            'animatedAvatar' => $profile['animatedAvatar'] ?? null,
         ];
         $sessionToken = $this->generateSessionToken($user);
 
@@ -147,14 +148,22 @@ final class DesktopSteamAuthController
         $steamId = (string) ($payload['steamId'] ?? '');
         $hasName = is_string($payload['name'] ?? null) && trim((string) $payload['name']) !== '';
         $hasAvatar = is_string($payload['avatar'] ?? null) && trim((string) $payload['avatar']) !== '';
+        $hasAnimatedAvatar = is_string($payload['animatedAvatar'] ?? null) && trim((string) $payload['animatedAvatar']) !== '';
 
-        if ($steamId !== '' && (!$hasName || !$hasAvatar)) {
+        if ($steamId !== '' && (!$hasName || !$hasAvatar || !$hasAnimatedAvatar)) {
             $profile = $this->fetchSteamProfile($steamId);
             if (!$hasName && is_string($profile['name'] ?? null) && trim((string) $profile['name']) !== '') {
                 $payload['name'] = (string) $profile['name'];
             }
             if (!$hasAvatar && is_string($profile['avatar'] ?? null) && trim((string) $profile['avatar']) !== '') {
                 $payload['avatar'] = (string) $profile['avatar'];
+            }
+            if (
+                !$hasAnimatedAvatar
+                && is_string($profile['animatedAvatar'] ?? null)
+                && trim((string) $profile['animatedAvatar']) !== ''
+            ) {
+                $payload['animatedAvatar'] = (string) $profile['animatedAvatar'];
             }
         }
 
@@ -354,9 +363,11 @@ final class DesktopSteamAuthController
             $data = $this->fetchJson($url, 10);
             $player = $data['response']['players'][0] ?? null;
             if (is_array($player)) {
+                $animatedAvatar = $this->fetchAnimatedAvatarFromMiniProfile($steamId64);
                 return [
                     'name' => $player['personaname'] ?? null,
                     'avatar' => $player['avatarfull'] ?? null,
+                    'animatedAvatar' => $animatedAvatar,
                 ];
             }
         }
@@ -396,7 +407,193 @@ final class DesktopSteamAuthController
         return [
             'name' => $name !== '' ? $name : null,
             'avatar' => $avatarFull !== '' ? $avatarFull : ($avatarMedium !== '' ? $avatarMedium : ($avatarIcon !== '' ? $avatarIcon : null)),
+            'animatedAvatar' => $this->fetchAnimatedAvatarFromMiniProfile($steamId64),
         ];
+    }
+
+    private function fetchAnimatedAvatarFromMiniProfile(string $steamId64): ?string
+    {
+        $accountId = (int) $steamId64 - 76561197960265728;
+        if ($accountId <= 0) {
+            error_log('[desktop-auth][avatar] invalid accountId for steamId=' . $steamId64);
+            return null;
+        }
+
+        $miniProfileUrls = [
+            "https://steamcommunity.com/miniprofile/{$accountId}/json/",
+            "https://steamcommunity.com/miniprofile/{$accountId}/json/?l=english",
+            "https://steamcommunity.com/miniprofile/{$accountId}/json/?l=english&origin=https://steamcommunity.com",
+            "https://steam-chat.com/miniprofile/{$accountId}/json/",
+            "https://steam-chat.com/miniprofile/{$accountId}/json/?l=english&origin=https://steamcommunity.com",
+            "https://community.cloudflare.steamstatic.com/miniprofile/{$accountId}/json/",
+            "https://community.cloudflare.steamstatic.com/miniprofile/{$accountId}/json/?l=english&origin=https://steamcommunity.com",
+        ];
+
+        $data = null;
+        $lastHttpCode = 0;
+        foreach ($miniProfileUrls as $url) {
+            $result = $this->fetchJsonWithStatus($url, 10);
+            $candidate = $result['data'] ?? null;
+            $httpCode = (int) ($result['httpCode'] ?? 0);
+            if (is_array($candidate)) {
+                $data = $candidate;
+                error_log('[desktop-auth][avatar] miniProfile source ok steamId=' . $steamId64 . ' url=' . $url . ' http=' . $httpCode);
+                break;
+            }
+            $lastHttpCode = $httpCode;
+        }
+        if (!is_array($data)) {
+            error_log('[desktop-auth][avatar] miniProfile fetch failed for steamId=' . $steamId64 . ' http=' . $lastHttpCode);
+            return null;
+        }
+
+        $candidateKeys = [
+            'animated_avatar',
+            'animatedAvatar',
+            'animated_avatar_url',
+            'animatedAvatarUrl',
+            'avatar_animated',
+            'avatarAnimated',
+            'avatar_url_animated',
+            'avatarAnimatedUrl',
+            'avatar_url_full',
+            'avatarUrlFull',
+            'avatar_url',
+            'avatarUrl',
+        ];
+
+        foreach ($candidateKeys as $key) {
+            $value = $data[$key] ?? null;
+            $resolved = $this->extractAnimatedAvatarCandidate($value, true);
+            if ($resolved !== null) {
+                error_log('[desktop-auth][avatar] resolved via key=' . $key . ' steamId=' . $steamId64 . ' url=' . $resolved);
+                return $resolved;
+            }
+        }
+
+        // Fallback: some Steam responses nest media URLs in sub-objects.
+        $fallbackResolved = $this->extractAnimatedAvatarCandidate($data, false);
+        if ($fallbackResolved !== null) {
+            error_log('[desktop-auth][avatar] resolved via nested fallback steamId=' . $steamId64 . ' url=' . $fallbackResolved);
+            return $fallbackResolved;
+        }
+
+        $profileResolved = $this->fetchAnimatedAvatarFromProfilePage($steamId64);
+        if ($profileResolved !== null) {
+            error_log('[desktop-auth][avatar] resolved via profile-page fallback steamId=' . $steamId64 . ' url=' . $profileResolved);
+            return $profileResolved;
+        }
+
+        $availableKeys = implode(',', array_keys($data));
+        error_log('[desktop-auth][avatar] no animated avatar resolved steamId=' . $steamId64 . ' availableKeys=' . $availableKeys);
+        return null;
+    }
+
+    private function extractAnimatedAvatarCandidate(mixed $value, bool $allowNonAnimated): ?string
+    {
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if ($trimmed === '') {
+                return null;
+            }
+
+            $normalized = $this->normalizeAvatarUrlCandidate($trimmed);
+            if ($normalized === null) {
+                return null;
+            }
+
+            $lower = strtolower($normalized);
+            $looksAnimated =
+                str_contains($lower, '.gif')
+                || str_contains($lower, '.webm')
+                || str_contains($lower, '.mp4')
+                || str_contains($lower, '/animated/')
+                || str_contains($lower, 'avatar_animated')
+                || str_contains($lower, 'avataranimated');
+
+            if ($looksAnimated || $allowNonAnimated) {
+                return $normalized;
+            }
+            return null;
+        }
+
+        if (is_array($value)) {
+            foreach ($value as $nested) {
+                $resolved = $this->extractAnimatedAvatarCandidate($nested, false);
+                if ($resolved !== null) {
+                    return $resolved;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeAvatarUrlCandidate(string $url): ?string
+    {
+        $trimmed = trim($url);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, '//')) {
+            return 'https:' . $trimmed;
+        }
+
+        if (str_starts_with($trimmed, '/')) {
+            return 'https://steamcommunity.com' . $trimmed;
+        }
+
+        if (str_starts_with($trimmed, 'http://')) {
+            return 'https://' . substr($trimmed, strlen('http://'));
+        }
+
+        if (preg_match('/^https:\/\/[^\\s]+$/i', $trimmed) === 1) {
+            return $trimmed;
+        }
+
+        return null;
+    }
+
+    private function fetchAnimatedAvatarFromProfilePage(string $steamId64): ?string
+    {
+        $url = "https://steamcommunity.com/profiles/{$steamId64}/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $this->applyDesktopCurlTlsOptions($ch);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'CS-Portfolio-Desktop/1.0');
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || $response === '' || $httpCode !== 200) {
+            error_log('[desktop-auth][avatar] profile-page fallback request failed steamId=' . $steamId64 . ' http=' . $httpCode);
+            return null;
+        }
+
+        if (preg_match_all('/https?:\\\\\/\\\\\/[^"\'\\s<>()]+\\.(?:webm|mp4|gif)(?:\\?[^"\'\\s<>()]*)?/i', $response, $escapedMatches) === 1) {
+            foreach ($escapedMatches[0] as $rawMatch) {
+                $decoded = str_replace('\\\\/', '/', (string) $rawMatch);
+                $normalized = $this->normalizeAvatarUrlCandidate($decoded);
+                if ($normalized !== null) {
+                    return $normalized;
+                }
+            }
+        }
+
+        if (preg_match_all('/https?:\\/\\/[^"\'\\s<>()]+\\.(?:webm|mp4|gif)(?:\\?[^"\'\\s<>()]*)?/i', $response, $matches) === 1) {
+            foreach ($matches[0] as $rawMatch) {
+                $normalized = $this->normalizeAvatarUrlCandidate((string) $rawMatch);
+                if ($normalized !== null) {
+                    return $normalized;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function fetchPublicInventory(string $steamId64): array
@@ -588,6 +785,7 @@ final class DesktopSteamAuthController
             'steamId' => $user['steamId'],
             'name' => $user['name'] ?? null,
             'avatar' => $user['avatar'] ?? null,
+            'animatedAvatar' => $user['animatedAvatar'] ?? null,
             'exp' => time() + (30 * 24 * 60 * 60),
             'iat' => time(),
             'type' => 'desktop-session',

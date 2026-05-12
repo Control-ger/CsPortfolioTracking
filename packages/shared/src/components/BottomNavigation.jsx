@@ -21,7 +21,13 @@ export const BottomNavigation = () => {
       const currentUser = await getCurrentUser();
       let resolvedUser = currentUser;
 
-      if (!resolvedUser?.avatar && !resolvedUser?.steam_avatar && !resolvedUser?.steamAvatar) {
+      if (
+        !resolvedUser?.animatedAvatar &&
+        !resolvedUser?.animated_avatar &&
+        !resolvedUser?.avatar &&
+        !resolvedUser?.steam_avatar &&
+        !resolvedUser?.steamAvatar
+      ) {
         const session = await getSession();
         if (session?.token) {
           const refreshed = await validateSession(session.token);
@@ -37,7 +43,14 @@ export const BottomNavigation = () => {
       }
 
       if (isMounted) {
-        setAvatarUrl(resolvedUser?.avatar || resolvedUser?.steam_avatar || resolvedUser?.steamAvatar || null);
+        setAvatarUrl(
+          resolvedUser?.animatedAvatar ||
+            resolvedUser?.animated_avatar ||
+            resolvedUser?.avatar ||
+            resolvedUser?.steam_avatar ||
+            resolvedUser?.steamAvatar ||
+            null,
+        );
       }
     };
 

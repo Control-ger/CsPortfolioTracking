@@ -29,7 +29,13 @@ export function UserMenu() {
       const currentUser = await getCurrentUser()
       let resolvedUser = currentUser
 
-      if (!resolvedUser?.avatar && !resolvedUser?.steam_avatar && !resolvedUser?.steamAvatar) {
+      if (
+        !resolvedUser?.animatedAvatar &&
+        !resolvedUser?.animated_avatar &&
+        !resolvedUser?.avatar &&
+        !resolvedUser?.steam_avatar &&
+        !resolvedUser?.steamAvatar
+      ) {
         const session = await getSession()
         if (session?.token) {
           const refreshed = await validateSession(session.token)
@@ -66,7 +72,13 @@ export function UserMenu() {
     }
     window.location.href = "/"
   }
-  const avatarUrl = user?.avatar || user?.steam_avatar || user?.steamAvatar || null;
+  const avatarUrl =
+    user?.animatedAvatar ||
+    user?.animated_avatar ||
+    user?.avatar ||
+    user?.steam_avatar ||
+    user?.steamAvatar ||
+    null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
