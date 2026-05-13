@@ -13,6 +13,7 @@ import { Skeleton } from "@shared/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components";
 import { fetchFeeSettings, updateFeeSettings, fetchCsFloatApiKeyStatus, updateCsFloatApiKey } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
+import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 
 const DEFAULT_FORM = {
   fxFeePercent: "0",
@@ -114,7 +115,8 @@ export function SettingsPage() {
       }
       try {
         const config = await window.electronAPI.serverConfig.get();
-        setServerUrl(config?.serverUrl || "");
+        const normalizedHost = normalizeServerHostInput(config?.serverUrl || "");
+        setServerUrl(normalizedHost || String(config?.serverUrl || ""));
       } catch (error) {
         setServerConfigError(error?.message || "Server-Konfiguration konnte nicht geladen werden.");
       } finally {
@@ -258,23 +260,6 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <details className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          <summary className="cursor-pointer select-none font-medium text-foreground/90">
-            Datenschutz & Steam API Hinweise
-          </summary>
-          <div className="mt-2 space-y-2 leading-relaxed">
-            <p>
-              Diese App nutzt Steam als Datenquelle, ist jedoch nicht offiziell von Valve betrieben oder
-              unterstuetzt.
-            </p>
-            <p>
-              Abgerufen werden nur noetige Profil- und Inventardaten fuer genutzte Features.
-            </p>
-            <p>
-              Gespeichert werden portfolio-relevante Itemdaten und optionale Preise, keine Steam-Passwoerter.
-            </p>
-          </div>
-        </details>
       </div>
     );
   };
@@ -582,7 +567,13 @@ export function SettingsPage() {
                   setServerConfigError("");
                   setServerConfigMessage("");
                 }}
-                placeholder="https://dein-server.example.com"
+                onBlur={() => {
+                  const normalized = normalizeServerHostInput(serverUrl);
+                  if (normalized && normalized !== serverUrl) {
+                    setServerUrl(normalized);
+                  }
+                }}
+                placeholder="cs2.clustercontrol.cc"
                 disabled={serverConfigLoading || serverConfigSaving || serverConfigTesting}
               />
               <div className="flex flex-wrap items-center gap-2">
@@ -591,12 +582,18 @@ export function SettingsPage() {
                   disabled={serverConfigLoading || serverConfigTesting || !serverUrl.trim()}
                   onClick={async () => {
                     try {
+                      const normalizedHost = normalizeServerHostInput(serverUrl);
+                      if (!normalizedHost) {
+                        setServerConfigError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                        return;
+                      }
                       setServerConfigTesting(true);
                       setServerConfigError("");
                       setServerConfigMessage("");
-                      const result = await window.electronAPI.serverConfig.test(serverUrl.trim());
+                      const result = await window.electronAPI.serverConfig.test(normalizedHost);
                       if (result?.ok) {
                         setServerConfigMessage(result?.message || "Verbindung erfolgreich.");
+                        setServerUrl(normalizedHost);
                       } else {
                         setServerConfigError(result?.message || "Verbindung fehlgeschlagen.");
                       }
@@ -613,10 +610,16 @@ export function SettingsPage() {
                   disabled={serverConfigLoading || serverConfigSaving || !serverUrl.trim()}
                   onClick={async () => {
                     try {
+                      const normalizedHost = normalizeServerHostInput(serverUrl);
+                      if (!normalizedHost) {
+                        setServerConfigError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                        return;
+                      }
                       setServerConfigSaving(true);
                       setServerConfigError("");
                       setServerConfigMessage("");
-                      await window.electronAPI.serverConfig.set({ serverUrl: serverUrl.trim() });
+                      await window.electronAPI.serverConfig.set({ serverUrl: normalizedHost });
+                      setServerUrl(normalizedHost);
                       setServerConfigMessage("Server-URL gespeichert.");
                     } catch (error) {
                       setServerConfigError(error?.message || "Server-URL konnte nicht gespeichert werden.");

@@ -32,6 +32,15 @@ function unwrapApiData(payload) {
   return payload?.data && typeof payload.data === 'object' ? payload.data : payload;
 }
 
+function normalizeDesktopLocalUserId(candidate, fallback = "1") {
+  const fallbackId = String(fallback || "1").trim() || "1";
+  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
+  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
+    return raw;
+  }
+  return fallbackId;
+}
+
 async function resolveApiBase() {
   if (isDesktopApp() && window.electronAPI?.backend?.getBaseUrl) {
     const desktopBase = await window.electronAPI.backend.getBaseUrl();
@@ -509,7 +518,7 @@ export async function fetchCS2Inventory(steamId) {
 export async function importInventoryAsInvestments(items, userId, options = {}) {
   // Use local store if available (Desktop)
   if (isDesktopApp() && window.electronAPI.localStore) {
-    const resolvedUserId = String(userId || "1");
+    const resolvedUserId = normalizeDesktopLocalUserId(userId, "1");
     let targetBucket = String(options?.bucket || "").trim().toLowerCase();
     if (!targetBucket && window.electronAPI.localStore.getPortfolioPreferences) {
       try {

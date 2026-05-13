@@ -1,7 +1,7 @@
 {
   "name": "cs-portfolio-tracking-monorepo",
   "private": true,
-  "version": "0.1.12",
+  "version": "0.1.13",
   "main": "apps/desktop/main.js",
   "type": "module",
   "repository": {
@@ -61,6 +61,7 @@
       }
     ],
     "win": {
+      "artifactName": "CS-Investor-Hub-Setup-${version}.${ext}",
       "target": [
         "nsis"
       ],

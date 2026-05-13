@@ -276,13 +276,21 @@ function getDesktopLocalStore() {
   return window.electronAPI.localStore;
 }
 
-function resolveDesktopLocalUserId(user) {
-  const candidate = user?.id ?? user?.userId ?? 1;
-  const parsed = Number(candidate);
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return String(Math.floor(parsed));
+function normalizeDesktopLocalUserId(candidate, fallback = "1") {
+  const fallbackId = String(fallback || "1").trim() || "1";
+  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
+  if (!raw) {
+    return fallbackId;
   }
-  return "1";
+  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
+    return raw;
+  }
+  return fallbackId;
+}
+
+function resolveDesktopLocalUserId(user) {
+  const candidate = user?.userId ?? user?.id ?? 1;
+  return normalizeDesktopLocalUserId(candidate, "1");
 }
 
 function stableHash(value) {
@@ -714,12 +722,18 @@ export async function updateInvestmentBucket(id, bucket, sourceInvestmentIds = [
     : "investment";
   const localStore = getDesktopLocalStore();
   if (localStore) {
-    const candidateIds = Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
+    const requestedId = String(id || "").trim();
+    const attemptedIds = new Set();
+    const candidateIds = (Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
       ? sourceInvestmentIds
-      : [id];
+      : [id]).map((candidateId) => String(candidateId || "").trim()).filter(Boolean);
     let updatedCount = 0;
 
     for (const candidateId of candidateIds) {
+      if (attemptedIds.has(candidateId)) {
+        continue;
+      }
+      attemptedIds.add(candidateId);
       const existing = unwrapLocalStoreResult(
         await localStore.getInvestment(candidateId),
         "local-store-get-investment",
@@ -737,6 +751,57 @@ export async function updateInvestmentBucket(id, bucket, sourceInvestmentIds = [
         "local-store-upsert-investment",
       );
       updatedCount += 1;
+    }
+
+    if (updatedCount === 0) {
+      try {
+        const currentUser = await getCurrentUser();
+        const userId = resolveDesktopLocalUserId(currentUser);
+        const localRows = unwrapLocalStoreResult(
+          await localStore.listInvestments(userId),
+          "local-store-list-investments",
+        );
+        const investments = Array.isArray(localRows) ? localRows : [];
+        const fallbackIds = [];
+
+        if (requestedId.startsWith("cluster-")) {
+          const clusterKey = requestedId.slice("cluster-".length).trim().toLowerCase();
+          if (clusterKey) {
+            investments.forEach((row) => {
+              const rowKey = String(row?.marketHashName || row?.name || row?.itemName || row?.id || "")
+                .trim()
+                .toLowerCase();
+              if (rowKey === clusterKey) {
+                fallbackIds.push(String(row?.id || "").trim());
+              }
+            });
+          }
+        }
+
+        for (const fallbackId of fallbackIds) {
+          if (!fallbackId || attemptedIds.has(fallbackId)) {
+            continue;
+          }
+          attemptedIds.add(fallbackId);
+          const existing = unwrapLocalStoreResult(
+            await localStore.getInvestment(fallbackId),
+            "local-store-get-investment",
+          );
+          if (!existing) {
+            continue;
+          }
+          unwrapLocalStoreResult(
+            await localStore.upsertInvestment({
+              ...existing,
+              bucket: normalizedBucket,
+            }),
+            "local-store-upsert-investment",
+          );
+          updatedCount += 1;
+        }
+      } catch (fallbackError) {
+        console.warn("[desktop-sync] bucket fallback resolution failed", fallbackError);
+      }
     }
 
     if (updatedCount === 0) {

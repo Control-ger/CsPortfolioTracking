@@ -4,6 +4,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 
 const SCHEMA_VERSION = 4;
+const CANONICAL_LOCAL_USER_ID = "1";
 
 function nowIso() {
   return new Date().toISOString();
@@ -114,6 +115,25 @@ function resolveDbPath(userDataPath) {
   return path.join(userDataPath, "cs-investor-hub.sqlite");
 }
 
+function normalizeLocalUserId(value, fallback = CANONICAL_LOCAL_USER_ID) {
+  const fallbackId = String(fallback || CANONICAL_LOCAL_USER_ID).trim() || CANONICAL_LOCAL_USER_ID;
+  const raw = value === null || value === undefined ? "" : String(value).trim();
+  if (!raw) {
+    return fallbackId;
+  }
+
+  const lower = raw.toLowerCase();
+  if (lower === "local" || lower.startsWith("steam-")) {
+    return fallbackId;
+  }
+
+  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
+    return raw;
+  }
+
+  return fallbackId;
+}
+
 function runMigrations(db) {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
@@ -142,7 +162,7 @@ function runMigrations(db) {
       id TEXT PRIMARY KEY,
       server_id INTEGER,
       item_id TEXT,
-      user_id TEXT NOT NULL DEFAULT 'local',
+      user_id TEXT NOT NULL DEFAULT '1',
       name TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'skin',
       quantity INTEGER NOT NULL DEFAULT 1,
@@ -161,7 +181,7 @@ function runMigrations(db) {
       id TEXT PRIMARY KEY,
       server_id INTEGER,
       item_id TEXT,
-      user_id TEXT NOT NULL DEFAULT 'local',
+      user_id TEXT NOT NULL DEFAULT '1',
       name TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'skin',
       payload TEXT NOT NULL DEFAULT '{}',
@@ -197,7 +217,7 @@ function runMigrations(db) {
 
     CREATE TABLE IF NOT EXISTS portfolio_snapshots (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL DEFAULT 'local',
+      user_id TEXT NOT NULL DEFAULT '1',
       captured_at TEXT NOT NULL,
       total_value_usd REAL NOT NULL DEFAULT 0,
       invested_value_usd REAL NOT NULL DEFAULT 0,
@@ -219,7 +239,7 @@ function runMigrations(db) {
 
     CREATE TABLE IF NOT EXISTS steam_inventory_state (
       steam_asset_id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL DEFAULT 'local',
+      user_id TEXT NOT NULL DEFAULT '1',
       market_hash_name TEXT NOT NULL,
       item_type TEXT NOT NULL DEFAULT 'skin',
       in_inventory INTEGER NOT NULL DEFAULT 1,
@@ -231,7 +251,7 @@ function runMigrations(db) {
 
     CREATE TABLE IF NOT EXISTS steam_csfloat_matches (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL DEFAULT 'local',
+      user_id TEXT NOT NULL DEFAULT '1',
       steam_asset_id TEXT NOT NULL,
       steam_item_name TEXT NOT NULL,
       csfloat_investment_id TEXT NOT NULL,
@@ -247,7 +267,7 @@ function runMigrations(db) {
 
     CREATE TABLE IF NOT EXISTS sync_notifications (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL DEFAULT 'local',
+      user_id TEXT NOT NULL DEFAULT '1',
       category TEXT NOT NULL,
       title TEXT NOT NULL,
       message TEXT NOT NULL,
@@ -275,6 +295,43 @@ function runMigrations(db) {
      VALUES ('schema_version', ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
   ).run(String(SCHEMA_VERSION), nowIso());
+
+  const legacyUserWhere = "user_id IS NULL OR TRIM(user_id) = '' OR lower(user_id) = 'local' OR lower(user_id) LIKE 'steam-%'";
+  db.exec(`
+    UPDATE investments SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
+    UPDATE watchlist_items SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
+    UPDATE portfolio_snapshots SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
+    UPDATE steam_inventory_state SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
+    UPDATE steam_csfloat_matches SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
+    UPDATE sync_notifications SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
+  `);
+
+  const legacyPreferenceRows = db
+    .prepare(
+      `SELECT key, value
+       FROM meta
+       WHERE key LIKE 'portfolio_pref:local:%'
+          OR key LIKE 'portfolio_pref:steam-%:%'`,
+    )
+    .all();
+  const now = nowIso();
+  const upsertMeta = db.prepare(
+    `INSERT INTO meta (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  );
+  const deleteMeta = db.prepare("DELETE FROM meta WHERE key = ?");
+  legacyPreferenceRows.forEach((row) => {
+    const key = String(row?.key || "");
+    const suffixIndex = key.lastIndexOf(":");
+    if (suffixIndex <= 0 || suffixIndex >= key.length - 1) {
+      return;
+    }
+    const preferenceKey = key.slice(suffixIndex + 1);
+    const canonicalKey = `portfolio_pref:${CANONICAL_LOCAL_USER_ID}:${preferenceKey}`;
+    upsertMeta.run(canonicalKey, String(row?.value || ""), now);
+    deleteMeta.run(key);
+  });
 }
 
 export function createLocalStore(userDataPath) {
@@ -592,7 +649,7 @@ export function createLocalStore(userDataPath) {
            ORDER BY updated_at DESC
            LIMIT 1`,
         )
-        .get(String(row.user_id || "local"), String(row.name));
+        .get(normalizeLocalUserId(row.user_id), String(row.name));
 
       if (fallbackRow?.payload) {
         const fallbackPayload = deserialize(fallbackRow.payload);
@@ -653,14 +710,14 @@ export function createLocalStore(userDataPath) {
          WHERE user_id = ? AND id = ? AND deleted = 0
          LIMIT 1`,
       )
-      .get(String(userId || "local"), String(steamAssetId || ""));
+      .get(normalizeLocalUserId(userId), String(steamAssetId || ""));
     const csfloatRow = db
       .prepare(
         `SELECT * FROM investments
          WHERE user_id = ? AND id = ? AND deleted = 0
          LIMIT 1`,
       )
-      .get(String(userId || "local"), String(csfloatInvestmentId || ""));
+      .get(normalizeLocalUserId(userId), String(csfloatInvestmentId || ""));
 
     if (!steamRow || !csfloatRow) {
       return false;
@@ -705,8 +762,8 @@ export function createLocalStore(userDataPath) {
     return changed;
   }
 
-  function applyResolvedSteamCsfloatMatches(userId = "local") {
-    const normalizedUserId = String(userId || "local");
+  function applyResolvedSteamCsfloatMatches(userId = CANONICAL_LOCAL_USER_ID) {
+    const normalizedUserId = normalizeLocalUserId(userId);
     const rows = db
       .prepare(
         `SELECT steam_asset_id, csfloat_investment_id
@@ -781,7 +838,7 @@ export function createLocalStore(userDataPath) {
         id,
         serverId,
         itemId: row.itemId ? String(row.itemId) : null,
-        userId: String(row.userId || userId || "local"),
+        userId: normalizeLocalUserId(row.userId || userId),
         name: String(row.name || row.marketHashName || row.itemName || ""),
         type: String(row.type || "skin"),
         quantity: Number(row.quantity || 1),
@@ -821,7 +878,7 @@ export function createLocalStore(userDataPath) {
       const id = String(row.id || randomUUID());
       const serverId =
         row.serverId ?? (Number.isFinite(Number(row.id)) ? Number(row.id) : null);
-      const normalizedUserId = String(row.userId || userId || "local");
+      const normalizedUserId = normalizeLocalUserId(row.userId || userId);
       const resolvedName = String(row.name || row.marketHashName || "");
       const existingRow = db
         .prepare("SELECT payload FROM watchlist_items WHERE id = ? LIMIT 1")
@@ -891,19 +948,19 @@ export function createLocalStore(userDataPath) {
       };
     },
 
-    listInvestments(userId = "local") {
+    listInvestments(userId = CANONICAL_LOCAL_USER_ID) {
       return db
         .prepare(
           `SELECT * FROM investments
            WHERE user_id = ? AND deleted = 0
            ORDER BY updated_at DESC`,
         )
-        .all(String(userId))
+        .all(normalizeLocalUserId(userId))
         .map(mapInvestment);
     },
 
-    syncSteamInventory(items = [], userId = "local") {
-      const normalizedUserId = String(userId || "local");
+    syncSteamInventory(items = [], userId = CANONICAL_LOCAL_USER_ID) {
+      const normalizedUserId = normalizeLocalUserId(userId);
       const now = nowIso();
       const preferences = this.getPortfolioPreferences(normalizedUserId);
       const steamDefaultBucket = normalizeBucket(
@@ -1222,7 +1279,7 @@ export function createLocalStore(userDataPath) {
       };
     },
 
-    importInvestments(rows = [], userId = "local") {
+    importInvestments(rows = [], userId = CANONICAL_LOCAL_USER_ID) {
       if (!Array.isArray(rows) || rows.length === 0) {
         return { imported: 0 };
       }
@@ -1276,7 +1333,7 @@ export function createLocalStore(userDataPath) {
         id,
         serverId: input.serverId ?? null,
         itemId: input.itemId ? String(input.itemId) : null,
-        userId: String(input.userId || "local"),
+        userId: normalizeLocalUserId(input.userId),
         name: String(input.name || input.marketHashName || input.itemName || ""),
         type: String(input.type || input.itemType || "skin"),
         quantity: Number(input.quantity || 1),
@@ -1319,8 +1376,8 @@ export function createLocalStore(userDataPath) {
       return true;
     },
 
-    getPortfolioPreferences(userId = "local") {
-      const normalizedUserId = String(userId || "local");
+    getPortfolioPreferences(userId = CANONICAL_LOCAL_USER_ID) {
+      const normalizedUserId = normalizeLocalUserId(userId);
       const prefix = `portfolio_pref:${normalizedUserId}:`;
       const rows = db
         .prepare(
@@ -1343,8 +1400,8 @@ export function createLocalStore(userDataPath) {
       return normalizePortfolioPreferences(parsed);
     },
 
-    updatePortfolioPreferences(userId = "local", patch = {}) {
-      const normalizedUserId = String(userId || "local");
+    updatePortfolioPreferences(userId = CANONICAL_LOCAL_USER_ID, patch = {}) {
+      const normalizedUserId = normalizeLocalUserId(userId);
       const current = this.getPortfolioPreferences(normalizedUserId);
       const next = normalizePortfolioPreferences({
         ...current,
@@ -1388,18 +1445,18 @@ export function createLocalStore(userDataPath) {
       return true;
     },
 
-    listWatchlistItems(userId = "local") {
+    listWatchlistItems(userId = CANONICAL_LOCAL_USER_ID) {
       return db
         .prepare(
           `SELECT * FROM watchlist_items
            WHERE user_id = ? AND deleted = 0
            ORDER BY updated_at DESC`,
         )
-        .all(String(userId))
+        .all(normalizeLocalUserId(userId))
         .map(mapWatchlistItem);
     },
 
-    listPortfolioSnapshots(userId = "local", limit = 365) {
+    listPortfolioSnapshots(userId = CANONICAL_LOCAL_USER_ID, limit = 365) {
       return db
         .prepare(
           `SELECT * FROM portfolio_snapshots
@@ -1407,13 +1464,13 @@ export function createLocalStore(userDataPath) {
            ORDER BY captured_at ASC
            LIMIT ?`,
         )
-        .all(String(userId), Number(limit))
+        .all(normalizeLocalUserId(userId), Number(limit))
         .map(mapPortfolioSnapshot);
     },
 
     upsertPortfolioSnapshot(input = {}) {
       const id = String(input.id || randomUUID());
-      const userId = String(input.userId || "local");
+      const userId = normalizeLocalUserId(input.userId);
       const capturedAt = input.capturedAt || input.date || nowIso();
       const payload = {
         ...input.payload,
@@ -1450,7 +1507,7 @@ export function createLocalStore(userDataPath) {
       });
     },
 
-    importWatchlistItems(rows = [], userId = "local") {
+    importWatchlistItems(rows = [], userId = CANONICAL_LOCAL_USER_ID) {
       if (!Array.isArray(rows) || rows.length === 0) {
         return { imported: 0 };
       }
@@ -1492,7 +1549,7 @@ export function createLocalStore(userDataPath) {
         id,
         serverId: input.serverId ?? null,
         itemId: input.itemId ? String(input.itemId) : null,
-        userId: String(input.userId || "local"),
+        userId: normalizeLocalUserId(input.userId),
         name: String(input.name || ""),
         type: String(input.type || "skin"),
         payload: serialize(payload),
@@ -1625,8 +1682,8 @@ export function createLocalStore(userDataPath) {
         }));
     },
 
-    listSteamCsfloatMatches(userId = "local", status = null, limit = 200) {
-      const normalizedUserId = String(userId || "local");
+    listSteamCsfloatMatches(userId = CANONICAL_LOCAL_USER_ID, status = null, limit = 200) {
+      const normalizedUserId = normalizeLocalUserId(userId);
       if (status) {
         return db
           .prepare(
@@ -1652,7 +1709,7 @@ export function createLocalStore(userDataPath) {
 
     createNotification(input = {}) {
       const id = String(input.id || randomUUID());
-      const userId = String(input.userId || "local");
+      const userId = normalizeLocalUserId(input.userId);
       const category = String(input.category || "steam_sync");
       const title = String(input.title || "Neue Synchronisation");
       const message = String(input.message || "");
@@ -1704,8 +1761,8 @@ export function createLocalStore(userDataPath) {
       return row ? mapNotification(row) : null;
     },
 
-    listNotifications(userId = "local", options = {}) {
-      const normalizedUserId = String(userId || "local");
+    listNotifications(userId = CANONICAL_LOCAL_USER_ID, options = {}) {
+      const normalizedUserId = normalizeLocalUserId(userId);
       const limit = Number(options?.limit || 20);
       const unreadOnly = Boolean(options?.unreadOnly);
 
@@ -1741,8 +1798,8 @@ export function createLocalStore(userDataPath) {
       return true;
     },
 
-    markAllNotificationsRead(userId = "local", category = null) {
-      const normalizedUserId = String(userId || "local");
+    markAllNotificationsRead(userId = CANONICAL_LOCAL_USER_ID, category = null) {
+      const normalizedUserId = normalizeLocalUserId(userId);
       if (category) {
         db.prepare(
           `UPDATE sync_notifications
@@ -1783,7 +1840,7 @@ export function createLocalStore(userDataPath) {
       ) {
         applySteamCsfloatMatchLink.call(
           this,
-          String(matchRow.user_id || "local"),
+          normalizeLocalUserId(matchRow.user_id),
           String(matchRow.steam_asset_id || ""),
           String(matchRow.csfloat_investment_id || ""),
         );

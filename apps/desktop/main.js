@@ -10,6 +10,13 @@ import { fileURLToPath, pathToFileURL } from "url";
 import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
+const DESKTOP_APP_NAME = "CS Investor Hub";
+const DESKTOP_APP_ID = "com.csportfolio";
+
+app.setName(DESKTOP_APP_NAME);
+if (typeof app.setAppUserModelId === "function") {
+  app.setAppUserModelId(DESKTOP_APP_ID);
+}
 
 // ============================================================
 // Debug / Logging Setup
@@ -349,10 +356,46 @@ function normalizeServerHost(value) {
   if (!trimmed) {
     return "";
   }
-  if (trimmed.includes("://") || /[\\/]/.test(trimmed)) {
+
+  const hostPattern =
+    /^(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)(:\d{1,5})?$/i;
+
+  const parseUrlHost = (candidateValue) => {
+    const withScheme = candidateValue.startsWith("//")
+      ? `https:${candidateValue}`
+      : /^[a-z][a-z0-9+.-]*:\/\//i.test(candidateValue)
+        ? candidateValue
+        : "";
+    if (!withScheme) {
+      return "";
+    }
+    try {
+      const parsed = new URL(withScheme);
+      const host = parsed.hostname || "";
+      const port = parsed.port ? `:${parsed.port}` : "";
+      return `${host}${port}`;
+    } catch {
+      return "";
+    }
+  };
+
+  const parsedHost = parseUrlHost(trimmed);
+  let candidate = parsedHost || trimmed;
+  candidate = candidate.replace(/\\/g, "/");
+
+  if (!parsedHost) {
+    candidate = candidate.split(/[/?#]/, 1)[0] || "";
+    const atIndex = candidate.lastIndexOf("@");
+    if (atIndex >= 0) {
+      candidate = candidate.slice(atIndex + 1);
+    }
+  }
+
+  candidate = candidate.trim().replace(/^\[|\]$/g, "");
+  if (!candidate || !hostPattern.test(candidate)) {
     return "";
   }
-  return trimmed;
+  return candidate.toLowerCase();
 }
 
 function buildServerBaseUrl(hostname) {
@@ -590,10 +633,6 @@ function getStoredServerConfig() {
 async function writeServerConfig(serverConfig) {
   const hostOnly = normalizeServerHost(serverConfig?.serverUrl || "");
   if (!hostOnly) {
-    const rawInput = String(serverConfig?.serverUrl || "").trim();
-    if (rawInput) {
-      throw new Error("Bitte nur den Hostnamen ohne Protokoll oder Pfad eingeben (z.B. cs.tracking).");
-    }
     throw new Error("Server URL darf nicht leer sein.");
   }
 
@@ -622,12 +661,9 @@ async function writeServerConfig(serverConfig) {
 async function testServerConnection(serverUrl) {
   const hostOnly = normalizeServerHost(serverUrl);
   if (!hostOnly) {
-    const rawInput = String(serverUrl || "").trim();
     return {
       ok: false,
-      message: rawInput
-        ? "Bitte nur den Hostnamen ohne Protokoll oder Pfad eingeben (z.B. cs.tracking)."
-        : "Server URL fehlt.",
+      message: "Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).",
     };
   }
 

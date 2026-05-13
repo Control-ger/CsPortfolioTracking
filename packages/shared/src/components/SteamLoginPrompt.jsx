@@ -332,6 +332,17 @@ async function extractPaletteFromImage(imageUrl, fallbackPalette) {
   }
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export async function deriveSteamPaletteFromUser(user) {
+  const fallbackPalette = resolveSteamPalette(user || null);
+  const { preferredAvatarUrl, staticAvatarUrl } = resolveAvatarUrls(user || null);
+  const paletteSourceUrl = staticAvatarUrl || (isVideoAvatarUrl(preferredAvatarUrl) ? null : preferredAvatarUrl);
+  if (!paletteSourceUrl) {
+    return fallbackPalette;
+  }
+  return extractPaletteFromImage(paletteSourceUrl, fallbackPalette);
+}
+
 export function SteamLoginPrompt({ onLoginSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -364,18 +375,8 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     }
 
     let isActive = true;
-    const fallbackPalette = resolveSteamPalette(user);
-    setSteamPalette(fallbackPalette);
-
-    const { preferredAvatarUrl, staticAvatarUrl } = resolveAvatarUrls(user);
-    const paletteSourceUrl = staticAvatarUrl || (isVideoAvatarUrl(preferredAvatarUrl) ? null : preferredAvatarUrl);
-    if (!paletteSourceUrl) {
-      return () => {
-        isActive = false;
-      };
-    }
-
-    void extractPaletteFromImage(paletteSourceUrl, fallbackPalette).then((derivedPalette) => {
+    setSteamPalette(resolveSteamPalette(user));
+    void deriveSteamPaletteFromUser(user).then((derivedPalette) => {
       if (!isActive) {
         return;
       }
@@ -448,13 +449,6 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     root.style.setProperty("--steam-shell-color-b", steamPalette.colorB);
     root.style.setProperty("--steam-shell-color-c", steamPalette.colorC);
     root.style.setProperty("--steam-shell-color-d", steamPalette.colorD || steamPalette.colorB);
-
-    return () => {
-      root.style.removeProperty("--steam-shell-color-a");
-      root.style.removeProperty("--steam-shell-color-b");
-      root.style.removeProperty("--steam-shell-color-c");
-      root.style.removeProperty("--steam-shell-color-d");
-    };
   }, [steamPalette.colorA, steamPalette.colorB, steamPalette.colorC, steamPalette.colorD]);
 
   const hydrateUserMediaIfNeeded = async (candidateUser) => {
@@ -776,6 +770,19 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
           <p>Import your CS2 inventory automatically</p>
           <p>Track prices and portfolio value</p>
           <p>Local-first: Your data stays on your device</p>
+        </div>
+
+        <div className="rounded-md border border-border/70 bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+          <p className="font-medium text-foreground">Datenschutz & Steam API</p>
+          <p className="mt-1">
+            Wir koennen ueber die Steam API nur oeffentlich sichtbare Profil- und Inventarinfos lesen.
+          </p>
+          <p>
+            Kein Zugriff auf Steam-Passwort, Trades, Kauf/Verkauf oder andere Account-Aktionen.
+          </p>
+          <p>
+            Diese App ist nicht offiziell von Valve/Steam betrieben oder unterstuetzt.
+          </p>
         </div>
 
         <Button

@@ -227,9 +227,13 @@ function unwrapApiData(payload) {
 }
 
 function parseUserId(user) {
-  const candidate = user?.id ?? user?.userId ?? 1;
-  const parsed = Number(candidate);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+  const candidate = user?.userId ?? user?.id ?? 1;
+  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
+  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+  }
+  return 1;
 }
 
 function withSafetyWindow(timestamp) {

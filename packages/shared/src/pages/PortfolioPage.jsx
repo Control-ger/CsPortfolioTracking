@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell } from "lucide-react";
+import { Bell, Info } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
 import { ApiWarnings } from "@shared/components";
@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@shared/components";
 import { Skeleton } from "@shared/components";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@shared/components";
 import { usePortfolio } from "@shared/hooks";
 import { usePortfolioComposition } from "@shared/hooks";
 import {
@@ -44,6 +45,7 @@ import {
   importInventoryAsInvestments,
   resolveMetricsScopeFromPreferences,
   fetchCsFloatApiKeyStatus,
+  updateCsFloatApiKey,
   toggleExcludeInvestment,
   updatePortfolioPreferences,
 } from "@shared/lib";
@@ -51,6 +53,8 @@ import { BREAKPOINTS, UI } from "@shared/lib";
 import { useKeyboard } from "@shared/hooks";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { runDesktopSyncNowIfDue } from "@shared/lib/desktopSync.js";
+import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
+import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 
 function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -116,6 +120,7 @@ const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
+const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "matching", "management"];
 
 function readStartupWelcomeDismissed() {
   if (typeof window === "undefined") {
@@ -153,12 +158,28 @@ function normalizeBucket(value, fallback = "investment") {
 }
 
 function resolveDesktopRuntimeUserId(user, fallback = 1) {
-  const candidate = user?.id ?? user?.userId ?? fallback;
-  const parsed = Number(candidate);
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return String(Math.floor(parsed));
+  const fallbackId = String(fallback || 1).trim() || "1";
+  const candidate = user?.userId ?? user?.id ?? fallbackId;
+  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
+  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
+    return raw;
   }
-  return String(fallback);
+  return fallbackId;
+}
+
+function normalizeCsFloatApiKeyInput(value) {
+  let normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  normalized = normalized
+    .replace(/^["']|["']$/g, "")
+    .replace(/^bearer\s+/i, "")
+    .replace(/^csfloat[_-]?api[_-]?key\s*[:=]\s*/i, "")
+    .replace(/\s+/g, "");
+
+  return normalized;
 }
 
 async function readJourneyState() {
@@ -396,6 +417,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [journeyLoading, setJourneyLoading] = useState(true);
   const [journeyUserName, setJourneyUserName] = useState("");
   const [hasCsFloatKey, setHasCsFloatKey] = useState(false);
+  const [journeyApiKey, setJourneyApiKey] = useState("");
+  const [journeyApiKeySaving, setJourneyApiKeySaving] = useState(false);
+  const [journeyApiKeyError, setJourneyApiKeyError] = useState("");
+  const [journeyApiKeySuccess, setJourneyApiKeySuccess] = useState("");
+  const [journeyApiKeyHelper, setJourneyApiKeyHelper] = useState("");
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [isSteamSyncing, setIsSteamSyncing] = useState(false);
   const [steamSyncError, setSteamSyncError] = useState("");
@@ -469,20 +495,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
           fetchCsFloatApiKeyStatus(),
           getCurrentUser(),
         ]);
-        setJourneyState(savedJourney || { skipped: false });
+        setJourneyState(savedJourney && typeof savedJourney === "object" ? savedJourney : { skipped: false });
         setJourneyUserName(String(currentUser?.name || currentUser?.steamName || ""));
         const keyConnected = Boolean(keyStatus?.data?.hasKey || keyStatus?.data?.configured);
         setHasCsFloatKey(keyConnected);
-
-        if (keyConnected && !savedJourney?.completedAt) {
-          const completedJourney = {
-            ...(savedJourney || {}),
-            skipped: false,
-            completedAt: new Date().toISOString(),
-          };
-          setJourneyState(completedJourney);
-          await writeJourneyState(completedJourney);
-        }
       } catch (journeyError) {
         console.warn("Failed to load onboarding journey state", journeyError);
       } finally {
@@ -510,6 +526,40 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     void loadPortfolioPreferences();
   }, [isDesktopRuntime]);
+
+  useEffect(() => {
+    if (!isDesktopRuntime || typeof document === "undefined") {
+      return;
+    }
+
+    let active = true;
+    const root = document.documentElement;
+    const applyJourneyPalette = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        const palette = await deriveSteamPaletteFromUser(currentUser);
+        if (!active || !palette) {
+          return;
+        }
+        root.style.setProperty("--steam-shell-color-a", String(palette.colorA || ""));
+        root.style.setProperty("--steam-shell-color-b", String(palette.colorB || ""));
+        root.style.setProperty("--steam-shell-color-c", String(palette.colorC || ""));
+        root.style.setProperty("--steam-shell-color-d", String(palette.colorD || palette.colorB || ""));
+      } catch (paletteError) {
+        console.warn("Failed to apply journey palette", paletteError);
+      }
+    };
+
+    void applyJourneyPalette();
+    const intervalId = showSetupJourney ? window.setInterval(() => void applyJourneyPalette(), 120000) : null;
+
+    return () => {
+      active = false;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [isDesktopRuntime, journeyUserName, showSetupJourney]);
 
   useEffect(() => {
     const loadManagementInvestments = async () => {
@@ -665,6 +715,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
       });
       const imported = Number(syncResult?.imported || 0);
       const updated = Number(syncResult?.updated || 0);
+      const matchesSuggested = Number(syncResult?.matchesSuggested || 0);
       const syncedAt = new Date().toISOString();
       try {
         await runDesktopSyncNowIfDue({ force: true });
@@ -716,7 +767,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
         }));
       }
 
-      if (imported > 0 || updated > 0) {
+      if (imported > 0 || updated > 0 || matchesSuggested > 0) {
         await refreshPortfolio();
         setCompositionRefreshToken((current) => current + 1);
       }
@@ -738,10 +789,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
       try {
         const config = await window.electronAPI.serverConfig.get();
         const configured = Boolean(String(config?.serverUrl || "").trim());
+        const normalizedHost = normalizeServerHostInput(config?.serverUrl || "");
         setServerSetup({
           loading: false,
           configured,
-          serverUrl: String(config?.serverUrl || ""),
+          serverUrl: normalizedHost || String(config?.serverUrl || ""),
         });
       } catch {
         setServerSetup({ loading: false, configured: false, serverUrl: "" });
@@ -1023,6 +1075,28 @@ export function PortfolioPage({ initialTab = "overview" }) {
     const price = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
     return !Number.isFinite(price) || price <= 0;
   }).length;
+  const managementQuickHints = [
+    {
+      id: "matching",
+      title: "Matching",
+      text: "Verknuepfe Steam-Items mit CSFloat-Kaeufen fuer korrekte Kaufpreise und Historie.",
+    },
+    {
+      id: "prices",
+      title: "Preise",
+      text: "Ergaenze fehlende Einkaufspreise fuer saubere ROI- und Gewinnwerte.",
+    },
+    {
+      id: "exclude",
+      title: "Exclude",
+      text: "Blende Positionen aus Kennzahlen aus, ohne Daten zu loeschen.",
+    },
+    {
+      id: "sync",
+      title: "Sync",
+      text: "Starte manuell oder automatisch neue Imports, wenn sich dein Steam-Inventar geaendert hat.",
+    },
+  ];
 
   const toggleClusterExpanded = (clusterId) => {
     setExpandedClusters((current) => ({
@@ -1400,55 +1474,149 @@ export function PortfolioPage({ initialTab = "overview" }) {
   );
   const journeySteps = [
     {
-      id: "steam",
-      label: "Steam verbunden",
-      done: Boolean(!authRequired),
+      id: "server",
+      label: "Server-Verbindung eingerichtet",
+      done: Boolean(serverSetup.configured),
     },
     {
-      id: "inventory",
-      label: "Steam-Items importiert",
-      done: steamInventoryItems.length > 0,
+      id: "import_defaults",
+      label: "Steam-Importziel bestaetigt",
+      done: Boolean(journeyState?.importBucketConfirmedAt),
     },
     {
-      id: "csfloat",
-      label: "CSFloat Key hinterlegt",
+      id: "csfloat_key",
+      label: "CSFloat API Key hinterlegt",
       done: hasCsFloatKey,
+    },
+    {
+      id: "csfloat_import",
+      label: "CSFloat-Import entschieden",
+      done: Boolean(journeyState?.csfloatImportCompletedAt || journeyState?.csfloatImportSkippedAt),
     },
     {
       id: "matching",
       label: "Matching geprueft",
-      done: matchingSuggestedCount === 0,
+      done: Boolean(journeyState?.matchingReviewedAt) || matchingSuggestedCount === 0,
+    },
+    {
+      id: "management",
+      label: "Verwaltung-Hinweise gesehen",
+      done: Boolean(journeyState?.managementHintsSeenAt),
     },
   ];
   const completedJourneySteps = journeySteps.filter((step) => step.done).length;
+  const journeyStarted = Boolean(journeyState?.startedAt);
+  const firstIncompleteJourneyStep =
+    journeySteps.find((step) => !step.done)?.id || JOURNEY_STEP_ORDER[JOURNEY_STEP_ORDER.length - 1];
+  const storedJourneyStepId = String(journeyState?.currentStepId || "").trim();
+  const activeJourneyStepId =
+    journeyStarted && JOURNEY_STEP_ORDER.includes(storedJourneyStepId)
+      ? storedJourneyStepId
+      : journeyStarted
+        ? firstIncompleteJourneyStep
+        : "intro";
   const showJourneyBanner =
     !journeyLoading &&
-    !hasCsFloatKey &&
     !journeyState?.skipped &&
     !journeyState?.completedAt;
-  const showSetupJourney = isDesktopRuntime && showJourneyBanner;
+  const showSetupJourney = isDesktopRuntime && showJourneyBanner && activeTab !== "management";
   const showJourneyBannerLegacy = false;
-  const journeyStarted = Boolean(journeyState?.startedAt);
-
-  const handleSkipJourney = async () => {
+  const journeyProgressPercent =
+    journeySteps.length > 0 ? Math.round((completedJourneySteps / journeySteps.length) * 100) : 0;
+  const updateJourneyState = async (patch) => {
     const nextState = {
       ...journeyState,
-      skipped: true,
-      skippedAt: new Date().toISOString(),
+      ...patch,
     };
     setJourneyState(nextState);
     await writeJourneyState(nextState);
+    return nextState;
+  };
+  const resolveNextJourneyStepId = (stepId) => {
+    const currentIndex = JOURNEY_STEP_ORDER.indexOf(stepId);
+    if (currentIndex < 0) {
+      return firstIncompleteJourneyStep;
+    }
+    if (currentIndex >= JOURNEY_STEP_ORDER.length - 1) {
+      return JOURNEY_STEP_ORDER[JOURNEY_STEP_ORDER.length - 1];
+    }
+    return JOURNEY_STEP_ORDER[currentIndex + 1];
+  };
+  const resolvePreviousJourneyStepId = (stepId) => {
+    const currentIndex = JOURNEY_STEP_ORDER.indexOf(stepId);
+    if (currentIndex <= 0) {
+      return JOURNEY_STEP_ORDER[0];
+    }
+    return JOURNEY_STEP_ORDER[currentIndex - 1];
+  };
+
+  const handleSkipJourney = async () => {
+    await updateJourneyState({
+      skipped: true,
+      skippedAt: new Date().toISOString(),
+    });
   };
   const handleStartJourney = async () => {
     if (journeyStarted) {
       return;
     }
-    const nextState = {
-      ...journeyState,
+    await updateJourneyState({
+      skipped: false,
       startedAt: new Date().toISOString(),
-    };
-    setJourneyState(nextState);
-    await writeJourneyState(nextState);
+      currentStepId: serverSetup.configured ? firstIncompleteJourneyStep : "server",
+    });
+  };
+  const handleGoToJourneyStep = async (stepId) => {
+    if (!JOURNEY_STEP_ORDER.includes(stepId)) {
+      return;
+    }
+    await updateJourneyState({
+      currentStepId: stepId,
+    });
+  };
+  const handleGoBackJourneyStep = async () => {
+    if (!journeyStarted || activeJourneyStepId === "intro") {
+      return;
+    }
+    await handleGoToJourneyStep(resolvePreviousJourneyStepId(activeJourneyStepId));
+  };
+  const handleGoNextJourneyStep = async () => {
+    if (!journeyStarted || activeJourneyStepId === "intro") {
+      return;
+    }
+    await handleGoToJourneyStep(resolveNextJourneyStepId(activeJourneyStepId));
+  };
+  const handleConfirmImportDefaultsStep = async () => {
+    await updateJourneyState({
+      importBucketConfirmedAt: new Date().toISOString(),
+      currentStepId: resolveNextJourneyStepId("import_defaults"),
+    });
+  };
+  const handleMarkCsFloatImportSkipped = async () => {
+    await updateJourneyState({
+      csfloatImportSkippedAt: new Date().toISOString(),
+      currentStepId: resolveNextJourneyStepId("csfloat_import"),
+    });
+  };
+  const handleMarkMatchingReviewed = async () => {
+    await updateJourneyState({
+      matchingReviewedAt: new Date().toISOString(),
+      currentStepId: resolveNextJourneyStepId("matching"),
+    });
+  };
+  const handleManagementHintsSeen = async () => {
+    await updateJourneyState({
+      managementHintsSeenAt: new Date().toISOString(),
+    });
+  };
+  const handleCompleteJourney = async () => {
+    await updateJourneyState({
+      skipped: false,
+      completedAt: new Date().toISOString(),
+      currentStepId: JOURNEY_STEP_ORDER[JOURNEY_STEP_ORDER.length - 1],
+    });
+    setActiveTab("management");
+    setManagementSection("matching");
   };
 
   const handleRefreshCsFloatStatus = async () => {
@@ -1456,17 +1624,80 @@ export function PortfolioPage({ initialTab = "overview" }) {
       const keyStatus = await fetchCsFloatApiKeyStatus();
       const keyConnected = Boolean(keyStatus?.data?.hasKey || keyStatus?.data?.configured);
       setHasCsFloatKey(keyConnected);
-      if (keyConnected) {
-        const nextState = {
-          ...journeyState,
-          skipped: false,
-          completedAt: new Date().toISOString(),
-        };
-        setJourneyState(nextState);
-        await writeJourneyState(nextState);
+      if (keyConnected && journeyStarted && activeJourneyStepId === "csfloat_key") {
+        await updateJourneyState({
+          currentStepId: resolveNextJourneyStepId("csfloat_key"),
+        });
       }
+      return keyConnected;
     } catch (statusError) {
       console.warn("Failed to refresh CSFloat key status", statusError);
+      return false;
+    }
+  };
+  const handleSaveJourneyCsFloatKey = async () => {
+    const normalizedKey = normalizeCsFloatApiKeyInput(journeyApiKey);
+    if (!normalizedKey) {
+      setJourneyApiKeyError("Bitte einen gueltigen CSFloat API Key eingeben.");
+      setJourneyApiKeySuccess("");
+      setJourneyApiKeyHelper("");
+      return;
+    }
+
+    if (normalizedKey.length < 20) {
+      setJourneyApiKeyError("Der CSFloat API Key wirkt unvollstaendig. Bitte kopiere den kompletten Key.");
+      setJourneyApiKeySuccess("");
+      setJourneyApiKeyHelper(`Aktuell erkannt: ${normalizedKey.length} Zeichen`);
+      return;
+    }
+
+    try {
+      setJourneyApiKeySaving(true);
+      setJourneyApiKeyError("");
+      setJourneyApiKeySuccess("");
+      setJourneyApiKeyHelper(`Speichere ${normalizedKey.length} Zeichen...`);
+      await updateCsFloatApiKey(normalizedKey);
+      setJourneyApiKey("");
+      setJourneyApiKeySuccess("CSFloat API Key wurde gespeichert.");
+      setJourneyApiKeyHelper("Key erfolgreich gespeichert.");
+      const keyConnected = await handleRefreshCsFloatStatus();
+      if (keyConnected) {
+        await updateJourneyState({
+          csfloatKeySavedAt: new Date().toISOString(),
+          currentStepId: resolveNextJourneyStepId("csfloat_key"),
+        });
+      }
+    } catch (error) {
+      setJourneyApiKeyError(error?.message || "CSFloat API Key konnte nicht gespeichert werden.");
+      setJourneyApiKeySuccess("");
+      setJourneyApiKeyHelper("");
+    } finally {
+      setJourneyApiKeySaving(false);
+    }
+  };
+  const handlePasteJourneyCsFloatKey = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
+      setJourneyApiKeyError("Zwischenablage ist in dieser Umgebung nicht verfuegbar.");
+      setJourneyApiKeySuccess("");
+      setJourneyApiKeyHelper("");
+      return;
+    }
+
+    try {
+      const rawClipboard = await navigator.clipboard.readText();
+      const normalized = normalizeCsFloatApiKeyInput(rawClipboard);
+      setJourneyApiKey(normalized);
+      setJourneyApiKeyError("");
+      setJourneyApiKeySuccess("");
+      if (!normalized) {
+        setJourneyApiKeyHelper("Zwischenablage war leer oder enthielt keinen verarbeitbaren Key.");
+        return;
+      }
+      setJourneyApiKeyHelper(`Key aus Zwischenablage erkannt (${normalized.length} Zeichen).`);
+    } catch {
+      setJourneyApiKeyError("Konnte nicht auf die Zwischenablage zugreifen.");
+      setJourneyApiKeySuccess("");
+      setJourneyApiKeyHelper("");
     }
   };
   const handleToggleAutoSync = async () => {
@@ -1507,12 +1738,20 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   return (
     <div
-      className="min-h-screen bg-background font-sans text-foreground pb-20 touch-pan-y"
+      className={`min-h-screen font-sans text-foreground pb-20 touch-pan-y ${
+        showSetupJourney ? "steam-startup-shell" : "bg-background"
+      }`}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8 p-4 sm:p-6 md:p-8">
+      <div
+        className={
+          showSetupJourney
+            ? "mx-auto w-full max-w-5xl space-y-8 p-4 pb-12 pt-8 sm:p-8"
+            : "mx-auto max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-6 md:p-8"
+        }
+      >
         {/* Mobile Header - nur auf Mobile sichtbar */}
         <header className="flex sm:hidden items-center justify-between">
           <h1 className="text-lg font-bold tracking-tight text-primary">CS Investor Hub</h1>
@@ -1608,190 +1847,467 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {showSetupJourney ? (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardHeader>
-              <CardTitle className="text-xl">Willkommen{journeyUserName ? `, ${journeyUserName}` : ""}</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Deine Steam-Anmeldung ist erfolgreich. Lass uns jetzt die Einrichtung sauber abschliessen.
+          <Card className="relative overflow-hidden border-white/15 bg-slate-950/58 text-slate-100 shadow-2xl backdrop-blur-xl">
+            <CardHeader className="space-y-2 pb-3">
+              <CardTitle className="text-2xl tracking-tight text-slate-50">
+                Setup Journey{journeyUserName ? ` fuer ${journeyUserName}` : ""}
+              </CardTitle>
+              <p className="text-sm text-slate-300">
+                Wir teilen alles in klare Schritte auf. Du kannst spaeter in den Einstellungen jeden Punkt wieder aendern.
               </p>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              {!serverSetup.loading && !serverSetup.configured ? (
-                <div className="space-y-3 rounded-md border border-amber-300/50 bg-amber-500/5 p-3">
-                  <p className="font-medium">Schritt 1: Server-Verbindung einrichten</p>
-                  <p className="text-xs text-muted-foreground">
-                    Fuer Sync und serverseitige Preisdaten benoetigt die Desktop-App eine Server-URL.
-                  </p>
-                  {serverSetupError ? (
-                    <p className="text-xs text-destructive">{serverSetupError}</p>
-                  ) : null}
-                  {serverSetupMessage ? (
-                    <p className="text-xs text-emerald-700 dark:text-emerald-300">{serverSetupMessage}</p>
-                  ) : null}
-                  <input
-                    type="text"
-                    value={serverSetup.serverUrl}
-                    onChange={(event) => {
-                      setServerSetup((current) => ({ ...current, serverUrl: event.target.value }));
-                      setServerSetupError("");
-                      setServerSetupMessage("");
-                    }}
-                    placeholder="https://dein-server.example.com"
-                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            <CardContent className="space-y-6 text-sm">
+              <div className="space-y-3 rounded-xl border border-white/15 bg-white/5 p-4">
+                <div className="flex items-center justify-between text-xs text-slate-300">
+                  <span>Fortschritt</span>
+                  <span>{journeyProgressPercent}%</span>
+                </div>
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/15">
+                  <div
+                    className={`h-full rounded-full bg-cyan-300 transition-[width] duration-500 ${journeyProgressPercent < 100 ? "steam-progress-pulse" : ""}`}
+                    style={{ width: `${journeyProgressPercent}%` }}
                   />
+                </div>
+                <div className="grid gap-2 pt-1 sm:grid-cols-2">
+                  {journeySteps.map((step) => (
+                    <label
+                      key={step.id}
+                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
+                        step.done
+                          ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-200"
+                          : "border-white/15 bg-slate-900/40 text-slate-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={step.done}
+                        readOnly
+                        disabled
+                        className="h-4 w-4 cursor-default accent-emerald-400"
+                      />
+                      <span>{step.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {!journeyStarted ? (
+                <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                  <p className="text-slate-200">
+                    Reihenfolge: Login, Server, Steam-Importziel, CSFloat-Key, CSFloat-Import, Matching, Verwaltung.
+                  </p>
                   <div className="flex flex-wrap items-center gap-2">
+                    <Button onClick={() => void handleStartJourney()}>Journey starten</Button>
                     <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={serverSetupTesting || !serverSetup.serverUrl.trim()}
-                      onClick={async () => {
-                        try {
-                          setServerSetupTesting(true);
-                          setServerSetupError("");
-                          setServerSetupMessage("");
-                          const result = await window.electronAPI.serverConfig.test(serverSetup.serverUrl.trim());
-                          if (result?.ok) {
-                            setServerSetupMessage(result?.message || "Verbindung erfolgreich.");
-                          } else {
-                            setServerSetupError(result?.message || "Verbindung fehlgeschlagen.");
-                          }
-                        } catch (error) {
-                          setServerSetupError(error?.message || "Verbindungstest fehlgeschlagen.");
-                        } finally {
-                          setServerSetupTesting(false);
-                        }
-                      }}
-                    >
-                      {serverSetupTesting ? "Teste..." : "Verbindung testen"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={serverSetupSaving || !serverSetup.serverUrl.trim()}
-                      onClick={async () => {
-                        try {
-                          setServerSetupSaving(true);
-                          setServerSetupError("");
-                          setServerSetupMessage("");
-                          await window.electronAPI.serverConfig.set({
-                            serverUrl: serverSetup.serverUrl.trim(),
-                          });
-                          setServerSetup((current) => ({ ...current, configured: true }));
-                          setServerSetupMessage("Server-URL gespeichert.");
-                        } catch (error) {
-                          setServerSetupError(error?.message || "Server-URL konnte nicht gespeichert werden.");
-                        } finally {
-                          setServerSetupSaving(false);
-                        }
-                      }}
-                    >
-                      {serverSetupSaving ? "Speichert..." : "Speichern"}
-                    </Button>
-                    <Button
-                      size="sm"
                       variant="ghost"
-                      onClick={() => navigate("/settings", { replace: true })}
+                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      onClick={() => void handleSkipJourney()}
                     >
-                      Erweiterte Einstellungen
+                      Ueberspringen
                     </Button>
                   </div>
                 </div>
               ) : null}
 
-              {!journeyStarted ? (
-                <div className="space-y-3">
-                  <p>Wir fuehren dich durch Steam-Import, CSFloat-Key und Matching-Konfiguration.</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button onClick={() => void handleStartJourney()}>Setup Journey starten</Button>
-                    <Button variant="ghost" onClick={() => void handleSkipJourney()}>
-                      Journey ueberspringen
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p>
-                    Naechster Schritt: CSFloat verbinden:
-                    <span className="font-medium">{" "}CSFloat {"->"} Profile {"->"} Developer {"->"} New Key</span>.
-                  </p>
-                  <div className="space-y-1 rounded-md border bg-background/70 p-2">
-                    <p className="text-xs font-semibold">
-                      Fortschritt: {completedJourneySteps}/{journeySteps.length} Schritte
-                    </p>
-                    {journeySteps.map((step) => (
-                      <p key={step.id} className="text-xs text-muted-foreground">
-                        {step.done ? "[x]" : "[ ]"} {step.label}
+              {journeyStarted ? (
+                <div key={activeJourneyStepId} className="journey-step-panel space-y-4">
+                  {activeJourneyStepId === "server" ? (
+                    <div className="space-y-4 rounded-xl border border-amber-300/35 bg-amber-500/10 p-4">
+                      <div>
+                        <p className="font-semibold text-amber-100">1. Server-Verbindung</p>
+                        <p className="mt-1 text-xs text-amber-200/90">
+                          Diese URL wird fuer Sync und serverseitige Preisdaten benoetigt.
+                        </p>
+                      </div>
+                      {serverSetupError ? <p className="text-xs text-red-200">{serverSetupError}</p> : null}
+                      {serverSetupMessage ? <p className="text-xs text-emerald-200">{serverSetupMessage}</p> : null}
+                        <input
+                          type="text"
+                          value={serverSetup.serverUrl}
+                        onChange={(event) => {
+                          setServerSetup((current) => ({ ...current, serverUrl: event.target.value }));
+                          setServerSetupError("");
+                          setServerSetupMessage("");
+                          }}
+                          onBlur={() => {
+                            const normalized = normalizeServerHostInput(serverSetup.serverUrl);
+                            if (normalized && normalized !== serverSetup.serverUrl) {
+                              setServerSetup((current) => ({ ...current, serverUrl: normalized }));
+                            }
+                          }}
+                          placeholder="cs2.clustercontrol.cc"
+                          className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100 placeholder:text-slate-400"
+                        />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          disabled={serverSetupTesting || !serverSetup.serverUrl.trim()}
+                          onClick={async () => {
+                            try {
+                              const normalizedHost = normalizeServerHostInput(serverSetup.serverUrl);
+                              if (!normalizedHost) {
+                                setServerSetupError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                                return;
+                              }
+                              setServerSetupTesting(true);
+                              setServerSetupError("");
+                              setServerSetupMessage("");
+                              const result = await window.electronAPI.serverConfig.test(normalizedHost);
+                              if (result?.ok) {
+                                setServerSetup((current) => ({ ...current, serverUrl: normalizedHost }));
+                                setServerSetupMessage(result?.message || "Verbindung erfolgreich.");
+                              } else {
+                                setServerSetupError(result?.message || "Verbindung fehlgeschlagen.");
+                              }
+                            } catch (error) {
+                              setServerSetupError(error?.message || "Verbindungstest fehlgeschlagen.");
+                            } finally {
+                              setServerSetupTesting(false);
+                            }
+                          }}
+                        >
+                          {serverSetupTesting ? "Teste..." : "Verbindung testen"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={serverSetupSaving || !serverSetup.serverUrl.trim()}
+                          onClick={async () => {
+                            try {
+                              const normalizedHost = normalizeServerHostInput(serverSetup.serverUrl);
+                              if (!normalizedHost) {
+                                setServerSetupError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                                return;
+                              }
+                              setServerSetupSaving(true);
+                              setServerSetupError("");
+                              setServerSetupMessage("");
+                              await window.electronAPI.serverConfig.set({
+                                serverUrl: normalizedHost,
+                              });
+                              setServerSetup((current) => ({ ...current, configured: true, serverUrl: normalizedHost }));
+                              setServerSetupMessage("Server-URL gespeichert.");
+                              await handleGoNextJourneyStep();
+                            } catch (error) {
+                              setServerSetupError(error?.message || "Server-URL konnte nicht gespeichert werden.");
+                            } finally {
+                              setServerSetupSaving(false);
+                            }
+                          }}
+                        >
+                          {serverSetupSaving ? "Speichert..." : "Speichern"}
+                        </Button>
+                        {serverSetup.configured ? (
+                          <Button size="sm" onClick={() => void handleGoNextJourneyStep()}>
+                            Weiter
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  {activeJourneyStepId === "import_defaults" ? (
+                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-100">2. Ziel fuer Steam-Items waehlen</p>
+                        <p className="mt-1 text-xs text-slate-300">
+                          Kleiner Hinweis: Das kannst du spaeter jederzeit in den Einstellungen aendern.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-300">Steam-Import</label>
+                          <select
+                            className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100"
+                            value={portfolioPreferences.steamImportBucket}
+                            onChange={async (event) => {
+                              const updated = await updatePortfolioPreferences({
+                                steamImportBucket: event.target.value,
+                              });
+                              setPortfolioPreferences(updated);
+                            }}
+                          >
+                            <option value="inventory">In Inventar einsortieren</option>
+                            <option value="investment">In Investments einsortieren</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-300">CSFloat-Import</label>
+                          <select
+                            className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100"
+                            value={portfolioPreferences.csfloatImportBucket}
+                            onChange={async (event) => {
+                              const updated = await updatePortfolioPreferences({
+                                csfloatImportBucket: event.target.value,
+                              });
+                              setPortfolioPreferences(updated);
+                            }}
+                          >
+                            <option value="investment">In Investments einsortieren</option>
+                            <option value="inventory">In Inventar einsortieren</option>
+                          </select>
+                        </div>
+                      </div>
+                      <label className="flex items-start gap-3 rounded-md border border-white/15 bg-slate-900/40 p-3 text-xs text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(journeyState?.importBucketConfirmedAt)}
+                          onChange={(event) => {
+                            if (event.target.checked) {
+                              void handleConfirmImportDefaultsStep();
+                            }
+                          }}
+                          className="mt-0.5 h-4 w-4 accent-cyan-400"
+                        />
+                        <span>Importziel verstanden und bestaetigt.</span>
+                      </label>
+                    </div>
+                  ) : null}
+                  {activeJourneyStepId === "csfloat_key" ? (
+                    <div className="space-y-4 rounded-xl border border-cyan-300/30 bg-cyan-500/10 p-4">
+                      <div>
+                        <p className="font-semibold text-cyan-100">3. CSFloat API Key hinterlegen</p>
+                        <p className="mt-1 text-xs text-cyan-100/90">
+                          Der Key wird nur lokal und verschluesselt gespeichert. Nie im Web-Build und nie auf dem Server.
+                        </p>
+                      </div>
+                      <ol className="list-decimal space-y-1 pl-4 text-xs text-cyan-100/90">
+                        <li>
+                          <a
+                            href="https://csfloat.com/"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-200"
+                          >
+                            csfloat.com
+                          </a>{" "}
+                          oeffnen
+                        </li>
+                        <li>
+                          Profil aufrufen:{" "}
+                          <a
+                            href="https://csfloat.com/profile"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-200"
+                          >
+                            csfloat.com/profile
+                          </a>
+                        </li>
+                        <li>Zum Reiter Developer gehen</li>
+                        <li>Neuen Schluessel erstellen und kopieren</li>
+                      </ol>
+                      <div className="rounded-md border border-amber-300/35 bg-amber-500/10 p-3 text-xs text-amber-100">
+                        Gib den Schluessel nicht weiter. Falls du einen Leak vermutest: alten Schluessel loeschen und neu
+                        erstellen. Du kannst den Key spaeter jederzeit in der Verwaltung aendern.
+                      </div>
+                      {journeyApiKeyError ? (
+                        <div className="rounded-md border border-red-300/35 bg-red-500/10 p-2 text-xs text-red-200">
+                          {journeyApiKeyError}
+                        </div>
+                      ) : null}
+                      {journeyApiKeySuccess ? (
+                        <div className="rounded-md border border-emerald-300/35 bg-emerald-500/10 p-2 text-xs text-emerald-200">
+                          {journeyApiKeySuccess}
+                        </div>
+                      ) : null}
+                      {journeyApiKeyHelper ? (
+                        <div className="rounded-md border border-cyan-300/35 bg-cyan-500/10 p-2 text-xs text-cyan-100">
+                          {journeyApiKeyHelper}
+                        </div>
+                      ) : null}
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-cyan-100">CSFloat API Key</label>
+                        <input
+                          type="password"
+                          value={journeyApiKey}
+                          onChange={(event) => {
+                            setJourneyApiKey(event.target.value);
+                            setJourneyApiKeyError("");
+                            setJourneyApiKeySuccess("");
+                            setJourneyApiKeyHelper("");
+                          }}
+                          onBlur={() => {
+                            const normalized = normalizeCsFloatApiKeyInput(journeyApiKey);
+                            if (normalized !== journeyApiKey) {
+                              setJourneyApiKey(normalized);
+                            }
+                          }}
+                          placeholder="CSFloat API Key..."
+                          className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100 placeholder:text-slate-400"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            disabled={journeyApiKeySaving || !normalizeCsFloatApiKeyInput(journeyApiKey)}
+                            className="bg-slate-100 text-slate-900 hover:bg-white disabled:bg-slate-500 disabled:text-slate-800"
+                            onClick={() => void handleSaveJourneyCsFloatKey()}
+                          >
+                            {journeyApiKeySaving ? "Speichert..." : "Key speichern"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                            onClick={() => void handlePasteJourneyCsFloatKey()}
+                          >
+                            Aus Zwischenablage einfuegen
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                            onClick={() => void handleRefreshCsFloatStatus()}
+                          >
+                            Status aktualisieren
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  {activeJourneyStepId === "csfloat_import" ? (
+                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-100">4. CSFloat-Import jetzt starten?</p>
+                        <p className="mt-1 text-xs text-slate-300">
+                          Beim Import siehst du direkt die Ladeanzeige im CSFloat-Sync-Dialog.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          onClick={() => {
+                            setIsCsFloatSyncOpen(true);
+                          }}
+                        >
+                          CSFloat-Import starten
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          onClick={() => void handleMarkCsFloatImportSkipped()}
+                        >
+                          Spaeter / Skip
+                        </Button>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Wenn du jetzt importierst, leiten wir dich danach direkt zum Matching-Schritt.
                       </p>
-                    ))}
+                    </div>
+                  ) : null}
+                  {activeJourneyStepId === "matching" ? (
+                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-100">5. Steam und CSFloat Matching pruefen</p>
+                        <p className="mt-1 text-xs text-slate-300">
+                          Offene Matching-Vorschlaege: <span className="font-semibold">{matchingSuggestedCount}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          onClick={() => {
+                            setActiveTab("management");
+                            setManagementSection("matching");
+                          }}
+                        >
+                          Matching in Verwaltung oeffnen
+                        </Button>
+                        <Button size="sm" onClick={() => void handleMarkMatchingReviewed()}>
+                          Matching geprueft
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {activeJourneyStepId === "management" ? (
+                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-100">6. Verwaltung kurz erklaert</p>
+                        <p className="mt-1 text-xs text-slate-300">
+                          Hier steuerst du Matching, Preise und Exclude-Logik fuer deine Items.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-200">Matching</p>
+                          <p className="mt-1 text-xs text-slate-300">Vorschlaege bestaetigen oder korrigieren.</p>
+                        </div>
+                        <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-200">Preise</p>
+                          <p className="mt-1 text-xs text-slate-300">Fehlende Einkaufswerte schnell nachpflegen.</p>
+                        </div>
+                        <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-200">Exclude</p>
+                          <p className="mt-1 text-xs text-slate-300">Positionen aus Kennzahlen ausblenden.</p>
+                        </div>
+                      </div>
+                      <label className="flex items-start gap-3 rounded-md border border-white/15 bg-slate-900/40 p-3 text-xs text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(journeyState?.managementHintsSeenAt)}
+                          onChange={(event) => {
+                            if (event.target.checked) {
+                              void handleManagementHintsSeen();
+                            }
+                          }}
+                          className="mt-0.5 h-4 w-4 accent-cyan-400"
+                        />
+                        <span>Hinweise verstanden.</span>
+                      </label>
+                      <Button
+                        onClick={() => void handleCompleteJourney()}
+                        disabled={!journeyState?.managementHintsSeenAt}
+                      >
+                        Setup abschliessen
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {journeyStarted ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      onClick={() => void handleGoBackJourneyStep()}
+                      disabled={activeJourneyStepId === JOURNEY_STEP_ORDER[0]}
+                    >
+                      Zurueck
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      onClick={() => navigate("/settings", { replace: true })}
+                    >
+                      Einstellungen
+                    </Button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button size="sm" variant="default" onClick={() => navigate("/settings", { replace: true })}>
-                      CSFloat Key hinterlegen
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => void handleRefreshCsFloatStatus()}>
-                      Ich habe verbunden
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => void handleSkipJourney()}>
-                      Journey ueberspringen
-                    </Button>
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2 rounded-md border bg-background/70 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Import- und KPI-Defaults
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Steam-Import</label>
-                    <select
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={portfolioPreferences.steamImportBucket}
-                      onChange={async (event) => {
-                        const updated = await updatePortfolioPreferences({
-                          steamImportBucket: event.target.value,
-                        });
-                        setPortfolioPreferences(updated);
-                      }}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      onClick={() => void handleSkipJourney()}
                     >
-                      <option value="inventory">In Inventar einsortieren</option>
-                      <option value="investment">In Investments einsortieren</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">CSFloat-Import</label>
-                    <select
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={portfolioPreferences.csfloatImportBucket}
-                      onChange={async (event) => {
-                        const updated = await updatePortfolioPreferences({
-                          csfloatImportBucket: event.target.value,
-                        });
-                        setPortfolioPreferences(updated);
-                      }}
-                    >
-                      <option value="investment">In Investments einsortieren</option>
-                      <option value="inventory">In Inventar einsortieren</option>
-                    </select>
+                      Journey beenden
+                    </Button>
+                    {activeJourneyStepId !== "management" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                        onClick={() => void handleGoNextJourneyStep()}
+                      >
+                        Schritt ueberspringen
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Portfolio-Kennzahlen</label>
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                    value={portfolioPreferences.metricsDisplayMode}
-                    onChange={async (event) => {
-                      const updated = await updatePortfolioPreferences({
-                        metricsDisplayMode: event.target.value,
-                      });
-                      setPortfolioPreferences(updated);
-                    }}
-                  >
-                    <option value="toggle_mode">Im Dashboard umschaltbar</option>
-                    <option value="investments_only">Immer nur Investments</option>
-                    <option value="always_all">Immer alles zusammen</option>
-                  </select>
-                </div>
-              </div>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
@@ -2108,6 +2624,26 @@ export function PortfolioPage({ initialTab = "overview" }) {
                       CSFloat Sync
                     </Button>
                   </div>
+                  <TooltipProvider delayDuration={140}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {managementQuickHints.map((hint) => (
+                        <Tooltip key={hint.id}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                              <span>{hint.title}</span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+                            {hint.text}
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </TooltipProvider>
                   {steamSyncError ? (
                     <p className="text-xs text-destructive">{steamSyncError}</p>
                   ) : null}
@@ -2116,25 +2652,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     pro App-Instanz und kann jederzeit deaktiviert werden.
                   </p>
                 </div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Steam API Hinweise</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-xs text-muted-foreground">
-                    <p>
-                      Valve/Steam ist Datenquelle dieser App, aber die App ist nicht offiziell von Valve
-                      unterstuetzt oder betrieben.
-                    </p>
-                    <p>
-                      Gespeichert werden nur Portfolio-relevante Itemdaten, Exclude-Status und optional von dir
-                      gesetzte Einkaufspreise. Es werden keine Steam-Passwoerter gespeichert.
-                    </p>
-                    <p>
-                      Preis- oder Importdaten werden nur im Rahmen der von dir genutzten Features abgerufen.
-                    </p>
-                  </CardContent>
-                </Card>
-
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant={managementSection === "matching" ? "default" : "outline"}
@@ -2584,7 +3101,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
           onClose={() => setIsCsFloatSyncOpen(false)}
           onSynced={async () => {
             await refreshPortfolio();
-            setActiveTab("inventory");
+            setCompositionRefreshToken((current) => current + 1);
+            const nextState = {
+              ...journeyState,
+              skipped: false,
+              csfloatImportCompletedAt: new Date().toISOString(),
+              csfloatImportSkippedAt: null,
+              currentStepId: "matching",
+            };
+            setJourneyState(nextState);
+            await writeJourneyState(nextState);
+            setActiveTab("management");
+            setManagementSection("matching");
             setIsCsFloatSyncOpen(false);
           }}
         />

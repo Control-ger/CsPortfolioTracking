@@ -9,12 +9,13 @@ export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
 });
 
 function resolveDesktopRuntimeUserId(user, fallback = 1) {
-  const candidate = user?.id ?? user?.userId ?? fallback;
-  const parsed = Number(candidate);
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return String(Math.floor(parsed));
+  const fallbackId = String(fallback || 1).trim() || "1";
+  const candidate = user?.userId ?? user?.id ?? fallbackId;
+  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
+  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
+    return raw;
   }
-  return String(fallback);
+  return fallbackId;
 }
 
 function normalizeBucket(value, fallback = "investment") {
