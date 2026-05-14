@@ -256,6 +256,39 @@ function getItemNameKey(item) {
     .toLowerCase();
 }
 
+function hasSourceIdOverlap(a = [], b = []) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || b.length === 0) {
+    return false;
+  }
+  const left = new Set(a.map((entry) => String(entry || "").trim()).filter(Boolean));
+  return b.some((entry) => left.has(String(entry || "").trim()));
+}
+
+function resolveLiveClusterItem(baseItem, rows = []) {
+  if (!baseItem || !Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  const exactMatch = rows.find((row) => row.id === baseItem.id);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const baseSourceIds = Array.isArray(baseItem.sourceInvestmentIds)
+    ? baseItem.sourceInvestmentIds
+    : [];
+  if (baseSourceIds.length > 0) {
+    const sourceMatch = rows.find((row) =>
+      hasSourceIdOverlap(baseSourceIds, Array.isArray(row?.sourceInvestmentIds) ? row.sourceInvestmentIds : []),
+    );
+    if (sourceMatch) {
+      return sourceMatch;
+    }
+  }
+
+  return null;
+}
+
 function buildManagementClusters(items = []) {
   const groups = new Map();
   items.forEach((item) => {
@@ -534,6 +567,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     let active = true;
     const root = document.documentElement;
+    const isJourneyVisible =
+      !journeyLoading &&
+      !journeyState?.skipped &&
+      !journeyState?.completedAt &&
+      activeTab !== "management";
+
     const applyJourneyPalette = async () => {
       try {
         const currentUser = await getCurrentUser();
@@ -551,7 +590,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     };
 
     void applyJourneyPalette();
-    const intervalId = showSetupJourney ? window.setInterval(() => void applyJourneyPalette(), 120000) : null;
+    const intervalId = isJourneyVisible ? window.setInterval(() => void applyJourneyPalette(), 120000) : null;
 
     return () => {
       active = false;
@@ -559,7 +598,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
         window.clearInterval(intervalId);
       }
     };
-  }, [isDesktopRuntime, journeyUserName, showSetupJourney]);
+  }, [activeTab, isDesktopRuntime, journeyLoading, journeyState?.completedAt, journeyState?.skipped, journeyUserName]);
 
   useEffect(() => {
     const loadManagementInvestments = async () => {
@@ -838,7 +877,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
       return null;
     }
 
-    return enrichedInvestments.find((investment) => investment.id === selectedItem.id);
+    return resolveLiveClusterItem(selectedItem, enrichedInvestments);
   }, [selectedItem, enrichedInvestments]);
 
   useEffect(() => {
@@ -2529,7 +2568,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
             <div className="hidden md:col-span-1 md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
               <ItemDetailPanel
-                item={selectedItem}
+                item={selectedItemWithLive || selectedItem}
                 history={selectedItemHistory}
                 historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
@@ -2539,19 +2578,23 @@ export function PortfolioPage({ initialTab = "overview" }) {
             </div>
 
             {modals.map((modal) =>
-              modal.type === "itemDetail" ? (
-                <ItemDetailsModal
-                  key={modal.id}
-                  isOpen={true}
-                  onClose={() => closeModal(modal.id)}
-                  item={modal.data.item}
-                  history={selectedItemHistory}
-                  historyLoading={selectedItemHistoryLoading}
-                  onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
-                  onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                  canToggleExclude={isDesktopRuntime}
-                />
-              ) : null,
+              modal.type === "itemDetail" ? (() => {
+                const liveModalItem =
+                  resolveLiveClusterItem(modal?.data?.item, enrichedInvestments) || modal?.data?.item || null;
+                return (
+                  <ItemDetailsModal
+                    key={modal.id}
+                    isOpen={true}
+                    onClose={() => closeModal(modal.id)}
+                    item={liveModalItem}
+                    history={selectedItemHistory}
+                    historyLoading={selectedItemHistoryLoading}
+                    onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
+                    onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
+                    canToggleExclude={isDesktopRuntime}
+                  />
+                );
+              })() : null,
             )}
           </TabsContent>
 
