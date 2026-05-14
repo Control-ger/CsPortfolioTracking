@@ -20,25 +20,27 @@ CS Investor Hub ist ein React + PHP Projekt zum Tracking meiner CS2 Portfolio- u
 
 Die Screenshots liegen unter `docs/screenshots/` und werden hier mit relativen Pfaden eingebunden.
 
-### Dashboard
+### Desktop App (Dark Mode)
 
-![Dashboard (Day)](docs/screenshots/dashboard_day.png)
+![Welcome (Dark)](docs/screenshots/electron-native-fixed/00-welcome.png)
 
-![Dashboard Mobile (Day)](docs/screenshots/dashboard_mobile_day.png)
+![Dashboard Overview (Dark)](docs/screenshots/electron-native-fixed/01-dashboard-overview.png)
 
-### Watchlist
+![Inventar Item Details (Dark)](docs/screenshots/electron-native-fixed/09-inventory-item-details.png)
 
-![Watchlist (Night)](docs/screenshots/watchlist_night.png)
+![Watchlist Item Details (Dark)](docs/screenshots/electron-native-fixed/10-watchlist-item-details.png)
 
-### Inventory
+![Verwaltung (Dark)](docs/screenshots/electron-native-fixed/07-tab-verwaltung.png)
 
-![Inventory (Day)](docs/screenshots/inventory_day.png)
+![Settings (Dark)](docs/screenshots/electron-native-fixed/08-settings.png)
 
-![Inventory Mobile (Day)](docs/screenshots/inventory_mobile_day.png)
+### Desktop App (Light Mode)
 
-### Debug
+![Dashboard Overview (Light)](docs/screenshots/electron-native-light/01-dashboard-overview-light.png)
 
-![Debug (Night)](docs/screenshots/debug_night.png)
+![Settings (Light)](docs/screenshots/electron-native-light/06-settings-light.png)
+
+![Watchlist Item Details (Light)](docs/screenshots/electron-native-light/09-watchlist-item-details-light.png)
 
 ## Lokaler Start
 
