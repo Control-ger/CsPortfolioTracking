@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -22,14 +22,31 @@ export const ItemDetailPanel = ({
   historyLoading,
   onExcludeChange,
   onBucketChange,
+  onOverpayChange,
   canToggleExclude = true,
 }) => {
   const { formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
+  const [isOverpayLoading, setIsOverpayLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const [overpayEnabledDraft, setOverpayEnabledDraft] = useState(false);
+  const [overpayFloorDraft, setOverpayFloorDraft] = useState("");
+  const [overpayNoteDraft, setOverpayNoteDraft] = useState("");
   const excludeEnabled = canToggleExclude && typeof onExcludeChange === "function";
   const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
+  const overpayToggleEnabled = canToggleExclude && typeof onOverpayChange === "function";
+
+  useEffect(() => {
+    const enabled = Boolean(item?.overpayEnabled ?? item?.isOverpayCandidate);
+    const floorValue = Number(item?.overpayFloorEur);
+    setOverpayEnabledDraft(enabled);
+    setOverpayFloorDraft(
+      Number.isFinite(floorValue) && floorValue > 0 ? floorValue.toFixed(2) : "",
+    );
+    setOverpayNoteDraft(String(item?.overpayNote || ""));
+  }, [item?.id, item?.overpayEnabled, item?.isOverpayCandidate, item?.overpayFloorEur, item?.overpayNote]);
+
   if (!item)
     return (
         <div className="flex min-h-50 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-muted-foreground sm:min-h-75 sm:p-8">
@@ -73,6 +90,32 @@ export const ItemDetailPanel = ({
       : "investment";
     const nextBucket = currentBucket === "investment" ? "inventory" : "investment";
     await onBucketChange(item, nextBucket);
+  };
+
+  const handleOverpaySave = async () => {
+    if (!overpayToggleEnabled) {
+      return;
+    }
+
+    const parsedFloor = Number(overpayFloorDraft);
+    const normalizedFloor =
+      Number.isFinite(parsedFloor) && parsedFloor > 0
+        ? Number(parsedFloor.toFixed(2))
+        : null;
+    const payload = {
+      overpayEnabled: Boolean(overpayEnabledDraft),
+      overpayFloorEur: normalizedFloor,
+      overpayNote: String(overpayNoteDraft || "").trim() || null,
+    };
+
+    setIsOverpayLoading(true);
+    try {
+      await onOverpayChange(item, payload);
+    } catch (error) {
+      console.error("Failed to update overpay profile:", error);
+    } finally {
+      setIsOverpayLoading(false);
+    }
   };
 
   const stats6m = item.details?.stats6m;
@@ -142,6 +185,11 @@ export const ItemDetailPanel = ({
                   <Badge variant="outline" className="text-[10px] uppercase">
                     Funding: {item.fundingMode === "cash_in" ? "Cash-In" : "Wallet"}
                   </Badge>
+                  {(item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
+                    <Badge variant="outline" className="text-[10px] uppercase border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                      Overpay
+                    </Badge>
+                  ) : null}
                   {excludeEnabled ? (
                     <Button
                       variant="outline"
@@ -204,6 +252,11 @@ export const ItemDetailPanel = ({
                     {confidenceLabel ? ` (${confidenceLabel})` : ""}
                   </p>
                 ) : null}
+                {item.overpayApplied && Number.isFinite(Number(item.baseLivePrice)) ? (
+                  <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                    Overpay aktiv: Basis {formatPrice(item.baseLivePrice)} → Anzeige {formatPrice(item.livePrice)}
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-md border p-2 sm:p-3">
@@ -258,6 +311,56 @@ export const ItemDetailPanel = ({
                     >
                       Inspect Link
                     </a>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {overpayToggleEnabled || (item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
+                <div className="rounded-md border p-2 sm:p-3">
+                  <p className="text-[10px] uppercase text-muted-foreground">Float Overpay</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={overpayEnabledDraft}
+                        onChange={(event) => setOverpayEnabledDraft(event.target.checked)}
+                      />
+                      Overpay-Kandidat aktiv
+                    </label>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={overpayFloorDraft}
+                      onChange={(event) => setOverpayFloorDraft(event.target.value)}
+                      placeholder="Floor EUR (optional)"
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={overpayNoteDraft}
+                      onChange={(event) => setOverpayNoteDraft(event.target.value)}
+                      placeholder="Notiz (z. B. Tradeup-freundlicher Float)"
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    />
+                    {overpayToggleEnabled ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isOverpayLoading}
+                        onClick={() => void handleOverpaySave()}
+                        className="h-8 text-[11px] uppercase"
+                      >
+                        {isOverpayLoading ? "Speichert..." : "Overpay speichern"}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {Number.isFinite(Number(item?.overpayFloorEur)) ? (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Aktueller Floor: {formatPrice(Number(item.overpayFloorEur))}
+                    </p>
                   ) : null}
                 </div>
               ) : null}

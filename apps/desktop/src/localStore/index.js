@@ -396,6 +396,24 @@ export function createLocalStore(userDataPath) {
     return String(a) === String(b);
   }
 
+  function toBooleanFlag(value) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value === 1;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      return ["1", "true", "yes", "on"].includes(normalized);
+    }
+    return false;
+  }
+
+  function normalizeOverpayFloor(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return null;
+    }
+    return Number(numeric.toFixed(2));
+  }
+
   function normalizeNameForMatching(value) {
     const normalized = normalizeMarketName(value)
       .replace(/\bstattrak\u2122?\b/g, " ")
@@ -586,16 +604,13 @@ export function createLocalStore(userDataPath) {
           ? "investment"
           : "investment";
     const bucket = normalizeBucket(payload?.bucket, derivedBucket);
-    const excludedFlag = (() => {
-      const value = payload?.excluded ?? payload?.isExcluded;
-      if (typeof value === "boolean") return value;
-      if (typeof value === "number") return value === 1;
-      if (typeof value === "string") {
-        const normalized = value.trim().toLowerCase();
-        return ["1", "true", "yes", "on"].includes(normalized);
-      }
-      return false;
-    })();
+    const excludedFlag = toBooleanFlag(payload?.excluded ?? payload?.isExcluded);
+    const overpayEnabled = toBooleanFlag(
+      payload?.overpayEnabled ?? payload?.isOverpayCandidate ?? payload?.floatOverpayWorthy,
+    );
+    const overpayFloorEur = normalizeOverpayFloor(
+      payload?.overpayFloorEur ?? payload?.floatOverpayFloorEur,
+    );
     return {
       ...payload,
       id: row.id,
@@ -612,6 +627,10 @@ export function createLocalStore(userDataPath) {
       bucket,
       excluded: excludedFlag,
       isExcluded: excludedFlag,
+      overpayEnabled,
+      isOverpayCandidate: overpayEnabled,
+      overpayFloorEur,
+      overpayNote: String(payload?.overpayNote || "").trim() || null,
       revision: row.revision,
       dirty: Boolean(row.dirty),
       deleted: Boolean(row.deleted),
@@ -1302,10 +1321,20 @@ export function createLocalStore(userDataPath) {
             ? "investment"
             : "investment";
       const bucket = normalizeBucket(input.bucket, defaultBucket);
+      const overpayEnabled = toBooleanFlag(
+        input.overpayEnabled ?? input.isOverpayCandidate ?? input.floatOverpayWorthy,
+      );
+      const overpayFloorEur = normalizeOverpayFloor(
+        input.overpayFloorEur ?? input.floatOverpayFloorEur,
+      );
       const payload = {
         ...input,
         id,
         bucket,
+        overpayEnabled,
+        isOverpayCandidate: overpayEnabled,
+        overpayFloorEur,
+        overpayNote: String(input?.overpayNote || "").trim() || null,
         updatedAt,
       };
 
@@ -1371,6 +1400,32 @@ export function createLocalStore(userDataPath) {
           input?.excluded ??
           false,
         ),
+        overpayEnabled: Boolean(
+          updatedRow?.overpayEnabled ??
+          updatedRow?.isOverpayCandidate ??
+          payload.overpayEnabled ??
+          payload.isOverpayCandidate ??
+          false,
+        ),
+        isOverpayCandidate: Boolean(
+          updatedRow?.isOverpayCandidate ??
+          updatedRow?.overpayEnabled ??
+          payload.isOverpayCandidate ??
+          payload.overpayEnabled ??
+          false,
+        ),
+        overpayFloorEur:
+          normalizeOverpayFloor(
+            updatedRow?.overpayFloorEur ??
+            payload?.overpayFloorEur ??
+            input?.overpayFloorEur,
+          ) ?? null,
+        overpayNote: String(
+          updatedRow?.overpayNote ??
+          payload?.overpayNote ??
+          input?.overpayNote ??
+          "",
+        ).trim() || null,
       };
 
       appendOperation("upsert", "investment", id, operationPayload);

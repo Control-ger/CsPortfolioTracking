@@ -90,9 +90,22 @@ final class PortfolioService
             }
             $presentation = $presentationCache[$presentationCacheKey];
             $livePrice = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
+            $baseLivePrice = $livePrice;
+            $overpayProfile = $this->resolveOverpayProfile($investmentPayload);
             $priceSource = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
             $displayPrice = $livePrice ?? $buyPrice;
-            $isLive = $livePrice !== null;
+            $overpayApplied = false;
+            if ($overpayProfile['enabled'] && $overpayProfile['floorEur'] !== null) {
+                $overpayCandidatePrice = max($displayPrice, (float) $overpayProfile['floorEur']);
+                if ($overpayCandidatePrice > $displayPrice) {
+                    $overpayApplied = true;
+                }
+                $displayPrice = $overpayCandidatePrice;
+                if ($baseLivePrice !== null) {
+                    $livePrice = $overpayCandidatePrice;
+                }
+            }
+            $isLive = $baseLivePrice !== null;
             $roi = $buyPrice > 0 ? (($displayPrice - $buyPrice) / $buyPrice) * 100 : 0.0;
             $fundingMode = $this->normalizeFundingMode($investment['funding_mode'] ?? null);
             $totalInvested = $buyPrice * $quantity;
@@ -108,7 +121,7 @@ final class PortfolioService
 
             $changeMetrics = $this->buildChangeMetricsFromBaselines(
                 $itemId,
-                $livePrice,
+                $isLive ? $displayPrice : null,
                 $baseline24h,
                 $baseline7d,
                 $baseline30d
@@ -142,12 +155,18 @@ final class PortfolioService
                 'buyPrice' => $buyPrice,
                 'buyPriceUsd' => $buyPriceUsd,
                 'quantity' => $quantity,
+                'baseLivePrice' => $baseLivePrice,
                 'livePrice' => $livePrice,
                 'priceSource' => $priceSource,
                 'priceScope' => $presentation['priceScope'] ?? 'item',
                 'priceStrategy' => $presentation['priceStrategy'] ?? null,
                 'priceConfidence' => $presentation['priceConfidence'] ?? null,
                 'sampleSize' => $presentation['sampleSize'] ?? null,
+                'overpayEnabled' => $overpayProfile['enabled'],
+                'isOverpayCandidate' => $overpayProfile['enabled'],
+                'overpayFloorEur' => $overpayProfile['floorEur'],
+                'overpayNote' => $overpayProfile['note'],
+                'overpayApplied' => $overpayApplied,
                 'displayPrice' => $displayPrice,
                 'roi' => $roi,
                 'isLive' => $isLive,
@@ -609,6 +628,12 @@ final class PortfolioService
                     'instancePriceCount' => 0,
                     'priceStrategies' => [],
                     'priceConfidences' => [],
+                    'overpayEnabled' => false,
+                    'overpayApplied' => false,
+                    'overpayFloorEur' => null,
+                    'overpayNotes' => [],
+                    'livePriceWeightedSum' => 0.0,
+                    'livePriceWeightedQuantity' => 0,
                 ];
             }
 
@@ -625,6 +650,35 @@ final class PortfolioService
             $groups[$key]['change24hPercentWeighted'] += (float) (($row['change24hPercent'] ?? 0.0) * $quantity);
             $groups[$key]['change7dPercentWeighted'] += (float) (($row['change7dPercent'] ?? 0.0) * $quantity);
             $groups[$key]['change30dPercentWeighted'] += (float) (($row['change30dPercent'] ?? 0.0) * $quantity);
+            $rowOverpayEnabled = $this->toBooleanFlag($row['overpayEnabled'] ?? $row['isOverpayCandidate'] ?? false);
+            $rowOverpayApplied = $this->toBooleanFlag($row['overpayApplied'] ?? false);
+            $rowOverpayFloorEur = $this->normalizeOverpayFloorEur($row['overpayFloorEur'] ?? null);
+            $rowOverpayNote = trim((string) ($row['overpayNote'] ?? ''));
+            if ($rowOverpayEnabled) {
+                $groups[$key]['overpayEnabled'] = true;
+            }
+            if ($rowOverpayApplied) {
+                $groups[$key]['overpayApplied'] = true;
+            }
+            if ($rowOverpayFloorEur !== null) {
+                $currentOverpayFloor = $groups[$key]['overpayFloorEur'];
+                if ($currentOverpayFloor === null || $rowOverpayFloorEur > (float) $currentOverpayFloor) {
+                    $groups[$key]['overpayFloorEur'] = $rowOverpayFloorEur;
+                }
+            }
+            if ($rowOverpayNote !== '') {
+                $groups[$key]['overpayNotes'][$rowOverpayNote] = true;
+            }
+            $rowBaseLivePrice = null;
+            if (isset($row['baseLivePrice']) && is_numeric($row['baseLivePrice'])) {
+                $rowBaseLivePrice = (float) $row['baseLivePrice'];
+            } elseif (isset($row['livePrice']) && is_numeric($row['livePrice'])) {
+                $rowBaseLivePrice = (float) $row['livePrice'];
+            }
+            if ($rowBaseLivePrice !== null && $quantity > 0) {
+                $groups[$key]['livePriceWeightedSum'] += $rowBaseLivePrice * $quantity;
+                $groups[$key]['livePriceWeightedQuantity'] += $quantity;
+            }
             if (strtolower(trim((string) ($row['priceScope'] ?? 'item'))) === 'instance') {
                 $groups[$key]['instancePriceCount'] += 1;
             }
@@ -684,13 +738,26 @@ final class PortfolioService
             $change24hPercent = $group['change24hPercentWeighted'] / $quantity;
             $change7dPercent = $group['change7dPercentWeighted'] / $quantity;
             $change30dPercent = $group['change30dPercentWeighted'] / $quantity;
+            $baseLivePrice = $group['livePriceWeightedQuantity'] > 0
+                ? ($group['livePriceWeightedSum'] / $group['livePriceWeightedQuantity'])
+                : null;
+            $overpayNotes = array_keys((array) ($group['overpayNotes'] ?? []));
+            $resolvedOverpayNote = count($overpayNotes) === 1 ? $overpayNotes[0] : null;
 
             $result[] = array_merge($base, [
                 'quantity' => $quantity,
                 'buyPrice' => $buyPrice,
+                'baseLivePrice' => $baseLivePrice,
                 'livePrice' => isset($base['livePrice']) && $base['livePrice'] !== null ? $displayPrice : null,
                 'displayPrice' => $displayPrice,
                 'roi' => $roi,
+                'overpayEnabled' => (bool) ($group['overpayEnabled'] ?? false),
+                'isOverpayCandidate' => (bool) ($group['overpayEnabled'] ?? false),
+                'overpayFloorEur' => isset($group['overpayFloorEur']) && is_numeric($group['overpayFloorEur'])
+                    ? (float) $group['overpayFloorEur']
+                    : null,
+                'overpayApplied' => (bool) ($group['overpayApplied'] ?? false),
+                'overpayNote' => $resolvedOverpayNote,
                 'totalInvested' => $totalInvested,
                 'currentValue' => $currentValue,
                 'profitEuro' => $profitEuro,
@@ -854,6 +921,26 @@ final class PortfolioService
         return $this->investmentRepository->updateBucket($userId, $id, $this->normalizeBucket($bucket));
     }
 
+    public function updateInvestmentOverpayProfile(
+        int $userId = 1,
+        int $id = 0,
+        bool $overpayEnabled = false,
+        ?float $overpayFloorEur = null,
+        ?string $overpayNote = null
+    ): bool {
+        if ($id <= 0) {
+            return false;
+        }
+
+        return $this->investmentRepository->updateOverpayProfile(
+            $userId,
+            $id,
+            $overpayEnabled,
+            $this->normalizeOverpayFloorEur($overpayFloorEur),
+            $overpayNote
+        );
+    }
+
     public function buildInvestmentSyncPayload(int $userId, int $id, ?bool $excluded = null, ?string $bucket = null): ?array
     {
         $row = $this->investmentRepository->findByUserAndId($userId, $id);
@@ -880,6 +967,7 @@ final class PortfolioService
             ? $this->normalizeBucket($bucket)
             : $this->resolveInvestmentBucket($row);
         $resolvedExcluded = $excluded ?? $this->isExcludedInvestment($row);
+        $resolvedOverpay = $this->resolveOverpayProfile($payload);
 
         return array_merge($payload, [
             'id' => (string) $id,
@@ -899,6 +987,10 @@ final class PortfolioService
             'serverId' => $id,
             'excluded' => $resolvedExcluded,
             'isExcluded' => $resolvedExcluded,
+            'overpayEnabled' => $resolvedOverpay['enabled'],
+            'isOverpayCandidate' => $resolvedOverpay['enabled'],
+            'overpayFloorEur' => $resolvedOverpay['floorEur'],
+            'overpayNote' => $resolvedOverpay['note'],
             'updatedAt' => gmdate('c'),
         ]);
     }
@@ -928,6 +1020,28 @@ final class PortfolioService
             'floatValue' => $floatValue,
             'paintSeed' => $paintSeed,
             'inspectLink' => $inspectLink !== '' ? $inspectLink : null,
+        ];
+    }
+
+    private function resolveOverpayProfile(array $payload): array
+    {
+        $overpayEnabled = $this->toBooleanFlag(
+            $payload['overpayEnabled']
+            ?? $payload['isOverpayCandidate']
+            ?? $payload['floatOverpayWorthy']
+            ?? false
+        );
+        $overpayFloorEur = $this->normalizeOverpayFloorEur(
+            $payload['overpayFloorEur']
+            ?? $payload['floatOverpayFloorEur']
+            ?? null
+        );
+        $overpayNote = trim((string) ($payload['overpayNote'] ?? ''));
+
+        return [
+            'enabled' => $overpayEnabled,
+            'floorEur' => $overpayFloorEur,
+            'note' => $overpayNote !== '' ? $overpayNote : null,
         ];
     }
 
@@ -1002,19 +1116,7 @@ final class PortfolioService
             return false;
         }
 
-        $value = $decoded['excluded'] ?? $decoded['isExcluded'] ?? false;
-        if (is_bool($value)) {
-            return $value;
-        }
-        if (is_numeric($value)) {
-            return (int) $value === 1;
-        }
-        if (is_string($value)) {
-            $normalized = strtolower(trim($value));
-            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
-        }
-
-        return false;
+        return $this->toBooleanFlag($decoded['excluded'] ?? $decoded['isExcluded'] ?? false);
     }
 
     private function resolveInvestmentBucket(array $investment): string
@@ -1041,6 +1143,36 @@ final class PortfolioService
     {
         $normalized = strtolower(trim($bucket));
         return $normalized === 'inventory' ? 'inventory' : 'investment';
+    }
+
+    private function normalizeOverpayFloorEur(mixed $value): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $parsed = round((float) $value, 2);
+        if ($parsed <= 0) {
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    private function toBooleanFlag(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+
+        return false;
     }
 
     private function normalizeScope(string $scope): string

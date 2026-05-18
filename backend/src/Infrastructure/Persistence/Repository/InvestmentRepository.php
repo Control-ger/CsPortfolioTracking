@@ -462,6 +462,18 @@ final class InvestmentRepository
             if (array_key_exists('bucket', $existingPayload) && !array_key_exists('bucket', $incomingPayload)) {
                 $incomingPayload['bucket'] = (string) $existingPayload['bucket'];
             }
+            if (array_key_exists('overpayEnabled', $existingPayload) && !array_key_exists('overpayEnabled', $incomingPayload)) {
+                $incomingPayload['overpayEnabled'] = (bool) $existingPayload['overpayEnabled'];
+            }
+            if (array_key_exists('isOverpayCandidate', $existingPayload) && !array_key_exists('isOverpayCandidate', $incomingPayload)) {
+                $incomingPayload['isOverpayCandidate'] = (bool) $existingPayload['isOverpayCandidate'];
+            }
+            if (array_key_exists('overpayFloorEur', $existingPayload) && !array_key_exists('overpayFloorEur', $incomingPayload)) {
+                $incomingPayload['overpayFloorEur'] = $existingPayload['overpayFloorEur'];
+            }
+            if (array_key_exists('overpayNote', $existingPayload) && !array_key_exists('overpayNote', $incomingPayload)) {
+                $incomingPayload['overpayNote'] = (string) $existingPayload['overpayNote'];
+            }
         }
 
         return json_encode($incomingPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -490,6 +502,62 @@ final class InvestmentRepository
         }
 
         $payload['bucket'] = strtolower(trim($bucket)) === 'inventory' ? 'inventory' : 'investment';
+        $payload['updatedAt'] = gmdate('c');
+
+        $updateSql = 'UPDATE investments SET raw_payload_json = ? WHERE user_id = ? AND id = ?';
+        $updateStmt = $this->pdo->prepare($updateSql);
+        $updateStmt->execute([
+            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            $userId,
+            $investmentId,
+        ]);
+
+        return true;
+    }
+
+    public function updateOverpayProfile(
+        int $userId,
+        int $investmentId,
+        bool $overpayEnabled,
+        ?float $overpayFloorEur = null,
+        ?string $overpayNote = null
+    ): bool {
+        $this->ensureTable();
+
+        $selectSql = 'SELECT raw_payload_json FROM investments WHERE user_id = ? AND id = ? LIMIT 1';
+        $selectStmt = $this->pdo->prepare($selectSql);
+        $selectStmt->execute([$userId, $investmentId]);
+        $row = $selectStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row === false) {
+            return false;
+        }
+
+        $payload = [];
+        $rawPayload = $row['raw_payload_json'] ?? null;
+        if (is_string($rawPayload) && trim($rawPayload) !== '') {
+            $decoded = json_decode($rawPayload, true);
+            if (is_array($decoded)) {
+                $payload = $decoded;
+            }
+        }
+
+        $payload['overpayEnabled'] = $overpayEnabled;
+        $payload['isOverpayCandidate'] = $overpayEnabled;
+
+        if ($overpayFloorEur !== null && $overpayFloorEur > 0) {
+            $payload['overpayFloorEur'] = round($overpayFloorEur, 2);
+        } else {
+            unset($payload['overpayFloorEur']);
+        }
+
+        $trimmedNote = trim((string) ($overpayNote ?? ''));
+        if ($trimmedNote !== '') {
+            $payload['overpayNote'] = mb_substr($trimmedNote, 0, 280);
+        } else {
+            unset($payload['overpayNote']);
+        }
+
         $payload['updatedAt'] = gmdate('c');
 
         $updateSql = 'UPDATE investments SET raw_payload_json = ? WHERE user_id = ? AND id = ?';

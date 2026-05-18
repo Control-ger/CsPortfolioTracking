@@ -54,6 +54,11 @@ export const ItemListRow = ({
         </div>
         <div className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-medium">{item.name}</h4>
+          {(item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+              Overpay
+            </p>
+          ) : null}
           {item.currentPrice !== null && item.currentPrice !== undefined && (
             <p className="truncate text-xs text-muted-foreground">
               {item.currentPriceUsd !== null && item.currentPriceUsd !== undefined

@@ -254,6 +254,11 @@ export function InventoryTable({ investments, onSelectItem }) {
                         <Badge variant="outline" className="text-[9px]">
                           {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
                         </Badge>
+                        {(item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
+                          <Badge variant="outline" className="text-[9px] border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                            overpay
+                          </Badge>
+                        ) : null}
                       </span>
                     </span>
                   </div>

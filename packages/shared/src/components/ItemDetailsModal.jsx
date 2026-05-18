@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BaseModal } from "@shared/components/BaseModal";
 import { PriceSourceBadge } from "@shared/components/PriceSourceBadge";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
@@ -56,12 +56,28 @@ export function ItemDetailsModal({
   historyLoading = false,
   onToggleExclude,
   onBucketChange,
+  onOverpayChange,
   canToggleExclude = true,
 }) {
   const { formatPrice } = useCurrency();
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const [isOverpayLoading, setIsOverpayLoading] = useState(false);
+  const [overpayEnabledDraft, setOverpayEnabledDraft] = useState(false);
+  const [overpayFloorDraft, setOverpayFloorDraft] = useState("");
+  const [overpayNoteDraft, setOverpayNoteDraft] = useState("");
   const excludeEnabled = canToggleExclude && typeof onToggleExclude === "function";
   const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
+  const overpayToggleEnabled = canToggleExclude && typeof onOverpayChange === "function";
+
+  useEffect(() => {
+    const enabled = Boolean(item?.overpayEnabled ?? item?.isOverpayCandidate);
+    const floorValue = Number(item?.overpayFloorEur);
+    setOverpayEnabledDraft(enabled);
+    setOverpayFloorDraft(
+      Number.isFinite(floorValue) && floorValue > 0 ? floorValue.toFixed(2) : "",
+    );
+    setOverpayNoteDraft(String(item?.overpayNote || ""));
+  }, [item?.id, item?.overpayEnabled, item?.isOverpayCandidate, item?.overpayFloorEur, item?.overpayNote]);
 
   if (!item) return null;
 
@@ -83,6 +99,31 @@ export function ItemDetailsModal({
       : "investment";
     const nextBucket = currentBucket === "investment" ? "inventory" : "investment";
     await onBucketChange(item, nextBucket);
+  };
+
+  const handleOverpaySave = async () => {
+    if (!overpayToggleEnabled) {
+      return;
+    }
+
+    const parsedFloor = Number(overpayFloorDraft);
+    const normalizedFloor =
+      Number.isFinite(parsedFloor) && parsedFloor > 0
+        ? Number(parsedFloor.toFixed(2))
+        : null;
+
+    setIsOverpayLoading(true);
+    try {
+      await onOverpayChange(item, {
+        overpayEnabled: Boolean(overpayEnabledDraft),
+        overpayFloorEur: normalizedFloor,
+        overpayNote: String(overpayNoteDraft || "").trim() || null,
+      });
+    } catch (error) {
+      console.error("Failed to update overpay profile:", error);
+    } finally {
+      setIsOverpayLoading(false);
+    }
   };
 
   const togglePriceDisplay = () => {
@@ -148,6 +189,11 @@ export function ItemDetailsModal({
               <Badge variant="outline">
                 Funding: {item.fundingMode === "cash_in" ? "Cash-In" : "Wallet"}
               </Badge>
+              {(item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
+                <Badge variant="outline" className="border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                  Overpay
+                </Badge>
+              ) : null}
               <Badge variant="outline" className={freshnessBadgeClass(item.freshnessStatus)}>
                 {item.freshnessLabel || "unbekannt"}
               </Badge>
@@ -182,6 +228,11 @@ export function ItemDetailsModal({
               <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
                 Instanzbewertung{strategyLabel ? `: ${strategyLabel}` : ""}
                 {confidenceLabel ? ` (${confidenceLabel})` : ""}
+              </p>
+            ) : null}
+            {item.overpayApplied && Number.isFinite(Number(item.baseLivePrice)) ? (
+              <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                Overpay aktiv: Basis {formatPrice(item.baseLivePrice)} → Anzeige {formatPrice(item.livePrice)}
               </p>
             ) : null}
           </div>
@@ -249,6 +300,54 @@ export function ItemDetailsModal({
                 >
                   Inspect Link
                 </a>
+              ) : null}
+            </div>
+          ) : null}
+
+          {overpayToggleEnabled || (item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
+            <div className="rounded-md border p-2 sm:p-3">
+              <p className="text-[10px] uppercase text-muted-foreground">Float Overpay</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="inline-flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={overpayEnabledDraft}
+                    onChange={(event) => setOverpayEnabledDraft(event.target.checked)}
+                  />
+                  Overpay-Kandidat aktiv
+                </label>
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={overpayFloorDraft}
+                  onChange={(event) => setOverpayFloorDraft(event.target.value)}
+                  placeholder="Floor EUR (optional)"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                />
+                <input
+                  type="text"
+                  value={overpayNoteDraft}
+                  onChange={(event) => setOverpayNoteDraft(event.target.value)}
+                  placeholder="Notiz (z. B. Tradeup-freundlicher Float)"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                />
+                {overpayToggleEnabled ? (
+                  <button
+                    onClick={() => void handleOverpaySave()}
+                    disabled={isOverpayLoading}
+                    className="h-8 rounded-md border px-3 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isOverpayLoading ? "Speichert..." : "Overpay speichern"}
+                  </button>
+                ) : null}
+              </div>
+              {Number.isFinite(Number(item?.overpayFloorEur)) ? (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Aktueller Floor: {formatPrice(Number(item.overpayFloorEur))}
+                </p>
               ) : null}
             </div>
           ) : null}

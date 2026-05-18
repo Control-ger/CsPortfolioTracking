@@ -35,6 +35,7 @@ import { usePortfolioComposition } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
   fetchPortfolioInvestmentHistory,
+  updateInvestmentOverpay,
   updateInvestmentBucket,
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
@@ -1767,6 +1768,19 @@ export function PortfolioPage({ initialTab = "overview" }) {
     setCompositionRefreshToken((current) => current + 1);
   };
 
+  const handleUpdateItemOverpay = async (item, overpayPayload = {}) => {
+    if (!item) {
+      return;
+    }
+
+    const sourceIds = Array.isArray(item?.sourceInvestmentIds) && item.sourceInvestmentIds.length > 0
+      ? item.sourceInvestmentIds
+      : [];
+    await updateInvestmentOverpay(item.id, overpayPayload, sourceIds);
+    await refreshPortfolio();
+    setCompositionRefreshToken((current) => current + 1);
+  };
+
   return (
     <div
       className={`min-h-screen font-sans text-foreground pb-20 touch-pan-y ${
@@ -2565,6 +2579,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
                 onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
+                onOverpayChange={isDesktopRuntime ? handleUpdateItemOverpay : undefined}
                 canToggleExclude={isDesktopRuntime}
               />
             </div>
@@ -2583,6 +2598,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     historyLoading={selectedItemHistoryLoading}
                     onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
                     onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
+                    onOverpayChange={isDesktopRuntime ? handleUpdateItemOverpay : undefined}
                     canToggleExclude={isDesktopRuntime}
                   />
                 );

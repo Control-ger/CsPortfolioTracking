@@ -330,6 +330,80 @@ final class PortfolioController
         }
     }
 
+    public function updateInvestmentOverpay(Request $request, int $id): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $overpayEnabled = filter_var(
+                $request->body['overpayEnabled'] ?? $request->body['isOverpayCandidate'] ?? false,
+                FILTER_VALIDATE_BOOL
+            );
+            $overpayFloorInput = $request->body['overpayFloorEur'] ?? null;
+            $overpayFloorEur = null;
+            if ($overpayFloorInput !== null && $overpayFloorInput !== '') {
+                if (!is_numeric($overpayFloorInput)) {
+                    JsonResponseFactory::error(
+                        'INVALID_OVERPAY_FLOOR',
+                        'overpayFloorEur muss numerisch sein.',
+                        ['overpayFloorEur' => $overpayFloorInput],
+                        400
+                    );
+                    return;
+                }
+                $overpayFloorEur = max(0.0, round((float) $overpayFloorInput, 2));
+            }
+            $overpayNote = isset($request->body['overpayNote']) ? (string) $request->body['overpayNote'] : null;
+
+            $success = $this->portfolioService->updateInvestmentOverpayProfile(
+                $userId,
+                $id,
+                $overpayEnabled,
+                $overpayFloorEur,
+                $overpayNote
+            );
+            if (!$success) {
+                JsonResponseFactory::error(
+                    'INVESTMENT_NOT_FOUND',
+                    'Investition mit dieser ID nicht gefunden.',
+                    ['id' => $id],
+                    404
+                );
+                return;
+            }
+
+            $syncPayload = $this->portfolioService->buildInvestmentSyncPayload($userId, $id, null, null);
+            if (is_array($syncPayload)) {
+                $this->syncService->upsertServerEntity(
+                    $userId,
+                    'investments',
+                    (string) $id,
+                    $syncPayload
+                );
+            }
+
+            JsonResponseFactory::success(
+                [
+                    'success' => true,
+                    'investmentId' => $id,
+                    'overpayEnabled' => $overpayEnabled,
+                    'overpayFloorEur' => $overpayFloorEur,
+                    'overpayNote' => $overpayNote,
+                ],
+                [],
+                200
+            );
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio update overpay profile failed',
+                ['statusCode' => 500, 'investmentId' => $id, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('PORTFOLIO_UPDATE_OVERPAY_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
     private function resolveUserId(Request $request): int
     {
         foreach (['x-user-id', 'user-id'] as $header) {

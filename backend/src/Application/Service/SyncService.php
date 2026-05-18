@@ -448,6 +448,56 @@ final class SyncService
             $merged['bucket'] = $this->normalizeBucket((string) $merged['bucket']);
         }
 
+        if (!array_key_exists('overpayEnabled', $merged)) {
+            if (array_key_exists('overpayEnabled', $existingPayload)) {
+                $merged['overpayEnabled'] = $this->toBooleanFlag($existingPayload['overpayEnabled']);
+            } elseif (array_key_exists('overpayEnabled', $existingRowPayload)) {
+                $merged['overpayEnabled'] = $this->toBooleanFlag($existingRowPayload['overpayEnabled']);
+            } elseif (array_key_exists('isOverpayCandidate', $existingPayload)) {
+                $merged['overpayEnabled'] = $this->toBooleanFlag($existingPayload['isOverpayCandidate']);
+            } elseif (array_key_exists('isOverpayCandidate', $existingRowPayload)) {
+                $merged['overpayEnabled'] = $this->toBooleanFlag($existingRowPayload['isOverpayCandidate']);
+            }
+        }
+        if (!array_key_exists('isOverpayCandidate', $merged) && array_key_exists('overpayEnabled', $merged)) {
+            $merged['isOverpayCandidate'] = $this->toBooleanFlag($merged['overpayEnabled']);
+        } elseif (array_key_exists('isOverpayCandidate', $merged) && !array_key_exists('overpayEnabled', $merged)) {
+            $merged['overpayEnabled'] = $this->toBooleanFlag($merged['isOverpayCandidate']);
+        } elseif (array_key_exists('isOverpayCandidate', $merged) && array_key_exists('overpayEnabled', $merged)) {
+            $normalizedOverpayFlag = $this->toBooleanFlag($merged['overpayEnabled']);
+            $merged['overpayEnabled'] = $normalizedOverpayFlag;
+            $merged['isOverpayCandidate'] = $normalizedOverpayFlag;
+        }
+
+        if (!array_key_exists('overpayFloorEur', $merged)) {
+            if (array_key_exists('overpayFloorEur', $existingPayload)) {
+                $merged['overpayFloorEur'] = is_numeric($existingPayload['overpayFloorEur'])
+                    ? max(0.0, round((float) $existingPayload['overpayFloorEur'], 2))
+                    : null;
+            } elseif (array_key_exists('overpayFloorEur', $existingRowPayload)) {
+                $merged['overpayFloorEur'] = is_numeric($existingRowPayload['overpayFloorEur'])
+                    ? max(0.0, round((float) $existingRowPayload['overpayFloorEur'], 2))
+                    : null;
+            }
+        } elseif (!is_numeric($merged['overpayFloorEur'] ?? null)) {
+            $merged['overpayFloorEur'] = null;
+        } else {
+            $merged['overpayFloorEur'] = max(0.0, round((float) $merged['overpayFloorEur'], 2));
+        }
+
+        if (!array_key_exists('overpayNote', $merged)) {
+            if (array_key_exists('overpayNote', $existingPayload)) {
+                $merged['overpayNote'] = trim((string) $existingPayload['overpayNote']);
+            } elseif (array_key_exists('overpayNote', $existingRowPayload)) {
+                $merged['overpayNote'] = trim((string) $existingRowPayload['overpayNote']);
+            }
+        } else {
+            $merged['overpayNote'] = trim((string) $merged['overpayNote']);
+        }
+        if (array_key_exists('overpayNote', $merged) && $merged['overpayNote'] === '') {
+            $merged['overpayNote'] = null;
+        }
+
         return $merged;
     }
 

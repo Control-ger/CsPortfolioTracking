@@ -864,6 +864,101 @@ export async function updateInvestmentBucket(id, bucket, sourceInvestmentIds = [
   });
 }
 
+export async function updateInvestmentOverpay(
+  id,
+  payload = {},
+  sourceInvestmentIds = [],
+) {
+  const normalizedOverpayEnabled = Boolean(
+    payload?.overpayEnabled ?? payload?.isOverpayCandidate ?? false,
+  );
+  const parsedFloor = Number(payload?.overpayFloorEur);
+  const normalizedFloor =
+    Number.isFinite(parsedFloor) && parsedFloor > 0
+      ? Number(parsedFloor.toFixed(2))
+      : null;
+  const normalizedNote = String(payload?.overpayNote || "").trim();
+  const localStore = getDesktopLocalStore();
+
+  if (localStore) {
+    const candidateIdsRaw = Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
+      ? sourceInvestmentIds
+      : [id];
+    const candidateIds = Array.from(
+      new Set(candidateIdsRaw.map((candidateId) => String(candidateId || "").trim()).filter(Boolean)),
+    );
+    let updatedCount = 0;
+
+    for (const candidateId of candidateIds) {
+      const existing = unwrapLocalStoreResult(
+        await localStore.getInvestment(candidateId),
+        "local-store-get-investment",
+      );
+
+      if (!existing) {
+        continue;
+      }
+
+      unwrapLocalStoreResult(
+        await localStore.upsertInvestment({
+          ...existing,
+          overpayEnabled: normalizedOverpayEnabled,
+          isOverpayCandidate: normalizedOverpayEnabled,
+          overpayFloorEur: normalizedFloor,
+          overpayNote: normalizedNote || null,
+        }),
+        "local-store-upsert-investment",
+      );
+      updatedCount += 1;
+    }
+
+    if (updatedCount === 0) {
+      throw new Error(
+        `Overpay update skipped: no local investment found for id=${String(id)}`,
+      );
+    }
+
+    let syncResult;
+    try {
+      syncResult = await runDesktopSyncNowIfDue({ force: true });
+    } catch (syncError) {
+      console.warn("[desktop-sync] overpay sync failed", syncError);
+      throw new Error(
+        `Overpay profile updated locally, but sync to server failed: ${syncError?.message || String(syncError)}`,
+      );
+    }
+
+    if (syncResult?.skipped) {
+      throw new Error(
+        `Overpay profile updated locally, but sync was skipped (${String(syncResult.reason || "unknown")}).`,
+      );
+    }
+
+    return {
+      data: {
+        success: true,
+        investmentId: id,
+        overpayEnabled: normalizedOverpayEnabled,
+        overpayFloorEur: normalizedFloor,
+        overpayNote: normalizedNote || null,
+      },
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
+  return requestWithMeta(`/api/v1/portfolio/investments/${id}/overpay`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      overpayEnabled: normalizedOverpayEnabled,
+      overpayFloorEur: normalizedFloor,
+      overpayNote: normalizedNote || null,
+    }),
+  });
+}
+
 export async function fetchCacheMaintenanceStats() {
   return requestWithMeta("/api/v1/debug/cache/stats");
 }

@@ -84,6 +84,28 @@ function filterRowsByScope(rows = [], scope = "investments") {
   return rows.filter((row) => resolveRowBucket(row) === "investment");
 }
 
+function toBooleanFlag(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value === 1;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return ["1", "true", "yes", "on"].includes(normalized);
+  }
+  return false;
+}
+
+function normalizeOverpayFloor(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return Number(parsed.toFixed(2));
+}
+
 function calculatePortfolioSummary(rows = []) {
   let totalValue = 0;
   let totalInvested = 0;
@@ -316,6 +338,19 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
       breakEvenPrice: upstream.breakEvenPrice ?? row.breakEvenPrice,
       breakEvenDeltaEuro: upstream.breakEvenDeltaEuro ?? row.breakEvenDeltaEuro,
       breakEvenDeltaPercent: upstream.breakEvenDeltaPercent ?? row.breakEvenDeltaPercent,
+      baseLivePrice: upstream.baseLivePrice ?? row.baseLivePrice ?? row.livePrice ?? null,
+      overpayEnabled: toBooleanFlag(
+        upstream.overpayEnabled ?? upstream.isOverpayCandidate ?? row.overpayEnabled ?? row.isOverpayCandidate,
+      ),
+      isOverpayCandidate: toBooleanFlag(
+        upstream.isOverpayCandidate ?? upstream.overpayEnabled ?? row.isOverpayCandidate ?? row.overpayEnabled,
+      ),
+      overpayFloorEur:
+        normalizeOverpayFloor(upstream.overpayFloorEur) ??
+        normalizeOverpayFloor(row.overpayFloorEur) ??
+        null,
+      overpayApplied: toBooleanFlag(upstream.overpayApplied ?? row.overpayApplied ?? false),
+      overpayNote: String(upstream.overpayNote ?? row.overpayNote ?? "").trim() || null,
       costBasisTotal: upstream.costBasisTotal ?? row.costBasisTotal,
       costBasisUnit: upstream.costBasisUnit ?? row.costBasisUnit,
       netPositionValue: upstream.netPositionValue ?? row.netPositionValue,
@@ -351,6 +386,11 @@ function clusterDesktopInvestments(rows = []) {
         buyPrice: 0,
         totalInvestedUsd: 0,
         totalInvested: 0,
+        overpayEnabled: false,
+        isOverpayCandidate: false,
+        overpayFloorEur: null,
+        overpayApplied: false,
+        overpayNote: null,
       });
     }
 
@@ -369,6 +409,27 @@ function clusterDesktopInvestments(rows = []) {
 
     if (!group.imageUrl && row.imageUrl) {
       group.imageUrl = row.imageUrl;
+    }
+
+    const rowOverpayEnabled = toBooleanFlag(row?.overpayEnabled ?? row?.isOverpayCandidate);
+    const rowOverpayApplied = toBooleanFlag(row?.overpayApplied);
+    const rowOverpayFloor = normalizeOverpayFloor(row?.overpayFloorEur);
+    const rowOverpayNote = String(row?.overpayNote || "").trim();
+    if (rowOverpayEnabled) {
+      group.overpayEnabled = true;
+      group.isOverpayCandidate = true;
+    }
+    if (rowOverpayApplied) {
+      group.overpayApplied = true;
+    }
+    if (rowOverpayFloor !== null) {
+      group.overpayFloorEur =
+        group.overpayFloorEur === null
+          ? rowOverpayFloor
+          : Math.max(Number(group.overpayFloorEur || 0), rowOverpayFloor);
+    }
+    if (!group.overpayNote && rowOverpayNote) {
+      group.overpayNote = rowOverpayNote;
     }
 
     const priceKey = buyPriceUsd.toFixed(4);
@@ -396,6 +457,11 @@ function clusterDesktopInvestments(rows = []) {
       buyPriceUsd: weightedBuyPriceUsd,
       buyPrice: weightedBuyPriceUsd,
       marketHashName: group.marketHashName || group.name,
+      overpayEnabled: Boolean(group.overpayEnabled),
+      isOverpayCandidate: Boolean(group.overpayEnabled),
+      overpayApplied: Boolean(group.overpayApplied),
+      overpayFloorEur: normalizeOverpayFloor(group.overpayFloorEur),
+      overpayNote: String(group.overpayNote || "").trim() || null,
       purchaseClusters: group.purchaseClusters
         .map((entry) => ({
           ...entry,
@@ -407,18 +473,7 @@ function clusterDesktopInvestments(rows = []) {
 }
 
 function isExcludedRow(row) {
-  const value = row?.excluded ?? row?.isExcluded;
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return value === 1;
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    return ["1", "true", "yes", "on"].includes(normalized);
-  }
-  return false;
+  return toBooleanFlag(row?.excluded ?? row?.isExcluded);
 }
 
 function buildPortfolioComposition(rows = []) {
