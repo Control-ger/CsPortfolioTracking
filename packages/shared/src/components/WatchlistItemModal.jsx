@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { BaseModal } from "@shared/components/BaseModal";
-import { PriceSourceBadge } from "@shared/components/PriceSourceBadge";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
 import { Badge } from "@shared/components/ui/badge";
 import { Button } from "@shared/components/ui/button";
@@ -70,7 +69,6 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <PriceSourceBadge priceSource={item.priceSource} />
               <Badge variant="outline" className="text-[10px] uppercase">
                 {item.changeLabel || "-"}
               </Badge>

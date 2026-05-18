@@ -106,6 +106,34 @@ function normalizeOverpayFloor(value) {
   return Number(parsed.toFixed(2));
 }
 
+function normalizePriceSource(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function enforceCsfloatOnlyRow(row) {
+  const priceSource = normalizePriceSource(row?.priceSource);
+  if (priceSource !== "steam") {
+    return row;
+  }
+
+  return {
+    ...row,
+    isLive: false,
+    livePrice: null,
+    baseLivePrice: null,
+    displayPrice: null,
+    currentValue: 0,
+    roi: null,
+    profitEuro: null,
+    isProfitPositive: null,
+    pricingStatus: "no_price",
+    priceSource: null,
+    overpayApplied: false,
+  };
+}
+
 function calculatePortfolioSummary(rows = []) {
   let totalValue = 0;
   let totalInvested = 0;
@@ -122,7 +150,7 @@ function calculatePortfolioSummary(rows = []) {
 
   rows.forEach((row) => {
     const quantity = Number(row.quantity || 0);
-    const displayPrice = Number(row.displayPrice ?? row.livePrice ?? row.buyPrice ?? 0);
+    const displayPrice = Number(row.displayPrice ?? row.livePrice ?? 0);
     const buyPrice = Number(row.buyPrice ?? 0);
     const currentValue = Number(row.currentValue ?? displayPrice * quantity);
     const invested = Number(row.totalInvested ?? buyPrice * quantity);
@@ -277,11 +305,15 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
       return row;
     }
     const quantity = Number(row.quantity || 0);
-    const fallbackDisplayPrice = Number(row.displayPrice ?? row.livePrice ?? row.buyPrice ?? 0);
+    const fallbackDisplayPrice = Number(row.displayPrice ?? row.livePrice ?? 0);
     const fallbackCurrentValue = Number(row.currentValue ?? fallbackDisplayPrice * quantity);
     const fallbackTotalInvested = Number(
       row.totalInvested ?? Number(row.buyPrice ?? row.buyPriceUsd ?? 0) * quantity,
     );
+    const mergedPriceSource = upstream.priceSource ?? row.priceSource ?? null;
+    const sourceIsCsfloat =
+      normalizePriceSource(mergedPriceSource) === "" ||
+      normalizePriceSource(mergedPriceSource) === "csfloat";
     const liveDisplayPrice = Number(upstream.displayPrice ?? upstream.livePrice);
     const hasLiveDisplayPrice = Number.isFinite(liveDisplayPrice) && liveDisplayPrice > 0;
     const mergedDisplayPrice = hasLiveDisplayPrice ? liveDisplayPrice : fallbackDisplayPrice;
@@ -295,26 +327,35 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
 
     return {
       ...row,
-      livePrice: upstream.livePrice ?? row.livePrice ?? null,
-      displayPrice: mergedDisplayPrice,
-      currentValue: Number.isFinite(mergedCurrentValue) ? mergedCurrentValue : fallbackCurrentValue,
+      livePrice: sourceIsCsfloat ? (upstream.livePrice ?? row.livePrice ?? null) : null,
+      displayPrice: sourceIsCsfloat ? mergedDisplayPrice : null,
+      currentValue: sourceIsCsfloat
+        ? (Number.isFinite(mergedCurrentValue) ? mergedCurrentValue : fallbackCurrentValue)
+        : 0,
       totalInvested:
         !isLooseMatch && Number.isFinite(Number(upstream.totalInvested))
           ? Number(upstream.totalInvested)
           : fallbackTotalInvested,
-      isLive: upstream.isLive === true || row.isLive === true,
-      pricingStatus: upstream.pricingStatus ?? row.pricingStatus ?? "fallback",
-      priceSource: upstream.priceSource ?? row.priceSource ?? null,
-      roi: !isLooseMatch && Number.isFinite(Number(upstream.roi))
-        ? Number(upstream.roi)
-        : computedRoi,
-      profitEuro: !isLooseMatch && Number.isFinite(Number(upstream.profitEuro))
-        ? Number(upstream.profitEuro)
-        : computedProfitEuro,
-      isProfitPositive:
-        !isLooseMatch && typeof upstream.isProfitPositive === "boolean"
-          ? upstream.isProfitPositive
-          : computedProfitEuro >= 0,
+      isLive: sourceIsCsfloat && (upstream.isLive === true || row.isLive === true),
+      pricingStatus: sourceIsCsfloat
+        ? (upstream.pricingStatus ?? row.pricingStatus ?? "no_price")
+        : "no_price",
+      priceSource: sourceIsCsfloat ? mergedPriceSource : null,
+      roi: sourceIsCsfloat
+        ? (!isLooseMatch && Number.isFinite(Number(upstream.roi))
+            ? Number(upstream.roi)
+            : computedRoi)
+        : null,
+      profitEuro: sourceIsCsfloat
+        ? (!isLooseMatch && Number.isFinite(Number(upstream.profitEuro))
+            ? Number(upstream.profitEuro)
+            : computedProfitEuro)
+        : null,
+      isProfitPositive: sourceIsCsfloat
+        ? (!isLooseMatch && typeof upstream.isProfitPositive === "boolean"
+            ? upstream.isProfitPositive
+            : computedProfitEuro >= 0)
+        : null,
       change24hEuro: upstream.change24hEuro ?? row.change24hEuro,
       change24hPercent: upstream.change24hPercent ?? row.change24hPercent,
       change7dEuro: upstream.change7dEuro ?? row.change7dEuro,
@@ -328,9 +369,6 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
       freshnessLabel: upstream.freshnessLabel ?? row.freshnessLabel,
       marketTypeLabel: upstream.marketTypeLabel ?? row.marketTypeLabel,
       wearName: upstream.wearName ?? row.wearName,
-      floatValue: upstream.floatValue ?? row.floatValue ?? null,
-      paintSeed: upstream.paintSeed ?? row.paintSeed ?? null,
-      inspectLink: upstream.inspectLink ?? row.inspectLink ?? null,
       priceScope: upstream.priceScope ?? row.priceScope ?? "item",
       priceStrategy: upstream.priceStrategy ?? row.priceStrategy ?? null,
       priceConfidence: upstream.priceConfidence ?? row.priceConfidence ?? null,
@@ -482,7 +520,7 @@ function buildPortfolioComposition(rows = []) {
 
   rows.forEach((row) => {
     const quantity = Number(row.quantity || 0);
-    const displayPrice = Number(row.displayPrice ?? row.livePrice ?? row.buyPrice ?? 0);
+    const displayPrice = Number(row.displayPrice ?? row.livePrice ?? 0);
     const currentValue = Number(row.currentValue ?? displayPrice * quantity);
     totalValue += currentValue;
 
@@ -677,6 +715,8 @@ async function fetchDesktopPortfolioData(options = {}) {
     }
   }
 
+  rows = rows.map(enforceCsfloatOnlyRow);
+
   // No server seeding - user must import from CS2 inventory first
   // Empty local DB means user hasn't imported items yet
   if (rows.length === 0) {
@@ -757,9 +797,23 @@ async function fetchApiPortfolioData(options = {}) {
     fetchApiPortfolioHistory({ signal: options.signal, scope: options.scope }),
   ]);
 
+  const sanitizedRows = {
+    ...rows,
+    data: Array.isArray(rows?.data) ? rows.data.map(enforceCsfloatOnlyRow) : [],
+  };
+  const recomputedSummary =
+    sanitizedRows.data.length > 0
+      ? {
+          ...summary,
+          data: calculatePortfolioSummary(
+            filterRowsByScope(sanitizedRows.data, options.scope),
+          ),
+        }
+      : summary;
+
   return {
-    rows,
-    summary,
+    rows: sanitizedRows,
+    summary: recomputedSummary,
     history,
   };
 }

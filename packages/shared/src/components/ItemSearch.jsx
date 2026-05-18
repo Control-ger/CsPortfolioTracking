@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { ApiWarnings } from "./ApiWarnings";
-import { PriceSourceBadge } from "./PriceSourceBadge";
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -613,10 +612,6 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                       ? `${candidate.livePriceEur.toFixed(2)} EUR`
                       : "Preis folgt"}
                   </p>
-                  <PriceSourceBadge
-                    priceSource={candidate.priceSource}
-                    compact
-                  />
                 </div>
               </div>
 

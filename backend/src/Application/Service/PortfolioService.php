@@ -93,7 +93,7 @@ final class PortfolioService
             $baseLivePrice = $livePrice;
             $overpayProfile = $this->resolveOverpayProfile($investmentPayload);
             $priceSource = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
-            $displayPrice = $livePrice ?? $buyPrice;
+            $displayPrice = $livePrice;
             $overpayApplied = false;
             if ($overpayProfile['enabled'] && $overpayProfile['floorEur'] !== null) {
                 $overpayCandidatePrice = max($displayPrice, (float) $overpayProfile['floorEur']);
@@ -106,14 +106,14 @@ final class PortfolioService
                 }
             }
             $isLive = $baseLivePrice !== null;
-            $roi = $buyPrice > 0 ? (($displayPrice - $buyPrice) / $buyPrice) * 100 : 0.0;
+            $roi = ($isLive && $buyPrice > 0) ? (($displayPrice - $buyPrice) / $buyPrice) * 100 : null;
             $fundingMode = $this->normalizeFundingMode($investment['funding_mode'] ?? null);
             $totalInvested = $buyPrice * $quantity;
-            $currentValue = $displayPrice * $quantity;
-            $profitEuro = $currentValue - $totalInvested;
+            $currentValue = $isLive ? ($displayPrice * $quantity) : 0.0;
+            $profitEuro = $isLive ? ($currentValue - $totalInvested) : null;
             $breakEvenPrice = $quantity > 0 ? $totalInvested / $quantity : $buyPrice;
-            $breakEvenDeltaEuro = $displayPrice - $breakEvenPrice;
-            $breakEvenDeltaPercent = $breakEvenPrice > 0
+            $breakEvenDeltaEuro = $isLive ? ($displayPrice - $breakEvenPrice) : null;
+            $breakEvenDeltaPercent = ($isLive && $breakEvenPrice > 0)
                 ? ($breakEvenDeltaEuro / $breakEvenPrice) * 100
                 : null;
 
@@ -135,9 +135,9 @@ final class PortfolioService
             $acquisitionFees = $this->resolveAcquisitionFees($totalInvested, $fundingMode, $feeSettings);
             $costBasisTotal = $totalInvested + $acquisitionFees;
             $costBasisUnit = $quantity > 0 ? ($costBasisTotal / $quantity) : 0.0;
-            $netPositionValue = $this->calculateNetProceeds($currentValue, $feeSettings);
-            $netProfitEuro = $netPositionValue - $costBasisTotal;
-            $netRoiPercent = $costBasisTotal > 0 ? ($netProfitEuro / $costBasisTotal) * 100 : 0.0;
+            $netPositionValue = $isLive ? $this->calculateNetProceeds($currentValue, $feeSettings) : 0.0;
+            $netProfitEuro = $isLive ? ($netPositionValue - $costBasisTotal) : null;
+            $netRoiPercent = ($isLive && $costBasisTotal > 0) ? ($netProfitEuro / $costBasisTotal) * 100 : null;
             $breakEvenPriceNet = $this->calculateBreakEvenNetUnitPrice($costBasisUnit, $feeSettings);
 
             $rows[] = [
@@ -149,9 +149,6 @@ final class PortfolioService
                 'imageUrl' => $this->resolveInvestmentImageUrl($investmentPayload, $presentation['iconUrl'] ?? null),
                 'marketTypeLabel' => $presentation['marketTypeLabel'] ?? null,
                 'wearName' => $presentation['wearLabel'] ?? null,
-                'floatValue' => $instanceHint['floatValue'] ?? ($presentation['floatValue'] ?? null),
-                'paintSeed' => $instanceHint['paintSeed'] ?? ($presentation['paintSeed'] ?? null),
-                'inspectLink' => $instanceHint['inspectLink'] ?? ($presentation['inspectLink'] ?? null),
                 'buyPrice' => $buyPrice,
                 'buyPriceUsd' => $buyPriceUsd,
                 'quantity' => $quantity,
@@ -170,11 +167,11 @@ final class PortfolioService
                 'displayPrice' => $displayPrice,
                 'roi' => $roi,
                 'isLive' => $isLive,
-                'pricingStatus' => $isLive ? ($priceSource ?? 'live') : 'fallback',
+                'pricingStatus' => $isLive ? ($priceSource ?? 'csfloat') : 'no_price',
                 'totalInvested' => $totalInvested,
                 'currentValue' => $currentValue,
                 'profitEuro' => $profitEuro,
-                'isProfitPositive' => $profitEuro >= 0,
+                'isProfitPositive' => $profitEuro !== null ? ($profitEuro >= 0) : null,
                 'breakEvenPrice' => $breakEvenPrice,
                 'breakEvenDeltaEuro' => $breakEvenDeltaEuro,
                 'breakEvenDeltaPercent' => $breakEvenDeltaPercent,
@@ -634,6 +631,7 @@ final class PortfolioService
                     'overpayNotes' => [],
                     'livePriceWeightedSum' => 0.0,
                     'livePriceWeightedQuantity' => 0,
+                    'liveQuantity' => 0,
                 ];
             }
 
@@ -650,6 +648,9 @@ final class PortfolioService
             $groups[$key]['change24hPercentWeighted'] += (float) (($row['change24hPercent'] ?? 0.0) * $quantity);
             $groups[$key]['change7dPercentWeighted'] += (float) (($row['change7dPercent'] ?? 0.0) * $quantity);
             $groups[$key]['change30dPercentWeighted'] += (float) (($row['change30dPercent'] ?? 0.0) * $quantity);
+            if (($row['isLive'] ?? false) === true) {
+                $groups[$key]['liveQuantity'] += $quantity;
+            }
             $rowOverpayEnabled = $this->toBooleanFlag($row['overpayEnabled'] ?? $row['isOverpayCandidate'] ?? false);
             $rowOverpayApplied = $this->toBooleanFlag($row['overpayApplied'] ?? false);
             $rowOverpayFloorEur = $this->normalizeOverpayFloorEur($row['overpayFloorEur'] ?? null);
@@ -713,21 +714,22 @@ final class PortfolioService
             $quantity = max(1, (int) $group['quantity']);
             $totalInvested = (float) $group['totalInvested'];
             $currentValue = (float) $group['currentValue'];
-            $displayPrice = $currentValue / $quantity;
+            $hasLivePrice = (int) ($group['liveQuantity'] ?? 0) > 0;
+            $displayPrice = $hasLivePrice ? ($currentValue / $quantity) : null;
             $buyPrice = $totalInvested / $quantity;
-            $profitEuro = $currentValue - $totalInvested;
-            $roi = $totalInvested > 0 ? ($profitEuro / $totalInvested) * 100 : 0.0;
+            $profitEuro = $hasLivePrice ? ($currentValue - $totalInvested) : null;
+            $roi = ($hasLivePrice && $totalInvested > 0) ? ($profitEuro / $totalInvested) * 100 : null;
 
             $costBasisTotal = (float) $group['costBasisTotal'];
             $costBasisUnit = $costBasisTotal / $quantity;
             $netPositionValue = (float) $group['netPositionValue'];
-            $netProfitEuro = $netPositionValue - $costBasisTotal;
-            $netRoiPercent = $costBasisTotal > 0 ? ($netProfitEuro / $costBasisTotal) * 100 : 0.0;
+            $netProfitEuro = $hasLivePrice ? ($netPositionValue - $costBasisTotal) : null;
+            $netRoiPercent = ($hasLivePrice && $costBasisTotal > 0) ? ($netProfitEuro / $costBasisTotal) * 100 : null;
             $breakEvenPrice = $buyPrice;
             $breakEvenPriceNet = $this->calculateBreakEvenNetUnitPrice($costBasisUnit, $base['appliedFees'] ?? []);
 
             $priceAgeSeconds = $group['maxPriceAgeSeconds'];
-            $freshnessStatus = $this->resolveFreshnessStatus($priceAgeSeconds, (bool) ($base['isLive'] ?? false));
+            $freshnessStatus = $this->resolveFreshnessStatus($priceAgeSeconds, $hasLivePrice);
             $allInstanceScoped = ((int) ($group['rowCount'] ?? 0)) > 0
                 && ((int) ($group['instancePriceCount'] ?? 0)) === ((int) ($group['rowCount'] ?? 0));
             $priceStrategies = array_keys((array) ($group['priceStrategies'] ?? []));
@@ -748,7 +750,7 @@ final class PortfolioService
                 'quantity' => $quantity,
                 'buyPrice' => $buyPrice,
                 'baseLivePrice' => $baseLivePrice,
-                'livePrice' => isset($base['livePrice']) && $base['livePrice'] !== null ? $displayPrice : null,
+                'livePrice' => $hasLivePrice ? $displayPrice : null,
                 'displayPrice' => $displayPrice,
                 'roi' => $roi,
                 'overpayEnabled' => (bool) ($group['overpayEnabled'] ?? false),
@@ -761,16 +763,13 @@ final class PortfolioService
                 'totalInvested' => $totalInvested,
                 'currentValue' => $currentValue,
                 'profitEuro' => $profitEuro,
-                'isProfitPositive' => $profitEuro >= 0,
+                'isProfitPositive' => $profitEuro !== null ? ($profitEuro >= 0) : null,
                 'breakEvenPrice' => $breakEvenPrice,
-                'breakEvenDeltaEuro' => $displayPrice - $breakEvenPrice,
-                'breakEvenDeltaPercent' => $breakEvenPrice > 0 ? (($displayPrice - $breakEvenPrice) / $breakEvenPrice) * 100 : null,
+                'breakEvenDeltaEuro' => $displayPrice !== null ? ($displayPrice - $breakEvenPrice) : null,
+                'breakEvenDeltaPercent' => ($displayPrice !== null && $breakEvenPrice > 0) ? (($displayPrice - $breakEvenPrice) / $breakEvenPrice) * 100 : null,
                 'priceScope' => $allInstanceScoped ? 'instance' : 'item',
                 'priceStrategy' => $resolvedPriceStrategy,
                 'priceConfidence' => $resolvedPriceConfidence,
-                'floatValue' => ((int) ($group['rowCount'] ?? 0)) === 1 ? ($base['floatValue'] ?? null) : null,
-                'paintSeed' => ((int) ($group['rowCount'] ?? 0)) === 1 ? ($base['paintSeed'] ?? null) : null,
-                'inspectLink' => ((int) ($group['rowCount'] ?? 0)) === 1 ? ($base['inspectLink'] ?? null) : null,
                 'costBasisTotal' => $costBasisTotal,
                 'costBasisUnit' => $costBasisUnit,
                 'netPositionValue' => $netPositionValue,
@@ -1025,23 +1024,10 @@ final class PortfolioService
 
     private function resolveOverpayProfile(array $payload): array
     {
-        $overpayEnabled = $this->toBooleanFlag(
-            $payload['overpayEnabled']
-            ?? $payload['isOverpayCandidate']
-            ?? $payload['floatOverpayWorthy']
-            ?? false
-        );
-        $overpayFloorEur = $this->normalizeOverpayFloorEur(
-            $payload['overpayFloorEur']
-            ?? $payload['floatOverpayFloorEur']
-            ?? null
-        );
-        $overpayNote = trim((string) ($payload['overpayNote'] ?? ''));
-
         return [
-            'enabled' => $overpayEnabled,
-            'floorEur' => $overpayFloorEur,
-            'note' => $overpayNote !== '' ? $overpayNote : null,
+            'enabled' => false,
+            'floorEur' => null,
+            'note' => null,
         ];
     }
 

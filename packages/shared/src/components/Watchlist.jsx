@@ -5,7 +5,6 @@ import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
 import { ApiWarnings } from "./ApiWarnings";
 import { ItemListRow } from "./ItemListRow";
-import { PriceSourceBadge } from "./PriceSourceBadge";
 import { X, Trash2 } from "lucide-react";
 import {
   deleteWatchlistItemData,
@@ -301,9 +300,6 @@ export const Watchlist = ({ focusTarget = null }) => {
                             <p>
                               Aktuell: {Number(selectedItem.currentPrice).toFixed(2)} EUR
                             </p>
-                            <PriceSourceBadge
-                              priceSource={selectedItem.priceSource}
-                            />
                           </div>
                         )}
                       </div>

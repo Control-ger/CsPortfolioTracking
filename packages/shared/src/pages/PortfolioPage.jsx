@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Info } from "lucide-react";
+import { Bell, Eye, FolderCog, Info, LayoutGrid, Package } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
 import { ApiWarnings } from "@shared/components";
@@ -35,7 +35,6 @@ import { usePortfolioComposition } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
   fetchPortfolioInvestmentHistory,
-  updateInvestmentOverpay,
   updateInvestmentBucket,
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
@@ -123,6 +122,12 @@ const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
 const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "matching", "management"];
+const DESKTOP_SIDEBAR_TABS = [
+  { key: "overview", label: "Uebersicht", icon: LayoutGrid },
+  { key: "inventory", label: "Inventar", icon: Package },
+  { key: "watchlist", label: "Watchlist", icon: Eye },
+  { key: "management", label: "Verwaltung", icon: FolderCog, desktopOnly: true },
+];
 
 function readStartupWelcomeDismissed() {
   if (typeof window === "undefined") {
@@ -942,6 +947,14 @@ export function PortfolioPage({ initialTab = "overview" }) {
     );
   }
 
+  const handleTabSelect = (nextTab) => {
+    if (!runtimeTabs.includes(nextTab)) {
+      return;
+    }
+    setActiveTab(nextTab);
+    navigate(`/?tab=${nextTab}`, { replace: true });
+  };
+
   const handleOpenWatchlistItem = (item) => {
     if (!item?.id) {
       return;
@@ -951,7 +964,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
       id: item.id,
       requestedAt: Date.now(),
     });
-    setActiveTab("watchlist");
+    handleTabSelect("watchlist");
   };
 
   const handleSwipeNavigation = (direction) => {
@@ -967,9 +980,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     if (nextIndex !== currentIndex) {
       const nextTab = runtimeTabs[nextIndex];
-      const path = nextTab === "overview" ? "/" : `/${nextTab}`;
-      navigate(path);
-      setActiveTab(nextTab);
+      handleTabSelect(nextTab);
     }
   };
 
@@ -1768,19 +1779,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
     setCompositionRefreshToken((current) => current + 1);
   };
 
-  const handleUpdateItemOverpay = async (item, overpayPayload = {}) => {
-    if (!item) {
-      return;
-    }
-
-    const sourceIds = Array.isArray(item?.sourceInvestmentIds) && item.sourceInvestmentIds.length > 0
-      ? item.sourceInvestmentIds
-      : [];
-    await updateInvestmentOverpay(item.id, overpayPayload, sourceIds);
-    await refreshPortfolio();
-    setCompositionRefreshToken((current) => current + 1);
-  };
-
   return (
     <div
       className={`min-h-screen font-sans text-foreground pb-20 touch-pan-y ${
@@ -2358,21 +2356,51 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {!showSetupJourney ? (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* Tab Navigation - nur auf Desktop sichtbar */}
-          <div className="hidden sm:block">
+        <div className={isDesktopRuntime ? "w-full lg:grid lg:grid-cols-[72px_minmax(0,1fr)] lg:gap-4" : "w-full"}>
+          {isDesktopRuntime ? (
+            <aside className="hidden lg:flex">
+              <div className="sticky top-24 flex h-fit w-[72px] flex-col items-center gap-2 rounded-2xl border bg-card/70 p-2 shadow-sm backdrop-blur">
+                {DESKTOP_SIDEBAR_TABS
+                  .filter((tab) => runtimeTabs.includes(tab.key) && (!tab.desktopOnly || isDesktopRuntime))
+                  .map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => handleTabSelect(tab.key)}
+                        className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
+                          isActive
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
+                        }`}
+                        title={tab.label}
+                        aria-label={tab.label}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </button>
+                    );
+                  })}
+              </div>
+            </aside>
+          ) : null}
+
+          <Tabs value={activeTab} onValueChange={handleTabSelect} className="w-full min-w-0">
             {error && (
               <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
-            <TabsList className={`grid w-full gap-1 sm:max-w-200 ${isDesktopRuntime ? "grid-cols-4" : "grid-cols-3"}`}>
-              <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
-              <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
-              <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
-              {isDesktopRuntime ? <TabsTrigger value="management" className="text-xs sm:text-sm">Verwaltung</TabsTrigger> : null}
-            </TabsList>
-          </div>
+            {/* Tab Navigation - auf Desktop Runtime durch Sidebar ersetzt */}
+            <div className={isDesktopRuntime ? "hidden sm:block lg:hidden" : "hidden sm:block"}>
+              <TabsList className={`grid w-full gap-1 sm:max-w-200 ${isDesktopRuntime ? "grid-cols-4" : "grid-cols-3"}`}>
+                <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
+                <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
+                <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
+                {isDesktopRuntime ? <TabsTrigger value="management" className="text-xs sm:text-sm">Verwaltung</TabsTrigger> : null}
+              </TabsList>
+            </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
             {portfolioPreferences.metricsDisplayMode === "toggle_mode" ? (
@@ -2579,7 +2607,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
                 onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                onOverpayChange={isDesktopRuntime ? handleUpdateItemOverpay : undefined}
                 canToggleExclude={isDesktopRuntime}
               />
             </div>
@@ -2598,7 +2625,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     historyLoading={selectedItemHistoryLoading}
                     onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
                     onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                    onOverpayChange={isDesktopRuntime ? handleUpdateItemOverpay : undefined}
                     canToggleExclude={isDesktopRuntime}
                   />
                 );
@@ -3145,6 +3171,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           </TabsContent>
           ) : null}
         </Tabs>
+        </div>
         ) : null}
 
         <CsFloatTradeSyncModal

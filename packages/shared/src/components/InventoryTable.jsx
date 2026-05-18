@@ -11,7 +11,6 @@ import {
   TableRow,
 } from "@shared/components/ui/table";
 
-import { PriceSourceBadge } from "@shared/components/PriceSourceBadge";
 import { Abbr } from "@shared/components/AbbreviationTooltip";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
@@ -141,10 +140,6 @@ export function InventoryTable({ investments, onSelectItem }) {
         return item.displayPrice;
       }
 
-      if (typeof item.buyPrice === "number" && Number.isFinite(item.buyPrice)) {
-        return item.buyPrice;
-      }
-
       return 0;
     };
 
@@ -254,11 +249,6 @@ export function InventoryTable({ investments, onSelectItem }) {
                         <Badge variant="outline" className="text-[9px]">
                           {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
                         </Badge>
-                        {(item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
-                          <Badge variant="outline" className="text-[9px] border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                            overpay
-                          </Badge>
-                        ) : null}
                       </span>
                     </span>
                   </div>
@@ -274,24 +264,13 @@ export function InventoryTable({ investments, onSelectItem }) {
                   {item.isLive ? (
                     <div className="flex flex-col items-end gap-1">
                       <span>{formatPrice(item.livePrice)}</span>
-                      <div className="flex items-center gap-1">
-                        <PriceSourceBadge priceSource={item.priceSource} compact />
-                        {String(item.priceScope || "item").toLowerCase() === "instance" ? (
-                          <Badge variant="outline" className="text-[9px] uppercase">
-                            Instanz
-                          </Badge>
-                        ) : null}
-                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {item.lastPriceUpdateAt || item.freshnessLabel || "unbekannt"}
+                      </span>
                     </div>
                   ) : (
                     <div className="flex flex-col items-end">
-                      <span className="text-xs">
-                        {formatPrice(item.buyPriceUsd ?? item.buyPrice, {
-                          useUsd: true,
-                          buyPriceUsd: item.buyPriceUsd ?? item.buyPrice,
-                        })}
-                      </span>
-                      <span className="animate-pulse text-[9px] uppercase">Warte...</span>
+                      <span className="text-xs text-muted-foreground">Kein Preis verfuegbar</span>
                     </div>
                   )}
                 </TableCell>
@@ -302,7 +281,7 @@ export function InventoryTable({ investments, onSelectItem }) {
                       {`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground opacity-50">0.0%</span>
+                    <span className="text-muted-foreground opacity-50">-</span>
                   )}
                 </TableCell>
               </TableRow>
@@ -356,8 +335,8 @@ export function InventoryTable({ investments, onSelectItem }) {
                 ...item,
                 currentPrice: item.isLive
                   ? item.livePrice
-                  : item.buyPrice,
-                currentPriceUsd: item.isLive ? null : item.buyPriceUsd ?? item.buyPrice,
+                  : null,
+                currentPriceUsd: null,
                 roi: item.roi,
                 trend: item.isLive ? (item.roi >= 0 ? "up" : "down") : null,
                 changeLabel: item.isLive

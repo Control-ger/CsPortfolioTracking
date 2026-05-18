@@ -125,7 +125,7 @@ final class PricingService
             )
             : [];
         $cachedLive = $this->selectLiveCacheForMode($cachedBySource, $priceMode);
-        $instancePricingEligible = $this->isInstancePricingEligible($resolvedInstanceHint, $catalog, $priceMode);
+        $instancePricingEligible = $this->isInstancePricingEligible($resolvedInstanceHint, $catalog);
 
         if (!$instancePricingEligible && $this->isFreshLiveCache($cachedLive)) {
             Logger::event(
@@ -164,7 +164,7 @@ final class PricingService
 
         $listing = null;
         $shouldFetchCsFloatPrice = $instancePricingEligible
-            ? $priceMode !== self::PRICE_SOURCE_STEAM
+            ? true
             : $this->shouldFetchCsFloatPrice($priceMode, $cachedBySource);
         if ($shouldFetchCsFloatPrice && $this->csFloatCircuitBreakerWarning === null) {
             $listingResult = $instancePricingEligible
@@ -212,51 +212,16 @@ final class PricingService
             }
         }
 
-        if (!$instancePricingEligible && $this->shouldFetchSteamPrice($priceMode, $cachedBySource, $csFloatUpdated)) {
-            $steamPriceSnapshot = $this->resolveSteamPriceSnapshot($itemName, $steamHint);
-            if ($steamPriceSnapshot !== null) {
-                $catalog = $this->persistCatalogEntry(
-                    $itemName,
-                    $catalog,
-                    $steamPriceSnapshot['steamHint'],
-                    null
-                );
-                $liveCache = $this->persistLiveCacheEntry($itemId, $steamPriceSnapshot['priceUsd'], self::PRICE_SOURCE_STEAM);
-                $cachedBySource[self::PRICE_SOURCE_STEAM] = $liveCache;
-            }
-        }
-
         $selectedLive = $instanceLive ?? $this->selectLiveCacheForMode($cachedBySource, $priceMode);
         if ($instancePricingEligible && $selectedLive === null && is_array($cachedLive)) {
             $selectedLive = $cachedLive;
         }
-        if (
-            ($selectedLive['priceSource'] ?? null) === self::PRICE_SOURCE_STEAM
-            && ($priceMode === self::PRICE_MODE_AUTO || $priceMode === self::PRICE_SOURCE_CSFLOAT)
-        ) {
-            Logger::event(
-                'warning',
-                'external',
-                'external.pricing.fallback_to_steam',
-                'Pricing fallback to Steam',
-                [
-                    'provider' => 'steam',
-                    'fallbackUsed' => true,
-                    'itemName' => $itemName,
-                    'priceMode' => $priceMode,
-                ]
-            );
-        }
-
         $presentation = $this->buildPresentation($catalog, $selectedLive, $priceMode);
         if ($instancePricingEligible) {
             $presentation['priceScope'] = $selectedLive['priceScope'] ?? self::PRICE_SCOPE_ITEM;
             $presentation['priceStrategy'] = $selectedLive['priceStrategy'] ?? null;
             $presentation['priceConfidence'] = $selectedLive['priceConfidence'] ?? null;
             $presentation['sampleSize'] = $selectedLive['sampleSize'] ?? null;
-            $presentation['floatValue'] = $selectedLive['floatValue'] ?? ($resolvedInstanceHint['floatValue'] ?? null);
-            $presentation['paintSeed'] = $selectedLive['paintSeed'] ?? ($resolvedInstanceHint['paintSeed'] ?? null);
-            $presentation['inspectLink'] = $selectedLive['inspectLink'] ?? ($resolvedInstanceHint['inspectLink'] ?? null);
         }
 
         return $presentation;
@@ -557,16 +522,6 @@ final class PricingService
 
     private function buildPresentation(?array $catalog, ?array $liveCache, string $priceMode): array
     {
-        $selectedSource = isset($liveCache['priceSource']) ? (string) $liveCache['priceSource'] : null;
-        $fallbackUsed = false;
-        if ($selectedSource !== null) {
-            if ($priceMode === self::PRICE_MODE_AUTO) {
-                $fallbackUsed = $selectedSource !== self::PRICE_SOURCE_CSFLOAT;
-            } elseif ($priceMode === self::PRICE_SOURCE_CSFLOAT || $priceMode === self::PRICE_SOURCE_STEAM) {
-                $fallbackUsed = $selectedSource !== $priceMode;
-            }
-        }
-
         return [
             'itemId' => $catalog['itemId'] ?? null,
             'marketHashName' => $catalog['marketHashName'] ?? null,
@@ -583,14 +538,11 @@ final class PricingService
             'iconUrl' => $catalog['imageUrl'] ?? null,
             'fetchedAt' => $liveCache['fetchedAt'] ?? null,
             'priceMode' => $priceMode,
-            'priceSourceFallbackUsed' => $fallbackUsed,
+            'priceSourceFallbackUsed' => false,
             'priceScope' => $liveCache['priceScope'] ?? self::PRICE_SCOPE_ITEM,
             'priceStrategy' => $liveCache['priceStrategy'] ?? null,
             'priceConfidence' => $liveCache['priceConfidence'] ?? null,
             'sampleSize' => $liveCache['sampleSize'] ?? null,
-            'floatValue' => $liveCache['floatValue'] ?? null,
-            'paintSeed' => $liveCache['paintSeed'] ?? null,
-            'inspectLink' => $liveCache['inspectLink'] ?? null,
         ];
     }
 
@@ -615,17 +567,13 @@ final class PricingService
         ];
     }
 
-    private function isInstancePricingEligible(?array $instanceHint, ?array $catalog, string $priceMode): bool
+    private function isInstancePricingEligible(?array $instanceHint, ?array $catalog): bool
     {
         if ($instanceHint === null) {
             return false;
         }
         $hasValuationHint = isset($instanceHint['floatValue']) || isset($instanceHint['paintSeed']);
         if (!$hasValuationHint) {
-            return false;
-        }
-
-        if ($priceMode === self::PRICE_SOURCE_STEAM) {
             return false;
         }
 
@@ -947,8 +895,6 @@ final class PricingService
     {
         $preparedMatches = [];
         $presentationCache = [];
-        $usdToEurRate = $this->getUsdToEurRate();
-
         foreach ($matchedItems as $match) {
             $marketHashName = (string) ($match['marketHashName'] ?? '');
             if ($marketHashName === '') {
@@ -969,19 +915,6 @@ final class PricingService
             $priceEur = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
             $priceUsd = isset($presentation['priceUsd']) ? (float) $presentation['priceUsd'] : null;
             $priceSource = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
-
-            if ($priceEur === null || $priceUsd === null) {
-                $steamHint = is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null;
-                $hintPriceUsd = isset($steamHint['sellPriceUsd']) && is_numeric($steamHint['sellPriceUsd'])
-                    ? (float) $steamHint['sellPriceUsd']
-                    : null;
-
-                if ($hintPriceUsd !== null && $hintPriceUsd > 0) {
-                    $priceUsd = round($hintPriceUsd, 2);
-                    $priceEur = round($priceUsd * $usdToEurRate, 2);
-                    $priceSource = self::PRICE_SOURCE_STEAM;
-                }
-            }
 
             if ($priceEur !== null) {
                 $match['sortPriceEur'] = $priceEur;
@@ -1011,7 +944,7 @@ final class PricingService
         $map = [];
         foreach ($rows as $row) {
             $source = strtolower(trim((string) ($row['priceSource'] ?? '')));
-            if ($source !== self::PRICE_SOURCE_CSFLOAT && $source !== self::PRICE_SOURCE_STEAM) {
+            if ($source !== self::PRICE_SOURCE_CSFLOAT) {
                 continue;
             }
 
@@ -1101,7 +1034,7 @@ final class PricingService
     private function resolvePriceModeForUser(int $userId): string
     {
         if ($userId <= 0) {
-            return self::PRICE_MODE_AUTO;
+            return self::PRICE_SOURCE_CSFLOAT;
         }
 
         if (isset($this->priceSourcePreferenceCache[$userId])) {
@@ -1150,11 +1083,7 @@ final class PricingService
     {
         $normalized = strtolower(trim((string) $mode));
 
-        return match ($normalized) {
-            self::PRICE_SOURCE_CSFLOAT => self::PRICE_SOURCE_CSFLOAT,
-            self::PRICE_SOURCE_STEAM => self::PRICE_SOURCE_STEAM,
-            default => self::PRICE_MODE_AUTO,
-        };
+        return self::PRICE_SOURCE_CSFLOAT;
     }
 
     private function sortSearchMatches(array &$matchedItems, string $sortBy): void

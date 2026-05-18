@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -7,7 +7,6 @@ import {
   CardDescription,
 } from "./ui/card";
 import { Button } from "./ui/button";
-import { PriceSourceBadge } from "./PriceSourceBadge";
 import { ExcludeInvestmentDialog } from "./ExcludeInvestmentDialog";
 import { toggleExcludeInvestment } from "../lib/apiClient";
 import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
@@ -22,30 +21,14 @@ export const ItemDetailPanel = ({
   historyLoading,
   onExcludeChange,
   onBucketChange,
-  onOverpayChange,
   canToggleExclude = true,
 }) => {
   const { formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
-  const [isOverpayLoading, setIsOverpayLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
-  const [overpayEnabledDraft, setOverpayEnabledDraft] = useState(false);
-  const [overpayFloorDraft, setOverpayFloorDraft] = useState("");
-  const [overpayNoteDraft, setOverpayNoteDraft] = useState("");
   const excludeEnabled = canToggleExclude && typeof onExcludeChange === "function";
   const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
-  const overpayToggleEnabled = canToggleExclude && typeof onOverpayChange === "function";
-
-  useEffect(() => {
-    const enabled = Boolean(item?.overpayEnabled ?? item?.isOverpayCandidate);
-    const floorValue = Number(item?.overpayFloorEur);
-    setOverpayEnabledDraft(enabled);
-    setOverpayFloorDraft(
-      Number.isFinite(floorValue) && floorValue > 0 ? floorValue.toFixed(2) : "",
-    );
-    setOverpayNoteDraft(String(item?.overpayNote || ""));
-  }, [item?.id, item?.overpayEnabled, item?.isOverpayCandidate, item?.overpayFloorEur, item?.overpayNote]);
 
   if (!item)
     return (
@@ -92,54 +75,8 @@ export const ItemDetailPanel = ({
     await onBucketChange(item, nextBucket);
   };
 
-  const handleOverpaySave = async () => {
-    if (!overpayToggleEnabled) {
-      return;
-    }
-
-    const parsedFloor = Number(overpayFloorDraft);
-    const normalizedFloor =
-      Number.isFinite(parsedFloor) && parsedFloor > 0
-        ? Number(parsedFloor.toFixed(2))
-        : null;
-    const payload = {
-      overpayEnabled: Boolean(overpayEnabledDraft),
-      overpayFloorEur: normalizedFloor,
-      overpayNote: String(overpayNoteDraft || "").trim() || null,
-    };
-
-    setIsOverpayLoading(true);
-    try {
-      await onOverpayChange(item, payload);
-    } catch (error) {
-      console.error("Failed to update overpay profile:", error);
-    } finally {
-      setIsOverpayLoading(false);
-    }
-  };
-
   const stats6m = item.details?.stats6m;
   const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
-  const floatValue = Number(item.floatValue);
-  const hasFloatValue = Number.isFinite(floatValue) && floatValue >= 0 && floatValue <= 1;
-  const paintSeed = Number(item.paintSeed);
-  const hasPaintSeed = Number.isFinite(paintSeed) && paintSeed >= 0;
-  const priceScope = String(item.priceScope || "item").toLowerCase();
-  const strategyLabelMap = {
-    seed_exact: "Pattern-Match",
-    float_band_00025: "Float-Band +/-0.0025",
-    float_band_00050: "Float-Band +/-0.0050",
-    float_band_00100: "Float-Band +/-0.0100",
-    float_band_00200: "Float-Band +/-0.0200",
-    market_lowest: "Market Lowest",
-  };
-  const strategyLabel = strategyLabelMap[String(item.priceStrategy || "").toLowerCase()] || null;
-  const confidenceLabelMap = {
-    high: "hoch",
-    medium: "mittel",
-    low: "niedrig",
-  };
-  const confidenceLabel = confidenceLabelMap[String(item.priceConfidence || "").toLowerCase()] || null;
   const formatUsdPrice = (value) =>
     formatPrice(value, {
       useUsd: true,
@@ -185,11 +122,6 @@ export const ItemDetailPanel = ({
                   <Badge variant="outline" className="text-[10px] uppercase">
                     Funding: {item.fundingMode === "cash_in" ? "Cash-In" : "Wallet"}
                   </Badge>
-                  {(item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
-                    <Badge variant="outline" className="text-[10px] uppercase border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                      Overpay
-                    </Badge>
-                  ) : null}
                   {excludeEnabled ? (
                     <Button
                       variant="outline"
@@ -234,29 +166,13 @@ export const ItemDetailPanel = ({
                 <p
                     className={`mt-2 text-xs sm:text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
                 >
-                  {item.livePrice !== null ? formatPrice(item.livePrice) : "Nicht verfuegbar"}
+                  {item.livePrice !== null ? formatPrice(item.livePrice) : "Kein Preis verfuegbar"}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-1 sm:gap-2">
-                  <PriceSourceBadge priceSource={item.priceSource} compact={true} />
-                  <p className="text-[10px] uppercase text-muted-foreground">
-                    {item.pricingStatus === "csfloat"
-                        ? "CSFloat"
-                        : item.pricingStatus === "steam"
-                            ? "Steam"
-                            : "Einkauf"}
+                  <p className="text-[10px] text-muted-foreground">
+                    {item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}
                   </p>
                 </div>
-                {priceScope === "instance" ? (
-                  <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                    Instanzbewertung{strategyLabel ? `: ${strategyLabel}` : ""}
-                    {confidenceLabel ? ` (${confidenceLabel})` : ""}
-                  </p>
-                ) : null}
-                {item.overpayApplied && Number.isFinite(Number(item.baseLivePrice)) ? (
-                  <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                    Overpay aktiv: Basis {formatPrice(item.baseLivePrice)} → Anzeige {formatPrice(item.livePrice)}
-                  </p>
-                ) : null}
               </div>
 
               <div className="rounded-md border p-2 sm:p-3">
@@ -269,14 +185,28 @@ export const ItemDetailPanel = ({
 
               <div className="rounded-md border p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Positionswert</p>
-                <p className="mt-2 text-xs sm:text-sm font-bold">{formatPrice(item.currentValue)}</p>
-                <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatPrice(item.displayPrice)}</p>
+                <p className="mt-2 text-xs sm:text-sm font-bold">
+                  {item.isLive ? formatPrice(item.currentValue) : "N/A"}
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {item.isLive ? `${item.quantity}x ${formatPrice(item.displayPrice)}` : "Kein csfloat-Preis vorhanden"}
+                </p>
               </div>
 
               <div className="rounded-md border p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Gewinn / Verlust</p>
-                <p className={`mt-2 text-xs sm:text-sm font-bold ${item.isProfitPositive ? "text-green-600" : "text-red-600"}`}>
-                  {`${item.isProfitPositive ? "+" : ""}${formatPrice(item.profitEuro)}`}
+                <p
+                  className={`mt-2 text-xs sm:text-sm font-bold ${
+                    item.isProfitPositive === null
+                      ? "text-muted-foreground"
+                      : item.isProfitPositive
+                        ? "text-green-600"
+                        : "text-red-600"
+                  }`}
+                >
+                  {item.isLive
+                    ? `${item.isProfitPositive ? "+" : ""}${formatPrice(item.profitEuro)}`
+                    : "N/A"}
                 </p>
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   {roiValue === null
@@ -292,78 +222,6 @@ export const ItemDetailPanel = ({
                   {item.lastPriceUpdateAt || "Unbekannt"}
                 </p>
               </div>
-
-              {(hasFloatValue || hasPaintSeed || item.inspectLink) ? (
-                <div className="rounded-md border p-2 sm:p-3">
-                  <p className="text-[10px] uppercase text-muted-foreground">Instanzdaten</p>
-                  <p className="mt-2 text-xs sm:text-sm font-bold">
-                    {hasFloatValue ? `Float: ${floatValue.toFixed(6)}` : "Float: -"}
-                  </p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    {hasPaintSeed ? `Pattern Seed: ${paintSeed}` : "Pattern Seed: -"}
-                  </p>
-                  {item.inspectLink ? (
-                    <a
-                      href={item.inspectLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 inline-flex text-[10px] uppercase tracking-wide text-primary underline-offset-2 hover:underline"
-                    >
-                      Inspect Link
-                    </a>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {overpayToggleEnabled || (item?.overpayEnabled ?? item?.isOverpayCandidate) ? (
-                <div className="rounded-md border p-2 sm:p-3">
-                  <p className="text-[10px] uppercase text-muted-foreground">Float Overpay</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={overpayEnabledDraft}
-                        onChange={(event) => setOverpayEnabledDraft(event.target.checked)}
-                      />
-                      Overpay-Kandidat aktiv
-                    </label>
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={overpayFloorDraft}
-                      onChange={(event) => setOverpayFloorDraft(event.target.value)}
-                      placeholder="Floor EUR (optional)"
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    />
-                    <input
-                      type="text"
-                      value={overpayNoteDraft}
-                      onChange={(event) => setOverpayNoteDraft(event.target.value)}
-                      placeholder="Notiz (z. B. Tradeup-freundlicher Float)"
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    />
-                    {overpayToggleEnabled ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isOverpayLoading}
-                        onClick={() => void handleOverpaySave()}
-                        className="h-8 text-[11px] uppercase"
-                      >
-                        {isOverpayLoading ? "Speichert..." : "Overpay speichern"}
-                      </Button>
-                    ) : null}
-                  </div>
-                  {Number.isFinite(Number(item?.overpayFloorEur)) ? (
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      Aktueller Floor: {formatPrice(Number(item.overpayFloorEur))}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
 
               <div className="rounded-md border p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Cost Basis</p>

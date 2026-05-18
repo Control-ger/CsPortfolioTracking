@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 import { BaseModal } from "@shared/components/BaseModal";
-import { PriceSourceBadge } from "@shared/components/PriceSourceBadge";
 import { Badge } from "@shared/components/ui/badge";
 import { BREAKPOINTS } from "@shared/lib/constants";
 
@@ -95,7 +94,6 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               <strong>Condition:</strong> {item.wearName || "N/A"}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <PriceSourceBadge priceSource={item.priceSource} />
               <Badge variant="outline" className={freshnessBadgeClass(item.freshnessStatus)}>
                 {item.freshnessLabel || "unbekannt"}
               </Badge>
@@ -128,25 +126,32 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               <p
                 className={`text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
               >
-                {item.livePrice !== null ? formatPrice(item.livePrice) : "Nicht verfuegbar"}
+                {item.livePrice !== null ? formatPrice(item.livePrice) : "Kein Preis verfuegbar"}
               </p>
             </div>
 
             <div className="rounded-md border p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Position</p>
-              <p className="text-sm font-bold">{formatPrice(item.currentValue)}</p>
+              <p className="text-sm font-bold">{item.isLive ? formatPrice(item.currentValue) : "N/A"}</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                {item.quantity}x {formatPrice(item.displayPrice)}
+                {item.isLive ? `${item.quantity}x ${formatPrice(item.displayPrice)}` : "Kein csfloat-Preis vorhanden"}
               </p>
             </div>
 
             <div className="rounded-md border p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Gewinn/Verlust</p>
               <p
-                className={`text-sm font-bold ${item.isProfitPositive ? "text-green-600" : "text-red-600"}`}
+                className={`text-sm font-bold ${
+                  item.isProfitPositive === null
+                    ? "text-muted-foreground"
+                    : item.isProfitPositive
+                      ? "text-green-600"
+                      : "text-red-600"
+                }`}
               >
-                {item.isProfitPositive ? "+" : ""}
-                {formatPrice(item.profitEuro)}
+                {item.isLive
+                  ? `${item.isProfitPositive ? "+" : ""}${formatPrice(item.profitEuro)}`
+                  : "N/A"}
               </p>
               <p className="mt-1 text-[10px] text-muted-foreground">{formatSignedPercent(item.roi)}</p>
             </div>
