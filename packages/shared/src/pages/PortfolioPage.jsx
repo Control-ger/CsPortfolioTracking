@@ -927,7 +927,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
   // hook order after login and triggers React's minified error #310.
   if (isElectronRuntime && showStartupWelcome) {
     return (
-      <div className="steam-startup-shell flex min-h-screen items-center justify-center p-4">
+      <div className="steam-startup-shell flex min-h-full items-center justify-center p-4">
         <SteamLoginPrompt
           onLoginSuccess={async () => {
             await refreshPortfolio();
@@ -941,7 +941,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   if (authRequired && !portfolioLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
+      <div className={`flex items-center justify-center p-4 ${isElectronRuntime ? "min-h-full" : "min-h-screen"}`}>
         <SteamLoginPrompt onLoginSuccess={refreshPortfolio} />
       </div>
     );
@@ -1782,7 +1782,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   return (
     <div
-      className={`min-h-screen font-sans text-foreground pb-20 touch-pan-y ${
+      className={`${isElectronRuntime ? "min-h-full" : "min-h-screen"} font-sans text-foreground pb-20 md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
       onTouchStart={onTouchStart}
@@ -2361,10 +2361,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {!showSetupJourney ? (
-        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
+        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:h-full lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
           {useDesktopSidebarShell ? (
-            <aside className="hidden lg:block">
-              <div className="sticky top-0 h-screen w-[88px] border-r border-border/70 bg-card/90 backdrop-blur">
+            <aside className="hidden lg:block lg:h-full">
+              <div className="sticky top-0 h-full min-h-0 w-[88px] overflow-hidden border-r border-border/70 bg-card/90 backdrop-blur">
                 <div className="flex h-full flex-col items-center py-4">
                   <nav className="flex w-full flex-col items-center gap-2 px-2">
                     {DESKTOP_SIDEBAR_TABS
@@ -2392,6 +2392,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   </nav>
 
                   <div className="mt-auto flex w-full flex-col items-center gap-2 px-2 pb-2">
+                    <ThemeToggle />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full p-0">
@@ -2435,34 +2436,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
             </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
-            {portfolioPreferences.metricsDisplayMode === "toggle_mode" ? (
-              <Card>
-                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
-                  <div>
-                    <p className="text-sm font-semibold">Kennzahlen-Scope</p>
-                    <p className="text-xs text-muted-foreground">
-                      Waehle, ob Portfolio-KPIs nur Investments oder alle Items enthalten.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant={metricsScope === "investments" ? "default" : "outline"}
-                      onClick={() => void handleMetricsScopeChange("investments")}
-                    >
-                      Nur Investments
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={metricsScope === "all" ? "default" : "outline"}
-                      onClick={() => void handleMetricsScopeChange("all")}
-                    >
-                      Alles
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
             {/* Mobile: PortfolioHeaderCard oben, Desktop: Alte Stats-Cards */}
             <div className="sm:hidden">
               <PortfolioHeaderCard
@@ -2520,9 +2493,19 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 history={portfolioHistory}
                 isLoading={portfolioLoading}
                 onHoverChange={setHoveredChartData}
+                metricsScope={metricsScope}
+                onMetricsScopeChange={
+                  portfolioPreferences.metricsDisplayMode === "toggle_mode"
+                    ? (nextScope) => void handleMetricsScopeChange(nextScope)
+                    : null
+                }
               />
               <div className="hidden md:block">
-                <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
+                <WatchlistOverview
+                  maxItems={useDesktopSidebarShell ? 4 : 5}
+                  allowExpand={!useDesktopSidebarShell}
+                  onOpenItem={handleOpenWatchlistItem}
+                />
               </div>
             </div>
 
@@ -2537,8 +2520,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 {compositionLoading ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                        <div className="lg:col-span-2 flex justify-center">
-                          <Skeleton className="h-55 w-full max-w-sm sm:h-80" />
+                      <div className="flex justify-center lg:col-span-2">
+                        <Skeleton className="h-55 w-full max-w-sm sm:h-80" />
                       </div>
                       <div className="space-y-2">
                         {[1, 2, 3, 4].map((entry) => (

@@ -1,14 +1,20 @@
 import { useTheme } from '../ThemeContext';
 
 export function ThemeToggle() {
-  const { isDark, toggle } = useTheme();
+  const { isDark, toggle, themeMode } = useTheme();
+  const title =
+    themeMode === 'system'
+      ? `Systemmodus aktiv (${isDark ? 'dunkel' : 'hell'}) - klicken zum Ueberschreiben`
+      : isDark
+        ? 'Helles Design aktivieren'
+        : 'Dunkles Design aktivieren';
 
   return (
     <button
       onClick={toggle}
-      className="p-2 rounded-lg hover:bg-muted transition-colors"
-      aria-label="Toggle dark mode"
-      title={isDark ? 'Light mode' : 'Dark mode'}
+      className="relative rounded-lg p-2 transition-colors hover:bg-muted"
+      aria-label="Farbmodus umschalten"
+      title={title}
     >
       {isDark ? (
         // Sun icon for light mode
@@ -39,6 +45,11 @@ export function ThemeToggle() {
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
       )}
+      {themeMode === 'system' ? (
+        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[8px] font-semibold leading-none text-primary-foreground">
+          A
+        </span>
+      ) : null}
     </button>
   );
 }

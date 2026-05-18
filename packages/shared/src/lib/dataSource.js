@@ -856,8 +856,27 @@ export async function fetchPortfolioCompositionData(options = {}) {
   );
   const scopedRows = filterRowsByScope(rawRows, options.scope);
   const activeRows = scopedRows.filter((row) => !isExcludedRow(row));
-  const clusteredRows = clusterDesktopInvestments(activeRows);
-  return buildPortfolioComposition(clusteredRows);
+  let clusteredRows = clusterDesktopInvestments(activeRows);
+
+  try {
+    const upstreamRowsResponse = await fetchApiPortfolioInvestments({
+      signal: options.signal,
+      scope: options.scope,
+    });
+    const upstreamRows = Array.isArray(upstreamRowsResponse?.data)
+      ? upstreamRowsResponse.data
+      : [];
+
+    if (upstreamRows.length > 0) {
+      clusteredRows = enrichDesktopRowsWithUpstreamLiveData(clusteredRows, upstreamRows);
+    }
+  } catch (error) {
+    if (!isAbortLikeError(error)) {
+      console.warn("[desktop-composition] upstream investments unavailable", error);
+    }
+  }
+
+  return buildPortfolioComposition(clusteredRows.map(enforceCsfloatOnlyRow));
 }
 
 export async function fetchWatchlistData(options = {}) {

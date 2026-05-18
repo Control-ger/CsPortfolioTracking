@@ -90,7 +90,11 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
   );
 };
 
-export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenItem }) => {
+export const WatchlistOverview = ({
+  maxItems = UI.MAX_WATCHLIST_ITEMS,
+  onOpenItem,
+  allowExpand = true,
+}) => {
   const [allWatchlistItems, setAllWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [warnings, setWarnings] = useState([]);
@@ -114,6 +118,12 @@ export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenIte
 
     loadWatchlistData();
   }, [maxItems]);
+
+  useEffect(() => {
+    if (!allowExpand) {
+      setIsExpanded(false);
+    }
+  }, [allowExpand]);
 
   if (loading) {
     return (
@@ -163,11 +173,13 @@ export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenIte
   // Berechne Top Mover
   const { gainers, losers, others } = calculateTopMovers(allWatchlistItems);
   const hasTopMovers = gainers.length > 0 || losers.length > 0;
+  const canExpand = allowExpand && others.length > 0;
+  const effectiveExpanded = canExpand && isExpanded;
 
   // Bestimme welche Items angezeigt werden (für nicht-expandierte Ansicht)
   const remainingSlots = Math.max(0, maxItems - (gainers.length + losers.length));
   const collapsedOthersCount = others.length > 0 ? Math.max(1, remainingSlots) : 0;
-  const displayedOthers = isExpanded ? others : others.slice(0, collapsedOthersCount);
+  const displayedOthers = effectiveExpanded ? others : others.slice(0, collapsedOthersCount);
   const hasMoreOthers = others.length > displayedOthers.length;
 
   return (
@@ -175,16 +187,20 @@ export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenIte
       <CardHeader>
         <button
           type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => {
+            if (canExpand) {
+              setIsExpanded(!isExpanded);
+            }
+          }}
           className="flex w-full items-center justify-between rounded-lg p-0 transition-colors hover:bg-muted/30"
-          aria-expanded={isExpanded}
+          aria-expanded={canExpand ? effectiveExpanded : undefined}
         >
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
             Watchlist ({allWatchlistItems.length})
           </CardTitle>
-          {hasMoreOthers && (
-            isExpanded ? (
+          {canExpand && hasMoreOthers && (
+            effectiveExpanded ? (
               <ChevronUp className="h-5 w-5 text-muted-foreground" />
             ) : (
               <ChevronDown className="h-5 w-5 text-muted-foreground" />
@@ -263,7 +279,7 @@ export const WatchlistOverview = ({ maxItems = UI.MAX_WATCHLIST_ITEMS, onOpenIte
           )}
         </div>
 
-        {hasMoreOthers && !isExpanded && (
+        {canExpand && hasMoreOthers && !effectiveExpanded && (
           <p className="mt-3 text-center text-xs text-muted-foreground">
             {others.length - displayedOthers.length} weitere Items • Klick zum Ausklappen
           </p>

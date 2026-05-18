@@ -184,6 +184,8 @@ export const PortfolioChart = ({
   isLoading = false,
   onHoverChange = null,
   showAbsolute = false,
+  metricsScope = null,
+  onMetricsScopeChange = null,
 }) => {
   const [rangeKey, setRangeKey] = useState("MAX");
 
@@ -261,26 +263,53 @@ export const PortfolioChart = ({
       <CardHeader className="pb-2 sm:pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="hidden text-base sm:block sm:text-lg">{title}</CardTitle>
-          <div className="inline-flex w-fit items-center rounded-md border p-1">
-            {RANGE_OPTIONS.map((option) => {
-              const isActive = rangeKey === option.key;
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            {typeof onMetricsScopeChange === "function" ? (
+              <div className="inline-flex w-fit items-center rounded-md border p-1">
+                {[
+                  { key: "investments", label: "Investments" },
+                  { key: "all", label: "Alles" },
+                ].map((option) => {
+                  const isActive = metricsScope === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
+                        isActive
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                      }`}
+                      onClick={() => onMetricsScopeChange(option.key)}
+                      disabled={isLoading}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            <div className="inline-flex w-fit items-center rounded-md border p-1">
+              {RANGE_OPTIONS.map((option) => {
+                const isActive = rangeKey === option.key;
 
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
-                    isActive
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                  }`}
-                  onClick={() => setRangeKey(option.key)}
-                  disabled={isLoading}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      isActive
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    }`}
+                    onClick={() => setRangeKey(option.key)}
+                    disabled={isLoading}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </CardHeader>

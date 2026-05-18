@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign, LineChart } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { useTheme } from "@shared/contexts";
 
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
@@ -61,6 +62,7 @@ export function SettingsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const currencyContext = useCurrency();
+  const { themeMode, setThemeMode, isDark, systemPrefersDark } = useTheme();
 
   // CSFloat API Key State
   const [apiKey, setApiKey] = useState("");
@@ -228,6 +230,11 @@ export function SettingsPage() {
   
   const renderGeneralTab = () => {
     const { currency, currencies, setCurrency, exchangeRates, ratesLoading } = currencyContext;
+    const themeModeLabel = themeMode === "system"
+      ? `System (${isDark ? "dunkel" : "hell"})`
+      : themeMode === "dark"
+        ? "Dunkel"
+        : "Hell";
     const priceSourceLabel = priceSourceMode === "csfloat"
       ? "Nur CSFloat"
       : priceSourceMode === "steam"
@@ -236,6 +243,47 @@ export function SettingsPage() {
 
     return (
       <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Darstellung</CardTitle>
+            <CardDescription>
+              Waehle, ob die App hell, dunkel oder automatisch per Systempraeferenz laufen soll.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-3">
+              {[
+                {
+                  value: "system",
+                  label: "System",
+                  hint: `Automatisch (${systemPrefersDark ? "dunkel" : "hell"})`,
+                },
+                { value: "light", label: "Hell", hint: "Immer helles Design" },
+                { value: "dark", label: "Dunkel", hint: "Immer dunkles Design" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setThemeMode(option.value)}
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    themeMode === option.value
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:bg-accent"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{option.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{option.hint}</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted p-3">
+              <p className="text-xs text-muted-foreground">
+                Aktiver Modus: <span className="font-semibold text-foreground">{themeModeLabel}</span>
+              </p>
+              <ThemeToggle />
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -745,7 +793,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-8 font-sans text-foreground pb-20 md:pb-0">
+    <div className={`${desktopRuntime ? "min-h-full" : "min-h-screen"} bg-background p-4 sm:p-8 font-sans text-foreground pb-20 md:pb-0`}>
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Header */}
         <header className="flex items-center justify-between gap-4">

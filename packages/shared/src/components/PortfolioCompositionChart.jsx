@@ -35,8 +35,10 @@ export function PortfolioCompositionChart({
   }
 
   const displayData = data.map((item, idx) => ({ ...item, displayColor: COLOR_PALETTE[idx % COLOR_PALETTE.length] }));
+  const chartData = displayData.filter((item) => Number(item.value) > 0);
   const totalValueFromData = displayData.reduce((sum, item) => sum + item.value, 0);
   const totalValue = Number.isFinite(Number(totalValueOverride)) ? Number(totalValueOverride) : totalValueFromData;
+  const hasRenderableChartData = chartData.length > 0;
 
   const renderTooltip = ({ payload }) => {
     if (!payload || !payload[0]) {
@@ -57,31 +59,33 @@ export function PortfolioCompositionChart({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-3 lg:items-stretch">
-        <div className="flex justify-center lg:col-span-2 lg:items-center">
+      <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-3 lg:items-start">
+        <div className="flex justify-center lg:col-span-2 lg:items-start">
           <div className="relative h-[220px] w-full max-w-sm sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie
-                  data={displayData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  outerRadius={isSmallScreen ? 70 : 100}
-                  innerRadius={isSmallScreen ? 45 : 60}
-                  dataKey="value"
-                  onMouseEnter={(_, index) => setHoveredIndex(index)}
-                  onMouseLeave={() => setHoveredIndex(null)}
-                >
-                  {displayData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.displayColor}
-                      stroke="none"
-                      opacity={hoveredIndex === null || hoveredIndex === index ? 1 : 0.3}
-                    />
-                  ))}
-                </Pie>
+                {hasRenderableChartData ? (
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={isSmallScreen ? 70 : 100}
+                    innerRadius={isSmallScreen ? 45 : 60}
+                    dataKey="value"
+                    onMouseEnter={(_, index) => setHoveredIndex(index)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.displayColor}
+                        stroke="none"
+                        opacity={hoveredIndex === null || hoveredIndex === index ? 1 : 0.3}
+                      />
+                    ))}
+                  </Pie>
+                ) : null}
                 <Tooltip content={renderTooltip} />
               </PieChart>
             </ResponsiveContainer>
@@ -92,12 +96,15 @@ export function PortfolioCompositionChart({
                   {totalValueLabel || formatPrice(totalValue, { useUsd: true, buyPriceUsd: totalValue })}
                 </p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">{displayData.length} Assets</p>
+                {!hasRenderableChartData ? (
+                  <p className="mt-1 text-[10px] text-muted-foreground">Noch keine csfloat-Livewerte</p>
+                ) : null}
               </div>
             </div>
           </div>
         </div>
-        <div className="flex flex-col lg:col-span-1 lg:justify-center">
-          <div className="max-h-52 space-y-2 overflow-y-auto pr-1 sm:max-h-64 lg:max-h-[320px]">
+        <div className="flex flex-col lg:col-span-1 lg:justify-start">
+          <div className="max-h-52 space-y-2 overflow-y-auto pr-1 sm:max-h-64 lg:h-[320px] lg:max-h-[320px]">
             {displayData.map((item, idx) => (
               <div
                 key={idx}
