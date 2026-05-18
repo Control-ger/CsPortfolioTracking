@@ -1048,10 +1048,13 @@ final class PricingService
             }
         }
 
-        $fallbackRows = array_values(array_filter(
-            $cachedBySource,
-            static fn(mixed $row): bool => is_array($row)
-        ));
+        $fallbackRows = [];
+        foreach ($orderedSources as $source) {
+            $candidate = $cachedBySource[$source] ?? null;
+            if (is_array($candidate)) {
+                $fallbackRows[] = $candidate;
+            }
+        }
         if ($fallbackRows === []) {
             return null;
         }
@@ -1080,39 +1083,19 @@ final class PricingService
 
     private function resolveSourceOrderForMode(string $priceMode): array
     {
-        return match ($priceMode) {
-            self::PRICE_SOURCE_STEAM => [self::PRICE_SOURCE_STEAM, self::PRICE_SOURCE_CSFLOAT],
-            self::PRICE_SOURCE_CSFLOAT => [self::PRICE_SOURCE_CSFLOAT, self::PRICE_SOURCE_STEAM],
-            default => [self::PRICE_SOURCE_CSFLOAT, self::PRICE_SOURCE_STEAM],
-        };
+        // Steam fallback is globally disabled: all modes resolve to CSFloat only.
+        return [self::PRICE_SOURCE_CSFLOAT];
     }
 
     private function shouldFetchCsFloatPrice(string $priceMode, array $cachedBySource): bool
     {
-        if ($priceMode === self::PRICE_SOURCE_STEAM) {
-            return false;
-        }
-
         $existing = $cachedBySource[self::PRICE_SOURCE_CSFLOAT] ?? null;
         return !$this->isFreshLiveCache($existing);
     }
 
     private function shouldFetchSteamPrice(string $priceMode, array $cachedBySource, bool $csFloatUpdated): bool
     {
-        if ($priceMode === self::PRICE_SOURCE_CSFLOAT) {
-            // Respect strict CSFloat mode and avoid unnecessary source-mixing.
-            return !isset($cachedBySource[self::PRICE_SOURCE_CSFLOAT]);
-        }
-
-        if ($priceMode === self::PRICE_SOURCE_STEAM) {
-            return true;
-        }
-
-        if ($csFloatUpdated && $this->isFreshLiveCache($cachedBySource[self::PRICE_SOURCE_CSFLOAT] ?? null)) {
-            return false;
-        }
-
-        return !$this->isFreshLiveCache($cachedBySource[self::PRICE_SOURCE_STEAM] ?? null);
+        return false;
     }
 
     private function resolvePriceModeForUser(int $userId): string
