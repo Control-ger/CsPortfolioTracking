@@ -5,6 +5,7 @@ use App\Application\Service\PortfolioService;
 use App\Application\Service\FeeSettingsService;
 use App\Application\Service\CsFloatTradeSyncService;
 use App\Application\Service\PricingService;
+use App\Application\Service\RequestRateLimiter;
 use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\SyncService;
@@ -101,6 +102,58 @@ function obs_env_int(string $key, int $default): int
     }
 
     return (int) $value;
+}
+
+function obs_env_string(string $key, ?string $default = null): ?string
+{
+    $value = getenv($key);
+    if ($value === false && isset($_ENV[$key])) {
+        $value = $_ENV[$key];
+    }
+
+    if ($value === false || $value === null) {
+        return $default;
+    }
+
+    $trimmed = trim((string) $value);
+    if ($trimmed === '') {
+        return $default;
+    }
+
+    return $trimmed;
+}
+
+function obs_env_int_range(string $key, int $default, int $min, int $max): int
+{
+    $value = obs_env_int($key, $default);
+    if ($value < $min) {
+        return $min;
+    }
+    if ($value > $max) {
+        return $max;
+    }
+
+    return $value;
+}
+
+/**
+ * @return array<int, string>
+ */
+function obs_parse_csv_values(string $raw): array
+{
+    if (trim($raw) === '') {
+        return [];
+    }
+
+    return array_values(
+        array_filter(
+            array_map(
+                static fn(string $value): string => trim($value),
+                explode(',', $raw)
+            ),
+            static fn(string $value): bool => $value !== ''
+        )
+    );
 }
 
 function obs_collect_headers(): array
@@ -222,10 +275,13 @@ function obs_debug_endpoints_enabled(): bool
     return obs_env_flag('DEBUG', false) || obs_env_flag('OBSERVABILITY_EVENTS_API_ENABLED', false);
 }
 
-$corsAllowedOriginsRaw = getenv('CORS_ALLOWED_ORIGINS') ?: ($_ENV['CORS_ALLOWED_ORIGINS'] ?? '');
-$requestOrigin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
-$requestHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
-$isCorsOriginAllowed = static function (string $origin, string $host, string $allowedOriginsRaw): bool {
+function obs_is_localhost_host(string $host): bool
+{
+    return preg_match('/^(localhost|127\.0\.0\.1|::1)$/i', trim($host)) === 1;
+}
+
+function obs_is_cors_origin_allowed(string $origin, string $host, string $allowedOriginsRaw): bool
+{
     if ($origin === '') {
         return true;
     }
@@ -240,26 +296,42 @@ $isCorsOriginAllowed = static function (string $origin, string $host, string $al
         return false;
     }
 
-    $requestHostOnly = explode(':', $host)[0] ?? $host;
-    if ($requestHostOnly !== '' && strcasecmp($parsedHost, $requestHostOnly) === 0 && in_array(strtolower($parsedScheme), ['http', 'https'], true)) {
+    $normalizedScheme = strtolower(trim($parsedScheme));
+    if (!in_array($normalizedScheme, ['http', 'https'], true)) {
+        return false;
+    }
+
+    $strictDefault = strtolower((string) (obs_env_string('APP_ENV', 'development') ?? 'development')) === 'production';
+    $strictMode = obs_env_flag('CORS_STRICT_MODE', $strictDefault);
+    $allowSameHost = obs_env_flag('CORS_ALLOW_SAME_HOST', true);
+    $allowLocalhost = obs_env_flag('CORS_ALLOW_LOCALHOST', !$strictMode);
+
+    $requestHostOnly = strtolower(explode(':', $host)[0] ?? $host);
+    $originHost = strtolower($parsedHost);
+
+    if ($allowSameHost && $requestHostOnly !== '' && $originHost === $requestHostOnly) {
         return true;
     }
 
-    if (preg_match('#^(localhost|127\.0\.0\.1)$#i', $parsedHost) === 1 && in_array(strtolower($parsedScheme), ['http', 'https'], true)) {
+    if ($allowLocalhost && obs_is_localhost_host($originHost)) {
         return true;
     }
 
-    $configured = array_values(array_filter(array_map('trim', explode(',', (string) $allowedOriginsRaw))));
-    foreach ($configured as $allowedOrigin) {
+    $configuredOrigins = obs_parse_csv_values($allowedOriginsRaw);
+    foreach ($configuredOrigins as $allowedOrigin) {
         if (strcasecmp($origin, $allowedOrigin) === 0) {
             return true;
         }
     }
 
     return false;
-};
+}
 
-if (!$isCorsOriginAllowed($requestOrigin, $requestHost, (string) $corsAllowedOriginsRaw)) {
+$corsAllowedOriginsRaw = (string) (obs_env_string('CORS_ALLOWED_ORIGINS', '') ?? '');
+$requestOrigin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+$requestHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
+
+if (!obs_is_cors_origin_allowed($requestOrigin, $requestHost, $corsAllowedOriginsRaw)) {
     http_response_code(403);
     header('Content-Type: application/json');
     echo json_encode([
@@ -277,6 +349,156 @@ if ($requestOrigin !== '') {
 }
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Request-Id');
+
+function obs_resolve_client_ip(array $headers): string
+{
+    $candidates = [];
+
+    foreach (['cf-connecting-ip', 'x-real-ip'] as $headerKey) {
+        $value = trim((string) ($headers[$headerKey] ?? ''));
+        if ($value !== '') {
+            $candidates[] = $value;
+        }
+    }
+
+    $forwardedFor = trim((string) ($headers['x-forwarded-for'] ?? ''));
+    if ($forwardedFor !== '') {
+        $parts = array_map('trim', explode(',', $forwardedFor));
+        foreach ($parts as $part) {
+            if ($part !== '') {
+                $candidates[] = $part;
+            }
+        }
+    }
+
+    $remoteAddr = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    if ($remoteAddr !== '') {
+        $candidates[] = $remoteAddr;
+    }
+
+    foreach ($candidates as $candidate) {
+        if (filter_var($candidate, FILTER_VALIDATE_IP) !== false) {
+            return $candidate;
+        }
+    }
+
+    return 'unknown';
+}
+
+function obs_resolve_rate_limit_identity(Request $request): string
+{
+    $userId = null;
+
+    foreach (['x-user-id', 'user-id'] as $header) {
+        $value = $request->headers[$header] ?? null;
+        if (is_numeric($value)) {
+            $userId = (int) $value;
+            break;
+        }
+    }
+
+    if ($userId === null) {
+        foreach (['userId', 'user_id'] as $key) {
+            $bodyValue = $request->body[$key] ?? null;
+            if (is_numeric($bodyValue)) {
+                $userId = (int) $bodyValue;
+                break;
+            }
+
+            $queryValue = $request->query[$key] ?? null;
+            if (is_numeric($queryValue)) {
+                $userId = (int) $queryValue;
+                break;
+            }
+        }
+    }
+
+    $identityParts = [];
+    if ($userId !== null && $userId > 0) {
+        $identityParts[] = 'user:' . $userId;
+    }
+    $identityParts[] = 'ip:' . obs_resolve_client_ip($request->headers);
+
+    return implode('|', $identityParts);
+}
+
+function obs_apply_security_rate_limit(Request $request): void
+{
+    if (!obs_env_flag('SECURITY_RATE_LIMIT_ENABLED', true)) {
+        return;
+    }
+
+    $rules = [
+        ['method' => 'POST', 'path' => '/api/v1/sync/push', 'limit' => obs_env_int_range('RATE_LIMIT_SYNC_PUSH_PER_MINUTE', 60, 0, 2000), 'window' => 60],
+        ['method' => 'GET', 'path' => '/api/v1/sync/pull', 'limit' => obs_env_int_range('RATE_LIMIT_SYNC_PULL_PER_MINUTE', 180, 0, 5000), 'window' => 60],
+        ['method' => 'POST', 'path' => '/api/v1/auth/steam/login', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_LOGIN_PER_MINUTE', 20, 0, 300), 'window' => 60],
+        ['method' => 'GET', 'path' => '/api/v1/auth/steam/login', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_LOGIN_PER_MINUTE', 20, 0, 300), 'window' => 60],
+        ['method' => 'GET', 'path' => '/api/v1/auth/steam/callback', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_CALLBACK_PER_MINUTE', 40, 0, 300), 'window' => 60],
+        ['method' => 'GET', 'path' => '/api/v1/auth/session/validate', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_VALIDATE_PER_MINUTE', 240, 0, 5000), 'window' => 60],
+        ['method' => 'GET', 'path' => '/api/v1/auth/steam/inventory', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_INVENTORY_PER_MINUTE', 60, 0, 1000), 'window' => 60],
+    ];
+
+    $matchedRule = null;
+    foreach ($rules as $rule) {
+        if ($request->method === $rule['method'] && $request->path === $rule['path']) {
+            $matchedRule = $rule;
+            break;
+        }
+    }
+
+    if (!is_array($matchedRule)) {
+        return;
+    }
+
+    static $limiter = null;
+    if (!$limiter instanceof RequestRateLimiter) {
+        $limiter = new RequestRateLimiter(obs_env_string('SECURITY_RATE_LIMIT_STORE_FILE'));
+    }
+
+    $limit = (int) ($matchedRule['limit'] ?? 0);
+    if ($limit <= 0) {
+        return;
+    }
+
+    $windowSeconds = max(1, (int) ($matchedRule['window'] ?? 60));
+    $identity = obs_resolve_rate_limit_identity($request);
+    $bucketKey = strtolower($request->method) . ':' . $request->path . ':' . $identity;
+    $result = $limiter->consume($bucketKey, $limit, $windowSeconds);
+
+    if (($result['allowed'] ?? false) !== true) {
+        $retryAfter = max(1, (int) ($result['retryAfter'] ?? 1));
+        header('Retry-After: ' . $retryAfter);
+        header('X-RateLimit-Limit: ' . $limit);
+        header('X-RateLimit-Remaining: 0');
+
+        Logger::event(
+            'warning',
+            'security',
+            'security.rate_limit.blocked',
+            'Request blocked by HTTP rate limit',
+            [
+                'statusCode' => 429,
+                'method' => $request->method,
+                'route' => $request->path,
+                'identity' => $identity,
+                'retryAfterSeconds' => $retryAfter,
+                'limit' => $limit,
+                'windowSeconds' => $windowSeconds,
+            ]
+        );
+
+        JsonResponseFactory::error(
+            'RATE_LIMITED',
+            'Zu viele Anfragen. Bitte spaeter erneut versuchen.',
+            ['retryAfterSeconds' => $retryAfter],
+            429
+        );
+        exit;
+    }
+
+    header('X-RateLimit-Limit: ' . (int) ($result['limit'] ?? $limit));
+    header('X-RateLimit-Remaining: ' . max(0, (int) ($result['remaining'] ?? 0)));
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
@@ -348,6 +570,8 @@ Logger::event(
         'requestId' => $requestId,
     ]
 );
+
+obs_apply_security_rate_limit($request);
 
 if ($request->jsonDecodeError !== null) {
     Logger::event(
