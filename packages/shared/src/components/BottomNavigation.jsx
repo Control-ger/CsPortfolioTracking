@@ -1,18 +1,28 @@
-import { useLocation, useNavigate } from "react-router-dom";
+﻿import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Home, Archive, Eye, UserRound } from "lucide-react";
 import { getCurrentUser, getSession, validateSession } from "@shared/lib/auth";
 
 const NAV_ITEMS = [
-  { path: "/", label: "Übersicht", icon: Home },
+  { path: "/", label: "Uebersicht", icon: Home },
   { path: "/inventory", label: "Inventar", icon: Archive },
   { path: "/watchlist", label: "Watchlist", icon: Eye },
 ];
 
+function isVideoAvatarUrl(url) {
+  const lower = String(url || "").toLowerCase();
+  return (
+    lower.endsWith(".webm") ||
+    lower.endsWith(".mp4") ||
+    lower.includes(".webm?") ||
+    lower.includes(".mp4?")
+  );
+}
+
 export const BottomNavigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -43,14 +53,7 @@ export const BottomNavigation = () => {
       }
 
       if (isMounted) {
-        setAvatarUrl(
-          resolvedUser?.animatedAvatar ||
-            resolvedUser?.animated_avatar ||
-            resolvedUser?.avatar ||
-            resolvedUser?.steam_avatar ||
-            resolvedUser?.steamAvatar ||
-            null,
-        );
+        setUser(resolvedUser);
       }
     };
 
@@ -67,6 +70,16 @@ export const BottomNavigation = () => {
     }
     return location.pathname === path;
   };
+
+  const avatarUrl =
+    user?.animatedAvatar ||
+    user?.animated_avatar ||
+    user?.avatar ||
+    user?.steam_avatar ||
+    user?.steamAvatar ||
+    null;
+  const fallbackAvatarUrl = user?.avatar || user?.steam_avatar || user?.steamAvatar || null;
+  const avatarIsVideo = isVideoAvatarUrl(avatarUrl);
 
   return (
     <nav
@@ -113,11 +126,24 @@ export const BottomNavigation = () => {
               aria-current={location.pathname === "/settings" ? "page" : undefined}
             >
               {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt="Steam Avatar"
-                  className="h-6 w-6 rounded-full object-cover"
-                />
+                avatarIsVideo ? (
+                  <video
+                    src={avatarUrl}
+                    poster={fallbackAvatarUrl || undefined}
+                    muted
+                    autoPlay
+                    loop
+                    playsInline
+                    aria-label="Steam Avatar"
+                    className="h-6 w-6 rounded-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={avatarUrl}
+                    alt="Steam Avatar"
+                    className="h-6 w-6 rounded-full object-cover"
+                  />
+                )
               ) : (
                 <UserRound className="h-5 w-5" />
               )}

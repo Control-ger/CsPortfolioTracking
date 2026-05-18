@@ -20,6 +20,7 @@ final class CsFloatClient
         500 => ['code' => 'CSFLOAT_INTERNAL_SERVER_ERROR', 'label' => 'Internal Server Error'],
         503 => ['code' => 'CSFLOAT_SERVICE_UNAVAILABLE', 'label' => 'Service Unavailable'],
     ];
+    private const BASE_LISTINGS_URL = 'https://csfloat.com/api/v1/listings';
 
     public function fetchLowestPriceUsd(string $marketHashName): ?float
     {
@@ -35,8 +36,155 @@ final class CsFloatClient
 
     public function fetchLowestListingResult(string $marketHashName): array
     {
-        $encodedName = urlencode($marketHashName);
-        $url = "https://csfloat.com/api/v1/listings?market_hash_name={$encodedName}&type=buy_now&sort_by=lowest_price&limit=1";
+        $result = $this->fetchListingsResult(
+            $marketHashName,
+            [
+                'type' => 'buy_now',
+                'sort_by' => 'lowest_price',
+                'limit' => 1,
+            ],
+            'lowest_listing_lookup'
+        );
+
+        if (($result['error'] ?? null) !== null) {
+            return [
+                'snapshot' => null,
+                'error' => $result['error'],
+            ];
+        }
+
+        $listings = is_array($result['listings'] ?? null) ? $result['listings'] : [];
+        if ($listings === []) {
+            return ['snapshot' => null, 'error' => null];
+        }
+
+        $snapshot = $this->buildComparableSnapshot(
+            $marketHashName,
+            $listings,
+            [
+                'strategy' => 'market_lowest',
+                'confidence' => 'low',
+            ]
+        );
+
+        return [
+            'snapshot' => $snapshot,
+            'error' => null,
+        ];
+    }
+
+    public function fetchComparableListingResult(
+        string $marketHashName,
+        ?float $targetFloat = null,
+        ?int $targetPaintSeed = null
+    ): array {
+        $normalizedFloat = $this->normalizeFloat($targetFloat);
+        $normalizedPaintSeed = $this->normalizePaintSeed($targetPaintSeed);
+
+        $attempts = [];
+        if ($normalizedPaintSeed !== null) {
+            $attempts[] = [
+                'strategy' => 'seed_exact',
+                'confidence' => 'high',
+                'params' => [
+                    'paint_seed' => (string) $normalizedPaintSeed,
+                    'limit' => 12,
+                    'sort_by' => 'lowest_price',
+                ],
+            ];
+        }
+
+        if ($normalizedFloat !== null) {
+            foreach ([0.0025, 0.0050, 0.0100, 0.0200] as $band) {
+                $attempts[] = [
+                    'strategy' => 'float_band_' . $this->formatBand($band),
+                    'confidence' => $band <= 0.0050 ? 'high' : ($band <= 0.0100 ? 'medium' : 'low'),
+                    'params' => [
+                        'min_float' => $this->formatFloat(max(0.0, $normalizedFloat - $band)),
+                        'max_float' => $this->formatFloat(min(1.0, $normalizedFloat + $band)),
+                        'limit' => 12,
+                        'sort_by' => 'lowest_price',
+                    ],
+                ];
+            }
+        }
+
+        $attempts[] = [
+            'strategy' => 'market_lowest',
+            'confidence' => 'low',
+            'params' => [
+                'limit' => 12,
+                'sort_by' => 'lowest_price',
+            ],
+        ];
+
+        $lastError = null;
+        foreach ($attempts as $attempt) {
+            $result = $this->fetchListingsResult(
+                $marketHashName,
+                array_merge(['type' => 'buy_now'], (array) ($attempt['params'] ?? [])),
+                'comparable_listing_lookup',
+                [
+                    'strategy' => $attempt['strategy'],
+                    'targetFloat' => $normalizedFloat,
+                    'targetPaintSeed' => $normalizedPaintSeed,
+                ]
+            );
+            $error = is_array($result['error'] ?? null) ? $result['error'] : null;
+            if ($error !== null) {
+                $lastError = $error;
+                continue;
+            }
+
+            $listings = is_array($result['listings'] ?? null) ? $result['listings'] : [];
+            if ($listings === []) {
+                continue;
+            }
+
+            $snapshot = $this->buildComparableSnapshot(
+                $marketHashName,
+                $listings,
+                [
+                    'strategy' => (string) $attempt['strategy'],
+                    'confidence' => (string) $attempt['confidence'],
+                ]
+            );
+
+            return [
+                'snapshot' => $snapshot,
+                'error' => null,
+            ];
+        }
+
+        return [
+            'snapshot' => null,
+            'error' => $lastError,
+        ];
+    }
+
+    private function buildHttpError(int $httpCode): array
+    {
+        $mapping = self::ERROR_MAP[$httpCode] ?? [
+            'code' => 'CSFLOAT_HTTP_ERROR',
+            'label' => 'HTTP Error',
+        ];
+
+        return [
+            'source' => 'csfloat',
+            'statusCode' => $httpCode,
+            'code' => $mapping['code'],
+            'label' => $mapping['label'],
+            'message' => sprintf('CSFloat antwortet mit %d %s.', $httpCode, $mapping['label']),
+        ];
+    }
+
+    private function fetchListingsResult(
+        string $marketHashName,
+        array $queryParams,
+        string $reason,
+        array $context = []
+    ): array {
+        $url = $this->buildListingsUrl($marketHashName, $queryParams);
         $apiKey = getenv('CSFLOAT_API_KEY') ?: $_ENV['CSFLOAT_API_KEY'] ?? null;
         $start = microtime(true);
 
@@ -45,11 +193,12 @@ final class CsFloatClient
             'external',
             'external.csfloat.request',
             'CSFloat request started',
-            [
+            array_merge([
                 'provider' => 'csfloat',
                 'itemName' => $marketHashName,
                 'url' => $url,
-            ]
+                'reason' => $reason,
+            ], $context)
         );
 
         $ch = curl_init();
@@ -57,7 +206,7 @@ final class CsFloatClient
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_USERAGENT, 'CsPortfolioTracking/1.0');
-        
+
         $headers = ['Accept: application/json'];
         if ($apiKey !== null && $apiKey !== '') {
             $headers[] = "Authorization: {$apiKey}";
@@ -83,6 +232,7 @@ final class CsFloatClient
                     'durationMs' => $durationMs,
                     'errorCode' => 'CSFLOAT_REQUEST_FAILED',
                     'curlError' => $curlError,
+                    'reason' => $reason,
                 ]
             );
             Logger::event(
@@ -90,17 +240,18 @@ final class CsFloatClient
                 'external',
                 'external.csfloat.response',
                 'CSFloat request failed',
-                [
+                array_merge([
                     'provider' => 'csfloat',
                     'itemName' => $marketHashName,
                     'httpCode' => $httpCode > 0 ? $httpCode : null,
                     'durationMs' => $durationMs,
                     'success' => false,
                     'errorCode' => 'CSFLOAT_REQUEST_FAILED',
-                ]
+                    'reason' => $reason,
+                ], $context)
             );
             return [
-                'snapshot' => null,
+                'listings' => [],
                 'error' => [
                     'source' => 'csfloat',
                     'statusCode' => $httpCode > 0 ? $httpCode : null,
@@ -118,17 +269,18 @@ final class CsFloatClient
                 'external',
                 'external.csfloat.response',
                 'CSFloat HTTP error response',
-                [
+                array_merge([
                     'provider' => 'csfloat',
                     'itemName' => $marketHashName,
                     'httpCode' => $httpCode,
                     'durationMs' => $durationMs,
                     'success' => false,
                     'errorCode' => $httpError['code'] ?? 'CSFLOAT_HTTP_ERROR',
-                ]
+                    'reason' => $reason,
+                ], $context)
             );
             return [
-                'snapshot' => null,
+                'listings' => [],
                 'error' => $httpError,
             ];
         }
@@ -139,17 +291,18 @@ final class CsFloatClient
                 'external',
                 'external.csfloat.response',
                 'CSFloat empty response',
-                [
+                array_merge([
                     'provider' => 'csfloat',
                     'itemName' => $marketHashName,
                     'httpCode' => 200,
                     'durationMs' => $durationMs,
                     'success' => false,
                     'errorCode' => 'CSFLOAT_EMPTY_RESPONSE',
-                ]
+                    'reason' => $reason,
+                ], $context)
             );
             return [
-                'snapshot' => null,
+                'listings' => [],
                 'error' => [
                     'source' => 'csfloat',
                     'statusCode' => 200,
@@ -167,30 +320,32 @@ final class CsFloatClient
                 'error',
                 'error.json_decode',
                 'CSFloat JSON decode failed',
-                [
+                array_merge([
                     'provider' => 'csfloat',
                     'itemName' => $marketHashName,
                     'statusCode' => 200,
                     'durationMs' => $durationMs,
                     'errorCode' => 'CSFLOAT_INVALID_RESPONSE',
-                ]
+                    'reason' => $reason,
+                ], $context)
             );
             Logger::event(
                 'error',
                 'external',
                 'external.csfloat.response',
                 'CSFloat invalid JSON response',
-                [
+                array_merge([
                     'provider' => 'csfloat',
                     'itemName' => $marketHashName,
                     'httpCode' => 200,
                     'durationMs' => $durationMs,
                     'success' => false,
                     'errorCode' => 'CSFLOAT_INVALID_RESPONSE',
-                ]
+                    'reason' => $reason,
+                ], $context)
             );
             return [
-                'snapshot' => null,
+                'listings' => [],
                 'error' => [
                     'source' => 'csfloat',
                     'statusCode' => 200,
@@ -201,78 +356,166 @@ final class CsFloatClient
             ];
         }
 
-        $listing = null;
-        if (isset($json[0]['price'])) {
-            $listing = $json[0];
-        } elseif (isset($json['data'][0]['price'])) {
-            $listing = $json['data'][0];
-        }
+        $listings = $this->extractListings($json);
 
-        if ($listing === null || !isset($listing['price'])) {
-            Logger::event(
-                'info',
-                'external',
-                'external.csfloat.response',
-                'CSFloat response without listing',
-                [
-                    'provider' => 'csfloat',
-                    'itemName' => $marketHashName,
-                    'httpCode' => 200,
-                    'durationMs' => $durationMs,
-                    'success' => true,
-                ]
-            );
-            return ['snapshot' => null, 'error' => null];
-        }
         Logger::event(
             'info',
             'external',
             'external.csfloat.response',
-            'CSFloat response received',
-            [
+            $listings === [] ? 'CSFloat response without listing' : 'CSFloat response received',
+            array_merge([
                 'provider' => 'csfloat',
                 'itemName' => $marketHashName,
                 'httpCode' => 200,
                 'durationMs' => $durationMs,
                 'success' => true,
-            ]
+                'reason' => $reason,
+                'listingsCount' => count($listings),
+            ], $context)
         );
 
-        $item = $listing['item'] ?? [];
-        if (!is_array($item)) {
-            $item = [];
-        }
-
-        $iconPath = (string) ($item['icon_url'] ?? '');
-
         return [
-            'snapshot' => [
-                'priceUsd' => round(((float) $listing['price']) / 100.0, 2),
-                'marketHashName' => (string) ($item['market_hash_name'] ?? $marketHashName),
-                'itemType' => isset($item['type']) ? (string) $item['type'] : null,
-                'itemTypeLabel' => isset($item['type_name']) ? (string) $item['type_name'] : null,
-                'wearName' => isset($item['wear_name']) ? (string) $item['wear_name'] : null,
-                'iconUrl' => $iconPath !== ''
-                    ? sprintf('https://community.akamai.steamstatic.com/economy/image/%s/96fx96f', $iconPath)
-                    : null,
-            ],
+            'listings' => $listings,
             'error' => null,
         ];
     }
 
-    private function buildHttpError(int $httpCode): array
+    private function buildListingsUrl(string $marketHashName, array $queryParams): string
     {
-        $mapping = self::ERROR_MAP[$httpCode] ?? [
-            'code' => 'CSFLOAT_HTTP_ERROR',
-            'label' => 'HTTP Error',
+        $params = [
+            'market_hash_name' => $marketHashName,
         ];
 
+        foreach ($queryParams as $key => $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            $stringValue = trim((string) $value);
+            if ($stringValue === '') {
+                continue;
+            }
+
+            $params[(string) $key] = $stringValue;
+        }
+
+        return self::BASE_LISTINGS_URL . '?' . http_build_query($params);
+    }
+
+    private function extractListings(array $json): array
+    {
+        if (isset($json[0]) && is_array($json[0])) {
+            return array_values(array_filter(
+                $json,
+                static fn (mixed $row): bool => is_array($row) && isset($row['price'])
+            ));
+        }
+
+        if (isset($json['data']) && is_array($json['data'])) {
+            return array_values(array_filter(
+                $json['data'],
+                static fn (mixed $row): bool => is_array($row) && isset($row['price'])
+            ));
+        }
+
+        return [];
+    }
+
+    private function buildComparableSnapshot(string $marketHashName, array $listings, array $meta): array
+    {
+        $prices = [];
+        foreach ($listings as $listing) {
+            if (!is_array($listing) || !isset($listing['price']) || !is_numeric($listing['price'])) {
+                continue;
+            }
+            $prices[] = (int) $listing['price'];
+        }
+        sort($prices, SORT_NUMERIC);
+
+        $selectedPriceCents = null;
+        if ($prices !== []) {
+            $index = (int) floor((count($prices) - 1) * 0.5);
+            $selectedPriceCents = $prices[$index] ?? null;
+        }
+
+        $fallbackListing = is_array($listings[0] ?? null) ? $listings[0] : [];
+        $selectedListing = $fallbackListing;
+        if ($selectedPriceCents !== null) {
+            foreach ($listings as $listing) {
+                if (!is_array($listing) || !isset($listing['price']) || !is_numeric($listing['price'])) {
+                    continue;
+                }
+                if ((int) $listing['price'] === $selectedPriceCents) {
+                    $selectedListing = $listing;
+                    break;
+                }
+            }
+        }
+
+        $snapshot = $this->mapListingSnapshot($selectedListing, $marketHashName);
+        $snapshot['strategy'] = (string) ($meta['strategy'] ?? 'market_lowest');
+        $snapshot['confidence'] = (string) ($meta['confidence'] ?? 'low');
+        $snapshot['sampleSize'] = count($prices);
+
+        return $snapshot;
+    }
+
+    private function mapListingSnapshot(array $listing, string $marketHashName): array
+    {
+        $item = is_array($listing['item'] ?? null) ? $listing['item'] : [];
+        $iconPath = (string) ($item['icon_url'] ?? '');
+        $priceCents = (float) ($listing['price'] ?? 0.0);
+
         return [
-            'source' => 'csfloat',
-            'statusCode' => $httpCode,
-            'code' => $mapping['code'],
-            'label' => $mapping['label'],
-            'message' => sprintf('CSFloat antwortet mit %d %s.', $httpCode, $mapping['label']),
+            'priceUsd' => round($priceCents / 100.0, 2),
+            'marketHashName' => (string) ($item['market_hash_name'] ?? $marketHashName),
+            'itemType' => isset($item['type']) ? (string) $item['type'] : null,
+            'itemTypeLabel' => isset($item['type_name']) ? (string) $item['type_name'] : null,
+            'wearName' => isset($item['wear_name']) ? (string) $item['wear_name'] : null,
+            'iconUrl' => $iconPath !== ''
+                ? sprintf('https://community.akamai.steamstatic.com/economy/image/%s/96fx96f', $iconPath)
+                : null,
+            'floatValue' => $this->normalizeFloat($item['float_value'] ?? null),
+            'paintSeed' => $this->normalizePaintSeed($item['paint_seed'] ?? null),
+            'inspectLink' => isset($item['inspect_link']) ? (string) $item['inspect_link'] : null,
         ];
+    }
+
+    private function normalizeFloat(mixed $value): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $parsed = (float) $value;
+        if ($parsed < 0.0 || $parsed > 1.0) {
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    private function normalizePaintSeed(mixed $value): ?int
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $parsed = (int) $value;
+        if ($parsed < 0) {
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    private function formatFloat(float $value): string
+    {
+        return number_format($value, 6, '.', '');
+    }
+
+    private function formatBand(float $value): string
+    {
+        return str_replace('.', '', number_format($value, 4, '.', ''));
     }
 }

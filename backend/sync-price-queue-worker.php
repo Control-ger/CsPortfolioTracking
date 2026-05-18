@@ -36,6 +36,7 @@ use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
 use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
+use App\Infrastructure\Persistence\Repository\UserPriceSourcePreferenceRepository;
 
 $startedAt = microtime(true);
 
@@ -47,6 +48,7 @@ try {
     $exchangeRateRepository = new ExchangeRateRepository($pdo);
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $priceHistoryRepository = new PriceHistoryRepository($pdo);
+    $userPriceSourcePreferenceRepository = new UserPriceSourcePreferenceRepository($pdo);
 
     $itemRepository->ensureTable();
     $exchangeRateRepository->ensureTable();
@@ -60,7 +62,8 @@ try {
         new MarketItemClassifier(),
         $itemRepository,
         $exchangeRateRepository,
-        $itemLiveCacheRepository
+        $itemLiveCacheRepository,
+        $userPriceSourcePreferenceRepository
     );
 
     $queueService = new PriceRefreshQueueService(
@@ -87,4 +90,3 @@ try {
     fwrite(STDERR, $exception->getTraceAsString() . "\n");
     exit(1);
 }
-

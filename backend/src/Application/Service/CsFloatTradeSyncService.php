@@ -18,6 +18,7 @@ final class CsFloatTradeSyncService
     private const DEFAULT_TRADE_CURRENCY = 'usd';
 
     private array $livePriceHintCache = [];
+    private int $activeUserId = 1;
 
     public function __construct(
         private readonly CsFloatTradeClient $tradeClient,
@@ -31,6 +32,8 @@ final class CsFloatTradeSyncService
     public function preview(int $userId, int $limit = self::DEFAULT_LIMIT, ?string $type = 'buy', int $maxPages = self::DEFAULT_MAX_PAGES): array
     {
         $this->investmentRepository->ensureImportColumns();
+        $this->activeUserId = max(1, $userId);
+        $this->livePriceHintCache = [];
 
         $collection = $this->collectTrades($limit, $type, $maxPages);
         $normalization = $this->normalizeAndClassifyTrades($collection['trades']);
@@ -70,6 +73,8 @@ final class CsFloatTradeSyncService
     {
         $this->investmentRepository->ensureImportColumns();
         $this->itemRepository->ensureTable();
+        $this->activeUserId = max(1, $userId);
+        $this->livePriceHintCache = [];
 
         $collection = $this->collectTrades($limit, $type, $maxPages);
         $normalization = $this->normalizeAndClassifyTrades($collection['trades']);
@@ -1055,7 +1060,7 @@ final class CsFloatTradeSyncService
             return $this->livePriceHintCache[$marketHashName];
         }
 
-        $livePrice = $this->pricingService->getLivePriceEur($marketHashName);
+        $livePrice = $this->pricingService->getLivePriceEur($marketHashName, $this->activeUserId);
         $this->livePriceHintCache[$marketHashName] = $livePrice !== null ? (float) $livePrice : null;
 
         return $this->livePriceHintCache[$marketHashName];

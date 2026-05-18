@@ -36,6 +36,7 @@ use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
+use App\Infrastructure\Persistence\Repository\UserPriceSourcePreferenceRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Infrastructure\Persistence\Repository\AuthStateRepository;
 use App\Infrastructure\Persistence\Repository\CacheMaintenanceRepository;
@@ -639,6 +640,7 @@ try {
     $itemLiveCacheRepository = new ItemLiveCacheRepository($pdo);
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
+    $userPriceSourcePreferenceRepository = new UserPriceSourcePreferenceRepository($pdo);
     $userRepository = new UserRepository($pdo);
     $userRepository->ensureDefaultUser();
     // Ensure core schema in a deterministic order on fresh databases.
@@ -658,7 +660,8 @@ try {
         new MarketItemClassifier(),
         $itemRepository,
         $exchangeRateRepository,
-        $itemLiveCacheRepository
+        $itemLiveCacheRepository,
+        $userPriceSourcePreferenceRepository
     );
     $csFloatTradeSyncService = new CsFloatTradeSyncService(
         new CsFloatTradeClient(),
@@ -680,12 +683,11 @@ try {
         $watchlistRepository,
         $itemRepository,
         $priceHistoryRepository,
-        $pricingService,
-        new SteamMarketClient()
+        $pricingService
     );
     $scalingShadowReadService = new ScalingShadowReadService($pdo);
     $syncService = new SyncService($pdo);
-    $settingsController = new SettingsController($feeSettingsService);
+    $settingsController = new SettingsController($feeSettingsService, $pricingService);
 
     $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService);
     $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService);
@@ -718,6 +720,8 @@ try {
     $router->register('POST', '/api/v1/sync/push', [$syncController, 'push']);
     $router->register('GET', '/api/v1/settings/fees', [$settingsController, 'fees']);
     $router->register('PUT', '/api/v1/settings/fees', [$settingsController, 'updateFees']);
+    $router->register('GET', '/api/v1/settings/price-source', [$settingsController, 'getPriceSourcePreference']);
+    $router->register('PUT', '/api/v1/settings/price-source', [$settingsController, 'updatePriceSourcePreference']);
     $router->register('GET', '/api/v1/settings/csfloat-api-key', [$settingsController, 'getCsFloatApiKeyStatus']);
     $router->register('POST', '/api/v1/settings/csfloat-api-key', [$settingsController, 'updateCsFloatApiKey']);
     $router->register('GET', '/api/v1/exchange-rate', [$exchangeRateController, 'getRates']);

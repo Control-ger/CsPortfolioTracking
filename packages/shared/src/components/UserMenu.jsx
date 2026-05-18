@@ -18,6 +18,11 @@ const NAV_ITEMS = [
   { label: "Einstellungen", to: "/settings" },
 ]
 
+function isVideoAvatarUrl(url) {
+  const lower = String(url || "").toLowerCase()
+  return lower.endsWith(".webm") || lower.endsWith(".mp4") || lower.includes(".webm?") || lower.includes(".mp4?")
+}
+
 export function UserMenu() {
   const location = useLocation()
   const [user, setUser] = useState(null)
@@ -78,7 +83,14 @@ export function UserMenu() {
     user?.avatar ||
     user?.steam_avatar ||
     user?.steamAvatar ||
-    null;
+    null
+  const fallbackAvatarUrl =
+    user?.avatar ||
+    user?.steam_avatar ||
+    user?.steamAvatar ||
+    null
+  const avatarIsVideo = isVideoAvatarUrl(avatarUrl)
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -89,11 +101,24 @@ export function UserMenu() {
           className="h-11 w-11 rounded-full p-0"
         >
           {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt={user?.name ? `${user.name} Steam Avatar` : "Steam Avatar"}
-              className="h-10 w-10 rounded-full object-cover"
-            />
+            avatarIsVideo ? (
+              <video
+                src={avatarUrl}
+                poster={fallbackAvatarUrl || undefined}
+                muted
+                autoPlay
+                loop
+                playsInline
+                aria-label={user?.name ? `${user.name} Steam Avatar` : "Steam Avatar"}
+                className="h-10 w-10 rounded-full object-cover"
+              />
+            ) : (
+              <img
+                src={avatarUrl}
+                alt={user?.name ? `${user.name} Steam Avatar` : "Steam Avatar"}
+                className="h-10 w-10 rounded-full object-cover"
+              />
+            )
           ) : (
             <UserRound className="h-5 w-5" />
           )}

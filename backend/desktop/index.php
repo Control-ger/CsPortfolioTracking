@@ -458,6 +458,96 @@ $summarizeProxyIssue = static function (array $attempts, string $endpointPath = 
     ]);
 };
 
+$router->register('GET', '/api/v1/settings/price-source', static function () use ($proxyUpstreamGet): void {
+    $proxied = $proxyUpstreamGet('/api/v1/settings/price-source');
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($proxied['data'] ?? null) ? $proxied['data'] : ['mode' => 'auto'],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success(
+        [
+            'userId' => 1,
+            'mode' => 'auto',
+            'updatedAt' => null,
+            'source' => 'desktop-defaults',
+        ],
+        [
+            'source' => 'desktop-local-fallback',
+            'proxyAttempts' => $proxied['attempts'] ?? [],
+        ]
+    );
+});
+
+$router->register('PUT', '/api/v1/settings/price-source', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+    $baseUrl = $resolveUpstreamApiBase();
+    $mode = strtolower(trim((string) ($request->body['mode'] ?? 'auto')));
+    if (!in_array($mode, ['auto', 'csfloat', 'steam'], true)) {
+        $mode = 'auto';
+    }
+
+    if ($baseUrl === '') {
+        JsonResponseFactory::success(
+            [
+                'userId' => 1,
+                'mode' => $mode,
+                'updatedAt' => gmdate('Y-m-d H:i:s'),
+                'source' => 'desktop-local-fallback',
+            ],
+            ['source' => 'desktop-local-fallback']
+        );
+        return;
+    }
+
+    $payloadJson = json_encode(['mode' => $mode], JSON_UNESCAPED_SLASHES);
+    if (!is_string($payloadJson)) {
+        JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', 'Ungueltiger Payload.', [], 400);
+        return;
+    }
+
+    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/settings/price-source') as $candidate) {
+        $ch = curl_init($candidate);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || trim($response) === '') {
+            continue;
+        }
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            JsonResponseFactory::success(
+                is_array($decoded['data'] ?? null) ? $decoded['data'] : ['mode' => $mode],
+                array_merge(is_array($decoded['meta'] ?? null) ? $decoded['meta'] : [], ['source' => 'upstream'])
+            );
+            return;
+        }
+    }
+
+    JsonResponseFactory::error(
+        'SETTINGS_SAVE_FAILED',
+        'Price-Source-Preference konnte nicht zum Server gespeichert werden.',
+        [],
+        502
+    );
+});
+
 $router->register('GET', '/api/v1/portfolio/history', static function (Request $request) use ($proxyUpstreamGet): void {
     $query = [];
     if (isset($request->query['scope'])) {

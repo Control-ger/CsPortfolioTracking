@@ -49,6 +49,7 @@ use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
+use App\Infrastructure\Persistence\Repository\UserPriceSourcePreferenceRepository;
 use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 
@@ -98,13 +99,28 @@ function mirrorScalablePriceTables(\PDO $pdo): array
                 item_id, price_usd, exchange_rate_id, price_source, provider_timestamp, fetched_at
             )
             SELECT
-                ilc.item_id,
-                ilc.price_usd,
-                ilc.exchange_rate_id,
-                COALESCE(ilc.price_source, 'sync'),
-                ilc.fetched_at,
-                ilc.fetched_at
-            FROM item_live_cache ilc
+                ranked.item_id,
+                ranked.price_usd,
+                ranked.exchange_rate_id,
+                ranked.price_source,
+                ranked.fetched_at,
+                ranked.fetched_at
+            FROM (
+                SELECT
+                    ilc.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY ilc.item_id
+                        ORDER BY
+                            CASE ilc.price_source
+                                WHEN 'csfloat' THEN 0
+                                WHEN 'steam' THEN 1
+                                ELSE 2
+                            END ASC,
+                            ilc.fetched_at DESC
+                    ) AS source_rank
+                FROM item_live_cache ilc
+            ) ranked
+            WHERE ranked.source_rank = 1
             ON DUPLICATE KEY UPDATE
                 price_usd = VALUES(price_usd),
                 exchange_rate_id = VALUES(exchange_rate_id),
@@ -119,13 +135,28 @@ function mirrorScalablePriceTables(\PDO $pdo): array
                 item_id, bucket_start, price_usd, exchange_rate_id, price_source, provider_timestamp
             )
             SELECT
-                ilc.item_id,
-                DATE_FORMAT(ilc.fetched_at, '%Y-%m-%d %H:00:00'),
-                ilc.price_usd,
-                ilc.exchange_rate_id,
-                COALESCE(ilc.price_source, 'sync'),
-                ilc.fetched_at
-            FROM item_live_cache ilc
+                ranked.item_id,
+                DATE_FORMAT(ranked.fetched_at, '%Y-%m-%d %H:00:00'),
+                ranked.price_usd,
+                ranked.exchange_rate_id,
+                ranked.price_source,
+                ranked.fetched_at
+            FROM (
+                SELECT
+                    ilc.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY ilc.item_id
+                        ORDER BY
+                            CASE ilc.price_source
+                                WHEN 'csfloat' THEN 0
+                                WHEN 'steam' THEN 1
+                                ELSE 2
+                            END ASC,
+                            ilc.fetched_at DESC
+                    ) AS source_rank
+                FROM item_live_cache ilc
+            ) ranked
+            WHERE ranked.source_rank = 1
             ON DUPLICATE KEY UPDATE
                 price_usd = VALUES(price_usd),
                 exchange_rate_id = VALUES(exchange_rate_id),
@@ -169,6 +200,7 @@ try {
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
+    $userPriceSourcePreferenceRepository = new UserPriceSourcePreferenceRepository($pdo);
     $userRepository = new UserRepository($pdo);
     $watchlistRepository = new WatchlistRepository($pdo);
 
@@ -215,7 +247,8 @@ try {
         $marketItemClassifier,
         $itemRepository,
         $exchangeRateRepository,
-        $itemLiveCacheRepository
+        $itemLiveCacheRepository,
+        $userPriceSourcePreferenceRepository
     );
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
     $portfolioService = new PortfolioService(

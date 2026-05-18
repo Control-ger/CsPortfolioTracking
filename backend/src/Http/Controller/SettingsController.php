@@ -6,6 +6,7 @@ namespace App\Http\Controller;
 use App\Application\Service\EncryptionService;
 use App\Application\Service\EnvSettingsService;
 use App\Application\Service\FeeSettingsService;
+use App\Application\Service\PricingService;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Logger;
@@ -20,6 +21,7 @@ final class SettingsController
 
     public function __construct(
         private readonly FeeSettingsService $feeSettingsService,
+        private readonly PricingService $pricingService,
         string $projectRootPath = __DIR__ . '/../../../'
     ) {
         $encryptionKey = getenv('ENCRYPTION_KEY') ?: $_ENV['ENCRYPTION_KEY'] ?? '';
@@ -143,6 +145,51 @@ final class SettingsController
                 'error',
                 'error.http_5xx',
                 'CSFloat API key update request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_SAVE_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function getPriceSourcePreference(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            JsonResponseFactory::success($this->pricingService->getPriceModePreference($userId));
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Price source preference read request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_FETCH_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function updatePriceSourcePreference(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $mode = (string) ($request->body['mode'] ?? '');
+            $saved = $this->pricingService->updatePriceModePreference($userId, $mode);
+            JsonResponseFactory::success($saved, statusCode: 200);
+        } catch (InvalidArgumentException $exception) {
+            Logger::event(
+                'warning',
+                'error',
+                'error.validation',
+                'Price source preference validation failed',
+                ['statusCode' => 400, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', $exception->getMessage(), [], 400);
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Price source preference update request failed',
                 ['statusCode' => 500, 'exception' => $exception]
             );
             JsonResponseFactory::error('SETTINGS_SAVE_FAILED', $exception->getMessage(), [], 500);

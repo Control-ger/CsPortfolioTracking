@@ -297,3 +297,11 @@ Updated: 2026-05-14
 Change: CS Updates Ingest auf Steam News API umgestellt
 - Externer Feed-Client nutzt jetzt `ISteamNews/GetNewsForApp` fuer `appid=730` als Primärquelle.
 - Grund: SteamDB-RSS liefert in Container-Laufzeiten teils `HTTP 403` und ist dadurch nicht stabil genug als alleinige Produktionsquelle.
+
+---
+
+Updated: 2026-05-18
+Change: Preisquellen-Praeferenz + getrennte Live-Quotes pro Source
+- Neue zentrale Repository-Komponente: `backend/src/Infrastructure/Persistence/Repository/UserPriceSourcePreferenceRepository.php`.
+- Datenmodell-Regel erweitert: `item_live_cache` speichert jetzt getrennte Quotes je `item_id + price_source` (mind. `csfloat`/`steam`), nicht mehr eine einzelne ueberschriebene Zeile pro Item.
+- Pricing-Flow in `backend/src/Application/Service/PricingService.php` nutzt User-Praeferenz (`auto`/`csfloat`/`steam`) fuer Source-Selection und vermeidet Source-Mischung durch Fallback-Ueberschreiben.

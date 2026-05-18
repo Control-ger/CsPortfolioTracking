@@ -6,7 +6,6 @@ namespace App\Application\Service;
 use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
-use App\Infrastructure\External\SteamMarketClient;
 use App\Shared\Dto\WatchlistItemDto;
 use App\Shared\Logger;
 
@@ -16,8 +15,7 @@ final class WatchlistService
         private readonly WatchlistRepository $watchlistRepository,
         private readonly ItemRepository $itemRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
-        private readonly PricingService $pricingService,
-        private readonly SteamMarketClient $steamMarketClient
+        private readonly PricingService $pricingService
     ) {
     }
 
@@ -88,6 +86,7 @@ final class WatchlistService
     }
 
     public function searchAvailableItems(
+        int $userId,
         string $query,
         int $limit = 6,
         ?string $itemTypeFilter = null,
@@ -149,30 +148,32 @@ final class WatchlistService
         );
         $totalPages = $totalItems > 0 ? (int) ceil($totalItems / $resolvedLimit) : 0;
 
-        $items = array_map(static function (array $row): array {
-            return [
+        $items = [];
+        foreach ($rows as $row) {
+            $marketHashName = (string) ($row['market_hash_name'] ?? '');
+            $presentation = $marketHashName !== ''
+                ? $this->pricingService->getItemPresentation($marketHashName, null, $userId)
+                : [];
+
+            $items[] = [
                 'id' => isset($row['id']) ? (int) $row['id'] : 0,
                 'itemId' => isset($row['id']) ? (int) $row['id'] : 0,
-                'marketHashName' => (string) ($row['market_hash_name'] ?? ''),
+                'marketHashName' => $marketHashName,
                 'displayName' => (string) (($row['name'] ?? '') ?: ($row['market_hash_name'] ?? '')),
-                'itemType' => (string) (($row['item_type'] ?? '') ?: ($row['type'] ?? 'other')),
-                'itemTypeLabel' => (string) (($row['item_type_label'] ?? '') ?: (($row['type'] ?? 'Other'))),
-                'marketTypeLabel' => (string) (($row['market_type_label'] ?? '') ?: (($row['item_type_label'] ?? '') ?: 'CS2 Item')),
-                'wear' => isset($row['wear_key']) ? (string) $row['wear_key'] : null,
-                'wearLabel' => isset($row['wear_label']) ? (string) $row['wear_label'] : null,
-                'iconUrl' => isset($row['image_url']) ? (string) $row['image_url'] : null,
-                'priceSource' => isset($row['price_source']) ? (string) $row['price_source'] : null,
-                'livePriceEur' => isset($row['price_eur']) && is_numeric($row['price_eur'])
-                    ? round((float) $row['price_eur'], 2)
-                    : null,
-                'livePriceUsd' => isset($row['price_usd']) && is_numeric($row['price_usd'])
-                    ? round((float) $row['price_usd'], 2)
-                    : null,
+                'itemType' => (string) (($presentation['itemType'] ?? '') ?: ($row['item_type'] ?? '') ?: ($row['type'] ?? 'other')),
+                'itemTypeLabel' => (string) (($presentation['itemTypeLabel'] ?? '') ?: ($row['item_type_label'] ?? '') ?: (($row['type'] ?? 'Other'))),
+                'marketTypeLabel' => (string) (($presentation['marketTypeLabel'] ?? '') ?: ($row['market_type_label'] ?? '') ?: (($row['item_type_label'] ?? '') ?: 'CS2 Item')),
+                'wear' => isset($presentation['wear']) ? (string) $presentation['wear'] : (isset($row['wear_key']) ? (string) $row['wear_key'] : null),
+                'wearLabel' => isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : (isset($row['wear_label']) ? (string) $row['wear_label'] : null),
+                'iconUrl' => isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : (isset($row['image_url']) ? (string) $row['image_url'] : null),
+                'priceSource' => isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : (isset($row['price_source']) ? (string) $row['price_source'] : null),
+                'livePriceEur' => isset($presentation['priceEur']) && is_numeric($presentation['priceEur'])
+                    ? round((float) $presentation['priceEur'], 2)
+                    : (isset($row['price_eur']) && is_numeric($row['price_eur']) ? round((float) $row['price_eur'], 2) : null),
+                'livePriceUsd' => isset($presentation['priceUsd']) && is_numeric($presentation['priceUsd'])
+                    ? round((float) $presentation['priceUsd'], 2)
+                    : (isset($row['price_usd']) && is_numeric($row['price_usd']) ? round((float) $row['price_usd'], 2) : null),
             ];
-        }, $rows);
-        $steamPriceMap = $this->buildSteamPriceMapForQuery($normalizedQuery, $resolvedLimit, $offset);
-        if ($steamPriceMap !== []) {
-            $items = $this->applySteamFallbackToSearchItems($items, $steamPriceMap);
         }
 
         return [
@@ -193,78 +194,6 @@ final class WatchlistService
         }
 
         return strlen($value);
-    }
-
-    private function buildSteamPriceMapForQuery(string $query, int $limit, int $offset): array
-    {
-        $normalizedQuery = trim($query);
-        if ($normalizedQuery === '') {
-            return [];
-        }
-
-        $steamResult = $this->steamMarketClient->searchItems($normalizedQuery, max(8, $limit), $offset);
-        $steamItems = $steamResult['items'] ?? null;
-        if (!is_array($steamItems)) {
-            return [];
-        }
-
-        $priceMap = [];
-        foreach ($steamItems as $steamItem) {
-            if (!is_array($steamItem)) {
-                continue;
-            }
-
-            $marketHashName = trim((string) ($steamItem['marketHashName'] ?? ''));
-            if ($marketHashName === '') {
-                continue;
-            }
-
-            $priceUsd = isset($steamItem['sellPriceUsd']) && is_numeric($steamItem['sellPriceUsd'])
-                ? (float) $steamItem['sellPriceUsd']
-                : null;
-            if ($priceUsd === null || $priceUsd <= 0) {
-                continue;
-            }
-
-            $priceMap[$marketHashName] = [
-                'priceUsd' => $priceUsd,
-                'iconUrl' => isset($steamItem['iconUrl']) ? (string) $steamItem['iconUrl'] : null,
-            ];
-        }
-
-        return $priceMap;
-    }
-
-    private function applySteamFallbackToSearchItems(array $items, array $steamPriceMap): array
-    {
-        $usdToEurRate = $this->pricingService->getUsdToEurRate();
-
-        return array_map(static function (array $item) use ($steamPriceMap, $usdToEurRate): array {
-            $marketHashName = trim((string) ($item['marketHashName'] ?? ''));
-            if ($marketHashName === '' || !isset($steamPriceMap[$marketHashName])) {
-                return $item;
-            }
-
-            $hasLivePrice = isset($item['livePriceUsd']) && is_numeric($item['livePriceUsd']) && (float) $item['livePriceUsd'] > 0;
-            if ($hasLivePrice) {
-                return $item;
-            }
-
-            $steamPrice = $steamPriceMap[$marketHashName];
-            $priceUsd = (float) ($steamPrice['priceUsd'] ?? 0);
-            if ($priceUsd <= 0) {
-                return $item;
-            }
-
-            $item['livePriceUsd'] = round($priceUsd, 2);
-            $item['livePriceEur'] = round($priceUsd * $usdToEurRate, 2);
-            $item['priceSource'] = 'steam';
-            if ((empty($item['iconUrl']) || $item['iconUrl'] === null) && !empty($steamPrice['iconUrl'])) {
-                $item['iconUrl'] = (string) $steamPrice['iconUrl'];
-            }
-
-            return $item;
-        }, $items);
     }
 
     public function addItemsBatch(int $userId, array $items): array
@@ -350,7 +279,7 @@ final class WatchlistService
         }
 
         $id = $this->watchlistRepository->insert($userId, $itemId, null);
-        $liveSnapshot = $this->syncSingleItemPrice($itemId, $trimmedName);
+        $liveSnapshot = $this->syncSingleItemPrice($userId, $itemId, $trimmedName);
 
         Logger::event(
             'info',
@@ -435,7 +364,7 @@ final class WatchlistService
                 continue;
             }
 
-            if ($itemId <= 0 || $this->syncSingleItemPrice($itemId, $name) === null) {
+            if ($itemId <= 0 || $this->syncSingleItemPrice($userId, $itemId, $name) === null) {
                 continue;
             }
 
@@ -446,9 +375,9 @@ final class WatchlistService
         return ['updated' => $updated, 'totalItems' => count($items)];
     }
 
-    private function syncSingleItemPrice(int $itemId, string $itemName): ?array
+    private function syncSingleItemPrice(int $userId, int $itemId, string $itemName): ?array
     {
-        $snapshot = $this->pricingService->getLivePriceSnapshot($itemName);
+        $snapshot = $this->pricingService->getLivePriceSnapshot($itemName, $userId);
         if ($snapshot === null) {
             return null;
         }

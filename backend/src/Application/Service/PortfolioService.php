@@ -73,14 +73,22 @@ final class PortfolioService
             $excluded = false;
             $itemId = (int) ($investment['item_id'] ?? 0);
             $name = (string) ($investment['name'] ?? '');
+            $investmentPayload = $this->decodeInvestmentPayload($investment);
+            $instanceHint = $this->extractInstanceHint($investmentPayload);
+            $presentationCacheKey = $this->buildPresentationCacheKey($name, $instanceHint);
             $buyPriceUsd = isset($investment['buy_price_usd']) ? (float) $investment['buy_price_usd'] : null;
             $usdToEurRate = $this->pricingService->getUsdToEurRate();
             $buyPrice = $buyPriceUsd !== null ? round($buyPriceUsd * $usdToEurRate, 2) : 0.0;
             $quantity = (int) ($investment['quantity'] ?? 0);
-            if (!isset($presentationCache[$name])) {
-                $presentationCache[$name] = $this->pricingService->getItemPresentation($name);
+            if (!isset($presentationCache[$presentationCacheKey])) {
+                $presentationCache[$presentationCacheKey] = $this->pricingService->getItemPresentation(
+                    $name,
+                    null,
+                    $userId,
+                    $instanceHint
+                );
             }
-            $presentation = $presentationCache[$name];
+            $presentation = $presentationCache[$presentationCacheKey];
             $livePrice = isset($presentation['priceEur']) ? (float) $presentation['priceEur'] : null;
             $priceSource = isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : null;
             $displayPrice = $livePrice ?? $buyPrice;
@@ -125,14 +133,21 @@ final class PortfolioService
                 'name' => $name,
                 'type' => (string) $investment['type'],
                 'bucket' => $bucket,
-                'imageUrl' => $presentation['iconUrl'] ?? null,
+                'imageUrl' => $this->resolveInvestmentImageUrl($investmentPayload, $presentation['iconUrl'] ?? null),
                 'marketTypeLabel' => $presentation['marketTypeLabel'] ?? null,
                 'wearName' => $presentation['wearLabel'] ?? null,
+                'floatValue' => $instanceHint['floatValue'] ?? ($presentation['floatValue'] ?? null),
+                'paintSeed' => $instanceHint['paintSeed'] ?? ($presentation['paintSeed'] ?? null),
+                'inspectLink' => $instanceHint['inspectLink'] ?? ($presentation['inspectLink'] ?? null),
                 'buyPrice' => $buyPrice,
                 'buyPriceUsd' => $buyPriceUsd,
                 'quantity' => $quantity,
                 'livePrice' => $livePrice,
                 'priceSource' => $priceSource,
+                'priceScope' => $presentation['priceScope'] ?? 'item',
+                'priceStrategy' => $presentation['priceStrategy'] ?? null,
+                'priceConfidence' => $presentation['priceConfidence'] ?? null,
+                'sampleSize' => $presentation['sampleSize'] ?? null,
                 'displayPrice' => $displayPrice,
                 'roi' => $roi,
                 'isLive' => $isLive,
@@ -446,6 +461,11 @@ final class PortfolioService
         array $presentation,
         ?string $priceSource
     ): void {
+        if (strtolower(trim((string) ($presentation['priceScope'] ?? 'item'))) !== 'item') {
+            // price_history remains item-level; instance-only valuations would corrupt shared baselines.
+            return;
+        }
+
         $priceUsd = $presentation['priceUsd'] ?? null;
         $exchangeRate = $presentation['exchangeRate'] ?? null;
         $exchangeRateId = $this->exchangeRateRepository->ensureTodayRate((float) ($exchangeRate ?? $this->pricingService->getUsdToEurRate()));
@@ -571,6 +591,7 @@ final class PortfolioService
             if (!isset($groups[$key])) {
                 $groups[$key] = [
                     'base' => $row,
+                    'rowCount' => 0,
                     'quantity' => 0,
                     'totalInvested' => 0.0,
                     'currentValue' => 0.0,
@@ -585,9 +606,13 @@ final class PortfolioService
                     'change30dPercentWeighted' => 0.0,
                     'lastPriceUpdateAt' => $row['lastPriceUpdateAt'] ?? null,
                     'maxPriceAgeSeconds' => isset($row['priceAgeSeconds']) && is_numeric($row['priceAgeSeconds']) ? (int) $row['priceAgeSeconds'] : null,
+                    'instancePriceCount' => 0,
+                    'priceStrategies' => [],
+                    'priceConfidences' => [],
                 ];
             }
 
+            $groups[$key]['rowCount'] += 1;
             $groups[$key]['quantity'] += $quantity;
             $groups[$key]['totalInvested'] += $totalInvested;
             $groups[$key]['currentValue'] += $currentValue;
@@ -600,6 +625,17 @@ final class PortfolioService
             $groups[$key]['change24hPercentWeighted'] += (float) (($row['change24hPercent'] ?? 0.0) * $quantity);
             $groups[$key]['change7dPercentWeighted'] += (float) (($row['change7dPercent'] ?? 0.0) * $quantity);
             $groups[$key]['change30dPercentWeighted'] += (float) (($row['change30dPercent'] ?? 0.0) * $quantity);
+            if (strtolower(trim((string) ($row['priceScope'] ?? 'item'))) === 'instance') {
+                $groups[$key]['instancePriceCount'] += 1;
+            }
+            $strategy = trim((string) ($row['priceStrategy'] ?? ''));
+            if ($strategy !== '') {
+                $groups[$key]['priceStrategies'][$strategy] = true;
+            }
+            $confidence = trim((string) ($row['priceConfidence'] ?? ''));
+            if ($confidence !== '') {
+                $groups[$key]['priceConfidences'][$confidence] = true;
+            }
 
             $existingUpdatedAt = (string) ($groups[$key]['lastPriceUpdateAt'] ?? '');
             $candidateUpdatedAt = (string) ($row['lastPriceUpdateAt'] ?? '');
@@ -638,6 +674,12 @@ final class PortfolioService
 
             $priceAgeSeconds = $group['maxPriceAgeSeconds'];
             $freshnessStatus = $this->resolveFreshnessStatus($priceAgeSeconds, (bool) ($base['isLive'] ?? false));
+            $allInstanceScoped = ((int) ($group['rowCount'] ?? 0)) > 0
+                && ((int) ($group['instancePriceCount'] ?? 0)) === ((int) ($group['rowCount'] ?? 0));
+            $priceStrategies = array_keys((array) ($group['priceStrategies'] ?? []));
+            $priceConfidences = array_keys((array) ($group['priceConfidences'] ?? []));
+            $resolvedPriceStrategy = count($priceStrategies) === 1 ? $priceStrategies[0] : null;
+            $resolvedPriceConfidence = count($priceConfidences) === 1 ? $priceConfidences[0] : null;
 
             $change24hPercent = $group['change24hPercentWeighted'] / $quantity;
             $change7dPercent = $group['change7dPercentWeighted'] / $quantity;
@@ -656,6 +698,12 @@ final class PortfolioService
                 'breakEvenPrice' => $breakEvenPrice,
                 'breakEvenDeltaEuro' => $displayPrice - $breakEvenPrice,
                 'breakEvenDeltaPercent' => $breakEvenPrice > 0 ? (($displayPrice - $breakEvenPrice) / $breakEvenPrice) * 100 : null,
+                'priceScope' => $allInstanceScoped ? 'instance' : 'item',
+                'priceStrategy' => $resolvedPriceStrategy,
+                'priceConfidence' => $resolvedPriceConfidence,
+                'floatValue' => ((int) ($group['rowCount'] ?? 0)) === 1 ? ($base['floatValue'] ?? null) : null,
+                'paintSeed' => ((int) ($group['rowCount'] ?? 0)) === 1 ? ($base['paintSeed'] ?? null) : null,
+                'inspectLink' => ((int) ($group['rowCount'] ?? 0)) === 1 ? ($base['inspectLink'] ?? null) : null,
                 'costBasisTotal' => $costBasisTotal,
                 'costBasisUnit' => $costBasisUnit,
                 'netPositionValue' => $netPositionValue,
@@ -853,6 +901,93 @@ final class PortfolioService
             'isExcluded' => $resolvedExcluded,
             'updatedAt' => gmdate('c'),
         ]);
+    }
+
+    private function decodeInvestmentPayload(array $investment): array
+    {
+        $rawPayload = $investment['raw_payload_json'] ?? null;
+        if (!is_string($rawPayload) || trim($rawPayload) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($rawPayload, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function extractInstanceHint(array $payload): ?array
+    {
+        $floatValue = $this->resolveFloatValueFromPayload($payload);
+        $paintSeed = $this->resolvePaintSeedFromPayload($payload);
+        $inspectLink = trim((string) ($payload['inspectLink'] ?? $payload['inspect_link'] ?? ''));
+
+        if ($floatValue === null && $paintSeed === null && $inspectLink === '') {
+            return null;
+        }
+
+        return [
+            'floatValue' => $floatValue,
+            'paintSeed' => $paintSeed,
+            'inspectLink' => $inspectLink !== '' ? $inspectLink : null,
+        ];
+    }
+
+    private function buildPresentationCacheKey(string $name, ?array $instanceHint): string
+    {
+        $normalizedName = trim($name);
+        if ($instanceHint === null) {
+            return $normalizedName;
+        }
+
+        $floatPart = isset($instanceHint['floatValue']) && is_numeric($instanceHint['floatValue'])
+            ? number_format((float) $instanceHint['floatValue'], 6, '.', '')
+            : 'na';
+        $seedPart = isset($instanceHint['paintSeed']) && is_numeric($instanceHint['paintSeed'])
+            ? (string) (int) $instanceHint['paintSeed']
+            : 'na';
+
+        return $normalizedName . '|f:' . $floatPart . '|s:' . $seedPart;
+    }
+
+    private function resolveInvestmentImageUrl(array $payload, ?string $fallbackImageUrl): ?string
+    {
+        foreach (['imageUrl', 'image_url', 'iconUrl', 'icon_url'] as $key) {
+            $value = trim((string) ($payload[$key] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return $fallbackImageUrl;
+    }
+
+    private function resolveFloatValueFromPayload(array $payload): ?float
+    {
+        foreach (['floatValue', 'float', 'wearFloat', 'float_value'] as $key) {
+            if (!array_key_exists($key, $payload) || !is_numeric($payload[$key])) {
+                continue;
+            }
+            $parsed = (float) $payload[$key];
+            if ($parsed >= 0.0 && $parsed <= 1.0) {
+                return $parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolvePaintSeedFromPayload(array $payload): ?int
+    {
+        foreach (['paintSeed', 'patternSeed', 'paint_seed', 'pattern_seed'] as $key) {
+            if (!array_key_exists($key, $payload) || !is_numeric($payload[$key])) {
+                continue;
+            }
+            $parsed = (int) $payload[$key];
+            if ($parsed >= 0) {
+                return $parsed;
+            }
+        }
+
+        return null;
     }
 
     private function isExcludedInvestment(array $investment): bool

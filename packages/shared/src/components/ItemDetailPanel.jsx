@@ -77,6 +77,26 @@ export const ItemDetailPanel = ({
 
   const stats6m = item.details?.stats6m;
   const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
+  const floatValue = Number(item.floatValue);
+  const hasFloatValue = Number.isFinite(floatValue) && floatValue >= 0 && floatValue <= 1;
+  const paintSeed = Number(item.paintSeed);
+  const hasPaintSeed = Number.isFinite(paintSeed) && paintSeed >= 0;
+  const priceScope = String(item.priceScope || "item").toLowerCase();
+  const strategyLabelMap = {
+    seed_exact: "Pattern-Match",
+    float_band_00025: "Float-Band +/-0.0025",
+    float_band_00050: "Float-Band +/-0.0050",
+    float_band_00100: "Float-Band +/-0.0100",
+    float_band_00200: "Float-Band +/-0.0200",
+    market_lowest: "Market Lowest",
+  };
+  const strategyLabel = strategyLabelMap[String(item.priceStrategy || "").toLowerCase()] || null;
+  const confidenceLabelMap = {
+    high: "hoch",
+    medium: "mittel",
+    low: "niedrig",
+  };
+  const confidenceLabel = confidenceLabelMap[String(item.priceConfidence || "").toLowerCase()] || null;
   const formatUsdPrice = (value) =>
     formatPrice(value, {
       useUsd: true,
@@ -178,6 +198,12 @@ export const ItemDetailPanel = ({
                             : "Einkauf"}
                   </p>
                 </div>
+                {priceScope === "instance" ? (
+                  <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                    Instanzbewertung{strategyLabel ? `: ${strategyLabel}` : ""}
+                    {confidenceLabel ? ` (${confidenceLabel})` : ""}
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-md border p-2 sm:p-3">
@@ -213,6 +239,28 @@ export const ItemDetailPanel = ({
                   {item.lastPriceUpdateAt || "Unbekannt"}
                 </p>
               </div>
+
+              {(hasFloatValue || hasPaintSeed || item.inspectLink) ? (
+                <div className="rounded-md border p-2 sm:p-3">
+                  <p className="text-[10px] uppercase text-muted-foreground">Instanzdaten</p>
+                  <p className="mt-2 text-xs sm:text-sm font-bold">
+                    {hasFloatValue ? `Float: ${floatValue.toFixed(6)}` : "Float: -"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {hasPaintSeed ? `Pattern Seed: ${paintSeed}` : "Pattern Seed: -"}
+                  </p>
+                  {item.inspectLink ? (
+                    <a
+                      href={item.inspectLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex text-[10px] uppercase tracking-wide text-primary underline-offset-2 hover:underline"
+                    >
+                      Inspect Link
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="rounded-md border p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Cost Basis</p>

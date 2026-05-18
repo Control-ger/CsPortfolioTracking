@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign } from "lucide-react";
+import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign, LineChart } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 import { ThemeToggle } from "@shared/components/ThemeToggle";
@@ -11,7 +11,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shar
 import { Input } from "@shared/components/ui/input";
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components";
-import { fetchFeeSettings, updateFeeSettings, fetchCsFloatApiKeyStatus, updateCsFloatApiKey } from "@shared/lib/apiClient";
+import {
+  fetchFeeSettings,
+  updateFeeSettings,
+  fetchCsFloatApiKeyStatus,
+  updateCsFloatApiKey,
+  fetchPriceSourcePreference,
+  updatePriceSourcePreference,
+} from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 
@@ -35,6 +42,17 @@ function isDesktopRuntime() {
   return typeof window !== "undefined" && Boolean(window.electronAPI?.secrets);
 }
 
+function normalizePriceSourceMode(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "csfloat") {
+    return "csfloat";
+  }
+  if (normalized === "steam") {
+    return "steam";
+  }
+  return "auto";
+}
+
 export function SettingsPage() {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [source, setSource] = useState("defaults");
@@ -53,6 +71,10 @@ export function SettingsPage() {
   const [apiKeyError, setApiKeyError] = useState("");
   const [apiKeySuccess, setApiKeySuccess] = useState("");
   const [encryptionReady, setEncryptionReady] = useState(false);
+  const [priceSourceMode, setPriceSourceMode] = useState("auto");
+  const [priceSourceSaving, setPriceSourceSaving] = useState(false);
+  const [priceSourceError, setPriceSourceError] = useState("");
+  const [priceSourceSuccess, setPriceSourceSuccess] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const [serverConfigLoading, setServerConfigLoading] = useState(true);
   const [serverConfigSaving, setServerConfigSaving] = useState(false);
@@ -66,9 +88,10 @@ export function SettingsPage() {
         setLoading(true);
         setApiKeyLoading(true);
 
-        const [feeResponse, keyStatusResponse] = await Promise.all([
+        const [feeResponse, keyStatusResponse, priceSourceResponse] = await Promise.all([
           fetchFeeSettings(),
-          fetchCsFloatApiKeyStatus()
+          fetchCsFloatApiKeyStatus(),
+          fetchPriceSourcePreference(),
         ]);
 
         const feeData = feeResponse?.data || {};
@@ -89,6 +112,8 @@ export function SettingsPage() {
 
         const keyStatus = keyStatusResponse?.data || { configured: false, lastFour: null };
         setApiKeyStatus(keyStatus);
+        const priceSourceData = priceSourceResponse?.data || {};
+        setPriceSourceMode(normalizePriceSourceMode(priceSourceData.mode));
 
         setEncryptionReady(
           desktopRuntime
@@ -203,6 +228,11 @@ export function SettingsPage() {
   
   const renderGeneralTab = () => {
     const { currency, currencies, setCurrency, exchangeRates, ratesLoading } = currencyContext;
+    const priceSourceLabel = priceSourceMode === "csfloat"
+      ? "Nur CSFloat"
+      : priceSourceMode === "steam"
+        ? "Nur Steam"
+        : "Auto (CSFloat bevorzugt)";
 
     return (
       <div className="space-y-4">
@@ -257,6 +287,81 @@ export function SettingsPage() {
                 </p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <LineChart className="h-5 w-5" />
+              <CardTitle>Live-Preisquelle</CardTitle>
+              <Badge variant="outline" className="ml-auto">
+                {priceSourceLabel}
+              </Badge>
+            </div>
+            <CardDescription>
+              Lege fest, welche Quelle fuer Live-Preise bevorzugt wird.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {priceSourceError ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {priceSourceError}
+              </div>
+            ) : null}
+            {priceSourceSuccess ? (
+              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                {priceSourceSuccess}
+              </div>
+            ) : null}
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              {[
+                { value: "auto", label: "Auto", hint: "CSFloat zuerst, Steam als Fallback" },
+                { value: "csfloat", label: "CSFloat", hint: "Nur CSFloat bevorzugen" },
+                { value: "steam", label: "Steam", hint: "Nur Steam bevorzugen" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setPriceSourceMode(option.value);
+                    setPriceSourceError("");
+                    setPriceSourceSuccess("");
+                  }}
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    priceSourceMode === option.value
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:bg-accent"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{option.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{option.hint}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                disabled={priceSourceSaving}
+                onClick={async () => {
+                  try {
+                    setPriceSourceSaving(true);
+                    setPriceSourceError("");
+                    setPriceSourceSuccess("");
+                    const response = await updatePriceSourcePreference(priceSourceMode);
+                    const saved = normalizePriceSourceMode(response?.data?.mode || priceSourceMode);
+                    setPriceSourceMode(saved);
+                    setPriceSourceSuccess("Preisquellen-Praeferenz gespeichert.");
+                  } catch (saveError) {
+                    setPriceSourceError(saveError?.message || "Preisquellen-Praeferenz konnte nicht gespeichert werden.");
+                  } finally {
+                    setPriceSourceSaving(false);
+                  }
+                }}
+              >
+                {priceSourceSaving ? "Speichert..." : "Praeferenz speichern"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

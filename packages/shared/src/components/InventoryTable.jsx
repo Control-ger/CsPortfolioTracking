@@ -269,7 +269,14 @@ export function InventoryTable({ investments, onSelectItem }) {
                   {item.isLive ? (
                     <div className="flex flex-col items-end gap-1">
                       <span>{formatPrice(item.livePrice)}</span>
-                      <PriceSourceBadge priceSource={item.priceSource} compact />
+                      <div className="flex items-center gap-1">
+                        <PriceSourceBadge priceSource={item.priceSource} compact />
+                        {String(item.priceScope || "item").toLowerCase() === "instance" ? (
+                          <Badge variant="outline" className="text-[9px] uppercase">
+                            Instanz
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-end">

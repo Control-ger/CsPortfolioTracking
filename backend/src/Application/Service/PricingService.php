@@ -10,6 +10,7 @@ use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
 use App\Infrastructure\Persistence\Repository\ItemRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
+use App\Infrastructure\Persistence\Repository\UserPriceSourcePreferenceRepository;
 use App\Shared\Dto\WatchlistSearchCandidateDto;
 use App\Shared\Logger;
 
@@ -19,6 +20,9 @@ final class PricingService
     private const CATALOG_CACHE_TTL_SECONDS = 86400;
     private const PRICE_SOURCE_CSFLOAT = 'csfloat';
     private const PRICE_SOURCE_STEAM = 'steam';
+    private const PRICE_MODE_AUTO = 'auto';
+    private const PRICE_SCOPE_ITEM = 'item';
+    private const PRICE_SCOPE_INSTANCE = 'instance';
     private const CSFLOAT_CIRCUIT_BREAKER_STATUSES = [401, 403, 405, 406, 418, 429, 500, 503];
     private const CSFLOAT_BACKOFF_SECONDS = [
         401 => 300,
@@ -35,6 +39,7 @@ final class PricingService
     private ?float $exchangeRateCache = null;
     private array $warnings = [];
     private ?array $csFloatCircuitBreakerWarning = null;
+    private array $priceSourcePreferenceCache = [];
 
     public function __construct(
         private readonly CsFloatClient $csFloatClient,
@@ -43,13 +48,14 @@ final class PricingService
         private readonly MarketItemClassifier $marketItemClassifier,
         private readonly ItemRepository $itemRepository,
         private readonly ExchangeRateRepository $exchangeRateRepository,
-        private readonly ItemLiveCacheRepository $itemLiveCacheRepository
+        private readonly ItemLiveCacheRepository $itemLiveCacheRepository,
+        private readonly UserPriceSourcePreferenceRepository $userPriceSourcePreferenceRepository
     ) {
     }
 
-    public function getLivePriceEur(string $itemName): ?float
+    public function getLivePriceEur(string $itemName, int $userId = 1, ?array $instanceHint = null): ?float
     {
-        $snapshot = $this->getLivePriceSnapshot($itemName);
+        $snapshot = $this->getLivePriceSnapshot($itemName, $userId, $instanceHint);
         return $snapshot['priceEur'] ?? null;
     }
 
@@ -63,9 +69,9 @@ final class PricingService
         return $this->exchangeRateCache;
     }
 
-    public function getLivePriceSnapshot(string $itemName): ?array
+    public function getLivePriceSnapshot(string $itemName, int $userId = 1, ?array $instanceHint = null): ?array
     {
-        $presentation = $this->getItemPresentation($itemName);
+        $presentation = $this->getItemPresentation($itemName, null, $userId, $instanceHint);
         if (!isset($presentation['priceUsd'], $presentation['priceEur'], $presentation['exchangeRate'])) {
             return null;
         }
@@ -81,6 +87,9 @@ final class PricingService
             'itemTypeLabel' => $presentation['itemTypeLabel'] ?? null,
             'wearName' => $presentation['wearLabel'] ?? null,
             'iconUrl' => $presentation['iconUrl'] ?? null,
+            'priceScope' => $presentation['priceScope'] ?? self::PRICE_SCOPE_ITEM,
+            'priceStrategy' => $presentation['priceStrategy'] ?? null,
+            'priceConfidence' => $presentation['priceConfidence'] ?? null,
         ];
     }
 
@@ -97,17 +106,28 @@ final class PricingService
         return $warnings;
     }
 
-    public function getItemPresentation(string $itemName, ?array $steamHint = null): array
+    public function getItemPresentation(
+        string $itemName,
+        ?array $steamHint = null,
+        int $userId = 1,
+        ?array $instanceHint = null
+    ): array
     {
         $this->ensureCacheTables();
+        $priceMode = $this->resolvePriceModeForUser($userId);
 
         $catalog = $this->getCatalogEntry($itemName, $steamHint);
+        $resolvedInstanceHint = $this->normalizeInstanceHint($instanceHint);
         $itemId = isset($catalog['itemId']) ? (int) $catalog['itemId'] : 0;
-        $cachedLive = $this->normalizeLiveCacheRow(
-            $itemId > 0 ? $this->itemLiveCacheRepository->findByItemId($itemId) : null
-        );
+        $cachedBySource = $itemId > 0
+            ? $this->indexLiveCacheRowsBySource(
+                $this->normalizeLiveCacheRows($this->itemLiveCacheRepository->findAllByItemId($itemId))
+            )
+            : [];
+        $cachedLive = $this->selectLiveCacheForMode($cachedBySource, $priceMode);
+        $instancePricingEligible = $this->isInstancePricingEligible($resolvedInstanceHint, $catalog, $priceMode);
 
-        if ($this->isFreshLiveCache($cachedLive)) {
+        if (!$instancePricingEligible && $this->isFreshLiveCache($cachedLive)) {
             Logger::event(
                 'info',
                 'external',
@@ -117,9 +137,10 @@ final class PricingService
                     'provider' => (string) ($cachedLive['priceSource'] ?? self::PRICE_SOURCE_CSFLOAT),
                     'cacheHit' => true,
                     'itemName' => $itemName,
+                    'priceMode' => $priceMode,
                 ]
             );
-            return $this->buildPresentation($catalog, $cachedLive);
+            return $this->buildPresentation($catalog, $cachedLive, $priceMode);
         }
 
         Logger::event(
@@ -131,16 +152,28 @@ final class PricingService
                 'provider' => 'pricing',
                 'cacheMiss' => true,
                 'itemName' => $itemName,
+                'priceMode' => $priceMode,
             ]
         );
 
+        $csFloatUpdated = false;
+        $instanceLive = null;
         if ($this->csFloatCircuitBreakerWarning === null) {
             $this->csFloatCircuitBreakerWarning = $this->loadActiveCsFloatBackoff();
         }
 
         $listing = null;
-        if ($this->csFloatCircuitBreakerWarning === null) {
-            $listingResult = $this->csFloatClient->fetchLowestListingResult($itemName);
+        $shouldFetchCsFloatPrice = $instancePricingEligible
+            ? $priceMode !== self::PRICE_SOURCE_STEAM
+            : $this->shouldFetchCsFloatPrice($priceMode, $cachedBySource);
+        if ($shouldFetchCsFloatPrice && $this->csFloatCircuitBreakerWarning === null) {
+            $listingResult = $instancePricingEligible
+                ? $this->csFloatClient->fetchComparableListingResult(
+                    $itemName,
+                    $resolvedInstanceHint['floatValue'] ?? null,
+                    $resolvedInstanceHint['paintSeed'] ?? null
+                )
+                : $this->csFloatClient->fetchLowestListingResult($itemName);
             $csFloatError = is_array($listingResult['error'] ?? null) ? $listingResult['error'] : null;
             if ($csFloatError !== null) {
                 $this->registerWarning($csFloatError, $itemName);
@@ -151,22 +184,56 @@ final class PricingService
             }
 
             $listing = is_array($listingResult['snapshot'] ?? null) ? $listingResult['snapshot'] : null;
-        } elseif (($cachedLive['priceSource'] ?? null) === self::PRICE_SOURCE_STEAM) {
-            $this->registerWarning($this->csFloatCircuitBreakerWarning, $itemName);
-            return $this->buildPresentation($catalog, $cachedLive);
-        } else {
+        } elseif ($this->csFloatCircuitBreakerWarning !== null) {
             $this->registerWarning($this->csFloatCircuitBreakerWarning, $itemName);
         }
 
         if ($listing !== null) {
             $catalog = $this->persistCatalogEntry($itemName, $catalog, $steamHint, $listing);
-            $liveCache = $this->persistLiveCacheEntry($itemId, (float) $listing['priceUsd'], self::PRICE_SOURCE_CSFLOAT);
-
-            return $this->buildPresentation($catalog, $liveCache);
+            if ($instancePricingEligible) {
+                $instanceLive = $this->buildTransientLiveCacheEntry(
+                    $itemId,
+                    (float) $listing['priceUsd'],
+                    self::PRICE_SOURCE_CSFLOAT,
+                    [
+                        'priceScope' => self::PRICE_SCOPE_INSTANCE,
+                        'priceStrategy' => isset($listing['strategy']) ? (string) $listing['strategy'] : 'market_lowest',
+                        'priceConfidence' => isset($listing['confidence']) ? (string) $listing['confidence'] : null,
+                        'sampleSize' => isset($listing['sampleSize']) ? (int) $listing['sampleSize'] : null,
+                        'floatValue' => $listing['floatValue'] ?? ($resolvedInstanceHint['floatValue'] ?? null),
+                        'paintSeed' => $listing['paintSeed'] ?? ($resolvedInstanceHint['paintSeed'] ?? null),
+                        'inspectLink' => $listing['inspectLink'] ?? ($resolvedInstanceHint['inspectLink'] ?? null),
+                    ]
+                );
+            } else {
+                $liveCache = $this->persistLiveCacheEntry($itemId, (float) $listing['priceUsd'], self::PRICE_SOURCE_CSFLOAT);
+                $cachedBySource[self::PRICE_SOURCE_CSFLOAT] = $liveCache;
+                $csFloatUpdated = true;
+            }
         }
 
-        $steamPriceSnapshot = $this->resolveSteamPriceSnapshot($itemName, $steamHint);
-        if ($steamPriceSnapshot !== null) {
+        if (!$instancePricingEligible && $this->shouldFetchSteamPrice($priceMode, $cachedBySource, $csFloatUpdated)) {
+            $steamPriceSnapshot = $this->resolveSteamPriceSnapshot($itemName, $steamHint);
+            if ($steamPriceSnapshot !== null) {
+                $catalog = $this->persistCatalogEntry(
+                    $itemName,
+                    $catalog,
+                    $steamPriceSnapshot['steamHint'],
+                    null
+                );
+                $liveCache = $this->persistLiveCacheEntry($itemId, $steamPriceSnapshot['priceUsd'], self::PRICE_SOURCE_STEAM);
+                $cachedBySource[self::PRICE_SOURCE_STEAM] = $liveCache;
+            }
+        }
+
+        $selectedLive = $instanceLive ?? $this->selectLiveCacheForMode($cachedBySource, $priceMode);
+        if ($instancePricingEligible && $selectedLive === null && is_array($cachedLive)) {
+            $selectedLive = $cachedLive;
+        }
+        if (
+            ($selectedLive['priceSource'] ?? null) === self::PRICE_SOURCE_STEAM
+            && ($priceMode === self::PRICE_MODE_AUTO || $priceMode === self::PRICE_SOURCE_CSFLOAT)
+        ) {
             Logger::event(
                 'warning',
                 'external',
@@ -176,20 +243,23 @@ final class PricingService
                     'provider' => 'steam',
                     'fallbackUsed' => true,
                     'itemName' => $itemName,
+                    'priceMode' => $priceMode,
                 ]
             );
-            $catalog = $this->persistCatalogEntry(
-                $itemName,
-                $catalog,
-                $steamPriceSnapshot['steamHint'],
-                null
-            );
-            $liveCache = $this->persistLiveCacheEntry($itemId, $steamPriceSnapshot['priceUsd'], self::PRICE_SOURCE_STEAM);
-
-            return $this->buildPresentation($catalog, $liveCache);
         }
 
-        return $this->buildPresentation($catalog, $cachedLive);
+        $presentation = $this->buildPresentation($catalog, $selectedLive, $priceMode);
+        if ($instancePricingEligible) {
+            $presentation['priceScope'] = $selectedLive['priceScope'] ?? self::PRICE_SCOPE_ITEM;
+            $presentation['priceStrategy'] = $selectedLive['priceStrategy'] ?? null;
+            $presentation['priceConfidence'] = $selectedLive['priceConfidence'] ?? null;
+            $presentation['sampleSize'] = $selectedLive['sampleSize'] ?? null;
+            $presentation['floatValue'] = $selectedLive['floatValue'] ?? ($resolvedInstanceHint['floatValue'] ?? null);
+            $presentation['paintSeed'] = $selectedLive['paintSeed'] ?? ($resolvedInstanceHint['paintSeed'] ?? null);
+            $presentation['inspectLink'] = $selectedLive['inspectLink'] ?? ($resolvedInstanceHint['inspectLink'] ?? null);
+        }
+
+        return $presentation;
     }
 
     public function searchWatchlistCandidates(
@@ -198,7 +268,8 @@ final class PricingService
         ?string $itemTypeFilter = null,
         ?string $wearFilter = null,
         int $page = 1,
-        ?string $sortBy = null
+        ?string $sortBy = null,
+        int $userId = 1
     ): array {
         $this->ensureCacheTables();
 
@@ -287,7 +358,7 @@ final class PricingService
             }
         }
 
-        $matchedItems = $this->prepareSearchMatches($matchedItems);
+        $matchedItems = $this->prepareSearchMatches($matchedItems, $userId);
         $this->sortSearchMatches($matchedItems, $normalizedSortBy);
 
         $totalItems = count($matchedItems);
@@ -345,6 +416,7 @@ final class PricingService
         $this->exchangeRateRepository->ensureTable();
         $this->itemRepository->ensureTable();
         $this->itemLiveCacheRepository->ensureTable();
+        $this->userPriceSourcePreferenceRepository->ensureTable();
         $this->cacheTablesReady = true;
     }
 
@@ -456,8 +528,45 @@ final class PricingService
         ];
     }
 
-    private function buildPresentation(?array $catalog, ?array $liveCache): array
+    private function buildTransientLiveCacheEntry(
+        int $itemId,
+        float $priceUsd,
+        string $priceSource,
+        array $meta = []
+    ): array {
+        $exchangeRate = $this->getUsdToEurRate();
+        $exchangeRateId = $this->exchangeRateRepository->ensureTodayRate($exchangeRate);
+
+        return [
+            'itemId' => $itemId,
+            'priceUsd' => round($priceUsd, 2),
+            'priceEur' => round($priceUsd * $exchangeRate, 2),
+            'exchangeRate' => $exchangeRate,
+            'exchangeRateId' => $exchangeRateId,
+            'priceSource' => $priceSource,
+            'fetchedAt' => date('Y-m-d H:i:s'),
+            'priceScope' => $meta['priceScope'] ?? self::PRICE_SCOPE_ITEM,
+            'priceStrategy' => $meta['priceStrategy'] ?? null,
+            'priceConfidence' => $meta['priceConfidence'] ?? null,
+            'sampleSize' => $meta['sampleSize'] ?? null,
+            'floatValue' => $meta['floatValue'] ?? null,
+            'paintSeed' => $meta['paintSeed'] ?? null,
+            'inspectLink' => $meta['inspectLink'] ?? null,
+        ];
+    }
+
+    private function buildPresentation(?array $catalog, ?array $liveCache, string $priceMode): array
     {
+        $selectedSource = isset($liveCache['priceSource']) ? (string) $liveCache['priceSource'] : null;
+        $fallbackUsed = false;
+        if ($selectedSource !== null) {
+            if ($priceMode === self::PRICE_MODE_AUTO) {
+                $fallbackUsed = $selectedSource !== self::PRICE_SOURCE_CSFLOAT;
+            } elseif ($priceMode === self::PRICE_SOURCE_CSFLOAT || $priceMode === self::PRICE_SOURCE_STEAM) {
+                $fallbackUsed = $selectedSource !== $priceMode;
+            }
+        }
+
         return [
             'itemId' => $catalog['itemId'] ?? null,
             'marketHashName' => $catalog['marketHashName'] ?? null,
@@ -473,7 +582,83 @@ final class PricingService
             'wearLabel' => $catalog['wearLabel'] ?? null,
             'iconUrl' => $catalog['imageUrl'] ?? null,
             'fetchedAt' => $liveCache['fetchedAt'] ?? null,
+            'priceMode' => $priceMode,
+            'priceSourceFallbackUsed' => $fallbackUsed,
+            'priceScope' => $liveCache['priceScope'] ?? self::PRICE_SCOPE_ITEM,
+            'priceStrategy' => $liveCache['priceStrategy'] ?? null,
+            'priceConfidence' => $liveCache['priceConfidence'] ?? null,
+            'sampleSize' => $liveCache['sampleSize'] ?? null,
+            'floatValue' => $liveCache['floatValue'] ?? null,
+            'paintSeed' => $liveCache['paintSeed'] ?? null,
+            'inspectLink' => $liveCache['inspectLink'] ?? null,
         ];
+    }
+
+    private function normalizeInstanceHint(?array $instanceHint): ?array
+    {
+        if (!is_array($instanceHint)) {
+            return null;
+        }
+
+        $floatValue = $this->normalizeFloatValue($instanceHint['floatValue'] ?? $instanceHint['float'] ?? $instanceHint['wearFloat'] ?? null);
+        $paintSeed = $this->normalizePaintSeed($instanceHint['paintSeed'] ?? $instanceHint['patternSeed'] ?? null);
+        $inspectLink = isset($instanceHint['inspectLink']) ? trim((string) $instanceHint['inspectLink']) : '';
+
+        if ($floatValue === null && $paintSeed === null && $inspectLink === '') {
+            return null;
+        }
+
+        return [
+            'floatValue' => $floatValue,
+            'paintSeed' => $paintSeed,
+            'inspectLink' => $inspectLink !== '' ? $inspectLink : null,
+        ];
+    }
+
+    private function isInstancePricingEligible(?array $instanceHint, ?array $catalog, string $priceMode): bool
+    {
+        if ($instanceHint === null) {
+            return false;
+        }
+        $hasValuationHint = isset($instanceHint['floatValue']) || isset($instanceHint['paintSeed']);
+        if (!$hasValuationHint) {
+            return false;
+        }
+
+        if ($priceMode === self::PRICE_SOURCE_STEAM) {
+            return false;
+        }
+
+        $itemType = strtolower(trim((string) ($catalog['itemType'] ?? '')));
+        return in_array($itemType, ['skin', 'weapon_skin', 'glove', 'knife'], true);
+    }
+
+    private function normalizeFloatValue(mixed $value): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $parsed = (float) $value;
+        if ($parsed < 0.0 || $parsed > 1.0) {
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    private function normalizePaintSeed(mixed $value): ?int
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $parsed = (int) $value;
+        if ($parsed < 0) {
+            return null;
+        }
+
+        return $parsed;
     }
 
     private function normalizeCatalogRow(?array $row): ?array
@@ -501,15 +686,37 @@ final class PricingService
             return null;
         }
 
+        $priceSource = isset($row['price_source']) ? strtolower(trim((string) $row['price_source'])) : '';
+        if ($priceSource === '') {
+            $priceSource = self::PRICE_SOURCE_CSFLOAT;
+        }
+
         return [
             'itemId' => isset($row['item_id']) ? (int) $row['item_id'] : null,
             'priceUsd' => isset($row['price_usd']) ? (float) $row['price_usd'] : null,
             'priceEur' => isset($row['price_usd'], $row['usd_to_eur']) ? ((float) $row['price_usd']) * ((float) $row['usd_to_eur']) : null,
             'exchangeRate' => isset($row['usd_to_eur']) ? (float) $row['usd_to_eur'] : null,
             'exchangeRateId' => isset($row['exchange_rate_id']) ? (int) $row['exchange_rate_id'] : null,
-            'priceSource' => isset($row['price_source']) ? (string) $row['price_source'] : null,
+            'priceSource' => $priceSource,
             'fetchedAt' => isset($row['fetched_at']) ? (string) $row['fetched_at'] : null,
         ];
+    }
+
+    private function normalizeLiveCacheRows(array $rows): array
+    {
+        $normalized = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $normalizedRow = $this->normalizeLiveCacheRow($row);
+            if ($normalizedRow === null) {
+                continue;
+            }
+            $normalized[] = $normalizedRow;
+        }
+
+        return $normalized;
     }
 
     private function hasUsefulCatalogData(array $catalog): bool
@@ -523,8 +730,7 @@ final class PricingService
     {
         if (
             $liveCache === null ||
-            !isset($liveCache['fetchedAt']) ||
-            ($liveCache['priceSource'] ?? null) !== self::PRICE_SOURCE_CSFLOAT
+            !isset($liveCache['fetchedAt'])
         ) {
             return false;
         }
@@ -737,7 +943,7 @@ final class PricingService
         };
     }
 
-    private function prepareSearchMatches(array $matchedItems): array
+    private function prepareSearchMatches(array $matchedItems, int $userId): array
     {
         $preparedMatches = [];
         $presentationCache = [];
@@ -754,7 +960,8 @@ final class PricingService
             } else {
                 $presentation = $this->getItemPresentation(
                     $marketHashName,
-                    is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null
+                    is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null,
+                    $userId
                 );
                 $presentationCache[$marketHashName] = $presentation;
             }
@@ -793,6 +1000,178 @@ final class PricingService
         }
 
         return $preparedMatches;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<string, array<string, mixed>>
+     */
+    private function indexLiveCacheRowsBySource(array $rows): array
+    {
+        $map = [];
+        foreach ($rows as $row) {
+            $source = strtolower(trim((string) ($row['priceSource'] ?? '')));
+            if ($source !== self::PRICE_SOURCE_CSFLOAT && $source !== self::PRICE_SOURCE_STEAM) {
+                continue;
+            }
+
+            if (!isset($map[$source])) {
+                $map[$source] = $row;
+                continue;
+            }
+
+            $existingFetchedAt = strtotime((string) ($map[$source]['fetchedAt'] ?? ''));
+            $candidateFetchedAt = strtotime((string) ($row['fetchedAt'] ?? ''));
+            if ($candidateFetchedAt !== false && ($existingFetchedAt === false || $candidateFetchedAt > $existingFetchedAt)) {
+                $map[$source] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    private function selectLiveCacheForMode(array $cachedBySource, string $priceMode): ?array
+    {
+        $orderedSources = $this->resolveSourceOrderForMode($priceMode);
+
+        foreach ($orderedSources as $source) {
+            $candidate = $cachedBySource[$source] ?? null;
+            if ($this->isFreshLiveCache($candidate)) {
+                return $candidate;
+            }
+        }
+
+        foreach ($orderedSources as $source) {
+            $candidate = $cachedBySource[$source] ?? null;
+            if (is_array($candidate)) {
+                return $candidate;
+            }
+        }
+
+        $fallbackRows = array_values(array_filter(
+            $cachedBySource,
+            static fn(mixed $row): bool => is_array($row)
+        ));
+        if ($fallbackRows === []) {
+            return null;
+        }
+
+        usort(
+            $fallbackRows,
+            static function (array $left, array $right): int {
+                $leftTs = strtotime((string) ($left['fetchedAt'] ?? ''));
+                $rightTs = strtotime((string) ($right['fetchedAt'] ?? ''));
+                if ($leftTs === $rightTs) {
+                    return 0;
+                }
+                if ($leftTs === false) {
+                    return 1;
+                }
+                if ($rightTs === false) {
+                    return -1;
+                }
+
+                return $rightTs <=> $leftTs;
+            }
+        );
+
+        return $fallbackRows[0] ?? null;
+    }
+
+    private function resolveSourceOrderForMode(string $priceMode): array
+    {
+        return match ($priceMode) {
+            self::PRICE_SOURCE_STEAM => [self::PRICE_SOURCE_STEAM, self::PRICE_SOURCE_CSFLOAT],
+            self::PRICE_SOURCE_CSFLOAT => [self::PRICE_SOURCE_CSFLOAT, self::PRICE_SOURCE_STEAM],
+            default => [self::PRICE_SOURCE_CSFLOAT, self::PRICE_SOURCE_STEAM],
+        };
+    }
+
+    private function shouldFetchCsFloatPrice(string $priceMode, array $cachedBySource): bool
+    {
+        if ($priceMode === self::PRICE_SOURCE_STEAM) {
+            return false;
+        }
+
+        $existing = $cachedBySource[self::PRICE_SOURCE_CSFLOAT] ?? null;
+        return !$this->isFreshLiveCache($existing);
+    }
+
+    private function shouldFetchSteamPrice(string $priceMode, array $cachedBySource, bool $csFloatUpdated): bool
+    {
+        if ($priceMode === self::PRICE_SOURCE_CSFLOAT) {
+            // Respect strict CSFloat mode and avoid unnecessary source-mixing.
+            return !isset($cachedBySource[self::PRICE_SOURCE_CSFLOAT]);
+        }
+
+        if ($priceMode === self::PRICE_SOURCE_STEAM) {
+            return true;
+        }
+
+        if ($csFloatUpdated && $this->isFreshLiveCache($cachedBySource[self::PRICE_SOURCE_CSFLOAT] ?? null)) {
+            return false;
+        }
+
+        return !$this->isFreshLiveCache($cachedBySource[self::PRICE_SOURCE_STEAM] ?? null);
+    }
+
+    private function resolvePriceModeForUser(int $userId): string
+    {
+        if ($userId <= 0) {
+            return self::PRICE_MODE_AUTO;
+        }
+
+        if (isset($this->priceSourcePreferenceCache[$userId])) {
+            return $this->priceSourcePreferenceCache[$userId];
+        }
+
+        $preference = $this->userPriceSourcePreferenceRepository->getByUserId($userId);
+        $mode = $this->normalizePriceMode($preference['mode'] ?? null);
+        $this->priceSourcePreferenceCache[$userId] = $mode;
+
+        return $mode;
+    }
+
+    public function getPriceModePreference(int $userId): array
+    {
+        $this->ensureCacheTables();
+        $preference = $this->userPriceSourcePreferenceRepository->getByUserId($userId);
+        $mode = $this->normalizePriceMode($preference['mode'] ?? null);
+        $this->priceSourcePreferenceCache[$userId] = $mode;
+
+        return [
+            'userId' => $userId,
+            'mode' => $mode,
+            'updatedAt' => $preference['updatedAt'] ?? null,
+            'source' => $preference['source'] ?? 'defaults',
+        ];
+    }
+
+    public function updatePriceModePreference(int $userId, string $mode): array
+    {
+        $this->ensureCacheTables();
+        $normalizedMode = $this->normalizePriceMode($mode);
+        $saved = $this->userPriceSourcePreferenceRepository->upsertByUserId($userId, $normalizedMode);
+        $resolvedMode = $this->normalizePriceMode($saved['mode'] ?? null);
+        $this->priceSourcePreferenceCache[$userId] = $resolvedMode;
+
+        return [
+            'userId' => $userId,
+            'mode' => $resolvedMode,
+            'updatedAt' => $saved['updatedAt'] ?? null,
+            'source' => $saved['source'] ?? 'db',
+        ];
+    }
+
+    private function normalizePriceMode(?string $mode): string
+    {
+        $normalized = strtolower(trim((string) $mode));
+
+        return match ($normalized) {
+            self::PRICE_SOURCE_CSFLOAT => self::PRICE_SOURCE_CSFLOAT,
+            self::PRICE_SOURCE_STEAM => self::PRICE_SOURCE_STEAM,
+            default => self::PRICE_MODE_AUTO,
+        };
     }
 
     private function sortSearchMatches(array &$matchedItems, string $sortBy): void

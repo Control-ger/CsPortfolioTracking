@@ -630,6 +630,18 @@ export async function updateFeeSettings(payload) {
   });
 }
 
+export async function fetchPriceSourcePreference() {
+  return requestWithMeta("/api/v1/settings/price-source");
+}
+
+export async function updatePriceSourcePreference(mode) {
+  return requestWithMeta("/api/v1/settings/price-source", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+}
+
 export async function fetchCsFloatApiKeyStatus() {
   const desktopSecrets = getDesktopSecrets();
   if (desktopSecrets?.getCsFloatApiKeyStatus) {

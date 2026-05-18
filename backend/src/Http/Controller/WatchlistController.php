@@ -62,6 +62,7 @@ final class WatchlistController
     public function search(Request $request): void
     {
         try {
+            $userId = $this->resolveUserId($request);
             $query = (string) ($request->query['query'] ?? '');
             $limit = (int) ($request->query['limit'] ?? 6);
             $page = (int) ($request->query['page'] ?? 1);
@@ -69,7 +70,7 @@ final class WatchlistController
             $wear = (string) ($request->query['wear'] ?? '');
             $sortBy = (string) ($request->query['sortBy'] ?? '');
 
-            $results = $this->watchlistService->searchAvailableItems($query, $limit, $itemType, $wear, $page, $sortBy);
+            $results = $this->watchlistService->searchAvailableItems($userId, $query, $limit, $itemType, $wear, $page, $sortBy);
             JsonResponseFactory::success(
                 $results,
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
