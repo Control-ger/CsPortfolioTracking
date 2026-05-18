@@ -1778,6 +1778,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     await refreshPortfolio();
     setCompositionRefreshToken((current) => current + 1);
   };
+  const useDesktopSidebarShell = isDesktopRuntime && !showSetupJourney;
 
   return (
     <div
@@ -1792,7 +1793,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
         className={
           showSetupJourney
             ? "mx-auto w-full max-w-5xl space-y-8 p-4 pb-12 pt-8 sm:p-8"
-            : "mx-auto max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-6 md:p-8"
+            : useDesktopSidebarShell
+              ? "w-full space-y-6 p-4 sm:space-y-8 sm:p-6 md:p-8 lg:p-0"
+              : "mx-auto max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-6 md:p-8"
         }
       >
         {/* Mobile Header - nur auf Mobile sichtbar */}
@@ -1819,7 +1822,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
         </header>
 
         {/* Header - nur auf Desktop sichtbar */}
-        <header className="hidden sm:flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+        <header className={`hidden sm:flex flex-col items-start justify-between gap-4 md:flex-row md:items-center ${
+          useDesktopSidebarShell ? "lg:hidden" : ""
+        }`}>
           <div className="flex-1">
             <h1 className="text-2xl font-bold tracking-tight text-primary md:text-3xl">CS Investor Hub</h1>
             <p className="text-sm text-muted-foreground md:text-base">Live Tracking via CSFloat and Currency API</p>
@@ -2356,37 +2361,64 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {!showSetupJourney ? (
-        <div className={isDesktopRuntime ? "w-full lg:grid lg:grid-cols-[72px_minmax(0,1fr)] lg:gap-4" : "w-full"}>
-          {isDesktopRuntime ? (
-            <aside className="hidden lg:flex">
-              <div className="sticky top-24 flex h-fit w-[72px] flex-col items-center gap-2 rounded-2xl border bg-card/70 p-2 shadow-sm backdrop-blur">
-                {DESKTOP_SIDEBAR_TABS
-                  .filter((tab) => runtimeTabs.includes(tab.key) && (!tab.desktopOnly || isDesktopRuntime))
-                  .map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => handleTabSelect(tab.key)}
-                        className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
-                          isActive
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
-                        }`}
-                        title={tab.label}
-                        aria-label={tab.label}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </button>
-                    );
-                  })}
+        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
+          {useDesktopSidebarShell ? (
+            <aside className="hidden lg:block">
+              <div className="sticky top-0 h-screen w-[88px] border-r border-border/70 bg-card/90 backdrop-blur">
+                <div className="flex h-full flex-col items-center py-4">
+                  <nav className="flex w-full flex-col items-center gap-2 px-2">
+                    {DESKTOP_SIDEBAR_TABS
+                      .filter((tab) => runtimeTabs.includes(tab.key) && (!tab.desktopOnly || isDesktopRuntime))
+                      .map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = activeTab === tab.key;
+                        return (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => handleTabSelect(tab.key)}
+                            className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
+                              isActive
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
+                            }`}
+                            title={tab.label}
+                            aria-label={tab.label}
+                          >
+                            <Icon className="h-5 w-5" />
+                          </button>
+                        );
+                      })}
+                  </nav>
+
+                  <div className="mt-auto flex w-full flex-col items-center gap-2 px-2 pb-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full p-0">
+                          <Bell className="h-5 w-5" />
+                          {unreadNotificationCount > 0 ? (
+                            <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                            </span>
+                          ) : null}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="end" className="w-80">
+                        {renderNotificationsDropdownContent()}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <UserMenu />
+                  </div>
+                </div>
               </div>
             </aside>
           ) : null}
 
-          <Tabs value={activeTab} onValueChange={handleTabSelect} className="w-full min-w-0">
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabSelect}
+            className={`w-full min-w-0 ${useDesktopSidebarShell ? "lg:px-6 xl:px-8" : ""}`}
+          >
             {error && (
               <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
