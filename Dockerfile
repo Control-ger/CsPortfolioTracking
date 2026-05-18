@@ -43,6 +43,7 @@ RUN mkdir -p /var/log/supervisor
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY backend /var/www/html/api
 COPY --from=web-build /app/dist /var/www/html
+COPY apps/web/public/.htaccess /var/www/html/.htaccess
 
 # Die Runtime-Konfiguration kommt bei Deployment ueber bind-mount /var/www/html/.env.
 RUN touch /var/www/html/.env
