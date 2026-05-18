@@ -247,7 +247,9 @@ function initiateWebSteamLogin() {
   sessionStorage.setItem('auth_return_url', window.location.href);
 
   // Request Steam redirect URL from backend, then navigate to Steam.
-  const returnUrl = `${window.location.origin}/auth/callback`;
+  // Use root callback target to avoid route-relative asset fetches like /auth/assets/*
+  // behind strict reverse proxies / access gateways.
+  const returnUrl = `${window.location.origin}/`;
   return resolveApiBase()
     .then((apiBase) =>
       fetch(`${apiBase}/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(returnUrl)}`, {
