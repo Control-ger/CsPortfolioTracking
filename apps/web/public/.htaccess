@@ -2,6 +2,10 @@
     RewriteEngine On
     RewriteBase /
 
+    # Route-relative Asset-URLs (z.B. /auth/assets/...) auf Root-Assets umbiegen.
+    RewriteRule ^(?:.+/)?assets/(.+)$ /assets/$1 [L,NC]
+    RewriteRule ^(?:.+/)?(icon\.png|icon\.ico|manifest\.json|sw\.js)$ /$1 [L,NC]
+
     # API-Routen muessen direkt an PHP gehen
     RewriteCond %{REQUEST_URI} ^/api/ [NC]
     RewriteRule ^ - [L]
