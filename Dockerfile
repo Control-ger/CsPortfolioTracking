@@ -1,3 +1,15 @@
+FROM node:22-alpine AS web-build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY vite.config.js jsconfig.json postcss.config.js tailwind.config.js ./
+
+RUN npm ci
+RUN npm run build:web
+
 FROM php:8.2-apache
 
 # Mod Rewrite aktivieren
@@ -21,20 +33,18 @@ RUN echo '<VirtualHost *:80>\n\
 </VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
 RUN apt-get update && \
-    apt-get install -y libcurl4-openssl-dev && \
+    apt-get install -y libcurl4-openssl-dev supervisor && \
     docker-php-ext-install pdo pdo_mysql curl && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install Supervisor
-# Falls der Fehler wiederkommt, liegt es an deiner Internetleitung/DNS am Server!
-RUN apt-get update && \
-    apt-get install -y supervisor && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /var/log/supervisor
 
 COPY supervisord.conf /etc/supervisor/supervisord.conf
+COPY backend /var/www/html/api
+COPY --from=web-build /app/dist /var/www/html
+
+# Die Runtime-Konfiguration kommt bei Deployment ueber bind-mount /var/www/html/.env.
+RUN touch /var/www/html/.env
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]

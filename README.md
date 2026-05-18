@@ -77,7 +77,7 @@ Copy-Item .env.example .env
 Pflichtgruppen (je nach Workflow):
 
 - Backend/DB: `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `DB_CHARSET`
-- Docker/CasaOS: `APP_HOST`, `APP_PORT`, `PMA_PORT`, `PROJECT_ROOT_PATH`, `DIST_PATH`, `BACKEND_PATH`
+- Docker/CasaOS: `APP_HOST`, `APP_PORT`, `PMA_PORT`, `PROJECT_ROOT_PATH`, `WEB_IMAGE`, `WEB_PULL_POLICY`
 - API/Debug: `CSFLOAT_API_KEY`, optional `DEBUG` und `OBSERVABILITY_*`
 
 ## Hinweise
