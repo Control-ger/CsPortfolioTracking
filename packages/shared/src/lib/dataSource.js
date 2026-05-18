@@ -190,6 +190,29 @@ function getInvestmentGroupKey(row) {
   return `${bucket}:${nameKey}`;
 }
 
+function getInvestmentGroupKeyWithoutBucket(row) {
+  return String(row.marketHashName || row.name || row.itemName || row.id || "")
+    .trim()
+    .toLowerCase();
+}
+
+function getInvestmentItemIdKey(row) {
+  const bucket = resolveRowBucket(row);
+  const itemId = Number(row?.itemId ?? row?.item_id ?? 0);
+  if (!Number.isFinite(itemId) || itemId <= 0) {
+    return "";
+  }
+  return `${bucket}:item:${Math.floor(itemId)}`;
+}
+
+function getInvestmentItemIdKeyWithoutBucket(row) {
+  const itemId = Number(row?.itemId ?? row?.item_id ?? 0);
+  if (!Number.isFinite(itemId) || itemId <= 0) {
+    return "";
+  }
+  return `item:${Math.floor(itemId)}`;
+}
+
 function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []) {
   if (!Array.isArray(localRows) || localRows.length === 0) {
     return [];
@@ -199,30 +222,70 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
   }
 
   const upstreamByKey = new Map();
+  const upstreamByItemId = new Map();
+  const upstreamByKeyWithoutBucket = new Map();
+  const upstreamByItemIdWithoutBucket = new Map();
   upstreamRows.forEach((row) => {
     const key = getInvestmentGroupKey(row);
     if (!key) {
       return;
     }
     upstreamByKey.set(key, row);
+
+    const itemIdKey = getInvestmentItemIdKey(row);
+    if (itemIdKey && !upstreamByItemId.has(itemIdKey)) {
+      upstreamByItemId.set(itemIdKey, row);
+    }
+
+    const keyWithoutBucket = getInvestmentGroupKeyWithoutBucket(row);
+    if (keyWithoutBucket && !upstreamByKeyWithoutBucket.has(keyWithoutBucket)) {
+      upstreamByKeyWithoutBucket.set(keyWithoutBucket, row);
+    }
+
+    const itemIdKeyWithoutBucket = getInvestmentItemIdKeyWithoutBucket(row);
+    if (
+      itemIdKeyWithoutBucket &&
+      !upstreamByItemIdWithoutBucket.has(itemIdKeyWithoutBucket)
+    ) {
+      upstreamByItemIdWithoutBucket.set(itemIdKeyWithoutBucket, row);
+    }
   });
 
   return localRows.map((row) => {
     const key = getInvestmentGroupKey(row);
-    if (!key || !upstreamByKey.has(key)) {
+    const itemIdKey = getInvestmentItemIdKey(row);
+    const keyWithoutBucket = getInvestmentGroupKeyWithoutBucket(row);
+    const itemIdKeyWithoutBucket = getInvestmentItemIdKeyWithoutBucket(row);
+    const exactItemIdMatch = itemIdKey ? upstreamByItemId.get(itemIdKey) : null;
+    const exactKeyMatch = key ? upstreamByKey.get(key) : null;
+    const looseItemIdMatch = itemIdKeyWithoutBucket
+      ? upstreamByItemIdWithoutBucket.get(itemIdKeyWithoutBucket)
+      : null;
+    const looseKeyMatch = keyWithoutBucket
+      ? upstreamByKeyWithoutBucket.get(keyWithoutBucket)
+      : null;
+    const upstream = exactItemIdMatch || exactKeyMatch || looseItemIdMatch || looseKeyMatch;
+    const isLooseMatch = !exactItemIdMatch && !exactKeyMatch && Boolean(looseItemIdMatch || looseKeyMatch);
+
+    if (!upstream) {
       return row;
     }
-
-    const upstream = upstreamByKey.get(key);
     const quantity = Number(row.quantity || 0);
     const fallbackDisplayPrice = Number(row.displayPrice ?? row.livePrice ?? row.buyPrice ?? 0);
     const fallbackCurrentValue = Number(row.currentValue ?? fallbackDisplayPrice * quantity);
+    const fallbackTotalInvested = Number(
+      row.totalInvested ?? Number(row.buyPrice ?? row.buyPriceUsd ?? 0) * quantity,
+    );
     const liveDisplayPrice = Number(upstream.displayPrice ?? upstream.livePrice);
     const hasLiveDisplayPrice = Number.isFinite(liveDisplayPrice) && liveDisplayPrice > 0;
     const mergedDisplayPrice = hasLiveDisplayPrice ? liveDisplayPrice : fallbackDisplayPrice;
     const mergedCurrentValue = Number.isFinite(Number(upstream.currentValue))
       ? Number(upstream.currentValue)
       : mergedDisplayPrice * quantity;
+    const computedProfitEuro = mergedCurrentValue - fallbackTotalInvested;
+    const computedRoi = fallbackTotalInvested > 0
+      ? (computedProfitEuro / fallbackTotalInvested) * 100
+      : 0;
 
     return {
       ...row,
@@ -230,20 +293,22 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
       displayPrice: mergedDisplayPrice,
       currentValue: Number.isFinite(mergedCurrentValue) ? mergedCurrentValue : fallbackCurrentValue,
       totalInvested:
-        Number.isFinite(Number(upstream.totalInvested))
+        !isLooseMatch && Number.isFinite(Number(upstream.totalInvested))
           ? Number(upstream.totalInvested)
-          : row.totalInvested,
+          : fallbackTotalInvested,
       isLive: upstream.isLive === true || row.isLive === true,
       pricingStatus: upstream.pricingStatus ?? row.pricingStatus ?? "fallback",
       priceSource: upstream.priceSource ?? row.priceSource ?? null,
-      roi: Number.isFinite(Number(upstream.roi)) ? Number(upstream.roi) : row.roi,
-      profitEuro: Number.isFinite(Number(upstream.profitEuro))
+      roi: !isLooseMatch && Number.isFinite(Number(upstream.roi))
+        ? Number(upstream.roi)
+        : computedRoi,
+      profitEuro: !isLooseMatch && Number.isFinite(Number(upstream.profitEuro))
         ? Number(upstream.profitEuro)
-        : row.profitEuro,
+        : computedProfitEuro,
       isProfitPositive:
-        typeof upstream.isProfitPositive === "boolean"
+        !isLooseMatch && typeof upstream.isProfitPositive === "boolean"
           ? upstream.isProfitPositive
-          : row.isProfitPositive,
+          : computedProfitEuro >= 0,
       change24hEuro: upstream.change24hEuro ?? row.change24hEuro,
       change24hPercent: upstream.change24hPercent ?? row.change24hPercent,
       change7dEuro: upstream.change7dEuro ?? row.change7dEuro,

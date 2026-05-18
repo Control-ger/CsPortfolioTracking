@@ -1030,7 +1030,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     !csUpdatesLoading &&
     Boolean(latestCsUpdate) &&
     Number.isFinite(latestCsUpdateAgeHours) &&
-    latestCsUpdateAgeHours <= 12;
+    latestCsUpdateAgeHours <= 24;
   const portfolioValueLabel = formatPrice(stats.totalValue || 0, {
     useUsd: true,
     buyPriceUsd: stats.totalValue || 0,

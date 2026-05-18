@@ -11,6 +11,7 @@ use App\Application\Service\SyncService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
 use App\Http\Controller\CsFloatSyncController;
+use App\Http\Controller\CsUpdatesController;
 use App\Http\Controller\DebugController;
 use App\Http\Controller\ExchangeRateController;
 use App\Http\Controller\PortfolioController;
@@ -37,6 +38,7 @@ use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Infrastructure\Persistence\Repository\AuthStateRepository;
 use App\Infrastructure\Persistence\Repository\CacheMaintenanceRepository;
+use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
 use App\Observability\Application\ObservabilityService;
 use App\Observability\Context\RequestContext;
 use App\Observability\Context\RequestContextStore;
@@ -470,6 +472,7 @@ try {
     $syncController = new SyncController($syncService);
     $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
     $exchangeRateController = new ExchangeRateController(new ExchangeRateClient());
+    $csUpdatesController = new CsUpdatesController(new CsUpdatesFeedRepository($pdo));
     $steamAuthController = new SteamAuthController($pdo, $userRepository);
 
     $router = new Router();
@@ -494,6 +497,7 @@ try {
     $router->register('GET', '/api/v1/settings/csfloat-api-key', [$settingsController, 'getCsFloatApiKeyStatus']);
     $router->register('POST', '/api/v1/settings/csfloat-api-key', [$settingsController, 'updateCsFloatApiKey']);
     $router->register('GET', '/api/v1/exchange-rate', [$exchangeRateController, 'getRates']);
+    $router->register('GET', '/api/v1/cs-updates', [$csUpdatesController, 'list']);
 
     $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
     $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);

@@ -1,4 +1,4 @@
-import { getSession } from "./auth.js";
+import { getSession, validateSession } from "./auth.js";
 import { get as cacheGet, set as cacheSet } from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 
@@ -227,13 +227,44 @@ function unwrapApiData(payload) {
 }
 
 function parseUserId(user) {
-  const candidate = user?.userId ?? user?.id ?? 1;
-  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
-  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
+  const MAX_INT32 = 2_147_483_647;
+  const candidates = [
+    user?.userId,
+    user?.localUserId,
+    user?.serverUserId,
+    user?.id,
+  ];
+
+  for (const candidate of candidates) {
+    const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
+    if (!/^[1-9]\d*$/.test(raw)) {
+      continue;
+    }
     const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_INT32) {
+      continue;
+    }
+    return Math.floor(parsed);
   }
-  return 1;
+
+  // Legacy desktop sessions may carry Steam IDs as large numeric "id" values.
+  // Sync is still keyed to the default numeric user scope.
+  const numericCandidateRaw = String(user?.id || user?.userId || "").trim();
+  if (/^[1-9]\d{10,}$/.test(numericCandidateRaw)) {
+    return 1;
+  }
+
+  const fallbackRaw = String(user?.id || user?.userId || "").trim().toLowerCase();
+  if (fallbackRaw.startsWith("steam-")) {
+    // Desktop auth sessions currently use "steam-<steamId>" identifiers.
+    // Sync endpoints still expect a positive integer userId (legacy/default scope).
+    return 1;
+  }
+  if (String(user?.steamId || "").trim() !== "") {
+    return 1;
+  }
+
+  return null;
 }
 
 function withSafetyWindow(timestamp) {
@@ -276,15 +307,51 @@ async function enrichSyncChange(operation, localStore) {
   }
 
   const normalized = { ...operation };
-  if (normalized.table !== "investments" || normalized.op !== "upsert") {
-    return normalized;
-  }
-
   const payload = normalized.payload && typeof normalized.payload === "object"
     ? { ...normalized.payload }
     : {};
-  const hasName = String(payload.name || payload.marketHashName || "").trim().length > 0;
+  const hasValidClientRevision =
+    Number.isFinite(Number(normalized.clientRevision)) && Number(normalized.clientRevision) > 0;
 
+  if (!hasValidClientRevision) {
+    try {
+      if (normalized.table === "investments" && typeof localStore.getInvestment === "function") {
+        const existing = unwrapLocalStoreResult(
+          await localStore.getInvestment(normalized.id),
+          "local-store-get-investment",
+        );
+        const revision = Number(existing?.revision || 0);
+        if (Number.isFinite(revision) && revision > 0) {
+          normalized.clientRevision = Math.floor(revision);
+        }
+      } else if (
+        normalized.table === "watchlist_items" &&
+        typeof localStore.getWatchlistItem === "function"
+      ) {
+        const existing = unwrapLocalStoreResult(
+          await localStore.getWatchlistItem(normalized.id),
+          "local-store-get-watchlist-item",
+        );
+        const revision = Number(existing?.revision || 0);
+        if (Number.isFinite(revision) && revision > 0) {
+          normalized.clientRevision = Math.floor(revision);
+        }
+      }
+    } catch (error) {
+      console.warn("[desktop-sync] failed to resolve local revision for operation", {
+        table: normalized.table,
+        id: normalized.id,
+        error: error?.message || String(error),
+      });
+    }
+  }
+
+  if (normalized.table !== "investments" || normalized.op !== "upsert") {
+    normalized.payload = payload;
+    return normalized;
+  }
+
+  const hasName = String(payload.name || payload.marketHashName || "").trim().length > 0;
   if (!hasName) {
     try {
       const existing = unwrapLocalStoreResult(
@@ -297,6 +364,12 @@ async function enrichSyncChange(operation, localStore) {
           ...payload,
           id: normalized.id,
         };
+        if (!hasValidClientRevision) {
+          const revision = Number(existing?.revision || 0);
+          if (Number.isFinite(revision) && revision > 0) {
+            normalized.clientRevision = Math.floor(revision);
+          }
+        }
         return normalized;
       }
     } catch (error) {
@@ -575,7 +648,14 @@ export async function runDesktopSyncNowIfDue(options = {}) {
       }
 
       const serverBaseUrl = normalizeServerBaseUrl(config.serverUrl);
-      const userId = parseUserId(session.user);
+      let userId = parseUserId(session.user);
+      if (userId === null) {
+        const validated = await validateSession(session.token);
+        userId = parseUserId(validated?.user);
+      }
+      if (userId === null) {
+        return { skipped: true, reason: "no-valid-session-user-id" };
+      }
       const localStore = window.electronAPI.localStore;
       await pushPendingOperations(serverBaseUrl, userId, session.token, localStore);
       await pullServerChanges(serverBaseUrl, userId, session.token, localStore);

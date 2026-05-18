@@ -281,3 +281,19 @@ Change: Investment/Inventar-Bucket als verbindliche Datenmodell-Regel eingefuehr
 - Jede lokale/gesyncte Position fuehrt `bucket` (`investment` | `inventory`) im Payload.
 - KPI-Scope ist standardmaessig `investments_only`; optional `toggle_mode` oder `always_all` ueber Portfolio-Preferences.
 - Import-Defaults sind quellbasiert konfigurierbar (Steam/CSFloat) und werden in Desktop-Preferences gespeichert.
+
+---
+
+Updated: 2026-05-14
+Change: CS Updates Feed Architektur auf SteamDB-RSS + Realtime vorbereitet
+- Neue Backend-Komponenten: `CsUpdatesIngestService`, `CsUpdatesFeedRepository`, `CsUpdatesController`.
+- Neuer Worker-Entry: `backend/sync-cs-updates-rss.php` fuer minuetlichen RSS-Ingest in `cs_updates_feed`.
+- Neue REST-Route: `GET /api/v1/cs-updates` in Server-Frontcontroller und Desktop-Sidecar-Proxy.
+- Neues Gateway-Verzeichnis `backend/ws-gateway/` fuer separaten WebSocket-Prozess (`/ws/updates`).
+
+---
+
+Updated: 2026-05-14
+Change: CS Updates Ingest auf Steam News API umgestellt
+- Externer Feed-Client nutzt jetzt `ISteamNews/GetNewsForApp` fuer `appid=730` als Primärquelle.
+- Grund: SteamDB-RSS liefert in Container-Laufzeiten teils `HTTP 403` und ist dadurch nicht stabil genug als alleinige Produktionsquelle.

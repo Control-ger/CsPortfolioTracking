@@ -1,7 +1,7 @@
 {
   "name": "cs-portfolio-tracking-monorepo",
   "private": true,
-  "version": "0.1.14",
+  "version": "0.1.15",
   "main": "apps/desktop/main.js",
   "type": "module",
   "repository": {
@@ -85,12 +85,12 @@
     "better-sqlite3": "^12.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.6.2",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.14.0",
     "recharts": "^2.15.4",
-    "electron-updater": "^6.6.2",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7"
   },
@@ -108,6 +108,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "playwright": "^1.60.0",
     "postcss": "^8.5.6",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",

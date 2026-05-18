@@ -378,17 +378,46 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = []) us
     ];
 };
 
-$summarizeProxyIssue = static function (array $attempts): array {
+$summarizeProxyIssue = static function (array $attempts, string $endpointPath = ''): array {
+    $attemptedUrls = [];
+    $attemptStatuses = [];
+    foreach ($attempts as $attempt) {
+        if (!is_array($attempt)) {
+            continue;
+        }
+        $url = trim((string) ($attempt['url'] ?? ''));
+        if ($url !== '') {
+            $attemptedUrls[] = $url;
+        }
+        $status = (int) ($attempt['httpCode'] ?? 0);
+        if ($status > 0) {
+            $attemptStatuses[] = $status;
+        }
+    }
+
+    $withContext = static function (array $issue) use ($endpointPath, $attemptedUrls, $attemptStatuses): array {
+        if ($endpointPath !== '') {
+            $issue['endpointPath'] = $endpointPath;
+        }
+        if ($attemptedUrls !== []) {
+            $issue['attemptedUrls'] = $attemptedUrls;
+        }
+        if ($attemptStatuses !== []) {
+            $issue['attemptStatuses'] = $attemptStatuses;
+        }
+        return $issue;
+    };
+
     foreach ($attempts as $attempt) {
         if (!is_array($attempt)) {
             continue;
         }
         $curlError = strtolower((string) ($attempt['curlError'] ?? ''));
         if ($curlError !== '' && (str_contains($curlError, 'issuer certificate') || str_contains($curlError, 'certificate'))) {
-            return [
+            return $withContext([
                 'code' => 'UPSTREAM_TLS_CERTIFICATE_ERROR',
                 'message' => 'TLS certificate chain could not be verified by the desktop sidecar.',
-            ];
+            ]);
         }
     }
 
@@ -398,35 +427,35 @@ $summarizeProxyIssue = static function (array $attempts): array {
         }
         $status = (int) ($attempt['httpCode'] ?? 0);
         if (in_array($status, [301, 302, 307, 308], true)) {
-            return [
+            return $withContext([
                 'code' => 'UPSTREAM_REDIRECT',
                 'message' => 'Upstream returned an HTTP redirect (often Cloudflare Access or auth redirect).',
-            ];
+            ]);
         }
         if (in_array($status, [401, 403], true)) {
-            return [
+            return $withContext([
                 'code' => 'UPSTREAM_ACCESS_DENIED',
                 'message' => 'Upstream denied access. Cloudflare/session login may be required.',
-            ];
+            ]);
         }
         if ($status >= 500) {
-            return [
+            return $withContext([
                 'code' => 'UPSTREAM_SERVER_ERROR',
                 'message' => 'Upstream returned a server error (5xx).',
-            ];
+            ]);
         }
         if ($status === 404) {
-            return [
+            return $withContext([
                 'code' => 'UPSTREAM_ROUTE_NOT_FOUND',
                 'message' => 'Upstream route not found (404).',
-            ];
+            ]);
         }
     }
 
-    return [
+    return $withContext([
         'code' => 'UPSTREAM_UNAVAILABLE',
         'message' => 'Upstream did not return a usable JSON response.',
-    ];
+    ]);
 };
 
 $router->register('GET', '/api/v1/portfolio/history', static function (Request $request) use ($proxyUpstreamGet): void {
@@ -466,7 +495,7 @@ $router->register('GET', '/api/v1/portfolio/investments', static function (Reque
     JsonResponseFactory::success([], [
         'source' => 'desktop-local-fallback',
         'proxyAttempts' => $proxied['attempts'] ?? [],
-        'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? []),
+        'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? [], '/api/v1/portfolio/investments'),
     ]);
 });
 
@@ -543,6 +572,39 @@ $router->register('GET', '/api/v1/watchlist', static function (Request $request)
         'proxyAttempts' => $proxied['attempts'] ?? [],
         'upstreamHint' => $summarizeProxyIssue($proxied['attempts'] ?? []),
     ]);
+});
+
+$router->register('GET', '/api/v1/cs-updates', static function (Request $request) use ($proxyUpstreamGet): void {
+    $query = [];
+    if (isset($request->query['limit'])) {
+        $query['limit'] = (string) $request->query['limit'];
+    }
+    if (isset($request->query['before'])) {
+        $query['before'] = (string) $request->query['before'];
+    }
+
+    $proxied = $proxyUpstreamGet('/api/v1/cs-updates', $query);
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($proxied['data'] ?? null) ? $proxied['data'] : ['items' => []],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success(
+        ['items' => []],
+        [
+            'source' => 'desktop-local-fallback',
+            'sourceMode' => 'desktop-local-fallback',
+            'fetchedAt' => gmdate(DATE_ATOM),
+            'lastRefreshAt' => gmdate(DATE_ATOM),
+            'staleAfterSeconds' => 120,
+            'isStale' => true,
+            'nextBefore' => null,
+            'proxyAttempts' => $proxied['attempts'] ?? [],
+        ]
+    );
 });
 
 $router->register('GET', '/api/v1/portfolio/investments/{key}/history', static function (Request $request, string $itemId) use ($proxyUpstreamGet): void {

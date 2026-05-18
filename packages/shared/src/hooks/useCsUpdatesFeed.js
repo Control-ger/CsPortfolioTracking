@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { fetchCsUpdatesFeed } from "@shared/lib/apiClient";
 import { getMockCsUpdatesFeed } from "@shared/lib/csUpdatesFeed.mock";
 
 const DEFAULT_STALE_AFTER_SECONDS = 6 * 60 * 60;
 const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
+const FALLBACK_POLL_INTERVAL_MS = 60 * 1000;
 
 function toTimestamp(value) {
   const timestamp = new Date(value).getTime();
@@ -35,7 +37,7 @@ function normalizeFeedPayload(payload) {
   return {
     items: sortFeedItems(items),
     meta: {
-      sourceMode: meta.sourceMode || "mock",
+      sourceMode: meta.sourceMode || "backend",
       fetchedAt: meta.fetchedAt || null,
       lastRefreshAt: meta.lastRefreshAt || meta.fetchedAt || null,
       staleAfterSeconds: Number.isFinite(meta.staleAfterSeconds)
@@ -55,6 +57,9 @@ function deriveFreshness(items, meta) {
     : false;
   const latestItem = items[0] || null;
   const latestItemTime = latestItem ? toTimestamp(latestItem.publishedAt) : null;
+  const latestItemAgeHours = latestItemTime !== null
+    ? Math.max(0, (now - latestItemTime) / (1000 * 60 * 60))
+    : null;
   const freshItemIds = items
     .filter((item) => {
       const itemTime = toTimestamp(item.publishedAt);
@@ -68,6 +73,7 @@ function deriveFreshness(items, meta) {
 
   return {
     latestItem,
+    latestItemAgeHours,
     newestFreshItem,
     freshItemIds,
     isStale: meta.isStale || staleByTime,
@@ -75,10 +81,55 @@ function deriveFreshness(items, meta) {
   };
 }
 
-export function useCsUpdatesFeed({ loader = getMockCsUpdatesFeed } = {}) {
+function mergeIncomingItem(prevItems, item) {
+  const itemId = String(item?.id || "").trim();
+  const externalId = String(item?.externalId || item?.external_id || "").trim();
+  const nextItems = [...prevItems];
+  const existingIndex = nextItems.findIndex((entry) => {
+    if (itemId && String(entry?.id || "").trim() === itemId) {
+      return true;
+    }
+    if (externalId) {
+      const existingExternalId = String(entry?.externalId || entry?.external_id || "").trim();
+      return existingExternalId !== "" && existingExternalId === externalId;
+    }
+    return false;
+  });
+
+  if (existingIndex >= 0) {
+    nextItems[existingIndex] = { ...nextItems[existingIndex], ...item };
+  } else {
+    nextItems.unshift(item);
+  }
+
+  return sortFeedItems(nextItems);
+}
+
+function resolveWsUrl() {
+  const configured = String(import.meta.env.VITE_CS_UPDATES_WS_URL || "").trim();
+  if (configured) {
+    return configured;
+  }
+
+  if (typeof window === "undefined") {
+    return null;
+  }
+  if (!window.location.host) {
+    return null;
+  }
+
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${wsProtocol}//${window.location.host}/ws/updates`;
+}
+
+async function defaultLoader() {
+  return fetchCsUpdatesFeed({ limit: 100 });
+}
+
+export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
   const [items, setItems] = useState([]);
   const [meta, setMeta] = useState({
-    sourceMode: "mock",
+    sourceMode: "backend",
     fetchedAt: null,
     lastRefreshAt: null,
     staleAfterSeconds: DEFAULT_STALE_AFTER_SECONDS,
@@ -87,6 +138,12 @@ export function useCsUpdatesFeed({ loader = getMockCsUpdatesFeed } = {}) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+
+  const wsRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
+  const fallbackPollTimerRef = useRef(null);
+  const reconnectAttemptRef = useRef(0);
+  const manualRefreshRef = useRef(false);
 
   const load = useCallback(
     async (mode = "initial") => {
@@ -98,7 +155,9 @@ export function useCsUpdatesFeed({ loader = getMockCsUpdatesFeed } = {}) {
         setIsLoading(true);
       }
 
-      setError(null);
+      if (!manualRefreshRef.current) {
+        setError(null);
+      }
 
       try {
         const payload = await loader();
@@ -107,17 +166,121 @@ export function useCsUpdatesFeed({ loader = getMockCsUpdatesFeed } = {}) {
         setMeta(normalized.meta);
       } catch (loadError) {
         setError(loadError?.message || "CS Updates konnten nicht geladen werden.");
+
+        if (mode === "initial") {
+          const fallbackPayload = await getMockCsUpdatesFeed();
+          const fallbackNormalized = normalizeFeedPayload(fallbackPayload);
+          setItems(fallbackNormalized.items);
+          setMeta({ ...fallbackNormalized.meta, sourceMode: "mock-fallback" });
+        }
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
+        manualRefreshRef.current = false;
       }
     },
     [loader],
   );
 
+  const startFallbackPolling = useCallback(() => {
+    if (fallbackPollTimerRef.current) {
+      return;
+    }
+
+    fallbackPollTimerRef.current = setInterval(() => {
+      void load("refresh");
+    }, FALLBACK_POLL_INTERVAL_MS);
+  }, [load]);
+
+  const stopFallbackPolling = useCallback(() => {
+    if (!fallbackPollTimerRef.current) {
+      return;
+    }
+    clearInterval(fallbackPollTimerRef.current);
+    fallbackPollTimerRef.current = null;
+  }, []);
+
+  const connectWebSocket = useCallback(() => {
+    const wsUrl = resolveWsUrl();
+    if (!wsUrl || typeof window === "undefined" || typeof WebSocket === "undefined") {
+      startFallbackPolling();
+      return;
+    }
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        reconnectAttemptRef.current = 0;
+        stopFallbackPolling();
+        ws.send(JSON.stringify({ type: "subscribe", topic: "cs_updates" }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(String(event.data || "{}"));
+          if (payload?.type === "ping") {
+            ws.send(JSON.stringify({ type: "pong", ts: Date.now() }));
+            return;
+          }
+          if (payload?.type !== "cs_update.created" || !payload?.item) {
+            return;
+          }
+
+          setItems((prevItems) => mergeIncomingItem(prevItems, payload.item));
+          setMeta((prevMeta) => ({
+            ...prevMeta,
+            sourceMode: "backend",
+            fetchedAt: new Date().toISOString(),
+            lastRefreshAt: new Date().toISOString(),
+            isStale: false,
+          }));
+        } catch {
+          // Ignore malformed WS messages.
+        }
+      };
+
+      ws.onerror = () => {
+        startFallbackPolling();
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        startFallbackPolling();
+
+        const attempt = reconnectAttemptRef.current;
+        const backoffMs = Math.min(30000, [1000, 2000, 5000, 10000][attempt] || 30000);
+        reconnectAttemptRef.current = attempt + 1;
+
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+        }
+        reconnectTimerRef.current = setTimeout(() => {
+          connectWebSocket();
+        }, backoffMs);
+      };
+    } catch {
+      startFallbackPolling();
+    }
+  }, [startFallbackPolling, stopFallbackPolling]);
+
   useEffect(() => {
     void load("initial");
-  }, [load]);
+    connectWebSocket();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      stopFallbackPolling();
+    };
+  }, [connectWebSocket, load, stopFallbackPolling]);
 
   const derived = useMemo(() => deriveFreshness(items, meta), [items, meta]);
 
@@ -128,13 +291,15 @@ export function useCsUpdatesFeed({ loader = getMockCsUpdatesFeed } = {}) {
       isStale: derived.isStale,
     },
     latestItem: derived.latestItem,
+    latestItemAgeHours: derived.latestItemAgeHours,
     newestFreshItem: derived.newestFreshItem,
     freshItemIds: derived.freshItemIds,
     isLoading,
     isRefreshing,
     error,
-    refresh: () => load("refresh"),
+    refresh: () => {
+      manualRefreshRef.current = true;
+      return load("refresh");
+    },
   };
 }
-
-

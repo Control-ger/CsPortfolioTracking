@@ -808,6 +808,7 @@ export function createLocalStore(userDataPath) {
         buy_price_usd = excluded.buy_price_usd,
         funding_mode = excluded.funding_mode,
         payload = excluded.payload,
+        revision = excluded.revision,
         dirty = CASE WHEN investments.dirty = 1 THEN investments.dirty ELSE 0 END,
         deleted = 0,
         updated_at = excluded.updated_at`,
@@ -869,6 +870,7 @@ export function createLocalStore(userDataPath) {
         name = excluded.name,
         type = excluded.type,
         payload = excluded.payload,
+        revision = excluded.revision,
         dirty = CASE WHEN watchlist_items.dirty = 1 THEN watchlist_items.dirty ELSE 0 END,
         deleted = 0,
         updated_at = excluded.updated_at`,
@@ -1348,8 +1350,31 @@ export function createLocalStore(userDataPath) {
         updatedAt,
       });
 
-      appendOperation("upsert", "investment", id, payload);
-      return this.getInvestment(id);
+      const updatedRow = this.getInvestment(id);
+      const operationPayload = {
+        ...payload,
+        revision: Number(updatedRow?.revision || payload.revision || input?.revision || 1),
+        excluded: Boolean(
+          updatedRow?.excluded ??
+          payload.excluded ??
+          payload.isExcluded ??
+          input?.excluded ??
+          input?.isExcluded ??
+          false,
+        ),
+        isExcluded: Boolean(
+          updatedRow?.isExcluded ??
+          updatedRow?.excluded ??
+          payload.isExcluded ??
+          payload.excluded ??
+          input?.isExcluded ??
+          input?.excluded ??
+          false,
+        ),
+      };
+
+      appendOperation("upsert", "investment", id, operationPayload);
+      return updatedRow;
     },
 
     getInvestment(id) {
@@ -1558,8 +1583,14 @@ export function createLocalStore(userDataPath) {
         updatedAt,
       });
 
-      appendOperation("upsert", "watchlist_item", id, payload);
-      return this.getWatchlistItem(id);
+      const updatedRow = this.getWatchlistItem(id);
+      const operationPayload = {
+        ...payload,
+        revision: Number(updatedRow?.revision || payload.revision || input?.revision || 1),
+      };
+
+      appendOperation("upsert", "watchlist_item", id, operationPayload);
+      return updatedRow;
     },
 
     getWatchlistItem(id) {

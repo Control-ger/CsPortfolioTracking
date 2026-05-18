@@ -1,0 +1,13 @@
+{
+  "name": "cs-updates-ws-gateway",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "WebSocket gateway for CS updates feed",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

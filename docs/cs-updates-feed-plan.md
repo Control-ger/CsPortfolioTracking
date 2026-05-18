@@ -1,258 +1,310 @@
-# CS Updates Feed Plan (Mini-PRD fuer Coding-Agent)
+# CS Updates Feed Plan (WebSocket + Steam News API)
 
-## 1. Zielbild
-Wir fuehren einen sichtbaren CS-Updates-Feed in der Portfolio-UI ein, damit Nutzer aktuelle Counter-Strike-News direkt in der App sehen koennen, ohne externe Quellen separat zu oeffnen.
+Status: IN PROGRESS  
+Updated: 2026-05-14  
+Owner: backend + shared frontend
 
-**Produktziel:**
-- Neueste CS-Updates schnell erfassbar anzeigen.
-- Mehr Informationen pro Update per Aufklappen bereitstellen.
-- Das neueste Update optisch hervorheben, wenn es nicht aelter als 24 Stunden ist.
-- Die UI soll auch auf Mobile gut funktionieren.
+## 0. Warum der alte Plan schwach war
 
-**Verbindliche UI-Regel:**
-- Die neue UI wird ausschliesslich mit `shadcn/ui` aus `src/components/ui/*` gebaut.
-- Keine zusaetzliche UI-Library fuer dieses Feature.
+Die bisherige Version war als Produkt-Idee gut, aber als Umsetzungsplan zu ungenau.
 
-## 2. Scope
+Hauptprobleme:
+- Pfade waren teilweise veraltet (`src/...` statt Monorepo-Pfade wie `packages/shared/...`).
+- Es fehlte ein fester Dedupe-Key fuer Feed-Eintraege.
+- "WebSocket" war genannt, aber ohne Betriebskonzept (PHP Frontcontroller ist kein dauerhafter WS-Server).
+- Keine klaren Reconnect/Fallback-Regeln fuer Clients.
+- Keine harten Akzeptanzkriterien pro Schritt.
 
-### MVP
-- Feed-Bereich im Portfolio sichtbar machen.
-- Mehrere CS-Updates als Liste oder Cards anzeigen.
-- Pro Update eine aufklappbare Detailansicht anbieten.
-- Das neueste Update unter 24h visuell hervorheben.
-- Lade-, Fehler-, Leer- und Aktualisierungszustand abbilden.
-- Datenquelle so kapseln, dass spaeter Mock-Daten, Backend-Endpoint oder externe Aggregation austauschbar sind.
+Dieses Dokument ersetzt den alten Plan durch eine Schritt-fuer-Schritt-Checkliste, die auch von einem einfachen Coding-Agent sauber abgearbeitet werden kann.
 
-### Nicht-Ziele im MVP
-- Kein komplettes News-CMS.
-- Kein Login- oder Personalization-Refactor.
-- Keine Pflicht fuer automatische externe Quellen.
-- Kein komplexes Editorial-Tool.
+---
 
-### Perspektivisch
-- SteamDB-Feeds integrieren.
-- Discord-/Webhook-Aggregation integrieren.
-- Backend-Aggregation mehrerer Quellen.
-- Quellenbadges, Filter und Priorisierung nach Relevanz.
-- Optionales Feature-Flag fuer kontrollierten Rollout, z. B. `FEATURE_CS_UPDATES_FEED`.
+## 1. Ziel (klar und testbar)
 
-## 3. Datenmodell
+Wir wollen CS2-Update-Events aus der Steam News API automatisch einspeisen und an Web/Electron nahezu live ausliefern.
 
-### 3.1 Feed-Item
-Ein Feed-Eintrag soll mindestens folgende Felder besitzen:
+Muss am Ende gelten:
+1. Server speichert neue News-Eintraege dedupliziert in DB.
+2. Feed ist per REST abrufbar.
+3. Neue Eintraege werden per WebSocket an aktive Clients gepusht.
+4. Wenn WebSocket ausfaellt, funktioniert Polling-Fallback.
 
-- `id`: eindeutige ID
-- `title`: kurzer Titel
-- `summary`: kompakte Einleitung fuer die Kartenansicht
-- `details`: laengerer Text oder strukturierte Detailpunkte
-- `publishedAt`: Zeitpunkt der Erstveroefentlichung
-- `updatedAt`: optionaler letzter Aenderungszeitpunkt
-- `source`: Herkunft, z. B. `mock`, `steamdb`, `discord`, `backend_aggregated`
-- `sourceLabel`: lesbarer Anzeigename
-- `url`: optionaler Link zur Quelle
-- `tags`: optionale Schlagworte
-- `severity`: optionale Prioritaet, z. B. `info`, `notice`, `warning`, `critical`
-- `pinned`: optional fuer wichtige Eintraege
-- `isBreaking`: optional fuer besonders auffaellige Meldungen
+---
 
-### 3.2 Meta-Daten
-Die Antwort sollte zusaetzlich Metadaten enthalten:
+## 2. Architektur-Entscheidung
 
-- `fetchedAt`: Zeitpunkt des letzten erfolgreichen Abrufs
-- `isStale`: ob die Daten veraltet wirken
-- `staleAfterSeconds`: optionaler Richtwert fuer Veraltung
-- `sourceMode`: z. B. `mock` oder `backend`
-- `lastRefreshAt`: optional fuer UI-Anzeige
+### 2.1 Datenquelle
+- Primaer: Valve `ISteamNews/GetNewsForApp` (`appid=730`, `steam_community_announcements`).
+- SteamDB RSS kann spaeter optional als Zusatzquelle dienen, ist aber in manchen Container-Laufzeiten per `HTTP 403` blockiert.
+- Kein Discord-Scraping.
 
-### 3.3 Datenquelle-neutraler Vertrag
-Die Implementierung soll die UI gegen einen stabilen Feed-Vertrag bauen, damit die Quelle spaeter austauschbar bleibt.
+### 2.2 Transport zu Clients
+- REST fuer Initial-Laden + Nachladen.
+- WebSocket fuer Live-Push.
 
-Empfohlene Reihenfolge:
-1. Mock-Daten mit realistischem Shape.
-2. Optionale Anbindung an einen Frontend-Adapter.
-3. Spaeter Austausch gegen Backend-Endpoint ohne UI-Refactor.
+### 2.3 Wichtiger Betriebs-Punkt
+- Der bestehende `backend/public/index.php` ist request-basiert und kein dauerhafter WS-Loop.
+- Deshalb: **separater WebSocket-Gateway-Prozess** als eigener Worker.
+- Dieser Gateway darf in Node.js laufen (einfacher Betrieb), waehrend Business-Logik/DB in PHP bleibt.
 
-## 4. UI/UX-Regeln
+---
 
-### 4.1 Einbauort
-Primaer in:
-- `src/pages/PortfolioPage.jsx`
+## 3. Datenmodell (MVP)
 
-Empfohlene Position im Layout:
-- im `overview`-Tab, direkt unter den Kennzahlen oder zwischen Kennzahlen und Charts.
+Neue Tabelle: `cs_updates_feed`
 
-### 4.2 Eigene Komponente
-Wenn der Bereich groesser wird, in eine eigene Komponente auslagern:
-- `src/components/CsUpdatesFeed.jsx`
+Pflichtspalten:
+- `id` BIGINT PK AUTO_INCREMENT
+- `source` VARCHAR(32) NOT NULL (`steam_news_api`)
+- `external_id` VARCHAR(191) NOT NULL
+- `title` VARCHAR(512) NOT NULL
+- `url` VARCHAR(1024) NOT NULL
+- `summary_raw` TEXT NULL
+- `published_at` DATETIME NOT NULL
+- `changelist_id` BIGINT NULL
+- `build_id` BIGINT NULL
+- `branch` VARCHAR(64) NULL
+- `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+- `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 
-### 4.3 Empfohlene shadcn/ui-Bausteine
-Nur Komponenten aus `src/components/ui/*`, insbesondere:
-- `Card`
-- `Badge`
-- `Button`
-- `ScrollArea`
-- optional `Tabs`
-- optional `Accordion` oder `Collapsible`, falls das projektseitig als shadcn/ui-Baustein vorhanden oder ergaenzt wird
+Indizes:
+- UNIQUE `ux_cs_updates_external_id` (`external_id`)
+- INDEX `ix_cs_updates_published_at` (`published_at`)
+- INDEX `ix_cs_updates_changelist_id` (`changelist_id`)
 
-### 4.4 Darstellungsvarianten
-Der Coding-Agent darf die visuell passendste Variante waehlen, aber das MVP sollte einfach, klar und responsiv bleiben.
+`external_id` Regel:
+- Wenn `gid` vorhanden: nutze `gid`.
+- Sonst: `sha1(url + "|" + published_at_iso + "|" + title)`.
 
-**Variante A – Card-Feed (Empfehlung)**
-- Jede Meldung als eigene Card.
-- Kurzansicht plus aufklappbare Details.
-- Gute Lesbarkeit auf Desktop und Mobile.
+---
 
-**Variante B – Live-Header/Ticker**
-- Schmaler Header mit Live-Gefuehl.
-- Danach kompakte Feed-Liste.
-- Sinnvoll, wenn die Oberfläche sehr platzsparend sein soll.
+## 4. API/WS Vertrag
 
-**Variante C – Accordion-/Collapsible-Liste**
-- Mehr Dichte bei mehreren Eintraegen.
-- Gut, wenn die Detailtexte laenger werden.
-- Nur umsetzen, wenn die Komponente sauber mit shadcn/ui realisierbar ist.
+## 4.1 REST
+`GET /api/v1/cs-updates?limit=50&before=<iso8601_optional>`
 
-**Empfehlung fuer MVP:** Variante A, weil sie am besten zur bestehenden Portfolio-Optik passt.
+Antwort:
+- `items[]` (absteigend nach `publishedAt`)
+- `meta.fetchedAt`
+- `meta.nextBefore` (fuer Pagination)
 
-### 4.5 Hervorhebung frischer Updates
-- Das neueste Update wird anhand von `publishedAt` bestimmt.
-- Ist das Update juenger als 24 Stunden, wird es hervorgehoben:
-  - Badge wie `Neu` oder `Live`
-  - auffaelligere Border oder Hintergrund
-  - optional standardmaessig aufgeklappt
-- Falls mehrere Updates innerhalb von 24 Stunden vorhanden sind, bleibt nur das neueste besonders markiert; weitere koennen neutral oder schwach markiert sein.
+Item-Shape:
+- `id`
+- `source`
+- `title`
+- `summary`
+- `url`
+- `publishedAt`
+- `changelistId`
+- `buildId`
+- `branch`
 
-## 5. Zustände und Verhalten
+## 4.2 WebSocket Events
 
-### 5.1 Loading
-- Beim Laden wird ein klarer Ladezustand angezeigt.
-- Optional Skeleton oder neutrale Card mit kurzem Hinweis.
-- Der Bereich sollte im Layout stabil bleiben.
+WS URL (Beispiel):
+- `wss://<host>/ws/updates`
 
-### 5.2 Empty
-- Wenn keine Updates vorhanden sind, wird ein freundlicher Empty State angezeigt.
-- Der Empty State muss sich klar vom Error-State unterscheiden.
+Events:
+1. Server -> Client `hello`
+2. Client -> Server `subscribe` mit `{ "topic": "cs_updates" }`
+3. Server -> Client `cs_update.created` mit einem Feed-Item
+4. Ping/Pong alle 25s
 
-### 5.3 Error
-- Bei Netzwerk- oder API-Fehlern wird ein eindeutiger Fehlerzustand angezeigt.
-- Wenn bereits Daten vorhanden sind, sollen diese moeglichst sichtbar bleiben und der Fehler nur als Hinweis erscheinen.
-- Ein Retry-Button ist vorgesehen.
+---
 
-### 5.4 Refresh / Stale Handling
-- Der Feed soll einen manuellen Refresh unterstuetzen.
-- Stale-Status soll sichtbar sein, wenn die letzte Aktualisierung aelter ist als gewuenscht.
-- Stale darf den Inhalt nicht verstecken.
-- Die UI soll zeigen:
-  - wann zuletzt erfolgreich geladen wurde,
-  - ob ein Refresh laeuft,
-  - ob Daten veraltet sind.
-- Empfehlenswert ist ein eigener `refreshing`-Zustand zusaetzlich zu `loading`.
+## 5. Polling- und Realtime-Raten
 
-## 6. Implementierungsplan mit Dateipfaden
+- News Ingest Worker: alle **60 Sekunden**
+- WebSocket Push: sofort nach Insert
+- Client Polling-Fallback:
+  - wenn WS disconnected: alle **60 Sekunden**
+  - wenn WS connected: kein permanentes Polling, nur Initial Load + Reconnect-Sync
 
-### 6.1 Frontend-Architektur
-1. Feed-Daten ueber einen klaren Adapter laden.
-2. UI und Datenquelle strikt trennen.
-3. Portfolio-Seite als primaren Einbauort waehlen.
-4. Bei Bedarf Feed in eigene Komponente auslagern.
+---
 
-### 6.2 Konkrete Dateien
+## 6. Implementierungsplan (Abarbeitbar fuer einfache KI)
 
-- `src/pages/PortfolioPage.jsx`
-  - Feed im `overview`-Bereich integrieren.
-  - Optional nur als Container fuer die Komponente nutzen.
+Wichtig: Jeder Schritt hat "Done-Check". Nicht zum naechsten Schritt springen, bevor Done-Check gruen ist.
 
-- `src/components/CsUpdatesFeed.jsx`
-  - Eigenstaendige Feed-UI.
-  - Cards/Liste, Expand-Details, Highlight-Logik, Empty/Error/Loading/Refresh.
+### Schritt 1 - DB Migration
 
-- `src/hooks/useCsUpdatesFeed.js`
-  - Optionaler Hook fuer Laden, Refresh, Stale-Logik und Fehlerbehandlung.
-  - Sinnvoll, wenn die Logik aus der UI herausgezogen werden soll.
+Datei:
+- `backend/sql/migrations/2026_05_14_001_cs_updates_feed.sql`
 
-- `src/lib/csUpdatesFeed.mock.js`
-  - Mock-Daten mit realistischem Shape.
-  - Dient als Startpunkt fuer die erste UI-Implementierung.
+Aufgaben:
+1. Tabelle `cs_updates_feed` erstellen.
+2. Indizes/Unique Key erstellen.
 
-- `src/lib/apiClient.js`
-  - Spaeter um `fetchCsUpdatesFeed()` ergaenzen, wenn ein Backend-Endpoint existiert.
+Done-Check:
+- Migration laeuft lokal ohne SQL-Fehler.
+- `DESCRIBE cs_updates_feed` zeigt alle Pflichtspalten.
 
-### 6.3 Spaetere Backend-Option
-Wenn der Feed nicht nur als Mock laufen soll, kann spaeter ein Backend-Endpoint ergaenzt werden, z. B.:
+---
 
+### Schritt 2 - Repository
+
+Neue Datei:
+- `backend/src/Infrastructure/Persistence/Repository/CsUpdatesFeedRepository.php`
+
+Methoden:
+1. `upsert(array $row): bool` (idempotent per `external_id`)
+2. `listLatest(int $limit, ?string $beforeIso): array`
+3. `findByExternalId(string $externalId): ?array`
+
+Done-Check:
+- Upsert erzeugt keine Duplikate bei 2x gleichem Entry.
+- List liefert `published_at DESC`.
+
+---
+
+### Schritt 3 - News Client + Parser Service
+
+Neue Dateien:
+- `backend/src/Infrastructure/External/SteamNewsClient.php`
+- `backend/src/Application/Service/CsUpdatesIngestService.php`
+
+Regeln:
+1. Endpoint aus ENV `CS_UPDATES_STEAM_NEWS_URL` (oder Default auf Steam API Endpoint).
+2. HTTP Timeout max 10s.
+3. Parser extrahiert aus `newsitems`: `title`, `url`, `published_at`, `summary_raw`.
+4. Regex versucht `changelist/build/branch` zu erkennen.
+5. `external_id` wie in Abschnitt 3.
+
+Done-Check:
+- Service kann mind. 1 echten News Entry in normiertes Array mappen.
+- Bei Netzwerkfehler: sauberer Fehlerlog, kein Crash.
+
+---
+
+### Schritt 4 - Ingest Worker Script
+
+Neue Datei:
+- `backend/sync-cs-updates-rss.php`
+
+Aufgaben:
+1. Bootstrap laden.
+2. Steam News holen.
+3. Alle Entries upserten.
+4. Ausgabe-Log:
+   - total_entries
+   - inserted_count
+   - updated_count
+   - skipped_count
+
+Done-Check:
+- Script lokal manuell ausfuehrbar.
+- Zweiter Lauf direkt danach erzeugt `inserted_count = 0` (idempotent).
+
+---
+
+### Schritt 5 - REST Controller + Route
+
+Neue Datei:
 - `backend/src/Http/Controller/CsUpdatesController.php`
-- `backend/src/Application/Service/CsUpdatesService.php`
-- `backend/src/Infrastructure/Persistence/Repository/CsUpdatesRepository.php`
 
-Fuehrende externe Quellen oder Aggregation perspektivisch:
-- `backend/src/Infrastructure/External/SteamDbClient.php`
-- `backend/src/Infrastructure/External/DiscordFeedClient.php`
+Aenderung:
+- `backend/public/index.php` Route registrieren:
+  - `GET /api/v1/cs-updates`
 
-## 7. Akzeptanzkriterien
-- Der CS-Updates-Feed ist im Portfolio-UI sichtbar.
-- Es werden mehrere Updates als Cards oder Liste dargestellt.
-- Das neueste Update unter 24h ist visuell hervorgehoben.
-- Details pro Update sind aufklappbar oder ausklappbar.
-- `loading`, `empty`, `error` und `stale/refresh` sind klar erkennbar.
-- Die Datenquelle ist austauschbar zwischen Mock und spaeterem Backend.
-- Die UI verwendet ausschliesslich Komponenten aus `src/components/ui/*`.
-- Die Darstellung ist auf Desktop und Mobile brauchbar.
-- Kein harter Backend-Zwang im MVP.
+Done-Check:
+- Endpoint liefert JSON mit `items` + `meta`.
+- `limit` funktioniert.
 
-## 8. Testplan
+---
 
-### 8.1 Datenlogik
-- Sortierung nach `publishedAt` absteigend.
-- Erkennung des neuesten Eintrags.
-- Erkennung von Updates juenger als 24 Stunden.
-- Stale-Berechnung ueber Meta-Daten oder Fallback-Zeitpunkt.
-- Fehlerbehandlung bei leerer oder ungueltiger Datenquelle.
+### Schritt 6 - WebSocket Gateway (separater Prozess)
 
-### 8.2 UI-Verhalten
-- Loading-State wird korrekt angezeigt.
-- Empty-State wird korrekt angezeigt.
-- Error-State wird korrekt angezeigt.
-- Expand/Collapse funktioniert pro Eintrag.
-- Refresh zeigt einen eigenen Status.
-- Hervorhebung des frischen Updates ist sichtbar, aber nicht uebertrieben.
+Neue Dateien (Node Worker im Repo):
+- `apps/desktop/src/localStore/` **nicht** verwenden.
+- Neuer Ordner:
+  - `backend/ws-gateway/server.mjs`
+  - `backend/ws-gateway/package.json`
 
-### 8.3 Integrationscheck
-- Feed laesst sich ohne grossen Umbau in `PortfolioPage.jsx` einhaengen.
-- Feed bleibt mit spaeterem Backend-Contract kompatibel.
-- Keine zusaetzliche UI-Library wird eingefuehrt.
+Gateway-Aufgaben:
+1. WS Server auf Port aus ENV `CS_UPDATES_WS_PORT`.
+2. Accept `subscribe` fuer `cs_updates`.
+3. Bekommt neue Items ueber leichtes internes Signal:
+   - Variante A (MVP): Poll jede 5s auf `MAX(id)` in DB und broadcast neue Rows.
+   - Variante B (spaeter): Queue/Redis PubSub.
+4. Sendet `cs_update.created` Event.
 
-## 9. Rollout
-1. Erst Mock-Daten und UI im Frontend aufbauen.
-2. Feed in `PortfolioPage.jsx` integrieren.
-3. Refresh- und Stale-Logik stabilisieren.
-4. Danach optionalen Backend-Endpoint anbinden.
-5. Danach externe Quellen wie SteamDB oder Discord ergaenzen.
-6. Optional Feature-Flag fuer kontrollierten Rollout verwenden.
+Done-Check:
+- Mit 2 Clients verbunden: beide erhalten neues Event.
+- Reconnect funktioniert nach Gateway-Restart.
 
-## 10. Risiken
-- Unklare oder wechselnde Datenformate zwischen Mock und Backend.
-- Timestamp- oder Timezone-Probleme bei der 24h-Hervorhebung.
-- Zu viel Information auf kleinen Bildschirmen.
-- Doppelte Eintraege bei spaeterer Aggregation mehrerer Quellen.
-- Layout-UEberladung, wenn Feed und Portfolio-Kennzahlen visuell konkurrieren.
-- Accordion-/Collapsible-Variante kann zusaetzliche shadcn-Komponenten erfordern.
+Hinweis:
+- Variante A ist absichtlich simpel und robust fuer MVP.
 
-## 11. Perspektive
-- SteamDB-Feeds automatisiert einspeisen.
-- Discord-/Webhook-Aggregation ergaenzen.
-- Backend-Aggregation mit Deduplizierung und Priorisierung.
-- Quellenbadges und Filter nach Relevanz oder Kanal.
-- Optionales Ranking nach Aktualitaet, Impact oder Vertrauensstufe.
-- Spaeter Benachrichtigungen oder Badge-Zaehler fuer neue Updates.
+---
 
-## 12. Geplante Datei-Struktur
-Primäre Spezifikationsdatei:
-- `docs/cs-updates-feed-plan.md`
+### Schritt 7 - Frontend Hook + Komponenten
 
-Spaetere Implementierung:
-- `src/pages/PortfolioPage.jsx`
-- `src/components/CsUpdatesFeed.jsx`
-- `src/hooks/useCsUpdatesFeed.js`
-- `src/lib/csUpdatesFeed.mock.js`
-- optional spaeter `src/lib/apiClient.js` fuer den Feed-Endpoint
+Bestehende Dateien nutzen/anpassen:
+- `packages/shared/src/lib/apiClient.js`
+- `packages/shared/src/hooks/useCsUpdatesFeed.js`
+- `packages/shared/src/components/CsUpdatesFeed.jsx`
+- `packages/shared/src/pages/CsUpdatesPage.jsx`
 
+Aufgaben:
+1. Initial Feed per REST laden.
+2. WS verbinden und `subscribe` senden.
+3. Bei `cs_update.created` Item vorne einfuegen (dedupe by `id`).
+4. WS reconnect mit Backoff (1s, 2s, 5s, 10s, max 30s).
+5. Fallback Polling nur wenn WS disconnected.
+
+Done-Check:
+- Neues Update erscheint ohne Page Reload.
+- Bei WS-Ausfall aktualisiert sich Feed trotzdem spaetestens nach 60s.
+
+---
+
+### Schritt 8 - Betrieb/Scheduler
+
+Aendern:
+- bestehende Cron/Supervisor config (analog zu anderen Workern)
+
+Aufgaben:
+1. `sync-cs-updates-rss.php` jede Minute starten.
+2. WS Gateway als dauerhaften Prozess starten.
+
+Done-Check:
+- Nach Deploy laufen beide Prozesse stabil >24h.
+- Keine Prozess-Neustart-Schleifen.
+
+---
+
+## 7. Konkrete Schwachstellen + Gegenmassnahmen
+
+1. Schwachstelle: RSS Format aendert sich.  
+Gegenmassnahme: Parser defensiv, fehlende Felder erlauben, Fehler loggen.
+
+2. Schwachstelle: Duplikate.  
+Gegenmassnahme: harter UNIQUE Key auf `external_id`.
+
+3. Schwachstelle: WS Instabilitaet.  
+Gegenmassnahme: Reconnect + Polling-Fallback.
+
+4. Schwachstelle: Clock/Timezone Fehler.  
+Gegenmassnahme: alles in UTC speichern und API nur ISO UTC liefern.
+
+5. Schwachstelle: Lastspitzen bei vielen Clients.  
+Gegenmassnahme: leichte Event-Payload, initiale Pagination, spaeter ggf. Redis.
+
+---
+
+## 8. Akzeptanzkriterien (Final)
+
+Feature gilt als "fertig", wenn:
+1. Neue CS2 News Entries erscheinen in DB innerhalb 60-120s.
+2. REST liefert die letzten 50 Updates sortiert.
+3. Offene Clients erhalten neue Updates per WS Push.
+4. Bei WS-Down zeigt UI weiter Updates ueber Fallback-Polling.
+5. Keine doppelten Feed-Eintraege nach wiederholtem Ingest.
+
+---
+
+## 9. Phase 2 (nicht MVP)
+
+1. Optionales SteamDB-Patchnotes-Enrichment als zweite Quelle.
+2. Besserer WS Broadcast ueber Redis PubSub statt DB-Minipolling.
+3. Feature-Flag fuer Feed/Realtime separat.

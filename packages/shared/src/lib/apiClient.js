@@ -229,8 +229,26 @@ async function requestPayload(path, options = {}) {
   const normalizedPayload = payload || { data: null, meta: {} };
 
   const upstreamHint = normalizedPayload?.meta?.upstreamHint;
+  const proxyAttempts = Array.isArray(normalizedPayload?.meta?.proxyAttempts)
+    ? normalizedPayload.meta.proxyAttempts
+    : [];
+  const proxyAttemptPreview = proxyAttempts.slice(0, 3).map((attempt) => {
+    const status = Number(attempt?.httpCode || 0);
+    const url = String(attempt?.url || "");
+    return {
+      status: Number.isFinite(status) && status > 0 ? status : null,
+      url,
+    };
+  });
   if (upstreamHint?.code) {
-    console.warn("[apiClient] upstream hint", upstreamHint);
+    console.warn("[apiClient] upstream hint", {
+      ...upstreamHint,
+      request: {
+        method,
+        path,
+      },
+      proxyAttempts: proxyAttemptPreview,
+    });
     void sendFrontendTelemetryEvent({
       level: "warning",
       event: "frontend.upstream_fallback_hint",
@@ -240,6 +258,8 @@ async function requestPayload(path, options = {}) {
         path,
         hintCode: String(upstreamHint.code || "UNKNOWN"),
         hintMessage: String(upstreamHint.message || ""),
+        hintEndpointPath: String(upstreamHint.endpointPath || ""),
+        hintAttemptCount: proxyAttempts.length,
       },
     });
   }
@@ -691,10 +711,20 @@ export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds =
       );
     }
 
+    let syncResult;
     try {
-      await runDesktopSyncNowIfDue({ force: true });
+      syncResult = await runDesktopSyncNowIfDue({ force: true });
     } catch (syncError) {
       console.warn("[desktop-sync] exclude sync failed", syncError);
+      throw new Error(
+        `Exclude was updated locally, but sync to server failed: ${syncError?.message || String(syncError)}`,
+      );
+    }
+
+    if (syncResult?.skipped) {
+      throw new Error(
+        `Exclude was updated locally, but sync was skipped (${String(syncResult.reason || "unknown")}).`,
+      );
     }
 
     return {
@@ -837,4 +867,19 @@ export async function updateInvestmentBucket(id, bucket, sourceInvestmentIds = [
 
 export async function fetchCacheMaintenanceStats() {
   return requestWithMeta("/api/v1/debug/cache/stats");
+}
+
+export async function fetchCsUpdatesFeed(options = {}) {
+  const limit = Number.isFinite(options.limit) ? Number(options.limit) : undefined;
+  const before = typeof options.before === "string" ? options.before : undefined;
+
+  return requestWithMeta(
+    buildPath("/api/v1/cs-updates", {
+      limit,
+      before,
+    }),
+    {
+      signal: options.signal,
+    },
+  );
 }
