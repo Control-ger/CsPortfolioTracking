@@ -6,6 +6,20 @@ import { getMockCsUpdatesFeed } from "@shared/lib/csUpdatesFeed.mock";
 const DEFAULT_STALE_AFTER_SECONDS = 6 * 60 * 60;
 const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
 const FALLBACK_POLL_INTERVAL_MS = 60 * 1000;
+const WS_RECONNECT_BACKOFF_STEPS_MS = [1000, 2000, 5000, 10000, 30000];
+const WS_RECONNECT_COOLDOWN_MS = 5 * 60 * 1000;
+
+function isWsRealtimeEnabled() {
+  const rawValue = String(import.meta.env.VITE_CS_UPDATES_WS_ENABLED ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (!rawValue) {
+    return false;
+  }
+
+  return ["1", "true", "yes", "on"].includes(rawValue);
+}
 
 function toTimestamp(value) {
   const timestamp = new Date(value).getTime();
@@ -143,6 +157,7 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
   const reconnectTimerRef = useRef(null);
   const fallbackPollTimerRef = useRef(null);
   const reconnectAttemptRef = useRef(0);
+  const wsDisabledUntilRef = useRef(0);
   const manualRefreshRef = useRef(false);
 
   const load = useCallback(
@@ -201,6 +216,24 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
   }, []);
 
   const connectWebSocket = useCallback(() => {
+    if (!isWsRealtimeEnabled()) {
+      startFallbackPolling();
+      return;
+    }
+
+    const now = Date.now();
+    if (wsDisabledUntilRef.current > now) {
+      startFallbackPolling();
+      const remainingMs = wsDisabledUntilRef.current - now;
+      if (!reconnectTimerRef.current) {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          connectWebSocket();
+        }, remainingMs);
+      }
+      return;
+    }
+
     const wsUrl = resolveWsUrl();
     if (!wsUrl || typeof window === "undefined" || typeof WebSocket === "undefined") {
       startFallbackPolling();
@@ -213,6 +246,7 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
 
       ws.onopen = () => {
         reconnectAttemptRef.current = 0;
+        wsDisabledUntilRef.current = 0;
         stopFallbackPolling();
         ws.send(JSON.stringify({ type: "subscribe", topic: "cs_updates" }));
       };
@@ -250,7 +284,20 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
         startFallbackPolling();
 
         const attempt = reconnectAttemptRef.current;
-        const backoffMs = Math.min(30000, [1000, 2000, 5000, 10000][attempt] || 30000);
+        const backoffMs = WS_RECONNECT_BACKOFF_STEPS_MS[attempt] || null;
+        if (backoffMs === null) {
+          reconnectAttemptRef.current = 0;
+          wsDisabledUntilRef.current = Date.now() + WS_RECONNECT_COOLDOWN_MS;
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+          }
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            connectWebSocket();
+          }, WS_RECONNECT_COOLDOWN_MS);
+          return;
+        }
+
         reconnectAttemptRef.current = attempt + 1;
 
         if (reconnectTimerRef.current) {
