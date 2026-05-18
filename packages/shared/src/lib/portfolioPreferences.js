@@ -1,5 +1,6 @@
 import { getCurrentUser } from "./auth.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
+import { resolveDesktopLocalUserId as resolveDesktopRuntimeUserId } from "./userIdentity.js";
 
 export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   steamImportBucket: "inventory",
@@ -7,16 +8,6 @@ export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   metricsDisplayMode: "toggle_mode",
   metricsScopeDefault: "investments",
 });
-
-function resolveDesktopRuntimeUserId(user, fallback = 1) {
-  const fallbackId = String(fallback || 1).trim() || "1";
-  const candidate = user?.userId ?? user?.id ?? fallbackId;
-  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
-  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
-    return raw;
-  }
-  return fallbackId;
-}
 
 function normalizeBucket(value, fallback = "investment") {
   const normalized = String(value || "")

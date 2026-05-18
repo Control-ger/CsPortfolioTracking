@@ -43,6 +43,7 @@ import {
   getPortfolioPreferences,
   getCurrentUser,
   importInventoryAsInvestments,
+  resolveDesktopLocalUserId as resolveDesktopRuntimeUserId,
   resolveMetricsScopeFromPreferences,
   fetchCsFloatApiKeyStatus,
   updateCsFloatApiKey,
@@ -155,16 +156,6 @@ function normalizeBucket(value, fallback = "investment") {
     return "investment";
   }
   return fallback === "inventory" ? "inventory" : "investment";
-}
-
-function resolveDesktopRuntimeUserId(user, fallback = 1) {
-  const fallbackId = String(fallback || 1).trim() || "1";
-  const candidate = user?.userId ?? user?.id ?? fallbackId;
-  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
-  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
-    return raw;
-  }
-  return fallbackId;
 }
 
 function normalizeCsFloatApiKeyInput(value) {

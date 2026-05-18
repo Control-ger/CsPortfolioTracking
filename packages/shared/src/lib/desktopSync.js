@@ -2,6 +2,7 @@ import { getSession, validateSession } from "./auth.js";
 import { get as cacheGet, set as cacheSet } from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
+import { parseDesktopSyncUserId } from "./userIdentity.js";
 
 const SYNC_CURSOR_CACHE_KEY = "desktop-sync:last-pull-at";
 const SYNC_MIN_INTERVAL_MS = 30_000;
@@ -275,47 +276,6 @@ async function fetchWithCloudflareAccess(url, options, serverBaseUrl) {
 
 function unwrapApiData(payload) {
   return payload?.data && typeof payload.data === "object" ? payload.data : payload;
-}
-
-function parseUserId(user) {
-  const MAX_INT32 = 2_147_483_647;
-  const candidates = [
-    user?.userId,
-    user?.localUserId,
-    user?.serverUserId,
-    user?.id,
-  ];
-
-  for (const candidate of candidates) {
-    const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
-    if (!/^[1-9]\d*$/.test(raw)) {
-      continue;
-    }
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_INT32) {
-      continue;
-    }
-    return Math.floor(parsed);
-  }
-
-  // Legacy desktop sessions may carry Steam IDs as large numeric "id" values.
-  // Sync is still keyed to the default numeric user scope.
-  const numericCandidateRaw = String(user?.id || user?.userId || "").trim();
-  if (/^[1-9]\d{10,}$/.test(numericCandidateRaw)) {
-    return 1;
-  }
-
-  const fallbackRaw = String(user?.id || user?.userId || "").trim().toLowerCase();
-  if (fallbackRaw.startsWith("steam-")) {
-    // Desktop auth sessions currently use "steam-<steamId>" identifiers.
-    // Sync endpoints still expect a positive integer userId (legacy/default scope).
-    return 1;
-  }
-  if (String(user?.steamId || "").trim() !== "") {
-    return 1;
-  }
-
-  return null;
 }
 
 function withSafetyWindow(timestamp) {
@@ -727,10 +687,10 @@ export async function runDesktopSyncNowIfDue(options = {}) {
       }
 
       const serverBaseUrl = normalizeServerBaseUrl(config.serverUrl);
-      let userId = parseUserId(session.user);
+      let userId = parseDesktopSyncUserId(session.user);
       if (userId === null) {
         const validated = await validateSession(session.token);
-        userId = parseUserId(validated?.user);
+        userId = parseDesktopSyncUserId(validated?.user);
       }
       if (userId === null) {
         return { skipped: true, reason: "no-valid-session-user-id" };

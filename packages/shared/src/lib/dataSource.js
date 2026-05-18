@@ -12,6 +12,7 @@ import {
 import { getCurrentUser, isAuthenticated } from "./auth.js";
 import { runDesktopSyncNowIfDue } from "./desktopSync.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
+import { resolveDesktopLocalUserId as resolveDesktopUserId } from "./userIdentity.js";
 
 const DEFAULT_STATS = {
   totalValue: 0,
@@ -41,23 +42,6 @@ function getDesktopLocalStore() {
   }
 
   return window.electronAPI.localStore;
-}
-
-function normalizeDesktopLocalUserId(candidate, fallback = "1") {
-  const fallbackId = String(fallback || "1").trim() || "1";
-  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
-  if (!raw) {
-    return fallbackId;
-  }
-  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
-    return raw;
-  }
-  return fallbackId;
-}
-
-function resolveDesktopUserId(user, fallback = 1) {
-  const candidate = user?.userId ?? user?.id ?? fallback;
-  return normalizeDesktopLocalUserId(candidate, String(fallback || 1));
 }
 
 function isAbortLikeError(error) {

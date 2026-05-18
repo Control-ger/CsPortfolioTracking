@@ -7,6 +7,7 @@ import { runDesktopSyncNowIfDue } from "./desktopSync.js";
 import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { getPortfolioPreferences } from "./portfolioPreferences.js";
+import { resolveDesktopLocalUserId } from "./userIdentity.js";
 
 const DEFAULT_API_BASE = `${window.location.origin}/api/index.php`;
 const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE);
@@ -294,23 +295,6 @@ function getDesktopLocalStore() {
   }
 
   return window.electronAPI.localStore;
-}
-
-function normalizeDesktopLocalUserId(candidate, fallback = "1") {
-  const fallbackId = String(fallback || "1").trim() || "1";
-  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
-  if (!raw) {
-    return fallbackId;
-  }
-  if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
-    return raw;
-  }
-  return fallbackId;
-}
-
-function resolveDesktopLocalUserId(user) {
-  const candidate = user?.userId ?? user?.id ?? 1;
-  return normalizeDesktopLocalUserId(candidate, "1");
 }
 
 function stableHash(value) {
