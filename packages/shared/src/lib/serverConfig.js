@@ -26,6 +26,26 @@ function parseHostFromUrlLikeInput(value) {
   }
 }
 
+export function normalizeServerBaseUrl(rawUrl) {
+  return String(rawUrl || "").trim().replace(/\/+$/, "");
+}
+
+export function resolveAccessBaseUrl(serverBaseUrl) {
+  const normalized = normalizeServerBaseUrl(serverBaseUrl);
+  if (!normalized) {
+    return "";
+  }
+
+  const lower = normalized.toLowerCase();
+  if (lower.endsWith("/api/index.php")) {
+    return normalized.slice(0, -"/api/index.php".length);
+  }
+  if (lower.endsWith("/api")) {
+    return normalized.slice(0, -"/api".length);
+  }
+  return normalized;
+}
+
 export function normalizeServerHostInput(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
@@ -55,4 +75,3 @@ export function normalizeServerHostInput(value) {
 
   return candidate.toLowerCase();
 }
-

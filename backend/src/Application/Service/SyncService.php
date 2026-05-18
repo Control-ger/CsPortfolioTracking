@@ -152,16 +152,19 @@ final class SyncService
         $idempotencyRow = $this->findIdempotency($userId, (string) $change['idempotencyKey']);
         if ($idempotencyRow !== null) {
             if ((string) $idempotencyRow['request_hash'] !== $requestHash) {
-                return [
+                return $this->finalizeChangeResult([
                     'status' => 'rejected',
                     'table' => $change['table'],
                     'id' => $change['id'],
                     'errorCode' => 'IDEMPOTENCY_KEY_REUSE',
                     'message' => 'Idempotency key reused with different payload.',
-                ];
+                ], $change);
             }
 
-            return $this->decodePayload((string) $idempotencyRow['result_json']);
+            return $this->finalizeChangeResult(
+                $this->decodePayload((string) $idempotencyRow['result_json']),
+                $change
+            );
         }
 
         $this->pdo->beginTransaction();
@@ -172,13 +175,13 @@ final class SyncService
             $clientRevision = (int) $change['clientRevision'];
 
             if ($clientRevision > 0 && $currentRevision > 0 && $clientRevision < $currentRevision) {
-                $result = [
+                $result = $this->finalizeChangeResult([
                     'status' => 'conflict',
                     'table' => $change['table'],
                     'id' => $change['id'],
                     'serverRevision' => $currentRevision,
                     'updatedAt' => $this->toIso8601((string) $entity['updated_at']),
-                ];
+                ], $change);
                 $this->insertIdempotency($userId, (string) $change['idempotencyKey'], $requestHash, $result);
                 $this->pdo->commit();
                 return $result;
@@ -216,13 +219,13 @@ final class SyncService
             ]);
 
             $updatedRow = $this->findEntityForUpdate($userId, (string) $change['table'], (string) $change['id']);
-            $result = [
+            $result = $this->finalizeChangeResult([
                 'status' => 'applied',
                 'table' => $change['table'],
                 'id' => $change['id'],
                 'serverRevision' => $updatedRow ? (int) $updatedRow['server_revision'] : $nextRevision,
                 'updatedAt' => $updatedRow ? $this->toIso8601((string) $updatedRow['updated_at']) : gmdate('c'),
-            ];
+            ], $change);
 
             $this->insertIdempotency($userId, (string) $change['idempotencyKey'], $requestHash, $result);
             $this->pdo->commit();
@@ -231,14 +234,25 @@ final class SyncService
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
-            return [
+            return $this->finalizeChangeResult([
                 'status' => 'rejected',
                 'table' => $change['table'],
                 'id' => $change['id'],
                 'errorCode' => 'SYNC_APPLY_FAILED',
                 'message' => $exception->getMessage(),
-            ];
+            ], $change);
         }
+    }
+
+    private function finalizeChangeResult(array $result, array $change): array
+    {
+        $result['table'] = (string) ($result['table'] ?? $change['table'] ?? '');
+        $result['id'] = (string) ($result['id'] ?? $change['id'] ?? '');
+        $result['op'] = (string) ($result['op'] ?? $change['op'] ?? 'upsert');
+        $result['idempotencyKey'] = (string) ($change['idempotencyKey'] ?? $result['idempotencyKey'] ?? '');
+        $result['clientRevision'] = (int) ($result['clientRevision'] ?? $change['clientRevision'] ?? 0);
+
+        return $result;
     }
 
     private function applyDomainChange(

@@ -9,7 +9,6 @@ let lastSeenId = 0;
 
 function log(message, context = {}) {
   const ts = new Date().toISOString();
-  // eslint-disable-next-line no-console
   console.log(`[${ts}] [cs-updates-ws] ${message}`, context);
 }
 

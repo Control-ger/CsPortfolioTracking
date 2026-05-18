@@ -101,6 +101,20 @@ function getRangeDays(rangeKey) {
   return range?.days ?? null;
 }
 
+function deriveInvestedFromGrowth(value, growthPercent) {
+  if (!Number.isFinite(value) || !Number.isFinite(growthPercent)) {
+    return null;
+  }
+
+  const denominator = 1 + growthPercent / 100;
+  if (Math.abs(denominator) <= Number.EPSILON) {
+    return null;
+  }
+
+  const invested = value / denominator;
+  return Number.isFinite(invested) ? invested : null;
+}
+
 function normalizeHistory(history) {
   if (!Array.isArray(history)) {
     return [];
@@ -116,6 +130,13 @@ function normalizeHistory(history) {
         entry?.price ??
         entry?.value;
       const wert = Number(rawValue);
+      const investedValue = Number(
+        entry?.invested ??
+          entry?.investedValue ??
+          entry?.invested_value ??
+          entry?.totalInvested ??
+          entry?.total_invested,
+      );
 
       if (timestamp === null || !Number.isFinite(wert)) {
         return null;
@@ -126,6 +147,7 @@ function normalizeHistory(history) {
         date: entry?.date ?? "",
         timestamp,
         wert,
+        invested: Number.isFinite(investedValue) ? investedValue : null,
         growthPercent:
           entry?.growthPercent ??
           entry?.growth_percent ??
@@ -185,10 +207,16 @@ export const PortfolioChart = ({
         : hasValidBaseValue
           ? ((entry.wert - baseValue) / baseValue) * 100
           : 0;
+      const invested = Number.isFinite(Number(entry?.invested))
+        ? Number(entry.invested)
+        : deriveInvestedFromGrowth(entry.wert, growthPercent);
+      const profitEuro = Number.isFinite(invested) ? entry.wert - invested : null;
 
       return {
         ...entry,
         growthPercent,
+        invested,
+        profitEuro,
         displayValue: showAbsolute ? entry.wert : growthPercent,
       };
     });
@@ -293,6 +321,8 @@ export const PortfolioChart = ({
                   onHoverChange({
                     wert: hoveredData.wert,
                     growthPercent: hoveredData.growthPercent,
+                    invested: hoveredData.invested,
+                    profitEuro: hoveredData.profitEuro,
                     date: hoveredData.date,
                   });
                 }

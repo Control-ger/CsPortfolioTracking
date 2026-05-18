@@ -387,6 +387,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       isActive = false;
     };
   }, [
+    user,
     user?.id,
     user?.steamId,
     user?.name,
@@ -431,6 +432,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       cancelled = true;
     };
   }, [
+    user,
     user?.steamId,
     user?.animatedAvatar,
     user?.animated_avatar,

@@ -1,6 +1,7 @@
 import { getSession, validateSession } from "./auth.js";
 import { get as cacheGet, set as cacheSet } from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
+import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
 
 const SYNC_CURSOR_CACHE_KEY = "desktop-sync:last-pull-at";
 const SYNC_MIN_INTERVAL_MS = 30_000;
@@ -19,26 +20,6 @@ function isDesktopWithLocalStore() {
     window.electronAPI.localStore &&
     window.electronAPI.serverConfig
   );
-}
-
-function normalizeServerBaseUrl(rawUrl) {
-  return String(rawUrl || "").trim().replace(/\/+$/, "");
-}
-
-function resolveAccessBaseUrl(serverBaseUrl) {
-  const normalized = String(serverBaseUrl || "").trim().replace(/\/+$/, "");
-  if (!normalized) {
-    return "";
-  }
-
-  const lower = normalized.toLowerCase();
-  if (lower.endsWith("/api/index.php")) {
-    return normalized.slice(0, -"/api/index.php".length);
-  }
-  if (lower.endsWith("/api")) {
-    return normalized.slice(0, -"/api".length);
-  }
-  return normalized;
 }
 
 async function hasCloudflareAccessIdentity(accessBaseUrl) {
@@ -79,7 +60,7 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
 }
 
 function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
-  const normalizedBase = String(serverBaseUrl || "").trim().replace(/\/+$/, "");
+  const normalizedBase = normalizeServerBaseUrl(serverBaseUrl);
   const rawEndpoint = String(endpointPath || "");
   const queryStart = rawEndpoint.indexOf("?");
   const endpointPathOnly = queryStart >= 0 ? rawEndpoint.slice(0, queryStart) : rawEndpoint;
@@ -128,16 +109,86 @@ async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, option
   }
 
   let lastResponse = null;
+  let firstNon404Response = null;
+  let lastError = null;
   for (const url of candidates) {
-    const response = await fetchWithCloudflareAccess(url, options, serverBaseUrl);
-    if (response.status === 404) {
+    try {
+      const response = await fetchWithCloudflareAccess(url, options, serverBaseUrl);
+      if (response?.ok) {
+        return response;
+      }
       lastResponse = response;
+      if (response && response.status !== 404 && !firstNon404Response) {
+        firstNon404Response = response;
+      }
+    } catch (error) {
+      lastError = error;
       continue;
     }
-    return response;
   }
 
-  return lastResponse;
+  if (firstNon404Response) {
+    return firstNon404Response;
+  }
+  if (lastResponse) {
+    return lastResponse;
+  }
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error("Sync endpoint request failed before receiving a response.");
+}
+
+function operationMatchesResult(operation, result) {
+  if (!result || typeof result !== "object") {
+    return false;
+  }
+
+  const sameTable = String(result.table || "") === String(operation.table || "");
+  const sameId = String(result.id || "") === String(operation.id || "");
+  if (!sameTable || !sameId) {
+    return false;
+  }
+
+  const op = String(operation.op || "").toLowerCase();
+  const resultOp = String(result.op || "").toLowerCase();
+  if (!op || !resultOp) {
+    return true;
+  }
+
+  return op === resultOp;
+}
+
+function findResultForOperation(operation, results, usedResultIndexes) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return null;
+  }
+
+  const idempotencyKey = String(operation?.idempotencyKey || "");
+  if (idempotencyKey) {
+    for (let index = 0; index < results.length; index += 1) {
+      if (usedResultIndexes.has(index)) {
+        continue;
+      }
+      const candidate = results[index];
+      if (String(candidate?.idempotencyKey || "") === idempotencyKey) {
+        return { result: candidate, index };
+      }
+    }
+  }
+
+  for (let index = 0; index < results.length; index += 1) {
+    if (usedResultIndexes.has(index)) {
+      continue;
+    }
+    const candidate = results[index];
+    if (operationMatchesResult(operation, candidate)) {
+      return { result: candidate, index };
+    }
+  }
+
+  return null;
 }
 
 async function ensureCloudflareAccessSession(serverBaseUrl) {
@@ -474,13 +525,40 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
     return;
   }
 
-  const keyToResult = new Map(
-    results.map((result) => [`${result.table}:${result.id}:${result.status}`, result]),
-  );
-  for (const op of mapped) {
-    const applied = keyToResult.get(`${op.table}:${op.id}:applied`);
-    const conflict = keyToResult.get(`${op.table}:${op.id}:conflict`);
-    const rejected = keyToResult.get(`${op.table}:${op.id}:rejected`);
+  if (results.length !== mapped.length) {
+    console.warn("[desktop-sync] sync push returned unexpected result count", {
+      expected: mapped.length,
+      received: results.length,
+    });
+  }
+
+  const usedResultIndexes = new Set();
+  for (let index = 0; index < mapped.length; index += 1) {
+    const op = mapped[index];
+    let matched = null;
+
+    const indexedResult = results[index];
+    if (operationMatchesResult(op, indexedResult)) {
+      matched = { result: indexedResult, index };
+    } else {
+      matched = findResultForOperation(op, results, usedResultIndexes);
+    }
+
+    if (!matched?.result) {
+      console.warn("[desktop-sync] missing sync push result for operation", {
+        table: op.table,
+        id: op.id,
+        idempotencyKey: op.idempotencyKey,
+      });
+      continue;
+    }
+
+    usedResultIndexes.add(matched.index);
+    const matchedResult = matched.result;
+    const status = String(matchedResult?.status || "");
+    const rejected = status === "rejected" ? matchedResult : null;
+    const applied = status === "applied";
+    const conflict = status === "conflict";
     if (rejected) {
       const dropped = shouldDropRejectedOperation(op, rejected);
 
@@ -494,6 +572,7 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
       console.warn("[desktop-sync] operation rejected by server", {
         table: op.table,
         id: op.id,
+        idempotencyKey: op.idempotencyKey,
         result: rejected,
       });
       continue;

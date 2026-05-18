@@ -679,9 +679,12 @@ export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
 export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds = []) {
   const localStore = getDesktopLocalStore();
   if (localStore) {
-    const candidateIds = Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
+    const candidateIdsRaw = Array.isArray(sourceInvestmentIds) && sourceInvestmentIds.length > 0
       ? sourceInvestmentIds
       : [id];
+    const candidateIds = Array.from(
+      new Set(candidateIdsRaw.map((candidateId) => String(candidateId || "").trim()).filter(Boolean)),
+    );
     let updatedCount = 0;
 
     for (const candidateId of candidateIds) {

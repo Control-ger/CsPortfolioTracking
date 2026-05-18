@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { ApiWarnings } from "./ApiWarnings";
@@ -148,9 +148,6 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [selectedItems, setSelectedItems] = useState([]);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
-  const isAlreadyInWatchlist = (itemName) =>
-    existingItems.some((item) => item.name === itemName);
-
   const wearEnabled = itemType === "skin";
   const normalizedTerm = normalizeSearchTerm(searchTerm);
   const keywordBrowseType = itemType === "all" ? resolveKeywordBrowseType(normalizedTerm) : null;
@@ -160,7 +157,15 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const isBrowseRequest = effectiveTerm.length === 0 && canBrowseWithoutQuery;
   const shouldSearch = effectiveTerm.length >= 2 || isBrowseRequest;
   const hasMorePages = page < totalPages;
-  const selectableResults = results.filter((candidate) => !isAlreadyInWatchlist(candidate.marketHashName));
+  const existingItemNames = useMemo(
+    () => new Set(existingItems.map((item) => item.name)),
+    [existingItems],
+  );
+  const isAlreadyInWatchlist = (itemName) => existingItemNames.has(itemName);
+  const selectableResults = useMemo(
+    () => results.filter((candidate) => !existingItemNames.has(candidate.marketHashName)),
+    [results, existingItemNames],
+  );
 
   useEffect(() => {
     setPage(1);
@@ -169,7 +174,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   useEffect(() => {
     const selectableNames = new Set(selectableResults.map((entry) => entry.marketHashName));
     setSelectedItems((current) => current.filter((name) => selectableNames.has(name)));
-  }, [results]);
+  }, [selectableResults]);
 
   useEffect(() => {
     const activeWear = effectiveItemType === "skin" ? wear : "all";

@@ -1023,9 +1023,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
   const headerPortfolioValue = hoveredChartData?.wert ?? (stats.totalValue || 0);
   const headerPortfolioPercent = hoveredChartData?.growthPercent ?? (stats.totalRoiPercent || 0);
-  const headerPortfolioPositive = hoveredChartData
-    ? Number(hoveredChartData.growthPercent) >= 0
-    : Boolean(stats.isPositive);
+  const hoveredProfitEuro = Number(hoveredChartData?.profitEuro);
+  const headerProfitEuro = hoveredChartData
+    ? Number.isFinite(hoveredProfitEuro)
+      ? hoveredProfitEuro
+      : (headerPortfolioValue || 0) - Number(stats.totalInvested || 0)
+    : Number(stats.totalProfitEuro || 0);
+  const headerPortfolioPositive = hoveredChartData ? headerProfitEuro >= 0 : Boolean(stats.isPositive);
   const showCsUpdateBanner =
     !csUpdatesLoading &&
     Boolean(latestCsUpdate) &&
@@ -1039,9 +1043,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
     useUsd: true,
     buyPriceUsd: headerPortfolioValue || 0,
   });
-  const headerProfitEuro = hoveredChartData
-    ? (headerPortfolioValue || 0) - Number(stats.totalInvested || 0)
-    : Number(stats.totalProfitEuro || 0);
   const headerProfitPercent = hoveredChartData
     ? Number(headerPortfolioPercent || 0)
     : Number(stats.totalRoiPercent || 0);
