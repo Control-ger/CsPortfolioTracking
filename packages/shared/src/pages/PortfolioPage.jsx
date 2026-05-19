@@ -1792,10 +1792,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
       <div
         className={
           showSetupJourney
-            ? "mx-auto w-full max-w-5xl space-y-8 p-4 pb-12 pt-8 sm:p-8"
+            ? "mx-auto flex w-full max-w-5xl flex-col gap-8 p-4 pb-12 pt-8 sm:p-8"
             : useDesktopSidebarShell
-              ? "w-full space-y-6 p-4 sm:space-y-8 sm:p-6 md:p-8 lg:p-0"
-              : "mx-auto max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-6 md:p-8"
+              ? "flex w-full flex-col gap-6 p-4 sm:gap-8 sm:p-6 md:p-8 lg:p-0"
+              : "mx-auto flex max-w-7xl flex-col gap-6 p-4 sm:gap-8 sm:p-6 md:p-8"
         }
       >
         {/* Mobile Header - nur auf Mobile sichtbar */}
@@ -2435,7 +2435,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </TabsList>
             </div>
 
-          <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+          <TabsContent value="overview" className="space-y-4 sm:space-y-5 lg:space-y-4">
             {/* Mobile: PortfolioHeaderCard oben, Desktop: Alte Stats-Cards */}
             <div className="sm:hidden">
               <PortfolioHeaderCard
@@ -2488,7 +2488,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </Card>
             </div>
 
-            <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
               <PortfolioChart
                 history={portfolioHistory}
                 isLoading={portfolioLoading}
@@ -2514,7 +2514,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
             </div>
 
-            <div className="grid gap-4 sm:gap-6 grid-cols-1">
+            <div className="grid grid-cols-1 gap-4 sm:gap-5">
               <div>
                 <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
                 {compositionLoading ? (
