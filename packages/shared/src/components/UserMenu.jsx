@@ -23,7 +23,11 @@ function isVideoAvatarUrl(url) {
   return lower.endsWith(".webm") || lower.endsWith(".mp4") || lower.includes(".webm?") || lower.includes(".mp4?")
 }
 
-export function UserMenu() {
+export function UserMenu({
+  menuSide = "bottom",
+  menuAlign = "end",
+  menuSideOffset = 4,
+}) {
   const location = useLocation()
   const [user, setUser] = useState(null)
 
@@ -124,7 +128,12 @@ export function UserMenu() {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+      <DropdownMenuContent
+        side={menuSide}
+        align={menuAlign}
+        sideOffset={menuSideOffset}
+        className="w-48"
+      >
         <DropdownMenuLabel>Navigation</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {NAV_ITEMS.map((item) => (

@@ -2408,7 +2408,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                         {renderNotificationsDropdownContent()}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                    <UserMenu />
+                    <UserMenu menuSide="right" menuAlign="end" menuSideOffset={8} />
                   </div>
                 </div>
               </div>
