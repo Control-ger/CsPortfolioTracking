@@ -1782,7 +1782,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   return (
     <div
-      className={`${isElectronRuntime ? "min-h-full" : "min-h-screen"} font-sans text-foreground pb-20 md:pb-0 touch-pan-y ${
+      className={`${isElectronRuntime ? "h-full box-border" : "min-h-screen"} font-sans text-foreground pb-20 md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
       onTouchStart={onTouchStart}
@@ -2361,9 +2361,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {!showSetupJourney ? (
-        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:h-full lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
+        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
           {useDesktopSidebarShell ? (
-            <aside className="hidden lg:block lg:h-full">
+            <aside className="hidden lg:block lg:h-full lg:min-h-0">
               <div className="sticky top-0 h-full min-h-0 w-[88px] overflow-hidden border-r border-border/70 bg-card/90 backdrop-blur">
                 <div className="flex h-full flex-col items-center py-4">
                   <nav className="flex w-full flex-col items-center gap-2 px-2">
@@ -2418,7 +2418,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           <Tabs
             value={activeTab}
             onValueChange={handleTabSelect}
-            className={`w-full min-w-0 ${useDesktopSidebarShell ? "lg:px-6 xl:px-8" : ""}`}
+            className={`w-full min-w-0 ${useDesktopSidebarShell ? "lg:min-h-0 lg:px-6 xl:px-8" : ""}`}
           >
             {error && (
               <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
@@ -3149,34 +3149,39 @@ export function PortfolioPage({ initialTab = "overview" }) {
                         Keine offenen Matching-Vorschlaege vorhanden.
                       </p>
                     ) : (
-                      pendingMatchingRows.slice(0, 40).map((row) => (
-                        <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold">
-                              Steam: {row.steamItemName}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              Score: {row.matchScore.toFixed(0)} | Confidence: {row.confidence} | Status: {row.status}
-                            </p>
+                      pendingMatchingRows.slice(0, 40).map((row) => {
+                        const matchScore = Number(row.matchScore);
+                        const matchScoreLabel = Number.isFinite(matchScore) ? matchScore.toFixed(0) : "-";
+
+                        return (
+                          <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold">
+                                Steam: {row.steamItemName}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Score: {matchScoreLabel} | Confidence: {row.confidence} | Status: {row.status}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleMatchStatusUpdate(row.id, "manual_confirmed")}
+                              >
+                                Bestaetigen
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleMatchStatusUpdate(row.id, "rejected")}
+                              >
+                                Ablehnen
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void handleMatchStatusUpdate(row.id, "manual_confirmed")}
-                            >
-                              Bestaetigen
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void handleMatchStatusUpdate(row.id, "rejected")}
-                            >
-                              Ablehnen
-                            </Button>
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </CardContent>
                 </Card>
