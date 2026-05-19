@@ -21,6 +21,16 @@ const formatAge = (seconds) => {
   return `${Math.floor(seconds / 86400)}d`;
 };
 
+const formatPercent = (value, fractionDigits = 2) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "-";
+  }
+
+  const sign = numericValue >= 0 ? "+" : "";
+  return `${sign}${numericValue.toFixed(fractionDigits)}%`;
+};
+
 /**
  * PortfolioHeaderCard - Minimalistische Portfolio-Übersicht für mobiles Design
  * Zeigt: Portfolio-Wert mit Trend, Prozentuale Änderung, Total Items und Data Freshness
@@ -36,8 +46,11 @@ export const PortfolioHeaderCard = ({
   oldestDataAgeSeconds = 0,
 }) => {
   const { currency, formatPrice } = useCurrency();
-  const Icon = isPositive ? TrendingUp : TrendingDown;
-  const trendColor = isPositive ? "text-green-600" : "text-red-600";
+  const numericRoiPercent = Number(totalRoiPercent);
+  const hasValidRoiPercent = Number.isFinite(numericRoiPercent);
+  const effectiveIsPositive = hasValidRoiPercent ? numericRoiPercent >= 0 : isPositive;
+  const Icon = effectiveIsPositive ? TrendingUp : TrendingDown;
+  const trendColor = effectiveIsPositive ? "text-green-600" : "text-red-600";
   const hasStaleItems = staleItemsCount > 0;
   const freshnessTitle = hasStaleItems
     ? `${staleItemsCount}/${liveItemsCount + staleItemsCount} Items veraltet • ältest: ${formatAge(oldestDataAgeSeconds)}`
@@ -65,8 +78,7 @@ export const PortfolioHeaderCard = ({
           <div className={`mt-1 flex items-center gap-1 ${trendColor}`}>
             <Icon className="h-4 w-4" />
             <span className="text-sm font-semibold">
-              {isPositive ? "+" : ""}
-              {totalRoiPercent.toFixed(2)}%
+              {formatPercent(totalRoiPercent, 2)}
             </span>
           </div>
         </div>

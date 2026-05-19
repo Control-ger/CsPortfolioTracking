@@ -39,6 +39,11 @@ function toInputValue(value, fallback) {
   return String(value);
 }
 
+function formatExchangeRate(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(4) : "-";
+}
+
 function isDesktopRuntime() {
   return typeof window !== "undefined" && Boolean(window.electronAPI?.secrets);
 }
@@ -327,8 +332,8 @@ export function SettingsPage() {
               <div className="rounded-md bg-muted p-3 text-sm">
                 <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <div>1 EUR = {exchangeRates.USD?.toFixed(4) || "-"} USD</div>
-                  <div>1 EUR = {exchangeRates.GBP?.toFixed(4) || "-"} GBP</div>
+                  <div>1 EUR = {formatExchangeRate(exchangeRates.USD)} USD</div>
+                  <div>1 EUR = {formatExchangeRate(exchangeRates.GBP)} GBP</div>
                 </div>
                 <p className="mt-2 text-[10px] text-muted-foreground">
                   Kurse werden taeglich aktualisiert.

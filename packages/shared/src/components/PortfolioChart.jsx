@@ -96,6 +96,14 @@ function formatAxisPercent(value) {
   return `${sign}${value.toFixed(1)}%`;
 }
 
+function formatAxisAbsolute(value) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `${value.toFixed(0)}€`;
+}
+
 function getRangeDays(rangeKey) {
   const range = RANGE_OPTIONS.find((entry) => entry.key === rangeKey);
   return range?.days ?? null;
@@ -379,7 +387,7 @@ export const PortfolioChart = ({
                 axisLine={false}
                 width={70}
                 tickMargin={4}
-                tickFormatter={showAbsolute ? (v) => `${v.toFixed(0)}€` : formatAxisPercent}
+                tickFormatter={showAbsolute ? formatAxisAbsolute : formatAxisPercent}
               />
               <ChartTooltip
                 content={

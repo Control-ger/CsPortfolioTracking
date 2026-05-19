@@ -48,6 +48,18 @@ function formatSignedPercent(value) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
+function isFiniteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function formatSignedPercentOneDecimal(value) {
+  if (!isFiniteNumber(value)) {
+    return "-";
+  }
+
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
 function deltaClassName(value) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "text-muted-foreground";
@@ -276,9 +288,11 @@ export function InventoryTable({ investments, onSelectItem }) {
                 </TableCell>
 
                 <TableCell className="text-right">
-                  {item.isLive ? (
-                    <span className={`text-sm font-bold ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}>
-                      {`${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`}
+                  {item.isLive && isFiniteNumber(item.roi) ? (
+                    <span
+                      className={`text-sm font-bold ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}
+                    >
+                      {formatSignedPercentOneDecimal(item.roi)}
                     </span>
                   ) : (
                     <span className="text-muted-foreground opacity-50">-</span>
@@ -328,24 +342,24 @@ export function InventoryTable({ investments, onSelectItem }) {
             </div>
           </div>
 
-          {sortedInvestments.map((item) => (
-            <ItemListRow
-              key={item.id}
-              item={{
-                ...item,
-                currentPrice: item.isLive
-                  ? item.livePrice
-                  : null,
-                currentPriceUsd: null,
-                roi: item.roi,
-                trend: item.isLive ? (item.roi >= 0 ? "up" : "down") : null,
-                changeLabel: item.isLive
-                  ? `${item.roi >= 0 ? "+" : ""}${item.roi.toFixed(1)}%`
-                  : "-",
-              }}
-              onClick={() => onSelectItem(item)}
-            />
-          ))}
+          {sortedInvestments.map((item) => {
+            const roiValue = isFiniteNumber(item.roi) ? item.roi : null;
+
+            return (
+              <ItemListRow
+                key={item.id}
+                item={{
+                  ...item,
+                  currentPrice: item.isLive ? item.livePrice : null,
+                  currentPriceUsd: null,
+                  roi: roiValue,
+                  trend: item.isLive && roiValue !== null ? (roiValue >= 0 ? "up" : "down") : null,
+                  changeLabel: item.isLive ? formatSignedPercentOneDecimal(roiValue) : "-",
+                }}
+                onClick={() => onSelectItem(item)}
+              />
+            );
+          })}
         </div>
     </>
   );

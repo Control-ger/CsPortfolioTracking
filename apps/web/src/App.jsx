@@ -56,7 +56,7 @@ export default function App() {
 
   return (
     <CurrencyProvider>
-      <div className={`flex flex-col ${isElectron ? 'h-screen overflow-hidden' : 'min-h-screen'} bg-background text-foreground`}>
+      <div className={`flex flex-col ${isElectron ? "h-full overflow-hidden" : "min-h-screen"} bg-background text-foreground`}>
 
         {/* Nur in Electron anzeigen! */}
         {isElectron && <Titlebar />}
