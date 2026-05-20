@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign, LineChart } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign, LineChart, LayoutGrid, Package, FolderCog, Cog } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { useTheme } from "@shared/contexts";
 
@@ -59,6 +59,14 @@ function normalizePriceSourceMode(value) {
   return "auto";
 }
 
+const DESKTOP_SIDEBAR_ITEMS = [
+  { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/?tab=overview" },
+  { key: "inventory", label: "Inventar", icon: Package, to: "/?tab=inventory" },
+  { key: "watchlist", label: "Watchlist", icon: Eye, to: "/?tab=watchlist" },
+  { key: "management", label: "Verwaltung", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
+  { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
+];
+
 export function SettingsPage() {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [source, setSource] = useState("defaults");
@@ -89,6 +97,23 @@ export function SettingsPage() {
   const [serverConfigMessage, setServerConfigMessage] = useState("");
   const [serverConfigError, setServerConfigError] = useState("");
   const desktopRuntime = isDesktopRuntime();
+  const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
+  const useDesktopSidebarShell = isElectronRuntime;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activePortfolioTab = new URLSearchParams(location.search).get("tab") || "overview";
+
+  const isSidebarItemActive = (item) => {
+    if (item.key === "settings") {
+      return location.pathname === "/settings";
+    }
+
+    if (location.pathname !== "/") {
+      return false;
+    }
+
+    return activePortfolioTab === item.key;
+  };
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -797,48 +822,100 @@ export function SettingsPage() {
     );
   };
 
-  return (
-    <div className={`${desktopRuntime ? "min-h-full" : "min-h-screen"} bg-background p-4 sm:p-8 font-sans text-foreground pb-20 md:pb-0`}>
-      <div className="mx-auto max-w-3xl space-y-6">
-        {/* Header */}
-        <header className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Button asChild variant="ghost" size="icon" className="shrink-0">
-              <Link to="/">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
-              <p className="text-sm text-muted-foreground">
-                Allgemeine Einstellungen und API/Remote-Konfiguration
-              </p>
-            </div>
+  const settingsContent = (
+    <div className="mx-auto max-w-3xl space-y-6">
+      {/* Header */}
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className={`shrink-0 ${useDesktopSidebarShell ? "lg:hidden" : ""}`}
+          >
+            <Link to="/">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
+            <p className="text-sm text-muted-foreground">
+              Allgemeine Einstellungen und API/Remote-Konfiguration
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <div className="hidden sm:block">
-              <UserMenu />
-            </div>
-          </div>
-        </header>
-
-        <div className="space-y-4">
-          <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="general">Allgemein</TabsTrigger>
-              <TabsTrigger value="api-remote">API & Remote</TabsTrigger>
-            </TabsList>
-            <TabsContent value="general" className="space-y-4">
-              {renderGeneralTab()}
-              {renderFeesTab()}
-            </TabsContent>
-            <TabsContent value="api-remote" className="space-y-4">
-              {renderRemoteConnectionsTab()}
-            </TabsContent>
-          </Tabs>
         </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <div className="hidden sm:block">
+            <UserMenu />
+          </div>
+        </div>
+      </header>
+
+      <div className="space-y-4">
+        <Tabs defaultValue="general" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="general">Allgemein</TabsTrigger>
+            <TabsTrigger value="api-remote">API & Remote</TabsTrigger>
+          </TabsList>
+          <TabsContent value="general" className="space-y-4">
+            {renderGeneralTab()}
+            {renderFeesTab()}
+          </TabsContent>
+          <TabsContent value="api-remote" className="space-y-4">
+            {renderRemoteConnectionsTab()}
+          </TabsContent>
+        </Tabs>
       </div>
+    </div>
+  );
+
+  return (
+    <div
+      className={`${desktopRuntime ? "min-h-full" : "min-h-screen"} ${
+        useDesktopSidebarShell ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
+      } bg-background p-4 sm:p-8 lg:p-0 font-sans text-foreground pb-20 md:pb-0`}
+    >
+      {useDesktopSidebarShell ? (
+        <div className="w-full lg:grid lg:min-h-0 lg:h-full lg:grid-cols-[88px_minmax(0,1fr)]">
+          <aside className="hidden lg:block lg:h-full lg:min-h-0">
+            <div className="h-full min-h-0 w-[88px] overflow-hidden border-r border-border/70 bg-card/90 backdrop-blur">
+              <div className="flex h-full flex-col items-center py-4">
+                <nav className="flex w-full flex-col items-center gap-2 px-2">
+                  {DESKTOP_SIDEBAR_ITEMS
+                    .filter((item) => !item.desktopOnly || desktopRuntime)
+                    .map((item) => {
+                      const Icon = item.icon;
+                      const isActive = isSidebarItemActive(item);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => navigate(item.to, { replace: true })}
+                          className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
+                            isActive
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
+                          }`}
+                          title={item.label}
+                          aria-label={item.label}
+                        >
+                          <Icon className="h-5 w-5" />
+                        </button>
+                      );
+                    })}
+                </nav>
+              </div>
+            </div>
+          </aside>
+
+          <div className="w-full min-w-0 lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8">
+            <div className="p-0 sm:p-0 md:p-0 lg:py-6">{settingsContent}</div>
+          </div>
+        </div>
+      ) : (
+        settingsContent
+      )}
     </div>
   );
 }

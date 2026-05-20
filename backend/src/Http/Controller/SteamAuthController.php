@@ -173,7 +173,34 @@ final class SteamAuthController
      */
     public function validateSession(string $token): ?array
     {
-        return $this->decryptSessionToken($token);
+        $payload = $this->decryptSessionToken($token);
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $steamId = (string) ($payload['steamId'] ?? '');
+        $hasName = is_string($payload['name'] ?? null) && trim((string) $payload['name']) !== '';
+        $hasAvatar = is_string($payload['avatar'] ?? null) && trim((string) $payload['avatar']) !== '';
+        $hasAnimatedAvatar = is_string($payload['animatedAvatar'] ?? null) && trim((string) $payload['animatedAvatar']) !== '';
+
+        if ($steamId !== '' && (!$hasName || !$hasAvatar || !$hasAnimatedAvatar)) {
+            $profile = $this->fetchSteamProfile($steamId);
+            if (!$hasName && is_string($profile['name'] ?? null) && trim((string) $profile['name']) !== '') {
+                $payload['name'] = (string) $profile['name'];
+            }
+            if (!$hasAvatar && is_string($profile['avatar'] ?? null) && trim((string) $profile['avatar']) !== '') {
+                $payload['avatar'] = (string) $profile['avatar'];
+            }
+            if (
+                !$hasAnimatedAvatar
+                && is_string($profile['animatedAvatar'] ?? null)
+                && trim((string) $profile['animatedAvatar']) !== ''
+            ) {
+                $payload['animatedAvatar'] = (string) $profile['animatedAvatar'];
+            }
+        }
+
+        return $payload;
     }
     
     /**

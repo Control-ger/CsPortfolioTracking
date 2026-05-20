@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Eye, FolderCog, Info, LayoutGrid, Package } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Package } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
 import { ApiWarnings } from "@shared/components";
@@ -127,6 +127,7 @@ const DESKTOP_SIDEBAR_TABS = [
   { key: "inventory", label: "Inventar", icon: Package },
   { key: "watchlist", label: "Watchlist", icon: Eye },
   { key: "management", label: "Verwaltung", icon: FolderCog, desktopOnly: true },
+  { key: "settings", label: "Einstellungen", icon: Cog, route: "/settings" },
 ];
 
 function readStartupWelcomeDismissed() {
@@ -362,6 +363,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     : ["overview", "inventory", "watchlist"];
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const resolvedInitialTab = searchParams.get("tab") || initialTab;
   const [showStartupWelcome, setShowStartupWelcome] = useState(
@@ -2370,15 +2372,27 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 <div className="flex h-full flex-col items-center py-4">
                   <nav className="flex w-full flex-col items-center gap-2 px-2">
                     {DESKTOP_SIDEBAR_TABS
-                      .filter((tab) => runtimeTabs.includes(tab.key) && (!tab.desktopOnly || isDesktopRuntime))
+                      .filter(
+                        (tab) =>
+                          (runtimeTabs.includes(tab.key) || tab.route) &&
+                          (!tab.desktopOnly || isDesktopRuntime),
+                      )
                       .map((tab) => {
                         const Icon = tab.icon;
-                        const isActive = activeTab === tab.key;
+                        const isActive = tab.route
+                          ? location.pathname === tab.route
+                          : activeTab === tab.key;
                         return (
                           <button
                             key={tab.key}
                             type="button"
-                            onClick={() => handleTabSelect(tab.key)}
+                            onClick={() => {
+                              if (tab.route) {
+                                navigate(tab.route, { replace: true });
+                                return;
+                              }
+                              handleTabSelect(tab.key);
+                            }}
                             className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
                               isActive
                                 ? "border-primary bg-primary/10 text-primary"

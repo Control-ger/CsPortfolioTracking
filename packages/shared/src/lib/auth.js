@@ -119,6 +119,20 @@ function clearWebCookie(name) {
   document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
+function hasAnimatedAvatarData(user) {
+  if (!user || typeof user !== "object") {
+    return false;
+  }
+  const candidates = [
+    user.animatedAvatar,
+    user.animated_avatar,
+    user.animatedAvatarUrl,
+    user.animated_avatar_url,
+  ];
+
+  return candidates.some((value) => typeof value === "string" && value.trim() !== "");
+}
+
 /**
  * Initiate Steam login flow
  * 
@@ -372,7 +386,7 @@ export async function getSession() {
     }
 
     try {
-      const user = JSON.parse(userJson);
+      let user = JSON.parse(userJson);
       // Hydrate in-memory stores if we resumed from localStorage/cookie.
       if (!tokenFromSession) {
         sessionStorage.setItem(WEB_AUTH_TOKEN_KEY, token);
@@ -388,6 +402,21 @@ export async function getSession() {
       }
       if (!tokenFromCookie) {
         setWebCookie(WEB_AUTH_COOKIE_KEY, token, WEB_AUTH_COOKIE_MAX_AGE_SECONDS);
+      }
+
+      // Backfill missing animated avatar data for older persisted sessions.
+      if (!hasAnimatedAvatarData(user)) {
+        try {
+          const validated = await validateSession(token);
+          if (validated?.success && validated.user) {
+            user = { ...user, ...validated.user };
+            const mergedUserJson = JSON.stringify(user);
+            sessionStorage.setItem(WEB_AUTH_USER_KEY, mergedUserJson);
+            localStorage.setItem(WEB_AUTH_USER_KEY, mergedUserJson);
+          }
+        } catch {
+          // Ignore enrichment errors and continue with current session data.
+        }
       }
 
       return { token, user };
