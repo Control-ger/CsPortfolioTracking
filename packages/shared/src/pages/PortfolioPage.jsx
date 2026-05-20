@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Package } from "lucide-react";
+import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Package, Search } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
 import { ApiWarnings } from "@shared/components";
@@ -35,6 +35,7 @@ import { usePortfolioComposition } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
   fetchPortfolioInvestmentHistory,
+  searchWatchlistItems,
   updateInvestmentBucket,
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
@@ -113,6 +114,10 @@ function formatDateSafe(value) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function normalizeSearchText(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
@@ -312,8 +317,10 @@ function buildManagementClusters(items = []) {
       name: item.name || group.name,
       quantity: Number(item.quantity || 0),
       buyPriceUsd: Number(item.buyPriceUsd ?? item.buyPrice ?? 0),
+      imageUrl: item.imageUrl || group.imageUrl || null,
       externalTradeId: item.externalTradeId || null,
       purchasedAt: item.purchasedAt || null,
+      updatedAt: item.updatedAt || item.purchasedAt || item.createdAt || null,
       platform: String(item.platform || item.source || "").toLowerCase(),
       steamAssetId: item.steamAssetId ? String(item.steamAssetId) : null,
       bucket: normalizeBucket(item.bucket),
@@ -419,7 +426,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [matchingLoading, setMatchingLoading] = useState(false);
   const [expandedClusters, setExpandedClusters] = useState({});
   const [managementFilter, setManagementFilter] = useState("all");
+  const [managementSearchTerm, setManagementSearchTerm] = useState("");
+  const [managementTypeFilter, setManagementTypeFilter] = useState("all");
+  const [managementBucketFilter, setManagementBucketFilter] = useState("all");
+  const [managementSortBy, setManagementSortBy] = useState("name_asc");
   const [managementSection, setManagementSection] = useState("matching");
+  const [priceSearchTerm, setPriceSearchTerm] = useState("");
+  const [priceSortBy, setPriceSortBy] = useState("name_asc");
+  const [priceMissingOnly, setPriceMissingOnly] = useState(false);
+  const [matchingSearchTerm, setMatchingSearchTerm] = useState("");
+  const [matchingSortBy, setMatchingSortBy] = useState("score_desc");
   const [priceDrafts, setPriceDrafts] = useState({});
   const [savingPriceItemId, setSavingPriceItemId] = useState(null);
   const [manualItemDraft, setManualItemDraft] = useState({
@@ -431,6 +447,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
     type: "skin",
     bucket: "investment",
   });
+  const [manualNameSuggestions, setManualNameSuggestions] = useState([]);
+  const [manualNameSuggestionsLoading, setManualNameSuggestionsLoading] = useState(false);
+  const [manualNameSuggestionsError, setManualNameSuggestionsError] = useState("");
+  const [manualSelectedSuggestion, setManualSelectedSuggestion] = useState(null);
   const [manualItemSaving, setManualItemSaving] = useState(false);
   const [syncNotification, setSyncNotification] = useState({
     newItemsCount: 0,
@@ -632,6 +652,66 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     void loadManagementInvestments();
   }, [compositionRefreshToken]);
+
+  useEffect(() => {
+    if (managementSection !== "create") {
+      return;
+    }
+
+    const query = normalizeSearchText(manualItemDraft.name);
+    if (query.length < 2) {
+      setManualNameSuggestions([]);
+      setManualNameSuggestionsLoading(false);
+      setManualNameSuggestionsError("");
+      return;
+    }
+    const selectedName = normalizeSearchText(
+      manualSelectedSuggestion?.marketHashName || manualSelectedSuggestion?.displayName || "",
+    );
+    if (selectedName && selectedName === query) {
+      setManualNameSuggestions([]);
+      setManualNameSuggestionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setManualNameSuggestionsLoading(true);
+        setManualNameSuggestionsError("");
+
+        const response = await searchWatchlistItems(
+          query,
+          {
+            itemType: manualItemDraft.type && manualItemDraft.type !== "other"
+              ? manualItemDraft.type
+              : undefined,
+            sortBy: "relevance",
+          },
+          6,
+          1,
+        );
+        const items = Array.isArray(response?.data?.items) ? response.data.items : [];
+        if (!cancelled) {
+          setManualNameSuggestions(items);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setManualNameSuggestions([]);
+          setManualNameSuggestionsError(error?.message || "Vorschlaege konnten nicht geladen werden.");
+        }
+      } finally {
+        if (!cancelled) {
+          setManualNameSuggestionsLoading(false);
+        }
+      }
+    }, 260);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [managementSection, manualItemDraft.name, manualItemDraft.type, manualSelectedSuggestion]);
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -1052,14 +1132,73 @@ export function PortfolioPage({ initialTab = "overview" }) {
     ? Number(headerPortfolioPercent || 0)
     : Number(stats.totalRoiPercent || 0);
   const managementClusters = buildManagementClusters(managementInvestments);
+  const managementInvestmentById = new Map(
+    managementInvestments.map((item) => [String(item.id), item]),
+  );
+  const managementSearchQuery = normalizeSearchText(managementSearchTerm);
   const filteredManagementClusters = (() => {
+    let rows = [...managementClusters];
+
     if (managementFilter === "excluded") {
-      return managementClusters.filter((cluster) => cluster.excludedCount > 0);
+      rows = rows.filter((cluster) => cluster.excludedCount > 0);
+    } else if (managementFilter === "active") {
+      rows = rows.filter((cluster) => cluster.activeCount > 0);
     }
-    if (managementFilter === "active") {
-      return managementClusters.filter((cluster) => cluster.activeCount > 0);
+
+    if (managementTypeFilter !== "all") {
+      rows = rows.filter((cluster) => String(cluster.type || "").toLowerCase() === managementTypeFilter);
     }
-    return managementClusters;
+
+    if (managementBucketFilter !== "all") {
+      rows = rows.filter((cluster) =>
+        cluster.positions.some((position) => normalizeBucket(position.bucket) === managementBucketFilter),
+      );
+    }
+
+    if (managementSearchQuery) {
+      rows = rows.filter((cluster) =>
+        normalizeSearchText(cluster.name).includes(managementSearchQuery) ||
+        cluster.positions.some((position) => normalizeSearchText(position.externalTradeId).includes(managementSearchQuery)),
+      );
+    }
+
+    const getClusterUpdatedAt = (cluster) =>
+      cluster.positions.reduce((latest, position) => {
+        const timestamp = Date.parse(String(position.updatedAt || position.purchasedAt || ""));
+        if (!Number.isFinite(timestamp)) {
+          return latest;
+        }
+        return Math.max(latest, timestamp);
+      }, 0);
+
+    rows.sort((left, right) => {
+      if (managementSortBy === "name_desc") {
+        return right.name.localeCompare(left.name, "de");
+      }
+      if (managementSortBy === "qty_desc") {
+        return right.totalCount - left.totalCount || left.name.localeCompare(right.name, "de");
+      }
+      if (managementSortBy === "qty_asc") {
+        return left.totalCount - right.totalCount || left.name.localeCompare(right.name, "de");
+      }
+      if (managementSortBy === "updated_desc") {
+        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, "de");
+      }
+      return left.name.localeCompare(right.name, "de");
+    });
+
+    return rows;
+  })();
+  const managementTypeOptions = (() => {
+    const uniqueTypes = Array.from(
+      new Set(
+        managementClusters
+          .map((cluster) => String(cluster.type || "").trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    uniqueTypes.sort((left, right) => left.localeCompare(right, "de"));
+    return uniqueTypes;
   })();
   const pendingMatchingRows = matchingRows.filter((row) => row.status === "suggested");
   const confirmedOrAutoMatchByCsfloatId = new Map();
@@ -1075,6 +1214,38 @@ export function PortfolioPage({ initialTab = "overview" }) {
     }
     confirmedOrAutoMatchByCsfloatId.set(csfloatId, steamId);
   });
+  const matchingSearchQuery = normalizeSearchText(matchingSearchTerm);
+  const filteredMatchingRows = (() => {
+    let rows = [...pendingMatchingRows];
+    if (matchingSearchQuery) {
+      rows = rows.filter((row) => {
+        const steamItem = managementInvestmentById.get(String(row?.steamAssetId || ""));
+        const csfloatItem = managementInvestmentById.get(String(row?.csfloatInvestmentId || ""));
+        return [
+          row?.steamItemName,
+          row?.csfloatItemName,
+          steamItem?.name,
+          csfloatItem?.name,
+          row?.reason,
+        ].some((value) => normalizeSearchText(value).includes(matchingSearchQuery));
+      });
+    }
+
+    rows.sort((left, right) => {
+      const leftScore = Number(left?.matchScore || 0);
+      const rightScore = Number(right?.matchScore || 0);
+
+      if (matchingSortBy === "score_asc") {
+        return leftScore - rightScore;
+      }
+      if (matchingSortBy === "newest") {
+        return Date.parse(String(right?.createdAt || "")) - Date.parse(String(left?.createdAt || ""));
+      }
+      return rightScore - leftScore;
+    });
+
+    return rows;
+  })();
   const matchingSuggestedCount = pendingMatchingRows.length;
   const inventoryTabItems = enrichedInvestments.filter((item) => {
     const bucket = normalizeBucket(
@@ -1088,10 +1259,48 @@ export function PortfolioPage({ initialTab = "overview" }) {
     }
     return bucket === inventoryScope;
   });
-  const steamInventoryItems = managementInvestments.filter((item) => {
+  const rawSteamInventoryItems = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     return platform === "steam_inventory" || Boolean(item.steamAssetId);
   });
+  const priceSearchQuery = normalizeSearchText(priceSearchTerm);
+  const filteredPriceItems = (() => {
+    let rows = [...rawSteamInventoryItems];
+
+    if (priceMissingOnly) {
+      rows = rows.filter((item) => {
+        const price = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
+        return !Number.isFinite(price) || price <= 0;
+      });
+    }
+
+    if (priceSearchQuery) {
+      rows = rows.filter((item) => normalizeSearchText(item.name).includes(priceSearchQuery));
+    }
+
+    rows.sort((left, right) => {
+      const leftPrice = Number(left.buyPriceUsd ?? left.buyPrice ?? 0);
+      const rightPrice = Number(right.buyPriceUsd ?? right.buyPrice ?? 0);
+      const leftQuantity = Number(left.quantity || 0);
+      const rightQuantity = Number(right.quantity || 0);
+
+      if (priceSortBy === "name_desc") {
+        return String(right.name || "").localeCompare(String(left.name || ""), "de");
+      }
+      if (priceSortBy === "price_desc") {
+        return rightPrice - leftPrice;
+      }
+      if (priceSortBy === "price_asc") {
+        return leftPrice - rightPrice;
+      }
+      if (priceSortBy === "qty_desc") {
+        return rightQuantity - leftQuantity;
+      }
+      return String(left.name || "").localeCompare(String(right.name || ""), "de");
+    });
+
+    return rows;
+  })();
   const suggestedPriceByNameKey = (() => {
     const nextMap = new Map();
 
@@ -1112,11 +1321,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
     return nextMap;
   })();
-  const priceMissingCount = managementInvestments.filter((item) => {
-    const platform = String(item.platform || item.source || "").toLowerCase();
-    if (!(platform === "steam_inventory" || item.steamAssetId)) {
-      return false;
-    }
+  const priceMissingCount = rawSteamInventoryItems.filter((item) => {
     const price = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
     return !Number.isFinite(price) || price <= 0;
   }).length;
@@ -1236,9 +1441,35 @@ export function PortfolioPage({ initialTab = "overview" }) {
     await handleSaveSteamItemPrice(item, normalizedSuggestion);
   };
   const handleManualItemDraftChange = (key, value) => {
+    if (key === "name") {
+      const nextName = normalizeSearchText(value);
+      const selectedName = normalizeSearchText(manualSelectedSuggestion?.marketHashName || "");
+      if (nextName !== selectedName) {
+        setManualSelectedSuggestion(null);
+      }
+      setManualNameSuggestionsError("");
+    }
+    if (key === "type") {
+      setManualSelectedSuggestion(null);
+      setManualNameSuggestionsError("");
+    }
     setManualItemDraft((current) => ({
       ...current,
       [key]: value,
+    }));
+  };
+  const handleManualSuggestionPick = (candidate) => {
+    if (!candidate) {
+      return;
+    }
+
+    setManualSelectedSuggestion(candidate);
+    setManualNameSuggestions([]);
+    setManualNameSuggestionsError("");
+    setManualItemDraft((current) => ({
+      ...current,
+      name: String(candidate.marketHashName || candidate.displayName || current.name || "").trim(),
+      type: String(candidate.itemType || current.type || "skin").trim().toLowerCase() || "skin",
     }));
   };
   const handleCreateManualInvestment = async () => {
@@ -1246,7 +1477,17 @@ export function PortfolioPage({ initialTab = "overview" }) {
       return;
     }
 
-    const name = String(manualItemDraft.name || "").trim();
+    const normalizedManualName = normalizeSearchText(manualItemDraft.name);
+    const exactSuggestion = manualNameSuggestions.find(
+      (candidate) => normalizeSearchText(candidate?.marketHashName || "") === normalizedManualName,
+    );
+    const chosenSuggestion = manualSelectedSuggestion || exactSuggestion || null;
+    const name = String(
+      chosenSuggestion?.marketHashName ||
+      chosenSuggestion?.displayName ||
+      manualItemDraft.name ||
+      "",
+    ).trim();
     const quantity = Number(manualItemDraft.quantity);
     const buyPriceUsd = Number(manualItemDraft.buyPriceUsd);
     const bucket = manualItemDraft.bucket === "inventory" ? "inventory" : "investment";
@@ -1255,7 +1496,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
       String(manualItemDraft.fundingMode || "wallet_funded").trim().toLowerCase() === "balance_funded"
         ? "balance_funded"
         : "wallet_funded";
-    const type = String(manualItemDraft.type || "skin").trim().toLowerCase() || "skin";
+    const type = String(chosenSuggestion?.itemType || manualItemDraft.type || "skin").trim().toLowerCase() || "skin";
+    const suggestionImageUrl = String(chosenSuggestion?.iconUrl || "").trim() || null;
 
     if (!name) {
       setManagementError("Bitte einen Item-Namen angeben.");
@@ -1291,6 +1533,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
         fundingMode,
         platform,
         source: platform,
+        imageUrl: suggestionImageUrl,
         bucket,
         createdManually: true,
         createdAt: new Date().toISOString(),
@@ -1311,6 +1554,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
         type: "skin",
         bucket: "investment",
       });
+      setManualSelectedSuggestion(null);
+      setManualNameSuggestions([]);
+      setManualNameSuggestionsError("");
       setManagementSection("exclude");
     } catch (createError) {
       setManagementError(createError?.message || "Item konnte nicht erstellt werden.");
@@ -2798,95 +3044,222 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 ) : null}
 
                 {managementSection === "prices" ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Preise setzen</CardTitle>
+                  <Card className="overflow-hidden">
+                    <CardHeader className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <CardTitle>Preise setzen</CardTitle>
+                        <Badge variant="secondary">{filteredPriceItems.length} sichtbar</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Nur Steam-Inventory-Items koennen hier einen Einkaufspreis erhalten.
+                      </p>
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                        <label className="relative block">
+                          <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <input
+                            type="text"
+                            value={priceSearchTerm}
+                            onChange={(event) => setPriceSearchTerm(event.target.value)}
+                            placeholder="Nach Item suchen..."
+                            className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
+                          />
+                        </label>
+                        <select
+                          value={priceSortBy}
+                          onChange={(event) => setPriceSortBy(event.target.value)}
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="name_asc">Sortierung: Name A-Z</option>
+                          <option value="name_desc">Sortierung: Name Z-A</option>
+                          <option value="price_desc">Sortierung: Preis absteigend</option>
+                          <option value="price_asc">Sortierung: Preis aufsteigend</option>
+                          <option value="qty_desc">Sortierung: Menge absteigend</option>
+                        </select>
+                        <label className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={priceMissingOnly}
+                            onChange={(event) => setPriceMissingOnly(event.target.checked)}
+                            className="h-4 w-4 rounded border-input"
+                          />
+                          Nur ohne Preis ({priceMissingCount})
+                        </label>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {steamInventoryItems.length === 0 ? (
+                      {rawSteamInventoryItems.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
                           Noch keine Steam-Inventory-Items vorhanden.
                         </p>
+                      ) : filteredPriceItems.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          Kein Item passt zu Suche/Filter.
+                        </p>
                       ) : (
-                        <>
-                          <p className="text-sm text-muted-foreground">
-                            Nur Steam-Inventory-Items koennen hier einen Einkaufspreis erhalten.
-                          </p>
-                          <div className="space-y-2">
-                            {steamInventoryItems.map((item) => {
-                              const currentPrice = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
-                              const nameKey = getItemNameKey(item);
-                              const suggestion = suggestedPriceByNameKey.get(nameKey) || null;
-                              const suggestedPrice = Number(suggestion?.value ?? 0);
-                              const hasSuggestion = Number.isFinite(suggestedPrice) && suggestedPrice > 0;
-                              const draftValue = priceDrafts[item.id] ?? String(currentPrice > 0 ? currentPrice : "");
-                              return (
-                                <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-md border p-2">
+                        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                          {filteredPriceItems.map((item) => {
+                            const currentPrice = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
+                            const nameKey = getItemNameKey(item);
+                            const suggestion = suggestedPriceByNameKey.get(nameKey) || null;
+                            const suggestedPrice = Number(suggestion?.value ?? 0);
+                            const hasSuggestion = Number.isFinite(suggestedPrice) && suggestedPrice > 0;
+                            const draftValue = priceDrafts[item.id] ?? String(currentPrice > 0 ? currentPrice : "");
+                            const itemImageUrl = String(item.imageUrl || item.iconUrl || "").trim() || null;
+                            const bucket = normalizeBucket(item.bucket, "inventory");
+                            const quantity = Math.max(1, Number(item.quantity || 1));
+
+                            return (
+                              <div key={item.id} className="rounded-md border p-2 sm:p-3">
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted/30 p-1">
+                                    {itemImageUrl ? (
+                                      <img
+                                        src={itemImageUrl}
+                                        alt={item.name}
+                                        className="h-full w-full object-contain"
+                                        loading="lazy"
+                                        decoding="async"
+                                      />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                                        N/A
+                                      </div>
+                                    )}
+                                  </div>
                                   <div className="min-w-0 flex-1">
-                                    <p className="truncate text-xs font-semibold">{item.name}</p>
-                                    <p className="text-[11px] text-muted-foreground">
-                                      Aktuell: {currentPrice > 0 ? `${currentPrice.toFixed(2)} USD` : "kein Preis gesetzt"}
-                                    </p>
+                                    <p className="truncate text-sm font-semibold">{item.name}</p>
+                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                      <span>{quantity}x</span>
+                                      <span>|</span>
+                                      <span>{bucket === "inventory" ? "Inventar" : "Investment"}</span>
+                                      <span>|</span>
+                                      <span>Aktuell: {currentPrice > 0 ? `${currentPrice.toFixed(2)} USD` : "kein Preis gesetzt"}</span>
+                                    </div>
                                     {hasSuggestion ? (
-                                      <p className="text-[11px] text-muted-foreground">
+                                      <p className="mt-1 text-[11px] text-muted-foreground">
                                         Vorschlag: {suggestedPrice.toFixed(2)} USD ({String(suggestion?.source || "live")})
                                       </p>
                                     ) : null}
                                   </div>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={draftValue}
-                                    onChange={(event) => handlePriceDraftChange(item.id, event.target.value)}
-                                    className="h-9 w-28 rounded-md border border-input bg-background px-2 text-sm"
-                                    placeholder={hasSuggestion ? `${suggestedPrice.toFixed(2)} USD` : "USD"}
-                                  />
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={savingPriceItemId === item.id}
-                                    onClick={() => void handleSaveSteamItemPrice(item)}
-                                  >
-                                    {savingPriceItemId === item.id ? "Speichert..." : "Speichern"}
-                                  </Button>
-                                  {hasSuggestion ? (
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={draftValue}
+                                      onChange={(event) => handlePriceDraftChange(item.id, event.target.value)}
+                                      className="h-9 w-28 rounded-md border border-input bg-background px-2 text-sm"
+                                      placeholder={hasSuggestion ? `${suggestedPrice.toFixed(2)} USD` : "USD"}
+                                    />
                                     <Button
                                       size="sm"
-                                      variant="default"
+                                      variant="outline"
                                       disabled={savingPriceItemId === item.id}
-                                      onClick={() => void handleAcceptSuggestedPrice(item, suggestedPrice)}
+                                      onClick={() => void handleSaveSteamItemPrice(item)}
                                     >
-                                      Vorschlag annehmen
+                                      {savingPriceItemId === item.id ? "Speichert..." : "Speichern"}
                                     </Button>
-                                  ) : null}
+                                    {hasSuggestion ? (
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        disabled={savingPriceItemId === item.id}
+                                        onClick={() => void handleAcceptSuggestedPrice(item, suggestedPrice)}
+                                      >
+                                        Vorschlag annehmen
+                                      </Button>
+                                    ) : null}
+                                  </div>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </CardContent>
                   </Card>
                 ) : null}
 
                 {managementSection === "create" ? (
-                  <Card>
+                  <Card className="overflow-hidden">
                     <CardHeader>
                       <CardTitle>Item manuell hinzufuegen</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-4">
                       <p className="text-sm text-muted-foreground">
-                        Fuege Positionen direkt in der Verwaltung hinzu (Preis, Quelle, Menge, Bucket).
+                        Fuege Positionen direkt in der Verwaltung hinzu. Nutze am besten die Vorschlaege, damit Name, Typ und Bild sauber gematcht sind.
                       </p>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-muted-foreground">Item Name</label>
+                        <label className="relative block">
+                          <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <input
+                            type="text"
+                            value={manualItemDraft.name}
+                            onChange={(event) => handleManualItemDraftChange("name", event.target.value)}
+                            placeholder="Item Name (z. B. Karambit | Doppler)"
+                            className="h-10 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
+                          />
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {manualNameSuggestionsLoading ? (
+                            <span className="text-muted-foreground">Suche Vorschlaege...</span>
+                          ) : null}
+                          {manualSelectedSuggestion ? (
+                            <Badge variant="secondary">
+                              Match: {manualSelectedSuggestion.marketHashName || manualSelectedSuggestion.displayName}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">Tipp: Vorschlag anklicken, um Tippfehler zu vermeiden.</span>
+                          )}
+                        </div>
+                        {manualNameSuggestionsError ? (
+                          <p className="text-xs text-destructive">{manualNameSuggestionsError}</p>
+                        ) : null}
+                        {manualNameSuggestions.length > 0 ? (
+                          <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/70 p-2">
+                            {manualNameSuggestions.map((candidate, index) => {
+                              const candidateName = String(
+                                candidate.marketHashName || candidate.displayName || "Unbekanntes Item",
+                              ).trim();
+                              const candidateType = String(candidate.itemType || "").trim().toLowerCase() || "other";
+                              const candidateImageUrl = String(candidate.iconUrl || "").trim() || null;
+                              return (
+                                <button
+                                  key={String(candidate.id || `${candidateName}-${index}`)}
+                                  type="button"
+                                  onClick={() => handleManualSuggestionPick(candidate)}
+                                  className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left hover:border-border hover:bg-accent/40"
+                                >
+                                  <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
+                                    {candidateImageUrl ? (
+                                      <img
+                                        src={candidateImageUrl}
+                                        alt={candidateName}
+                                        className="h-full w-full object-contain"
+                                        loading="lazy"
+                                        decoding="async"
+                                      />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                                        N/A
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-semibold">{candidateName}</p>
+                                    <p className="text-[11px] text-muted-foreground">Typ: {candidateType}</p>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground">Uebernehmen</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <input
-                          type="text"
-                          value={manualItemDraft.name}
-                          onChange={(event) => handleManualItemDraftChange("name", event.target.value)}
-                          placeholder="Item Name (z. B. Karambit | Doppler)"
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        />
                         <input
                           type="number"
                           min="0"
@@ -2974,7 +3347,51 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
                 {managementSection === "exclude" ? (
                   <>
-                    <div className="flex items-center gap-2">
+                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                      <label className="relative block">
+                        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={managementSearchTerm}
+                          onChange={(event) => setManagementSearchTerm(event.target.value)}
+                          placeholder="Suche nach Item oder Trade-ID..."
+                          className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
+                        />
+                      </label>
+                      <select
+                        value={managementTypeFilter}
+                        onChange={(event) => setManagementTypeFilter(event.target.value)}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="all">Typ: Alle</option>
+                        {managementTypeOptions.map((type) => (
+                          <option key={type} value={type}>
+                            Typ: {type}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={managementBucketFilter}
+                        onChange={(event) => setManagementBucketFilter(event.target.value)}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="all">Bucket: Alle</option>
+                        <option value="investment">Bucket: Investment</option>
+                        <option value="inventory">Bucket: Inventar</option>
+                      </select>
+                      <select
+                        value={managementSortBy}
+                        onChange={(event) => setManagementSortBy(event.target.value)}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="name_asc">Sortierung: Name A-Z</option>
+                        <option value="name_desc">Sortierung: Name Z-A</option>
+                        <option value="qty_desc">Sortierung: Menge absteigend</option>
+                        <option value="qty_asc">Sortierung: Menge aufsteigend</option>
+                        <option value="updated_desc">Sortierung: Zuletzt aktualisiert</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         variant={managementFilter === "all" ? "default" : "outline"}
                         size="sm"
@@ -2996,6 +3413,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                       >
                         Nur Aktiv
                       </Button>
+                      <Badge variant="secondary">{filteredManagementClusters.length} Cluster</Badge>
                     </div>
                   <div className="space-y-3">
                     {filteredManagementClusters.map((cluster) => {
@@ -3150,9 +3568,33 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 ) : null}
 
                 {managementSection === "matching" ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Steam ↔ CSFloat Matching Queue</CardTitle>
+                <Card className="overflow-hidden">
+                  <CardHeader className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <CardTitle>Steam &lt;-&gt; CSFloat Matching Queue</CardTitle>
+                      <Badge variant="secondary">{filteredMatchingRows.length} offen</Badge>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      <label className="relative block">
+                        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={matchingSearchTerm}
+                          onChange={(event) => setMatchingSearchTerm(event.target.value)}
+                          placeholder="Suche nach Steam/CSFloat Item..."
+                          className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
+                        />
+                      </label>
+                      <select
+                        value={matchingSortBy}
+                        onChange={(event) => setMatchingSortBy(event.target.value)}
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="score_desc">Sortierung: Score absteigend</option>
+                        <option value="score_asc">Sortierung: Score aufsteigend</option>
+                        <option value="newest">Sortierung: Neueste zuerst</option>
+                      </select>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {matchingLoading ? (
@@ -3164,40 +3606,97 @@ export function PortfolioPage({ initialTab = "overview" }) {
                       <p className="text-sm text-muted-foreground">
                         Keine offenen Matching-Vorschlaege vorhanden.
                       </p>
+                    ) : filteredMatchingRows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Kein Match passt zur Suche.
+                      </p>
                     ) : (
-                      pendingMatchingRows.slice(0, 40).map((row) => {
-                        const matchScore = Number(row.matchScore);
-                        const matchScoreLabel = Number.isFinite(matchScore) ? matchScore.toFixed(0) : "-";
+                      <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                        {filteredMatchingRows.map((row, index) => {
+                          const steamItem = managementInvestmentById.get(String(row?.steamAssetId || ""));
+                          const csfloatItem = managementInvestmentById.get(String(row?.csfloatInvestmentId || ""));
+                          const steamImageUrl = String(steamItem?.imageUrl || steamItem?.iconUrl || "").trim() || null;
+                          const csfloatImageUrl = String(csfloatItem?.imageUrl || csfloatItem?.iconUrl || "").trim() || null;
+                          const matchScore = Number(row.matchScore);
+                          const matchScoreLabel = Number.isFinite(matchScore) ? matchScore.toFixed(0) : "-";
+                          const createdAtLabel = formatDateSafe(row?.createdAt || null);
 
-                        return (
-                          <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-semibold">
-                                Steam: {row.steamItemName}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
-                                Score: {matchScoreLabel} | Confidence: {row.confidence} | Status: {row.status}
-                              </p>
+                          return (
+                            <div key={String(row.id || `match-${index}`)} className="rounded-md border p-2 sm:p-3">
+                              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                                <div className="space-y-2">
+                                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <div className="flex items-center gap-2 rounded-md border border-border/60 p-2">
+                                      <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
+                                        {steamImageUrl ? (
+                                          <img
+                                            src={steamImageUrl}
+                                            alt={row?.steamItemName || "Steam Item"}
+                                            className="h-full w-full object-contain"
+                                            loading="lazy"
+                                            decoding="async"
+                                          />
+                                        ) : (
+                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                                            N/A
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] text-muted-foreground">Steam</p>
+                                        <p className="truncate text-xs font-semibold">{row?.steamItemName || "-"}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 rounded-md border border-border/60 p-2">
+                                      <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
+                                        {csfloatImageUrl ? (
+                                          <img
+                                            src={csfloatImageUrl}
+                                            alt={row?.csfloatItemName || "CSFloat Item"}
+                                            className="h-full w-full object-contain"
+                                            loading="lazy"
+                                            decoding="async"
+                                          />
+                                        ) : (
+                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                                            N/A
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] text-muted-foreground">CSFloat</p>
+                                        <p className="truncate text-xs font-semibold">{row?.csfloatItemName || "-"}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Score: {matchScoreLabel} | Confidence: {row.confidence} | Status: {row.status} | Erstellt: {createdAtLabel}
+                                  </p>
+                                  {row?.reason ? (
+                                    <p className="text-[11px] text-muted-foreground">Grund: {row.reason}</p>
+                                  ) : null}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void handleMatchStatusUpdate(row.id, "manual_confirmed")}
+                                  >
+                                    Bestaetigen
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void handleMatchStatusUpdate(row.id, "rejected")}
+                                  >
+                                    Ablehnen
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void handleMatchStatusUpdate(row.id, "manual_confirmed")}
-                              >
-                                Bestaetigen
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void handleMatchStatusUpdate(row.id, "rejected")}
-                              >
-                                Ablehnen
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })
+                          );
+                        })}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
