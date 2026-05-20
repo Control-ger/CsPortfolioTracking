@@ -61,6 +61,7 @@ services:
             casaos.title: CS2 Portfolio Tracker
             icon: http://${APP_HOST}:${APP_PORT}/icon.png
             title: CS2 Portfolio Tracker
+            com.centurylinklabs.watchtower.enable: "true"
         networks:
             default: null
         ports:
@@ -71,6 +72,31 @@ services:
             - type: bind
               source: ${PROJECT_ROOT_PATH}/.env
               target: /var/www/html/.env
+              bind:
+                create_host_path: true
+    watchtower:
+        image: containrrr/watchtower:1.7.1
+        cpu_shares: 90
+        command:
+            - --interval
+            - ${WATCHTOWER_POLL_INTERVAL:-300}
+            - --label-enable
+            - --cleanup
+            - --rolling-restart
+        container_name: csportfolio-watchtower
+        deploy:
+            resources:
+                limits:
+                    memory: "2147483648"
+        environment:
+            WATCHTOWER_NO_STARTUP_MESSAGE: "true"
+        networks:
+            default: null
+        restart: always
+        volumes:
+            - type: bind
+              source: /var/run/docker.sock
+              target: /var/run/docker.sock
               bind:
                 create_host_path: true
 networks:
@@ -92,6 +118,7 @@ x-casaos:
             URL: http://${APP_HOST}:${APP_PORT}
             Web Image: ${WEB_IMAGE}
             Pull Policy: ${WEB_PULL_POLICY}
+            Auto-Update: Watchtower (Intervall ${WATCHTOWER_POLL_INTERVAL:-300}s)
 
             Host (intern im Docker)	${DB_HOST}
             Port (extern)	3306
