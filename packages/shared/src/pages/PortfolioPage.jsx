@@ -520,11 +520,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
     const loadJourneyState = async () => {
       setJourneyLoading(true);
       try {
-        const [savedJourney, keyStatus, currentUser] = await Promise.all([
+        const [savedJourney, currentUser] = await Promise.all([
           readJourneyState(),
-          fetchCsFloatApiKeyStatus(),
           getCurrentUser(),
         ]);
+        const keyStatus = isDesktopRuntime ? await fetchCsFloatApiKeyStatus() : null;
         setJourneyState(savedJourney && typeof savedJourney === "object" ? savedJourney : { skipped: false });
         setJourneyUserName(String(currentUser?.name || currentUser?.steamName || ""));
         const keyConnected = Boolean(keyStatus?.data?.hasKey || keyStatus?.data?.configured);
@@ -537,7 +537,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     };
 
     void loadJourneyState();
-  }, []);
+  }, [isDesktopRuntime]);
 
   useEffect(() => {
     const loadPortfolioPreferences = async () => {
@@ -1782,7 +1782,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   return (
     <div
-      className={`${isElectronRuntime ? "h-full box-border" : "min-h-screen"} font-sans text-foreground pb-20 md:pb-0 touch-pan-y ${
+      className={`${isElectronRuntime ? "h-full box-border" : "min-h-screen"} ${
+        useDesktopSidebarShell ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
+      } font-sans text-foreground pb-20 md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
       onTouchStart={onTouchStart}
@@ -1794,7 +1796,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           showSetupJourney
             ? "mx-auto flex w-full max-w-5xl flex-col gap-8 p-4 pb-12 pt-8 sm:p-8"
             : useDesktopSidebarShell
-              ? "flex w-full flex-col gap-6 p-4 sm:gap-8 sm:p-6 md:p-8 lg:p-0"
+              ? "flex w-full flex-col gap-6 p-4 sm:gap-8 sm:p-6 md:p-8 lg:h-full lg:min-h-0 lg:gap-0 lg:p-0"
               : "mx-auto flex max-w-7xl flex-col gap-6 p-4 sm:gap-8 sm:p-6 md:p-8"
         }
       >
@@ -2361,10 +2363,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {!showSetupJourney ? (
-        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
+        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
           {useDesktopSidebarShell ? (
             <aside className="hidden lg:block lg:h-full lg:min-h-0">
-              <div className="sticky top-0 h-full min-h-0 w-[88px] overflow-hidden border-r border-border/70 bg-card/90 backdrop-blur">
+              <div className="h-full min-h-0 w-[88px] overflow-hidden border-r border-border/70 bg-card/90 backdrop-blur">
                 <div className="flex h-full flex-col items-center py-4">
                   <nav className="flex w-full flex-col items-center gap-2 px-2">
                     {DESKTOP_SIDEBAR_TABS
@@ -2418,7 +2420,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           <Tabs
             value={activeTab}
             onValueChange={handleTabSelect}
-            className={`w-full min-w-0 ${useDesktopSidebarShell ? "lg:min-h-0 lg:px-6 xl:px-8" : ""}`}
+            className={`w-full min-w-0 ${useDesktopSidebarShell ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
           >
             {error && (
               <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
