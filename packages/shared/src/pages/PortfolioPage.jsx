@@ -1778,7 +1778,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     await refreshPortfolio();
     setCompositionRefreshToken((current) => current + 1);
   };
-  const useDesktopSidebarShell = isDesktopRuntime && !showSetupJourney;
+  const useDesktopSidebarShell = !showSetupJourney;
 
   return (
     <div
@@ -2426,7 +2426,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </div>
             )}
             {/* Tab Navigation - auf Desktop Runtime durch Sidebar ersetzt */}
-            <div className={isDesktopRuntime ? "hidden sm:block lg:hidden" : "hidden sm:block"}>
+            <div className={useDesktopSidebarShell ? "hidden sm:block lg:hidden" : "hidden sm:block"}>
               <TabsList className={`grid w-full gap-1 sm:max-w-200 ${isDesktopRuntime ? "grid-cols-4" : "grid-cols-3"}`}>
                 <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
                 <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
