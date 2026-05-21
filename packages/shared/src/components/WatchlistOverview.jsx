@@ -54,8 +54,10 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-[0_12px_30px_rgba(0,0,0,0.2)] transition-all",
-        isGainer ? "border-emerald-400/30 bg-emerald-500/7 hover:bg-emerald-500/11" : "border-red-400/30 bg-red-500/7 hover:bg-red-500/11"
+        "flex w-full items-center justify-between gap-3 rounded-md border p-3 text-left shadow-none transition-all dark:rounded-2xl dark:shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
+        isGainer
+          ? "border-emerald-400/30 bg-transparent hover:bg-emerald-500/7 dark:bg-emerald-500/7 dark:hover:bg-emerald-500/11"
+          : "border-red-400/30 bg-transparent hover:bg-red-500/7 dark:bg-red-500/7 dark:hover:bg-red-500/11"
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">

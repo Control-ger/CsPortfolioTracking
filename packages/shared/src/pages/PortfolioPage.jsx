@@ -602,14 +602,29 @@ export function PortfolioPage({ initialTab = "overview" }) {
       }
     },
     onSearch: () => {
+      if (activeTab === "search") {
+        setGlobalSearchOpen(false);
+        setTimeout(() => globalSearchInputRef.current?.focus(), 40);
+        return;
+      }
       setGlobalSearchOpen(true);
       setTimeout(() => globalSearchInputRef.current?.focus(), 40);
     }
   }, true);
 
   useEffect(() => {
-    setActiveTab(resolvedInitialTab);
+    setActiveTab((current) => (current === resolvedInitialTab ? current : resolvedInitialTab));
   }, [resolvedInitialTab]);
+
+  useEffect(() => {
+    if (location.pathname !== "/search") {
+      return;
+    }
+    setGlobalSearchTerm((current) => (current === searchPageInitialTerm ? current : searchPageInitialTerm));
+    setGlobalSearchCommittedTerm((current) =>
+      current === searchPageInitialTerm ? current : searchPageInitialTerm,
+    );
+  }, [location.pathname, searchPageInitialTerm]);
 
   useEffect(() => {
     if (!isElectronRuntime || !showStartupWelcome) {
@@ -1092,8 +1107,20 @@ export function PortfolioPage({ initialTab = "overview" }) {
     if (!runtimeTabs.includes(nextTab)) {
       return;
     }
-    setActiveTab(nextTab);
-    navigate(nextTab === "search" ? "/search" : `/?tab=${nextTab}`, { replace: true });
+    const targetPath =
+      nextTab === "search"
+        ? location.pathname === "/search"
+          ? `${location.pathname}${location.search || ""}`
+          : "/search"
+        : `/?tab=${nextTab}`;
+    const currentPathWithQuery = `${location.pathname}${location.search || ""}`;
+    if (nextTab === activeTab && currentPathWithQuery === targetPath) {
+      return;
+    }
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+    if (currentPathWithQuery !== targetPath) {
+      navigate(targetPath, { replace: true });
+    }
   };
 
   const handleOpenWatchlistItem = (item) => {
@@ -3320,11 +3347,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
           >
             {useDesktopSidebarShell ? (
               <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:justify-between lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
-                <div className="flex min-w-0 items-center gap-3">
+                <div className={`flex min-w-0 items-center ${activeTab === "search" ? "w-full justify-center" : "gap-3"}`}>
                   <form
-                    className="relative w-[340px] max-w-[46vw]"
+                    className={`relative ${activeTab === "search" ? "w-[min(920px,72vw)]" : "w-[340px] max-w-[46vw]"}`}
                     onSubmit={(event) => {
-                      setGlobalSearchOpen(true);
                       void handleGlobalSearchSubmit(event);
                     }}
                   >
@@ -3332,10 +3358,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     <input
                       ref={globalSearchInputRef}
                       value={globalSearchTerm}
-                      onFocus={() => setGlobalSearchOpen(true)}
+                      onFocus={() => {
+                        if (activeTab !== "search") {
+                          setGlobalSearchOpen(true);
+                        }
+                      }}
                       onChange={(event) => {
                         setGlobalSearchTerm(event.target.value);
-                        setGlobalSearchOpen(true);
+                        if (activeTab !== "search") {
+                          setGlobalSearchOpen(true);
+                        }
                       }}
                       onKeyDown={handleGlobalSearchInputKeyDown}
                       placeholder="Suche nach Item, Typ oder Kategorie..."
@@ -3365,13 +3397,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   >
                     Watchlist
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTabSelect("search")}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "search" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Suche
-                  </button>
                   {isDesktopRuntime ? (
                     <button
                       type="button"
@@ -3388,17 +3413,22 @@ export function PortfolioPage({ initialTab = "overview" }) {
               <form
                 className="relative"
                 onSubmit={(event) => {
-                  setGlobalSearchOpen(true);
                   void handleGlobalSearchSubmit(event);
                 }}
               >
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={globalSearchTerm}
-                  onFocus={() => setGlobalSearchOpen(true)}
+                  onFocus={() => {
+                    if (activeTab !== "search") {
+                      setGlobalSearchOpen(true);
+                    }
+                  }}
                   onChange={(event) => {
                     setGlobalSearchTerm(event.target.value);
-                    setGlobalSearchOpen(true);
+                    if (activeTab !== "search") {
+                      setGlobalSearchOpen(true);
+                    }
                   }}
                   onKeyDown={handleGlobalSearchInputKeyDown}
                   placeholder="Suche nach Item, Typ oder Kategorie..."
@@ -3646,40 +3676,17 @@ export function PortfolioPage({ initialTab = "overview" }) {
             />
           </TabsContent>
           <TabsContent value="search" className="space-y-4 sm:space-y-6">
-            <section className="rounded-lg border border-border/70 bg-transparent p-4 sm:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight">Alle Produkte</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Suche, filtere und browse neue Items fuer deine Watchlist.
-                  </p>
-                </div>
-                {searchPageInitialTerm ? (
-                  <Badge variant="secondary" className="text-xs">
-                    Suche: "{searchPageInitialTerm}"
-                  </Badge>
-                ) : null}
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border/70 bg-background/30 p-3 sm:p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Search className="h-4 w-4" />
-                  Produktsuche
-                  <span className="text-xs font-normal text-muted-foreground">
-                    ({globalSearchWatchlistItems.length} bekannte Watchlist-Items)
-                  </span>
-                </div>
-                <ItemSearch
-                  onAddToWatchlist={loadGlobalSearchWatchlistItems}
-                  existingItems={globalSearchWatchlistItems}
-                  onWarningsChange={(nextWarnings = []) => {
-                    handleUiWarningsChange("search-browser", "Produktsuche", nextWarnings);
-                  }}
-                  initialSearchTerm={searchPageInitialTerm}
-                  autoFocus={true}
-                />
-              </div>
-            </section>
+            <ItemSearch
+              onAddToWatchlist={loadGlobalSearchWatchlistItems}
+              existingItems={globalSearchKnownItems.map((entry) => ({ name: entry.name }))}
+              onWarningsChange={(nextWarnings = []) => {
+                handleUiWarningsChange("search-browser", "Produktsuche", nextWarnings);
+              }}
+              initialSearchTerm={searchPageInitialTerm}
+              submittedTerm={searchPageInitialTerm}
+              showSearchInput={false}
+              autoFocus={false}
+            />
           </TabsContent>
           {isDesktopRuntime ? (
           <TabsContent value="management" className="space-y-4 sm:space-y-6">

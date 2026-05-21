@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
-import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
 import { ItemListRow } from "./ItemListRow";
 import { X, Trash2 } from "lucide-react";
@@ -69,22 +69,19 @@ function WatchlistLoadingSkeleton() {
 }
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
+  const navigate = useNavigate();
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
-  const [searchWarnings, setSearchWarnings] = useState([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const itemRefs = useRef(new Map());
   const hasFiniteNumber = (value) => Number.isFinite(Number(value));
-  const combinedWarnings = useMemo(
-    () => [...warnings, ...searchWarnings],
-    [searchWarnings, warnings],
-  );
+  const combinedWarnings = useMemo(() => [...warnings], [warnings]);
 
   const loadWatchlistData = async () => {
     try {
@@ -215,9 +212,17 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Watchlist</h2>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Gefuehrte Suche mit Live-Preisdaten aus dem Backend
+            Deine beobachteten Items mit aktuellem Verlauf.
           </p>
         </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/search")}
+        >
+          Zur Produktsuche
+        </Button>
       </div>
 
       {error && (
@@ -226,19 +231,18 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         </div>
       )}
 
-      <ItemSearch
-        onAddToWatchlist={loadWatchlistData}
-        existingItems={watchlistItems}
-        onWarningsChange={setSearchWarnings}
-      />
-
       {watchlistItems.length === 0 ? (
         <Card>
           <CardContent className="p-4 sm:p-8 text-center text-muted-foreground">
             <p className="text-sm">
-              Keine Items in der Watchlist. Suche ein Item aus und fuege es per
-              Auswahl hinzu.
+              Keine Items in der Watchlist. Oeffne die Produktsuche und fuege
+              dort neue Items hinzu.
             </p>
+            <div className="mt-4">
+              <Button type="button" size="sm" onClick={() => navigate("/search")}>
+                Produktsuche oeffnen
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -260,11 +264,11 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                          }
                          itemRefs.current.delete(item.id);
                        }}
-                       className={`transition-colors ${
-                         selectedItem?.id === item.id
-                           ? "rounded-2xl border border-primary/40 bg-primary/14 shadow-[0_14px_28px_rgba(255,255,255,0.12)]"
-                           : ""
-                       }`}
+                        className={`transition-colors ${
+                          selectedItem?.id === item.id
+                            ? "rounded-md border border-primary/40 bg-primary/10 shadow-none dark:rounded-2xl dark:bg-primary/14 dark:shadow-[0_14px_28px_rgba(255,255,255,0.12)]"
+                            : ""
+                        }`}
                      >
                        <ItemListRow
                          item={item}

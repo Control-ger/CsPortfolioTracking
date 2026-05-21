@@ -296,8 +296,8 @@ export function SettingsPage() {
                   onClick={() => setThemeMode(option.value)}
                   className={`rounded-xl border p-3 text-left transition-colors ${
                     themeMode === option.value
-                      ? "border-primary/40 bg-primary/12 shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
-                      : "border-border/75 bg-card/65 hover:bg-accent/55"
+                      ? "border-primary/40 bg-primary/12 shadow-none dark:shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
+                      : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
                   }`}
                 >
                   <p className="text-sm font-semibold text-foreground">{option.label}</p>
@@ -305,7 +305,7 @@ export function SettingsPage() {
                 </button>
               ))}
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/65 p-3">
+            <div className="flex items-center justify-between rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
               <p className="text-xs text-muted-foreground">
                 Aktiver Modus: <span className="font-semibold text-foreground">{themeModeLabel}</span>
               </p>
@@ -336,8 +336,8 @@ export function SettingsPage() {
                     onClick={() => setCurrency(code)}
                     className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-3 transition-colors ${
                       currency === code
-                        ? "border-primary/40 bg-primary/12 shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
-                        : "border-border/75 bg-card/65 hover:bg-accent/55"
+                        ? "border-primary/40 bg-primary/12 shadow-none dark:shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
+                        : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
                     }`}
                   >
                     <span className="text-lg font-bold">{info.symbol}</span>
@@ -354,7 +354,7 @@ export function SettingsPage() {
                 <Skeleton className="h-3 w-32" />
               </div>
             ) : (
-              <div className="rounded-xl border border-border/70 bg-card/65 p-3 text-sm">
+              <div className="rounded-lg border border-border bg-transparent p-3 text-sm dark:border-border/70 dark:bg-card/65">
                 <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                   <div>1 EUR = {formatExchangeRate(exchangeRates.USD)} USD</div>
@@ -408,8 +408,8 @@ export function SettingsPage() {
                   }}
                   className={`rounded-xl border p-3 text-left transition-colors ${
                     priceSourceMode === option.value
-                      ? "border-primary/40 bg-primary/12 shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
-                      : "border-border/75 bg-card/65 hover:bg-accent/55"
+                      ? "border-primary/40 bg-primary/12 shadow-none dark:shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
+                      : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
                   }`}
                 >
                   <p className="text-sm font-semibold text-foreground">{option.label}</p>
@@ -854,9 +854,19 @@ export function SettingsPage() {
 
       <div className="space-y-4">
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/70 bg-card/70 p-1.5">
-            <TabsTrigger value="general" className="h-10 rounded-xl text-xs sm:text-sm">Allgemein</TabsTrigger>
-            <TabsTrigger value="api-remote" className="h-10 rounded-xl text-xs sm:text-sm">API & Remote</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-0 border-b border-border/70 bg-transparent p-0">
+            <TabsTrigger
+              value="general"
+              className="h-11 rounded-none border-b-2 border-b-transparent px-3 text-xs sm:text-sm data-[state=active]:border-b-foreground data-[state=active]:text-foreground"
+            >
+              Allgemein
+            </TabsTrigger>
+            <TabsTrigger
+              value="api-remote"
+              className="h-11 rounded-none border-b-2 border-b-transparent px-3 text-xs sm:text-sm data-[state=active]:border-b-foreground data-[state=active]:text-foreground"
+            >
+              API & Remote
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="space-y-4 pt-1">
             {renderGeneralTab()}
@@ -894,7 +904,7 @@ export function SettingsPage() {
                           onClick={() => navigate(item.to, { replace: true })}
                           className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
                             isActive
-                              ? "border-primary/35 bg-primary text-primary-foreground shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
+                              ? "border-primary/35 bg-primary text-primary-foreground shadow-none dark:shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
                               : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-accent/70 hover:text-foreground"
                           }`}
                           title={item.label}

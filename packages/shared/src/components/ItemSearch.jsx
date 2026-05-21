@@ -135,6 +135,8 @@ export const ItemSearch = ({
   onWarningsChange,
   initialSearchTerm = "",
   autoFocus = false,
+  showSearchInput = true,
+  submittedTerm = null,
 }) => {
   const [searchTerm, setSearchTerm] = useState(() => String(initialSearchTerm || "").trim());
   const [submittedSearchTerm, setSubmittedSearchTerm] = useState(() =>
@@ -159,7 +161,9 @@ export const ItemSearch = ({
     [existingItems],
   );
 
-  const normalizedSubmittedTerm = normalizeSearchTerm(submittedSearchTerm);
+  const normalizedSubmittedTerm = submittedTerm !== null
+    ? normalizeSearchTerm(String(submittedTerm || ""))
+    : normalizeSearchTerm(submittedSearchTerm);
   const keywordBrowseType = itemType === "all" ? resolveKeywordBrowseType(normalizedSubmittedTerm) : null;
   const effectiveItemType = keywordBrowseType || itemType;
   const effectiveTerm = keywordBrowseType ? "" : normalizedSubmittedTerm;
@@ -288,9 +292,13 @@ export const ItemSearch = ({
   const renderBody = () => {
     if (!shouldSearch) {
       return (
-        <div className="px-3 py-5 text-sm text-muted-foreground">
-          Gib mindestens 2 Zeichen ein und druecke Enter oder browse direkt ueber die Kategorien.
-        </div>
+        <tbody>
+          <tr className="border-t border-border/70">
+            <td colSpan={5} className="px-3 py-5 text-sm text-muted-foreground">
+              Gib mindestens 2 Zeichen ein und druecke Enter oder browse direkt ueber die Kategorien.
+            </td>
+          </tr>
+        </tbody>
       );
     }
 
@@ -385,23 +393,31 @@ export const ItemSearch = ({
   return (
     <section className="space-y-3">
       <form onSubmit={handleSearchSubmit} className="space-y-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            ref={searchInputRef}
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Suche nach Item-Namen (Enter startet Suche)"
-            className="h-10 w-full rounded-md border border-border/70 bg-transparent pl-10 pr-28 text-sm text-foreground outline-none transition-colors focus:border-border"
-            disabled={submittingItem !== ""}
-          />
-          <button
-            type="submit"
-            className="absolute right-1.5 top-1.5 inline-flex h-7 items-center rounded-md border border-border/70 px-2.5 text-xs font-semibold hover:bg-accent/60"
-          >
-            Suchen
-          </button>
-        </div>
+        {showSearchInput ? (
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              ref={searchInputRef}
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Suche nach Item-Namen (Enter startet Suche)"
+              className="h-10 w-full rounded-md border border-border/70 bg-transparent pl-10 pr-28 text-sm text-foreground outline-none transition-colors focus:border-border"
+              disabled={submittingItem !== ""}
+            />
+            <button
+              type="submit"
+              className="absolute right-1.5 top-1.5 inline-flex h-7 items-center rounded-md border border-border/70 px-2.5 text-xs font-semibold hover:bg-accent/60"
+            >
+              Suchen
+            </button>
+          </div>
+        ) : null}
+
+        {!showSearchInput ? (
+          <p className="text-xs text-muted-foreground">
+            Suche erfolgt ueber die obere Suchleiste.
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap gap-1.5 border-b border-border/70 pb-2">
           {CATEGORY_CHIPS.map((chip) => (

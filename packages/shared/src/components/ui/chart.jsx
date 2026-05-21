@@ -147,7 +147,7 @@ const ChartTooltipContent = forwardRef((
     <div
       ref={ref}
       className={cn(
-        "grid min-w-32 items-start gap-1.5 rounded-xl border border-border/70 bg-card/92 px-2.5 py-1.5 text-xs shadow-[0_16px_36px_rgba(0,0,0,0.35)] backdrop-blur-md",
+        "grid min-w-32 items-start gap-1.5 rounded-md border border-border bg-transparent px-2.5 py-1.5 text-xs shadow-none dark:rounded-xl dark:border-border/70 dark:bg-card/92 dark:shadow-[0_16px_36px_rgba(0,0,0,0.35)] dark:backdrop-blur-md",
         className
       )}>
       {!nestLabel ? tooltipLabel : null}

@@ -33,7 +33,7 @@ export const ItemListRow = ({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/75 p-3 text-left shadow-[0_14px_30px_rgba(0,0,0,0.2)] transition-all hover:border-border hover:bg-accent/45 active:scale-[0.995] ${className}`}
+      className={`flex w-full items-center justify-between gap-3 rounded-md border border-border bg-transparent p-3 text-left shadow-none transition-all hover:border-border hover:bg-accent/45 active:scale-[0.995] dark:rounded-2xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_14px_30px_rgba(0,0,0,0.2)] ${className}`}
     >
       {/* Bild + Name */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
