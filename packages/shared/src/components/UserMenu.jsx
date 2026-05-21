@@ -15,6 +15,7 @@ import { getCurrentUser, getSession, logout, validateSession } from "@shared/lib
 
 const NAV_ITEMS = [
   { label: "Portfolio", to: "/" },
+  { label: "Auftraege", to: "/inventory" },
   { label: "Einstellungen", to: "/settings" },
 ]
 
@@ -102,7 +103,7 @@ export function UserMenu({
           variant="outline"
           size="icon"
           aria-label="Benutzermenue oeffnen"
-          className="h-11 w-11 rounded-full p-0"
+          className="h-11 w-11 rounded-full border-border/80 bg-card/75 p-0"
         >
           {avatarUrl ? (
             avatarIsVideo ? (
@@ -132,7 +133,7 @@ export function UserMenu({
         side={menuSide}
         align={menuAlign}
         sideOffset={menuSideOffset}
-        className="w-48"
+        className="w-52 rounded-2xl border-border/70 bg-card/92 p-1.5 shadow-[0_18px_40px_rgba(0,0,0,0.36)]"
       >
         <DropdownMenuLabel>Navigation</DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -140,7 +141,7 @@ export function UserMenu({
           <DropdownMenuItem
             key={item.to}
             asChild
-            className={location.pathname === item.to ? "bg-accent" : ""}
+            className={location.pathname === item.to ? "bg-primary/15 text-foreground" : ""}
           >
             <Link to={item.to}>{item.label}</Link>
           </DropdownMenuItem>

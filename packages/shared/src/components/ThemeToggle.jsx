@@ -12,7 +12,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="relative rounded-lg p-2 transition-colors hover:bg-muted"
+      className="relative rounded-xl border border-border/80 bg-card/75 p-2.5 text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
       aria-label="Farbmodus umschalten"
       title={title}
     >

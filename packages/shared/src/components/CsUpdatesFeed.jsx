@@ -58,20 +58,20 @@ function formatDateTime(value) {
 function getSeverityClass(severity) {
   switch (severity) {
     case "critical":
-      return "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300";
+      return "border-red-500/40 bg-red-500/10 text-red-300";
     case "warning":
-      return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return "border-amber-500/40 bg-amber-500/10 text-amber-300";
     case "notice":
-      return "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300";
+      return "border-blue-500/40 bg-blue-500/10 text-sky-300";
     default:
-      return "border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300";
+      return "border-emerald-500/30 bg-emerald-500/8 text-emerald-300";
   }
 }
 
 function getFeedItemClass(isFresh, isOpen, severity) {
   return cn(
     "overflow-hidden rounded-xl border bg-card text-card-foreground transition-all duration-200",
-    isFresh ? "border-emerald-500/40 bg-emerald-500/5" : "border-border",
+    isFresh ? "border-emerald-400/30 bg-emerald-500/10" : "border-border",
     isOpen ? "ring-1 ring-primary/20" : "",
     severity === "critical" ? "shadow-[0_0_0_1px_rgba(239,68,68,0.06)]" : "",
   );
@@ -112,7 +112,7 @@ function ErrorState({ message, onRetry, hasItems }) {
   return (
     <Alert
       variant={hasItems ? "default" : "destructive"}
-      className={cn(hasItems ? "border-amber-500/30 bg-amber-500/10 text-foreground" : "")}
+      className={cn(hasItems ? "border-amber-400/35 bg-amber-500/12 text-amber-200" : "")}
     >
       <AlertCircle className="h-4 w-4" />
       <AlertTitle>CS Updates konnten nicht geladen werden</AlertTitle>
@@ -139,7 +139,7 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
               "mt-1 flex shrink-0 items-center justify-center rounded-full border",
               compact ? "h-7 w-7" : "h-9 w-9",
               isFresh
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
                 : "border-border text-muted-foreground",
             )}
           >
@@ -152,12 +152,12 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className={cn("font-semibold text-foreground", compact ? "text-sm" : "text-sm sm:text-base")}>{item.title}</h3>
                   {isFresh ? (
-                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
                       Neu
                     </Badge>
                   ) : null}
                   {item.isBreaking ? (
-                    <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300">
+                    <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-300">
                       Breaking
                     </Badge>
                   ) : null}
@@ -177,12 +177,12 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
 
             <div className={cn("flex flex-wrap items-center gap-2 text-xs text-muted-foreground", compact ? "text-[10px]" : "")}>
               <span>{formatDateTime(item.publishedAt)}</span>
-              <span>·</span>
+              <span>-</span>
               <span>{item.sourceLabel}</span>
               {!compact && Array.isArray(item.tags) && item.tags.length > 0 ? (
                 <>
-                  <span>·</span>
-                  <span>{item.tags.join(" · ")}</span>
+                  <span>-</span>
+                  <span>{item.tags.join(" - ")}</span>
                 </>
               ) : null}
             </div>
@@ -276,7 +276,7 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
       return "unbekannt";
     }
 
-    return `${formatRelativeTime(latestItem.publishedAt)} · ${formatDateTime(latestItem.publishedAt)}`;
+    return `${formatRelativeTime(latestItem.publishedAt)} - ${formatDateTime(latestItem.publishedAt)}`;
   }, [latestItem]);
 
   const hasItems = items.length > 0;
@@ -299,8 +299,8 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
   );
 
   return (
-    <Card className={cn("border-border/70 shadow-sm", compact ? "shadow-none" : "")}>
-      <CardHeader className={cn("space-y-3", compact ? "pb-3" : "")}>
+    <Card className={cn("rounded-2xl border-border/70 bg-card/70 shadow-sm", compact ? "shadow-none" : "")}>
+      <CardHeader className={cn("space-y-3", compact ? "pb-3" : "pb-4")}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -314,11 +314,11 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
                 </Badge>
               ) : null}
               {meta.isStale ? (
-                <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-300">
                   Veraltet
                 </Badge>
               ) : (
-                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
                   Aktuell
                 </Badge>
               )}
@@ -341,7 +341,7 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
                 <Clock3 className="h-3.5 w-3.5" />
                 Letztes Update: {lastUpdateLabel}
               </span>
-              {!compact && meta.lastRefreshAt ? <span>· Feed geladen</span> : null}
+              {!compact && meta.lastRefreshAt ? <span>- Feed geladen</span> : null}
             </div>
           </div>
         </div>
@@ -351,7 +351,7 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
             <Sparkles className="h-4 w-4 text-emerald-500" />
             <AlertTitle className="flex flex-wrap items-center gap-2">
               Neueste Meldung
-              <Badge variant="outline" className="border-emerald-500/30 bg-background/70 text-emerald-700 dark:text-emerald-300">
+              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">
                 {formatRelativeTime(newestFreshItem.publishedAt)}
               </Badge>
             </AlertTitle>
@@ -360,7 +360,7 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
         ) : null}
       </CardHeader>
 
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 pt-0">
         {isLoading ? <LoadingState /> : null}
         {!isLoading && error ? <ErrorState message={error} onRetry={refresh} hasItems={hasItems} /> : null}
         {!isLoading && !hasItems && !error ? <EmptyState /> : null}
@@ -376,4 +376,5 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
     </Card>
   );
 }
+
 

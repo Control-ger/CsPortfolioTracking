@@ -294,10 +294,10 @@ export function SettingsPage() {
                 <button
                   key={option.value}
                   onClick={() => setThemeMode(option.value)}
-                  className={`rounded-lg border p-3 text-left transition-colors ${
+                  className={`rounded-xl border p-3 text-left transition-colors ${
                     themeMode === option.value
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:bg-accent"
+                      ? "border-primary/40 bg-primary/12 shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
+                      : "border-border/75 bg-card/65 hover:bg-accent/55"
                   }`}
                 >
                   <p className="text-sm font-semibold text-foreground">{option.label}</p>
@@ -305,7 +305,7 @@ export function SettingsPage() {
                 </button>
               ))}
             </div>
-            <div className="flex items-center justify-between rounded-md bg-muted p-3">
+            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/65 p-3">
               <p className="text-xs text-muted-foreground">
                 Aktiver Modus: <span className="font-semibold text-foreground">{themeModeLabel}</span>
               </p>
@@ -334,10 +334,10 @@ export function SettingsPage() {
                   <button
                     key={code}
                     onClick={() => setCurrency(code)}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 transition-colors ${
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-3 transition-colors ${
                       currency === code
-                        ? "border-primary bg-primary/10"
-                        : "border-border hover:bg-accent"
+                        ? "border-primary/40 bg-primary/12 shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
+                        : "border-border/75 bg-card/65 hover:bg-accent/55"
                     }`}
                   >
                     <span className="text-lg font-bold">{info.symbol}</span>
@@ -354,7 +354,7 @@ export function SettingsPage() {
                 <Skeleton className="h-3 w-32" />
               </div>
             ) : (
-              <div className="rounded-md bg-muted p-3 text-sm">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-3 text-sm">
                 <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                   <div>1 EUR = {formatExchangeRate(exchangeRates.USD)} USD</div>
@@ -388,7 +388,7 @@ export function SettingsPage() {
               </div>
             ) : null}
             {priceSourceSuccess ? (
-              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+              <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
                 {priceSourceSuccess}
               </div>
             ) : null}
@@ -406,10 +406,10 @@ export function SettingsPage() {
                     setPriceSourceError("");
                     setPriceSourceSuccess("");
                   }}
-                  className={`rounded-lg border p-3 text-left transition-colors ${
+                  className={`rounded-xl border p-3 text-left transition-colors ${
                     priceSourceMode === option.value
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:bg-accent"
+                      ? "border-primary/40 bg-primary/12 shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
+                      : "border-border/75 bg-card/65 hover:bg-accent/55"
                   }`}
                 >
                   <p className="text-sm font-semibold text-foreground">{option.label}</p>
@@ -489,7 +489,7 @@ export function SettingsPage() {
             </div>
           )}
           {success && (
-            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+            <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
               {success}
             </div>
           )}
@@ -618,7 +618,7 @@ export function SettingsPage() {
             <Key className="h-5 w-5" />
             <CardTitle>CSFloat API Key</CardTitle>
             {apiKeyStatus.configured && (
-              <Badge variant="outline" className="ml-auto text-emerald-600 border-emerald-200">
+              <Badge variant="outline" className="ml-auto border-emerald-400/35 text-emerald-300">
                 Konfiguriert
               </Badge>
             )}
@@ -629,7 +629,7 @@ export function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           {!encryptionReady && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+            <div className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-3 text-sm text-amber-300">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
                 <span>
@@ -647,16 +647,16 @@ export function SettingsPage() {
             </div>
           )}
           {apiKeySuccess && (
-            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+            <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
               {apiKeySuccess}
             </div>
           )}
 
           {/* Current Status */}
           {apiKeyStatus.configured && (
-            <div className="flex items-center gap-3 p-3 rounded-lg ">
-              <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <Lock className="h-5 w-5 text-emerald-600" />
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/18">
+                <Lock className="h-5 w-5 text-emerald-300" />
               </div>
               <div>
                 <p className="text-sm font-medium">API Key aktiv</p>
@@ -739,7 +739,7 @@ export function SettingsPage() {
                 </div>
               ) : null}
               {serverConfigMessage ? (
-                <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
                   {serverConfigMessage}
                 </div>
               ) : null}
@@ -854,15 +854,15 @@ export function SettingsPage() {
 
       <div className="space-y-4">
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="general">Allgemein</TabsTrigger>
-            <TabsTrigger value="api-remote">API & Remote</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/70 bg-card/70 p-1.5">
+            <TabsTrigger value="general" className="h-10 rounded-xl text-xs sm:text-sm">Allgemein</TabsTrigger>
+            <TabsTrigger value="api-remote" className="h-10 rounded-xl text-xs sm:text-sm">API & Remote</TabsTrigger>
           </TabsList>
-          <TabsContent value="general" className="space-y-4">
+          <TabsContent value="general" className="space-y-4 pt-1">
             {renderGeneralTab()}
             {renderFeesTab()}
           </TabsContent>
-          <TabsContent value="api-remote" className="space-y-4">
+          <TabsContent value="api-remote" className="space-y-4 pt-1">
             {renderRemoteConnectionsTab()}
           </TabsContent>
         </Tabs>
@@ -874,12 +874,12 @@ export function SettingsPage() {
     <div
       className={`${desktopRuntime ? "min-h-full" : "min-h-screen"} ${
         useDesktopSidebarShell ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
-      } bg-background p-4 sm:p-8 lg:p-0 font-sans text-foreground pb-20 md:pb-0`}
+      } bg-background px-3.5 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-[max(0.35rem,env(safe-area-inset-top))] font-sans text-foreground sm:p-8 md:pb-0 lg:p-0`}
     >
       {useDesktopSidebarShell ? (
-        <div className="w-full lg:grid lg:min-h-0 lg:h-full lg:grid-cols-[88px_minmax(0,1fr)]">
+        <div className="w-full lg:grid lg:min-h-0 lg:h-full lg:grid-cols-[92px_minmax(0,1fr)]">
           <aside className="hidden lg:block lg:h-full lg:min-h-0">
-            <div className="h-full min-h-0 w-[88px] overflow-hidden border-r border-border/70 bg-card/90 backdrop-blur">
+            <div className="tr-desktop-rail h-full min-h-0 w-[92px] overflow-hidden">
               <div className="flex h-full flex-col items-center py-4">
                 <nav className="flex w-full flex-col items-center gap-2 px-2">
                   {DESKTOP_SIDEBAR_ITEMS
@@ -894,8 +894,8 @@ export function SettingsPage() {
                           onClick={() => navigate(item.to, { replace: true })}
                           className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
                             isActive
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
+                              ? "border-primary/35 bg-primary text-primary-foreground shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
+                              : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-accent/70 hover:text-foreground"
                           }`}
                           title={item.label}
                           aria-label={item.label}

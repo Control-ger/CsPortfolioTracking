@@ -364,7 +364,7 @@ export function DebugDashboardPage() {
     <div
       className={`${
         isElectronRuntime ? "min-h-full" : "min-h-screen"
-      } bg-background p-4 pb-20 font-sans text-foreground sm:p-8 md:pb-0`}
+      } bg-background px-3.5 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-[max(0.35rem,env(safe-area-inset-top))] font-sans text-foreground sm:p-8 md:pb-0`}
     >
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -378,7 +378,7 @@ export function DebugDashboardPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Observability
             </p>
-            <h1 className="text-3xl font-bold tracking-tight text-primary">Debug Panel</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Debug Panel</h1>
             <p className="text-muted-foreground">
               Strukturierte Application Logs mit Event-, Item- und Request-ID-Filtern.
             </p>
@@ -399,7 +399,7 @@ export function DebugDashboardPage() {
           </div>
         </header>
 
-        <Card>
+        <Card className="rounded-2xl border-border/70 bg-card/70">
           <CardHeader className="pb-4">
             <CardTitle className="text-base">Filter und Suche</CardTitle>
             <CardDescription>Filtere nach Event-Typ, Item und Request-ID.</CardDescription>

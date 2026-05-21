@@ -4,8 +4,8 @@ import { Home, Archive, Eye, UserRound } from "lucide-react";
 import { getCurrentUser, getSession, validateSession } from "@shared/lib/auth";
 
 const NAV_ITEMS = [
-  { path: "/", label: "Uebersicht", icon: Home },
-  { path: "/inventory", label: "Inventar", icon: Archive },
+  { path: "/", label: "Portfolio", icon: Home },
+  { path: "/inventory", label: "Auftraege", icon: Archive },
   { path: "/watchlist", label: "Watchlist", icon: Eye },
 ];
 
@@ -83,44 +83,42 @@ export const BottomNavigation = () => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))] md:hidden"
       aria-label="Hauptnavigation"
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 md:px-8">
-        <div className="flex h-20 items-center justify-between gap-2">
-          <div className="flex flex-1 items-center justify-around gap-1">
+      <div className="tr-bottom-dock mx-auto max-w-2xl rounded-[1.75rem] border border-border/65 px-2.5 py-2.5 shadow-[0_-14px_40px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex min-w-0 flex-1 items-center justify-around gap-1">
             {NAV_ITEMS.map((item) => {
               const isActive = isActivePath(item.path);
               return (
                 <button
                   key={item.path}
                   onClick={() => navigate(item.path)}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-lg px-4 py-2 text-xs font-medium transition-colors ${
+                  className={`flex min-w-[76px] flex-col items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                     isActive
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-[0_10px_24px_rgba(255,255,255,0.18)]"
+                      : "text-muted-foreground hover:bg-accent/80 hover:text-foreground"
                   }`}
                   aria-label={item.label}
                   aria-current={isActive ? "page" : undefined}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className={`h-[18px] w-[18px] ${isActive ? "" : "opacity-95"}`} />
                   <span className="text-[10px]">{item.label}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Trennlinie */}
-          <div className="h-8 w-px bg-border" />
+          <div className="h-9 w-px bg-border/60" />
 
-          {/* Settings Icon */}
-          <div className="flex items-center justify-center gap-1">
+          <div className="flex items-center justify-center">
             <button
               onClick={() => navigate("/settings")}
-              className={`flex flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+              className={`flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold transition-all ${
                 location.pathname === "/settings"
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-[0_10px_24px_rgba(255,255,255,0.18)]"
+                  : "text-muted-foreground hover:bg-accent/80 hover:text-foreground"
               }`}
               aria-label="Einstellungen"
               aria-current={location.pathname === "/settings" ? "page" : undefined}
@@ -135,19 +133,19 @@ export const BottomNavigation = () => {
                     loop
                     playsInline
                     aria-label="Steam Avatar"
-                    className="h-6 w-6 rounded-full object-cover"
+                    className="h-6 w-6 rounded-full object-cover ring-1 ring-border/60"
                   />
                 ) : (
                   <img
                     src={avatarUrl}
                     alt="Steam Avatar"
-                    className="h-6 w-6 rounded-full object-cover"
+                    className="h-6 w-6 rounded-full object-cover ring-1 ring-border/60"
                   />
                 )
               ) : (
-                <UserRound className="h-5 w-5" />
+                <UserRound className="h-[18px] w-[18px]" />
               )}
-              <span className="text-[10px]">User</span>
+              <span className="text-[10px]">Profil</span>
             </button>
           </div>
         </div>
