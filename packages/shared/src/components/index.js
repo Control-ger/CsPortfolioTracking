@@ -11,7 +11,6 @@ export { DebugPanel } from './DebugPanel.jsx';
 export { DeleteConfirmModal } from './DeleteConfirmModal.jsx';
 export { ExcludeInvestmentDialog } from './ExcludeInvestmentDialog.jsx';
 export { InventoryTable } from './InventoryTable.jsx';
-export { ItemDetailModal } from './ItemDetailModal.jsx';
 export { ItemDetailPanel } from './ItemDetailPanel.jsx';
 export { ItemDetailsModal } from './ItemDetailsModal.jsx';
 export { ItemListRow } from './ItemListRow.jsx';

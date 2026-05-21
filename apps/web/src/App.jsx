@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { CurrencyProvider } from "@shared/contexts";
 import { BottomNavigation, Titlebar } from "@shared/components";
-import { CsUpdatesPage, PortfolioPage, SettingsPage } from "@shared/pages";
+import { PortfolioPage } from "@shared/pages";
 import { handleWebAuthCallback } from "@shared/lib/auth.js";
 import { startDesktopAutoSync } from "@shared/lib/desktopSync.js";
+
+const SettingsPage = lazy(() =>
+  import("@shared/pages/SettingsPage.jsx").then((module) => ({ default: module.SettingsPage })),
+);
+const CsUpdatesPage = lazy(() => import("@shared/pages/CsUpdatesPage.jsx"));
 
 export default function App() {
   const isElectron = window.electronAPI !== undefined;
@@ -54,6 +59,12 @@ export default function App() {
     );
   }
 
+  const routeFallback = (
+    <div className="flex min-h-[30vh] items-center justify-center">
+      <p className="text-sm text-muted-foreground">Ansicht wird geladen...</p>
+    </div>
+  );
+
   return (
     <CurrencyProvider>
       <div className={`flex flex-col ${isElectron ? "h-full overflow-hidden" : "min-h-screen"} bg-background text-foreground`}>
@@ -66,8 +77,22 @@ export default function App() {
             <Route path="/" element={<PortfolioPage initialTab="overview" />} />
             <Route path="/inventory" element={<PortfolioPage initialTab="inventory" />} />
             <Route path="/watchlist" element={<PortfolioPage initialTab="watchlist" />} />
-            <Route path="/cs-updates" element={<CsUpdatesPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route
+              path="/cs-updates"
+              element={(
+                <Suspense fallback={routeFallback}>
+                  <CsUpdatesPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/settings"
+              element={(
+                <Suspense fallback={routeFallback}>
+                  <SettingsPage />
+                </Suspense>
+              )}
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

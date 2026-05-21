@@ -27,7 +27,16 @@ function parseHostFromUrlLikeInput(value) {
 }
 
 export function normalizeServerBaseUrl(rawUrl) {
-  return String(rawUrl || "").trim().replace(/\/+$/, "");
+  const trimmed = String(rawUrl || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  let end = trimmed.length;
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return end === trimmed.length ? trimmed : trimmed.slice(0, end);
 }
 
 export function resolveAccessBaseUrl(serverBaseUrl) {

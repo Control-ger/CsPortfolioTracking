@@ -31,8 +31,6 @@ export default defineConfig(({ mode }) => {
           entryFileNames: 'assets/[name].js',
           chunkFileNames: 'assets/[name].js',
           assetFileNames: 'assets/[name].[ext]',
-          // Prevent duplicate React
-          inlineDynamicImports: true,
         },
       },
     },

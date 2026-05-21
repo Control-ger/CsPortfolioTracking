@@ -3,8 +3,10 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import {
   devModeLogin,
+  fetchCS2Inventory,
   getCurrentUser,
   getSession,
+  importInventoryAsInvestments,
   initiateSteamLogin,
   isAuthenticated,
   validateSession,
@@ -550,7 +552,6 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
     if (hasSteamId) {
       startStep(steps[1]);
-      const { fetchCS2Inventory, importInventoryAsInvestments } = await import("../lib/auth.js");
       const inventoryResult = await fetchCS2Inventory(currentUser.steamId);
       finishStep(steps[2]);
 

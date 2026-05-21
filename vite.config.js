@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig(({ mode }) => {
-  // Lädt die .env Datei basierend auf dem aktuellen Modus (development/production)
+  // Laedt die .env Datei basierend auf dem aktuellen Modus (development/production)
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
@@ -39,8 +39,24 @@ export default defineConfig(({ mode }) => {
           entryFileNames: `assets/[name].js`,
           chunkFileNames: `assets/[name].js`,
           assetFileNames: `assets/[name].[ext]`,
-          // Inline dynamic imports to prevent duplicate React instances
-          inlineDynamicImports: true,
+          manualChunks(id) {
+            if (!id.includes("node_modules")) {
+              return undefined;
+            }
+            if (id.includes("node_modules/recharts")) {
+              return "vendor-charts";
+            }
+            if (id.includes("node_modules/@radix-ui")) {
+              return "vendor-radix";
+            }
+            if (id.includes("node_modules/lucide-react")) {
+              return "vendor-icons";
+            }
+            if (id.includes("node_modules/react-router")) {
+              return "vendor-router";
+            }
+            return "vendor-core";
+          },
         },
       },
     },
