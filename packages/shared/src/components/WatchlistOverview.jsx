@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
-import { ApiWarnings } from "./ApiWarnings";
 import { ItemListRow } from "./ItemListRow";
 import { ChevronDown, ChevronUp, Eye, TrendingUp, TrendingDown } from "lucide-react";
 import { fetchWatchlistData } from "@shared/lib/dataSource.js";
@@ -36,12 +35,12 @@ const calculateTopMovers = (items) => {
   return { gainers: topGainers, losers: topLosers, others };
 };
 
-// Spezielle ItemRow für Top Mover mit Highlighting
+// Spezielle ItemRow fuer Top Mover mit Highlighting
 const TopMoverItemRow = ({ item, rank, type, onClick }) => {
   const isGainer = type === "gainer";
   const rankColors = isGainer
-    ? ["bg-green-500/20 text-green-700 border-green-500/30", "bg-green-500/15 text-green-700 border-green-500/25"]
-    : ["bg-red-500/20 text-red-700 border-red-500/30", "bg-red-500/15 text-red-700 border-red-500/25"];
+    ? ["bg-emerald-500/20 text-emerald-200 border-emerald-400/35", "bg-emerald-500/15 text-emerald-200 border-emerald-400/25"]
+    : ["bg-red-500/20 text-red-200 border-red-400/35", "bg-red-500/15 text-red-200 border-red-400/25"];
 
   const rankColor = rankColors[rank - 1] || rankColors[1];
   const Icon = isGainer ? TrendingUp : TrendingDown;
@@ -55,12 +54,12 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center justify-between gap-3 p-3 text-left transition-all sm:rounded-lg border-2",
-        isGainer ? "border-green-500/30 bg-green-500/5 hover:bg-green-500/10" : "border-red-500/30 bg-red-500/5 hover:bg-red-500/10"
+        "flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-[0_12px_30px_rgba(0,0,0,0.2)] transition-all",
+        isGainer ? "border-emerald-400/30 bg-emerald-500/7 hover:bg-emerald-500/11" : "border-red-400/30 bg-red-500/7 hover:bg-red-500/11"
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md border">
+        <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl border border-border/70">
           {item.imageUrl ? (
             <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
           ) : (
@@ -80,8 +79,8 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
 
       <div className="flex flex-shrink-0 items-center gap-2">
         <div className="flex flex-col items-end gap-0.5">
-          <Icon className={cn("h-4 w-4", isGainer ? "text-green-600" : "text-red-600")} />
-          <span className={cn("text-xs font-semibold", isGainer ? "text-green-600" : "text-red-600")}>
+          <Icon className={cn("h-4 w-4", isGainer ? "text-emerald-400" : "text-red-400")} />
+          <span className={cn("text-xs font-semibold", isGainer ? "text-emerald-400" : "text-red-400")}>
             {derivedPercent >= 0 ? "+" : ""}{derivedPercent.toFixed(2)}%
           </span>
         </div>
@@ -94,6 +93,7 @@ export const WatchlistOverview = ({
   maxItems = UI.MAX_WATCHLIST_ITEMS,
   onOpenItem,
   allowExpand = true,
+  onWarningsChange,
 }) => {
   const [allWatchlistItems, setAllWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,6 +120,14 @@ export const WatchlistOverview = ({
   }, [maxItems]);
 
   useEffect(() => {
+    onWarningsChange?.(warnings);
+  }, [onWarningsChange, warnings]);
+
+  useEffect(() => () => {
+    onWarningsChange?.([]);
+  }, [onWarningsChange]);
+
+  useEffect(() => {
     if (!allowExpand) {
       setIsExpanded(false);
     }
@@ -127,7 +135,7 @@ export const WatchlistOverview = ({
 
   if (loading) {
     return (
-      <Card>
+      <Card className="border-border/70 bg-card/70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
@@ -136,7 +144,7 @@ export const WatchlistOverview = ({
         </CardHeader>
         <CardContent className="space-y-3">
           {[1, 2, 3].map((entry) => (
-            <div key={entry} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div key={entry} className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/65 p-3">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <Skeleton className="h-12 w-12 rounded-md flex-shrink-0" />
                 <div className="min-w-0 flex-1 space-y-2">
@@ -154,7 +162,7 @@ export const WatchlistOverview = ({
 
   if (allWatchlistItems.length === 0) {
     return (
-      <Card>
+      <Card className="border-border/70 bg-card/70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
@@ -176,14 +184,14 @@ export const WatchlistOverview = ({
   const canExpand = allowExpand && others.length > 0;
   const effectiveExpanded = canExpand && isExpanded;
 
-  // Bestimme welche Items angezeigt werden (für nicht-expandierte Ansicht)
+  // Bestimme welche Items angezeigt werden (fuer nicht-expandierte Ansicht)
   const remainingSlots = Math.max(0, maxItems - (gainers.length + losers.length));
   const collapsedOthersCount = others.length > 0 ? Math.max(1, remainingSlots) : 0;
   const displayedOthers = effectiveExpanded ? others : others.slice(0, collapsedOthersCount);
   const hasMoreOthers = others.length > displayedOthers.length;
 
   return (
-    <Card>
+    <Card className="border-border/70 bg-card/70">
       <CardHeader>
         <button
           type="button"
@@ -192,7 +200,7 @@ export const WatchlistOverview = ({
               setIsExpanded(!isExpanded);
             }
           }}
-          className="flex w-full items-center justify-between rounded-lg p-0 transition-colors hover:bg-muted/30"
+          className="flex w-full items-center justify-between rounded-xl p-1 transition-colors hover:bg-accent/45"
           aria-expanded={canExpand ? effectiveExpanded : undefined}
         >
           <CardTitle className="flex items-center gap-2">
@@ -209,12 +217,11 @@ export const WatchlistOverview = ({
         </button>
       </CardHeader>
       <CardContent>
-        <ApiWarnings warnings={warnings} className="mb-3" />
         <div className="space-y-4">
           {/* Top Gewinner Sektion */}
           {gainers.length > 0 && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-green-600">
+                <div className="flex items-center gap-2 text-emerald-400">
                 <TrendingUp className="h-4 w-4" />
                 <h3 className="text-xs font-semibold uppercase tracking-wide">Top Gewinner (7 Tage)</h3>
               </div>
@@ -235,7 +242,7 @@ export const WatchlistOverview = ({
           {/* Top Verlierer Sektion */}
           {losers.length > 0 && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-red-600">
+                <div className="flex items-center gap-2 text-red-400">
                 <TrendingDown className="h-4 w-4" />
                 <h3 className="text-xs font-semibold uppercase tracking-wide">Top Verlierer (7 Tage)</h3>
               </div>
@@ -281,10 +288,12 @@ export const WatchlistOverview = ({
 
         {canExpand && hasMoreOthers && !effectiveExpanded && (
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            {others.length - displayedOthers.length} weitere Items • Klick zum Ausklappen
+            {others.length - displayedOthers.length} weitere Items - Klick zum Ausklappen
           </p>
         )}
       </CardContent>
     </Card>
   );
 };
+
+

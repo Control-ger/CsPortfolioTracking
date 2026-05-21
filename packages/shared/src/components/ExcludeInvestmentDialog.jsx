@@ -8,7 +8,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import { Button } from './ui/button';
 import { AlertCircle } from 'lucide-react';
 
 export function ExcludeInvestmentDialog({
@@ -20,44 +19,43 @@ export function ExcludeInvestmentDialog({
 }) {
   const itemName = investment?.name || 'Item';
   const isCurrentlyExcluded = investment?.excluded || false;
-  const action = isCurrentlyExcluded ? 'again einschließen' : 'ausschließen';
+  const action = isCurrentlyExcluded ? 'wieder einschliessen' : 'ausschliessen';
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
       <AlertDialogContent className="border-border/60">
         <AlertDialogHeader>
           <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-500" />
+            <AlertCircle className="h-5 w-5 text-amber-400" />
             <AlertDialogTitle>
-              {isCurrentlyExcluded ? 'Item wieder einschließen?' : 'Item ausschließen?'}
+              {isCurrentlyExcluded ? 'Item wieder einschliessen?' : 'Item ausschliessen?'}
             </AlertDialogTitle>
           </div>
         </AlertDialogHeader>
 
         <AlertDialogDescription className="space-y-3 text-sm">
           <p>
-            <strong>{itemName}</strong> wird {isCurrentlyExcluded ? 'wieder ' : ''}
-            {action}.
+            <strong>{itemName}</strong> wird {action}.
           </p>
 
           {!isCurrentlyExcluded && (
-            <div className="rounded-md border border-amber-200/80 bg-amber-50/80 p-3 text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/35 dark:text-amber-200">
+            <div className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-3 text-amber-200">
               <p className="font-semibold">Folgen:</p>
               <ul className="mt-2 list-inside list-disc space-y-1">
                 <li>Item verschwindet aus dem Portfolio</li>
                 <li>Wird nicht in Gewinn/Verlust berechnet</li>
-                <li>Bleibt in der Datenbank gespeichert (nicht gelöscht)</li>
-                <li>Kann später wieder eingeschlossen werden</li>
+                <li>Bleibt in der Datenbank gespeichert (nicht geloescht)</li>
+                <li>Kann spaeter wieder eingeschlossen werden</li>
               </ul>
             </div>
           )}
 
           {isCurrentlyExcluded && (
-            <div className="rounded-md border border-blue-200/80 bg-blue-50/80 p-3 text-blue-900 dark:border-blue-700/60 dark:bg-blue-950/35 dark:text-blue-200">
+            <div className="rounded-xl border border-sky-400/35 bg-sky-500/12 p-3 text-sky-200">
               <p className="font-semibold">Das Item wird:</p>
               <ul className="mt-2 list-inside list-disc space-y-1">
                 <li>Wieder im Portfolio angezeigt</li>
-                <li>Wieder in Statistiken berücksichtigt</li>
+                <li>Wieder in Statistiken beruecksichtigt</li>
               </ul>
             </div>
           )}
@@ -72,15 +70,14 @@ export function ExcludeInvestmentDialog({
             disabled={isLoading}
             className={`font-semibold shadow-sm transition-all hover:scale-[1.02] ${
               isCurrentlyExcluded
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "bg-amber-600 text-white hover:bg-amber-700"
+                ? 'bg-sky-500 text-slate-950 hover:bg-sky-400'
+                : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
             }`}
           >
-            {isLoading ? 'Wird gespeichert...' : (isCurrentlyExcluded ? 'Einschließen' : 'Ausschließen')}
+            {isLoading ? 'Wird gespeichert...' : isCurrentlyExcluded ? 'Einschliessen' : 'Ausschliessen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
 }
-

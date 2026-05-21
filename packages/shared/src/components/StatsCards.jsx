@@ -16,7 +16,7 @@ export const StatCard = ({
   isPositive,
 }) => {
   const hasStatus = isPositive !== undefined;
-  const statusColor = isPositive ? "text-green-600" : "text-red-600";
+  const statusColor = isPositive ? "text-emerald-400" : "text-red-400";
   const hasDualMetricLayout = primaryValue !== undefined || secondaryValue !== undefined;
   const mainValue = primaryValue ?? value;
   const sideValue = secondaryValue ?? subValue;
@@ -25,7 +25,7 @@ export const StatCard = ({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
+        <CardTitle className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {title}
         </CardTitle>
       </CardHeader>

@@ -4,7 +4,7 @@ import { Skeleton } from "./ui/skeleton.jsx";
 import { BREAKPOINTS } from "../lib/constants.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
-const COLOR_PALETTE = ["#003f5c", "#2e4b7f", "#655197", "#9f509d", "#d44e90", "#fa5972", "#ff7a49", "#ffa600"];
+const COLOR_PALETTE = ["#5ca9ff", "#4d93ee", "#3e7cdc", "#2f67ca", "#2b56b1", "#23529a", "#1b4d82", "#144168"];
 
 export function PortfolioCompositionChart({
   data,
@@ -28,7 +28,7 @@ export function PortfolioCompositionChart({
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-96 items-center justify-center border rounded-lg">
+      <div className="flex h-96 items-center justify-center rounded-2xl border border-border/70 bg-card/65">
         <p className="text-muted-foreground">Keine Daten verfuegbar</p>
       </div>
     );
@@ -46,7 +46,7 @@ export function PortfolioCompositionChart({
     }
     const { name, count, value, percentage } = payload[0].payload;
     return (
-      <div className="bg-background border border-border rounded shadow-lg p-3 text-xs">
+      <div className="rounded-xl border border-border/70 bg-card/90 p-3 text-xs shadow-[0_14px_30px_rgba(0,0,0,0.3)]">
         <p className="font-semibold">{name}</p>
         <p className="text-muted-foreground">{count}x verfuegbar</p>
         <p className="font-semibold text-primary">
@@ -108,7 +108,7 @@ export function PortfolioCompositionChart({
             {displayData.map((item, idx) => (
               <div
                 key={idx}
-                className="flex cursor-pointer items-center gap-2 rounded border p-2 text-xs transition-colors hover:bg-muted/50 sm:text-sm"
+                className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/70 bg-card/65 p-2 text-xs transition-colors hover:bg-accent/45 sm:text-sm"
                 onMouseEnter={() => setHoveredIndex(idx)}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
@@ -123,7 +123,7 @@ export function PortfolioCompositionChart({
         </div>
       </div>
       <div className="grid grid-cols-1 gap-2">
-        <div className="rounded-lg border p-2 text-center sm:p-3">
+        <div className="rounded-xl border border-border/70 bg-card/65 p-2 text-center sm:p-3">
           <p className="text-[9px] font-semibold uppercase text-muted-foreground">Items</p>
           <p className="text-base font-bold sm:text-lg">{displayData.reduce((sum, item) => sum + item.count, 0)}</p>
         </div>

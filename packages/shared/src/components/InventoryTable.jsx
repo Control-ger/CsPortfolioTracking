@@ -15,7 +15,7 @@ import { Abbr } from "@shared/components/AbbreviationTooltip";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const ItemThumbnail = ({ imageUrl, name }) => (
-  <div className="h-14 w-14 overflow-hidden rounded-md border bg-muted/30 p-1">
+  <div className="h-14 w-14 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1">
     {imageUrl ? (
       <img
         src={imageUrl}
@@ -65,17 +65,17 @@ function deltaClassName(value) {
     return "text-muted-foreground";
   }
 
-  return value >= 0 ? "text-green-600" : "text-red-600";
+  return value >= 0 ? "text-emerald-400" : "text-red-400";
 }
 
 function freshnessBadgeClass(status) {
   switch (status) {
     case "fresh":
-      return "border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-900/60 dark:text-emerald-300";
+      return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
     case "aging":
-      return "border-amber-200 bg-amber-500/10 text-amber-700 dark:border-amber-900/60 dark:text-amber-300";
+      return "border-amber-400/35 bg-amber-500/12 text-amber-300";
     case "stale":
-      return "border-red-200 bg-red-500/10 text-red-700 dark:border-red-900/60 dark:text-red-300";
+      return "border-red-400/35 bg-red-500/12 text-red-300";
     default:
       return "border-muted text-muted-foreground";
   }
@@ -117,7 +117,7 @@ function SortHeaderButton({ label, align = "left", isActive, sortDirection, onCl
   return (
     <button
       type="button"
-      className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold uppercase tracking-wide transition-colors hover:bg-muted/70 ${
+      className={`inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold uppercase tracking-wide transition-colors hover:bg-muted/70 ${
         align === "right" ? "ml-auto" : ""
       } ${isActive ? "text-foreground" : "text-muted-foreground"}`}
       onClick={onClick}
@@ -246,14 +246,14 @@ export function InventoryTable({ investments, onSelectItem }) {
             {sortedInvestments.map((item) => (
               <TableRow
                 key={item.id}
-                className="group cursor-pointer transition-colors"
+                className="group cursor-pointer border-border/70 transition-colors hover:bg-accent/40"
                 onClick={() => onSelectItem(item)}
               >
                 <TableCell className="font-medium text-sm">
                   <div className="flex items-center gap-3">
                     <ItemThumbnail imageUrl={item.imageUrl} name={item.name} />
                     <span className="flex flex-col">
-                      <span className="transition-colors group-hover:text-primary">
+                      <span className="font-semibold transition-colors group-hover:text-primary">
                         {item.name}
                       </span>
                       <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
@@ -290,7 +290,7 @@ export function InventoryTable({ investments, onSelectItem }) {
                 <TableCell className="text-right">
                   {item.isLive && isFiniteNumber(item.roi) ? (
                     <span
-                      className={`text-sm font-bold ${item.roi >= 0 ? "text-green-500" : "text-red-500"}`}
+                      className={`text-sm font-bold ${item.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}
                     >
                       {formatSignedPercentOneDecimal(item.roi)}
                     </span>
@@ -307,7 +307,7 @@ export function InventoryTable({ investments, onSelectItem }) {
         {/* Mobile-View (unter md) */}
         <div className="space-y-3 px-2 md:hidden">
           {/* Sort Controls - Compact Horizontal */}
-          <div className="flex items-center gap-2 rounded-lg border bg-card p-2">
+          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/75 p-2.5 shadow-[0_14px_28px_rgba(0,0,0,0.2)]">
             <span className="text-[10px] uppercase text-muted-foreground shrink-0 pl-1">Sortierung</span>
             <div className="flex flex-1 gap-1 overflow-x-auto no-scrollbar">
               {[
@@ -322,10 +322,10 @@ export function InventoryTable({ investments, onSelectItem }) {
                     key={key}
                     type="button"
                     onClick={() => toggleSort(key)}
-                    className={`shrink-0 rounded px-2 py-1.5 text-xs font-medium transition-colors ${
+                    className={`shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
                       isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                        ? "bg-primary text-primary-foreground shadow-[0_8px_18px_rgba(255,255,255,0.14)]"
+                        : "bg-muted/35 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                     }`}
                     title={`${label} ${sortDirection === "asc" ? "↑" : "↓"}`}
                   >

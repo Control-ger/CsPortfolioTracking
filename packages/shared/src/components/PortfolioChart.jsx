@@ -267,13 +267,13 @@ export const PortfolioChart = ({
   );
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2 sm:pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="hidden text-base sm:block sm:text-lg">{title}</CardTitle>
+          <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {typeof onMetricsScopeChange === "function" ? (
-              <div className="inline-flex w-fit items-center rounded-md border p-1">
+              <div className="inline-flex w-fit items-center rounded-xl border border-border/70 bg-card/55 p-1">
                 {[
                   { key: "investments", label: "Investments" },
                   { key: "all", label: "Alles" },
@@ -283,9 +283,9 @@ export const PortfolioChart = ({
                     <button
                       key={option.key}
                       type="button"
-                      className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                         isActive
-                          ? "bg-background text-foreground shadow-sm"
+                          ? "bg-primary text-primary-foreground shadow-[0_8px_18px_rgba(255,255,255,0.15)]"
                           : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       }`}
                       onClick={() => onMetricsScopeChange(option.key)}
@@ -297,7 +297,7 @@ export const PortfolioChart = ({
                 })}
               </div>
             ) : null}
-            <div className="inline-flex w-fit items-center rounded-md border p-1">
+            <div className="inline-flex w-fit items-center rounded-xl border border-border/70 bg-card/55 p-1">
               {RANGE_OPTIONS.map((option) => {
                 const isActive = rangeKey === option.key;
 
@@ -305,9 +305,9 @@ export const PortfolioChart = ({
                   <button
                     key={option.key}
                     type="button"
-                    className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                       isActive
-                        ? "bg-background text-foreground shadow-sm"
+                        ? "bg-primary text-primary-foreground shadow-[0_8px_18px_rgba(255,255,255,0.15)]"
                         : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                     }`}
                     onClick={() => setRangeKey(option.key)}
@@ -368,8 +368,8 @@ export const PortfolioChart = ({
                 onHoverChange?.(null);
               }}
             >
-              <CartesianGrid vertical={false} />
-              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+              <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.45} />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.8} strokeDasharray="3 3" />
               <XAxis
                 dataKey="timestamp"
                 type="number"
@@ -403,12 +403,13 @@ export const PortfolioChart = ({
                 dataKey="displayValue"
                 type="monotone"
                 stroke="var(--color-growthPercent)"
-                strokeWidth={2.5}
+                strokeWidth={2.7}
                 dot={false}
                 activeDot={{
-                  r: 4,
+                  r: 5,
                   fill: trendStats.lineColor,
                   stroke: trendStats.lineColor,
+                  strokeWidth: 2,
                 }}
               />
             </LineChart>
@@ -424,7 +425,7 @@ export const PortfolioChart = ({
           </>
         ) : (
           <>
-            <div className="flex items-center gap-2 leading-none font-medium">
+            <div className="flex items-center gap-2 leading-none font-semibold">
               {trendStats.isPositive ? "Gewinn" : "Verlust"}: {formatSignedCurrency(trendStats.deltaValue)} (
               {formatSignedPercent(trendStats.deltaPercent)})
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}

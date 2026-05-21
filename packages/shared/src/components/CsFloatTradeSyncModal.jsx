@@ -22,13 +22,13 @@ function formatDate(value) {
 function Stat({ label, value, tone = "muted" }) {
   const toneClass =
     tone === "positive"
-      ? "text-green-600"
+      ? "text-emerald-400"
       : tone === "negative"
-        ? "text-red-600"
+        ? "text-red-400"
         : "text-foreground";
 
   return (
-    <div className="rounded-md border px-2 py-1.5 sm:p-2">
+    <div className="rounded-xl border border-border/70 bg-card/65 px-2 py-1.5 sm:p-2">
       <div className="text-[9px] sm:text-[10px] uppercase text-muted-foreground leading-tight">{label}</div>
       <div className={`text-sm sm:text-base font-bold ${toneClass}`}>{value}</div>
     </div>
@@ -131,22 +131,22 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         </div>
 
         {preview?.clustering?.applied ? (
-          <div className="rounded-lg border px-2 py-1.5 text-[10px] text-muted-foreground">
+          <div className="rounded-xl border border-border/70 bg-card/65 px-2 py-1.5 text-[10px] text-muted-foreground">
             Clustering: {preview.clustering.baseNormalizedCount} → {preview.clustering.clusteredCount} Positionen
           </div>
         ) : null}
 
         {preview?.skipped > 0 ? (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-900 dark:text-amber-200">
+          <div className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-2 text-xs text-amber-200">
             <div className="flex flex-wrap items-center gap-1">
               <span className="font-semibold">{preview.skipped} übersprungen:</span>
               {skipReasonEntries.slice(0, 2).map(([reason, count]) => (
-                <Badge key={reason} variant="outline" className="text-[10px] border-amber-700/40 text-amber-900 dark:text-amber-200">
+                <Badge key={reason} variant="outline" className="border-amber-400/35 bg-amber-500/10 text-[10px] text-amber-200">
                   {reason}: {count}
                 </Badge>
               ))}
               {skipReasonEntries.length > 2 && (
-                <span className="text-[10px] text-amber-700">+{skipReasonEntries.length - 2} mehr</span>
+                <span className="text-[10px] text-amber-300">+{skipReasonEntries.length - 2} mehr</span>
               )}
             </div>
           </div>
@@ -160,7 +160,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
             {loadingPreview ? (
               <div className="h-full space-y-2 overflow-hidden pr-1">
                 {[1, 2, 3, 4].map((entry) => (
-                  <div key={entry} className="grid gap-2 rounded-md border bg-background p-3 md:grid-cols-[1.2fr_0.5fr_0.6fr_0.7fr_0.8fr] md:items-center">
+                  <div key={entry} className="grid gap-2 rounded-xl border border-border/70 bg-card/65 p-3 md:grid-cols-[1.2fr_0.5fr_0.6fr_0.7fr_0.8fr] md:items-center">
                     <div className="space-y-2">
                       <Skeleton className="h-4 w-4/5" />
                       <Skeleton className="h-3 w-3/5" />
@@ -182,7 +182,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 {sampleRows.slice(0, 20).map((trade) => (
                   <div
                     key={trade.externalTradeId}
-                    className="grid gap-2 rounded-md border bg-background p-3 text-sm md:grid-cols-[1.2fr_0.5fr_0.6fr_0.7fr_0.8fr] md:items-center"
+                    className="grid gap-2 rounded-xl border border-border/70 bg-card/65 p-3 text-sm md:grid-cols-[1.2fr_0.5fr_0.6fr_0.7fr_0.8fr] md:items-center"
                   >
                     <div className="min-w-0">
                       <div className="truncate font-medium">{trade.name}</div>

@@ -44,8 +44,8 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="md" className="md:hidden">
       <div className="space-y-4">
-        <div className="flex gap-4">
-          <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border ">
+        <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+          <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-border/75 ">
             {item.imageUrl ? (
               <img
                 src={item.imageUrl}
@@ -77,41 +77,41 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-md border p-2">
+          <div className="rounded-xl border border-border/70 bg-card/65 p-2">
             <p className="text-xs uppercase text-muted-foreground">Aktuell</p>
             <p className="text-sm font-semibold">{formatPrice(item.currentPrice)}</p>
           </div>
 
           {item.lastPrice !== null && (
-            <div className="rounded-md border p-2">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Letzter Preis</p>
               <p className="text-sm font-semibold">{formatPrice(item.lastPrice)}</p>
             </div>
           )}
 
           {item.highestPrice !== null && (
-            <div className="rounded-md border p-2">
-              <p className="text-xs uppercase text-muted-foreground">Höchst</p>
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2">
+              <p className="text-xs uppercase text-muted-foreground">Hoechst</p>
               <p className="text-sm font-semibold">{formatPrice(item.highestPrice)}</p>
             </div>
           )}
 
           {item.lowestPrice !== null && (
-            <div className="rounded-md border p-2">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Tiefst</p>
               <p className="text-sm font-semibold">{formatPrice(item.lowestPrice)}</p>
             </div>
           )}
 
           {item.avgPrice !== null && (
-            <div className="rounded-md border p-2">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Durchschnitt</p>
               <p className="text-sm font-semibold">{formatPrice(item.avgPrice)}</p>
             </div>
           )}
 
           {item.highestPrice !== null || item.lowestPrice !== null ? (
-            <div className="col-span-2 rounded-md border p-2">
+            <div className="col-span-2 rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Preis-Spanne</p>
               <p className="text-sm font-semibold">
                 {formatPrice(item.lowestPrice)} - {formatPrice(item.highestPrice)}
@@ -121,7 +121,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
         </div>
 
         {Array.isArray(item.priceHistory) && item.priceHistory.length > 0 ? (
-          <div className="rounded-lg border p-3">
+          <div className="rounded-2xl border border-border/75 bg-card/65 p-3">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold">Preisentwicklung</h3>
               <button
@@ -158,12 +158,12 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
         )}
 
         {/* Delete Section */}
-        <div className="border-t pt-4">
+        <div className="sticky bottom-0 z-10 -mx-3 border-t border-border/70 bg-background/92 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-4 sm:backdrop-blur-0">
           <Button
             variant="outline"
             size="sm"
             onClick={handleDeleteClick}
-            className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            className="h-10 w-full rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Aus Watchlist entfernen
@@ -182,3 +182,4 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
     </BaseModal>
   );
 }
+

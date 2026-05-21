@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { ItemSearch } from "./ItemSearch";
 import { PortfolioChart } from "./PortfolioChart";
-import { ApiWarnings } from "./ApiWarnings";
 import { ItemListRow } from "./ItemListRow";
 import { X, Trash2 } from "lucide-react";
 import {
@@ -41,7 +40,7 @@ function WatchlistLoadingSkeleton() {
           </CardHeader>
           <CardContent className="space-y-2 sm:space-y-3">
             {[1, 2, 3, 4].map((entry) => (
-              <div key={entry} className="rounded-lg border p-3">
+              <div key={entry} className="rounded-xl border border-border/70 bg-card/65 p-3">
                 <div className="flex items-start gap-3">
                   <Skeleton className="h-12 w-12 rounded-md" />
                   <div className="flex-1 space-y-2">
@@ -69,18 +68,23 @@ function WatchlistLoadingSkeleton() {
   );
 }
 
-export const Watchlist = ({ focusTarget = null }) => {
+export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
+  const [searchWarnings, setSearchWarnings] = useState([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const itemRefs = useRef(new Map());
   const hasFiniteNumber = (value) => Number.isFinite(Number(value));
+  const combinedWarnings = useMemo(
+    () => [...warnings, ...searchWarnings],
+    [searchWarnings, warnings],
+  );
 
   const loadWatchlistData = async () => {
     try {
@@ -135,6 +139,14 @@ export const Watchlist = ({ focusTarget = null }) => {
   useEffect(() => {
     loadWatchlistData();
   }, []);
+
+  useEffect(() => {
+    onWarningsChange?.(combinedWarnings);
+  }, [combinedWarnings, onWarningsChange]);
+
+  useEffect(() => () => {
+    onWarningsChange?.([]);
+  }, [onWarningsChange]);
 
   useEffect(() => {
     if (!focusTarget?.id || watchlistItems.length === 0) {
@@ -214,11 +226,10 @@ export const Watchlist = ({ focusTarget = null }) => {
         </div>
       )}
 
-      <ApiWarnings warnings={warnings} />
-
       <ItemSearch
         onAddToWatchlist={loadWatchlistData}
         existingItems={watchlistItems}
+        onWarningsChange={setSearchWarnings}
       />
 
       {watchlistItems.length === 0 ? (
@@ -251,7 +262,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                        }}
                        className={`transition-colors ${
                          selectedItem?.id === item.id
-                           ? "rounded-lg border-primary bg-primary/10"
+                           ? "rounded-2xl border border-primary/40 bg-primary/14 shadow-[0_14px_28px_rgba(255,255,255,0.12)]"
                            : ""
                        }`}
                      >
@@ -277,7 +288,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                 <CardHeader className="pb-2 sm:pb-4">
                   <div className="flex items-start justify-between gap-2 sm:gap-3">
                     <div className="flex min-w-0 gap-2 sm:gap-4">
-                      <div className="h-14 w-14 sm:h-20 sm:w-20 overflow-hidden rounded-lg border flex-shrink-0">
+                      <div className="h-14 w-14 sm:h-20 sm:w-20 overflow-hidden rounded-xl border border-border/75 bg-muted/25 flex-shrink-0">
                         {selectedItem.imageUrl ? (
                           <img
                             src={selectedItem.imageUrl}
@@ -307,7 +318,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                     <button
                       type="button"
                       onClick={() => setSelectedItem(null)}
-                      className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
@@ -352,7 +363,7 @@ export const Watchlist = ({ focusTarget = null }) => {
                     </div>
                   )}
                   {selectedItem.changeLabel !== "N/A" && (
-                    <div className="mt-4 rounded-lg p-4">
+                    <div className="mt-4 rounded-xl border border-border/70 bg-card/65 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-sm text-muted-foreground">
                           Preisveraenderung (7 Tage)
@@ -360,8 +371,8 @@ export const Watchlist = ({ focusTarget = null }) => {
                         <span
                           className={`font-semibold ${
                             selectedItem.trend === "down"
-                              ? "text-red-600"
-                              : "text-green-600"
+                              ? "text-red-400"
+                              : "text-emerald-400"
                           }`}
                         >
                           {selectedItem.changeLabel}

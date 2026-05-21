@@ -32,7 +32,7 @@ export const ItemDetailPanel = ({
 
   if (!item)
     return (
-        <div className="flex min-h-50 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-muted-foreground sm:min-h-75 sm:p-8">
+        <div className="flex min-h-50 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/60 p-3 text-center text-muted-foreground sm:min-h-75 sm:p-8">
           <div className="text-xs sm:text-sm">
             Waehle ein Item aus der Liste,
             <br />
@@ -85,10 +85,10 @@ export const ItemDetailPanel = ({
 
   return (
       <>
-        <Card className="border-primary/20 shadow-lg">
+        <Card className="border-border/70">
           <CardHeader className="pb-2 sm:pb-4">
             <div className="flex items-start gap-2 sm:gap-4">
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted/30 p-1 sm:h-24 sm:w-24">
+              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1 sm:h-24 sm:w-24">
                 {item.imageUrl ? (
                     <img
                         src={item.imageUrl}
@@ -115,7 +115,7 @@ export const ItemDetailPanel = ({
                 <CardDescription className="text-[10px] font-bold uppercase tracking-widest">
                   {item.type}
                 </CardDescription>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="text-[10px] uppercase">
                     Bucket: {String(item?.bucket || "investment").toLowerCase() === "inventory" ? "Inventar" : "Investment"}
                   </Badge>
@@ -127,14 +127,14 @@ export const ItemDetailPanel = ({
                       variant="outline"
                       size="sm"
                       onClick={handleExcludeClick}
-                      className={`h-7 rounded-md border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow ${
+                      className={`h-8 rounded-lg border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow ${
                           item.excluded
-                              ? "border-blue-500/50 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
-                              : "border-amber-500/50 bg-amber-500/10 text-amber-800 hover:bg-amber-500/20 dark:text-amber-300"
+                              ? "border-sky-400/35 bg-sky-500/12 text-sky-300 hover:bg-sky-500/18"
+                              : "border-amber-400/35 bg-amber-500/12 text-amber-300 hover:bg-amber-500/18"
                       }`}
                   >
                     <AlertCircle className="mr-1 h-3 w-3" />
-                    {item.excluded ? "Einschließen" : "Ausschließen"}
+                    {item.excluded ? "Einschliessen" : "Ausschliessen"}
                     </Button>
                   ) : null}
                   {bucketToggleEnabled ? (
@@ -142,7 +142,7 @@ export const ItemDetailPanel = ({
                       variant="outline"
                       size="sm"
                       onClick={() => void handleBucketToggle()}
-                      className="h-7 rounded-md border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow"
+                      className="h-8 rounded-lg border border-border/75 bg-card/75 px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:bg-accent/70 hover:shadow"
                     >
                       {String(item?.bucket || "investment").toLowerCase() === "inventory"
                         ? "Zu Investments"
@@ -155,13 +155,13 @@ export const ItemDetailPanel = ({
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-6">
             <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
-              <div className="rounded-md border p-2 sm:p-3">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
                 <p className="mt-2 text-xs sm:text-sm font-bold">{formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
                 <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
               </div>
 
-              <div className="rounded-md border p-2 sm:p-3">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Live</p>
                 <p
                     className={`mt-2 text-xs sm:text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
@@ -175,7 +175,7 @@ export const ItemDetailPanel = ({
                 </div>
               </div>
 
-              <div className="rounded-md border p-2 sm:p-3">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Break-even</p>
                 <p className="mt-2 text-xs sm:text-sm font-bold">
                   {formatPrice(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}
@@ -183,7 +183,7 @@ export const ItemDetailPanel = ({
                 <p className="mt-1 text-[10px] text-muted-foreground">inkl. Seller + Withdrawal + FX Fees</p>
               </div>
 
-              <div className="rounded-md border p-2 sm:p-3">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Positionswert</p>
                 <p className="mt-2 text-xs sm:text-sm font-bold">
                   {item.isLive ? formatPrice(item.currentValue) : "N/A"}
@@ -193,15 +193,15 @@ export const ItemDetailPanel = ({
                 </p>
               </div>
 
-              <div className="rounded-md border p-2 sm:p-3">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Gewinn / Verlust</p>
                 <p
                   className={`mt-2 text-xs sm:text-sm font-bold ${
                     item.isProfitPositive === null
                       ? "text-muted-foreground"
                       : item.isProfitPositive
-                        ? "text-green-600"
-                        : "text-red-600"
+                        ? "text-emerald-400"
+                        : "text-red-400"
                   }`}
                 >
                   {item.isLive
@@ -215,7 +215,7 @@ export const ItemDetailPanel = ({
                 </p>
               </div>
 
-              <div className="rounded-md border p-2 sm:p-3">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Freshness</p>
                 <p className="mt-2 text-xs sm:text-sm font-bold">{item.freshnessLabel || "N/A"}</p>
                 <p className="mt-1 text-[10px] text-muted-foreground">
@@ -223,7 +223,7 @@ export const ItemDetailPanel = ({
                 </p>
               </div>
 
-              <div className="rounded-md border p-2 sm:p-3">
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Cost Basis</p>
                 <p className="mt-2 text-xs sm:text-sm font-bold">
                   {typeof item.costBasisTotal === "number" ? formatPrice(item.costBasisTotal) : "N/A"}
@@ -264,7 +264,7 @@ export const ItemDetailPanel = ({
 
             {/* Price History Chart */}
             {Array.isArray(history) && history.length > 0 && (
-              <div className="rounded-lg border p-3 sm:p-4">
+              <div className="rounded-2xl border border-border/70 bg-card/65 p-3 sm:p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold">Preisentwicklung</h3>
                   <button
@@ -309,3 +309,4 @@ export const ItemDetailPanel = ({
       </>
   );
 };
+

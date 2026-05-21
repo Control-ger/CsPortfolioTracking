@@ -23,17 +23,17 @@ function deltaClassName(value) {
     return "text-muted-foreground";
   }
 
-  return value >= 0 ? "text-green-600" : "text-red-600";
+  return value >= 0 ? "text-emerald-400" : "text-red-400";
 }
 
 function freshnessBadgeClass(status) {
   switch (status) {
     case "fresh":
-      return "border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-900/60 dark:text-emerald-300";
+      return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
     case "aging":
-      return "border-amber-200 bg-amber-500/10 text-amber-700 dark:border-amber-900/60 dark:text-amber-300";
+      return "border-amber-400/35 bg-amber-500/12 text-amber-300";
     case "stale":
-      return "border-red-200 bg-red-500/10 text-red-700 dark:border-red-900/60 dark:text-red-300";
+      return "border-red-400/35 bg-red-500/12 text-red-300";
     default:
       return "border-muted text-muted-foreground";
   }
@@ -41,7 +41,7 @@ function freshnessBadgeClass(status) {
 
 function ChangeMetric({ label, percent, euro }) {
   return (
-    <div className="flex items-center justify-between rounded border bg-background/80 px-2 py-1.5">
+    <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/65 px-2 py-1.5">
       <span className="text-[10px] uppercase text-muted-foreground">{label}</span>
       <span className={`text-xs font-semibold ${deltaClassName(percent)}`}>
         {formatSignedPercent(percent)}
@@ -71,7 +71,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
     <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="3xl" className="w-full sm:max-w-2xl md:max-w-4xl">
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="h-24 w-24 sm:h-32 sm:w-32 shrink-0 overflow-hidden rounded-lg border bg-muted/30 p-1">
+          <div className="h-24 w-24 sm:h-32 sm:w-32 shrink-0 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1">
             {item.imageUrl ? (
               <img
                 src={item.imageUrl}
@@ -103,7 +103,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
 
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:gap-6 lg:grid-cols-3">
           <div className="space-y-2 sm:space-y-3 lg:col-span-1">
-            <div className="rounded-md border p-2 sm:p-3">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
               <p className="text-sm font-bold">{formatPrice(item.buyPrice)}</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -111,7 +111,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border p-2 sm:p-3">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Break-even</p>
               <p className="text-sm font-bold">
                 {formatPrice(item.breakEvenPrice ?? item.buyPrice)}
@@ -121,7 +121,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border p-2 sm:p-3">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Live</p>
               <p
                 className={`text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
@@ -130,7 +130,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border p-2 sm:p-3">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Position</p>
               <p className="text-sm font-bold">{item.isLive ? formatPrice(item.currentValue) : "N/A"}</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -138,15 +138,15 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </p>
             </div>
 
-            <div className="rounded-md border p-2 sm:p-3">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
               <p className="text-[10px] uppercase text-muted-foreground">Gewinn/Verlust</p>
               <p
                 className={`text-sm font-bold ${
                   item.isProfitPositive === null
                     ? "text-muted-foreground"
                     : item.isProfitPositive
-                      ? "text-green-600"
-                      : "text-red-600"
+                      ? "text-emerald-400"
+                      : "text-red-400"
                 }`}
               >
                 {item.isLive
@@ -156,7 +156,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               <p className="mt-1 text-[10px] text-muted-foreground">{formatSignedPercent(item.roi)}</p>
             </div>
 
-            <div className="rounded-md border p-2 sm:p-3">
+            <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
               <p className="mb-2 text-[10px] uppercase text-muted-foreground">Price Change</p>
               <div className="space-y-1">
                 <ChangeMetric
@@ -179,7 +179,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
           </div>
 
           {history && history.length > 0 ? (
-            <div className="rounded-lg border p-3 sm:p-4 lg:col-span-2">
+            <div className="rounded-2xl border border-border/70 bg-card/65 p-3 sm:p-4 lg:col-span-2">
               <h3 className="mb-3 sm:mb-4 text-sm font-semibold">Preishistorie</h3>
               <ResponsiveContainer width="100%" height={isSmallScreen ? 200 : 280}>
                 <AreaChart data={history}>
@@ -196,7 +196,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center rounded-lg border border-dashed p-3 sm:p-4 text-sm text-muted-foreground lg:col-span-2">
+            <div className="flex items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/60 p-3 sm:p-4 text-sm text-muted-foreground lg:col-span-2">
               Keine Positionshistorie verfuegbar.
             </div>
           )}

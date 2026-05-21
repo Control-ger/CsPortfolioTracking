@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
-import { ApiWarnings } from "./ApiWarnings";
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -12,6 +11,7 @@ import {
   LoaderCircle,
   Plus,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 import { searchWatchlistItems } from "@shared/lib/apiClient.js";
 import { createWatchlistItemData, createWatchlistItemsBatchData } from "@shared/lib/dataSource.js";
@@ -131,7 +131,7 @@ function resolveKeywordBrowseType(term) {
   return BROWSE_KEYWORD_MAP[normalized] || null;
 }
 
-export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
+export const ItemSearch = ({ onAddToWatchlist, existingItems = [], onWarningsChange }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [itemType, setItemType] = useState("all");
   const [wear, setWear] = useState("all");
@@ -145,6 +145,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const [submittingItem, setSubmittingItem] = useState("");
   const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
+  const [showFiltersOnMobile, setShowFiltersOnMobile] = useState(false);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
   const wearEnabled = itemType === "skin";
@@ -251,6 +252,14 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
       window.clearTimeout(timeoutId);
     };
   }, [effectiveItemType, effectiveTerm, page, shouldSearch, sortBy, wear]);
+
+  useEffect(() => {
+    onWarningsChange?.(warnings);
+  }, [onWarningsChange, warnings]);
+
+  useEffect(() => () => {
+    onWarningsChange?.([]);
+  }, [onWarningsChange]);
 
   const handleTypeChange = (nextType) => {
     setItemType(nextType);
@@ -372,7 +381,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     }
 
     return (
-      <div className="space-y-2 rounded-lg border px-3 py-2">
+      <div className="space-y-2 rounded-xl border border-border/70 bg-card/65 px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
             {results.length} / {totalItems} Treffer angezeigt | Seite {page} von {totalPages}
@@ -383,7 +392,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               type="button"
               onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
               disabled={isSearching}
-              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-border/75 px-2 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSearching ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ChevronRight className="h-3.5 w-3.5" />}
               Mehr laden
@@ -396,7 +405,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             type="button"
             onClick={() => setPage(1)}
             disabled={page === 1 || isSearching}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/75 transition-colors hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Erste Seite"
           >
             <ChevronsLeft className="h-4 w-4" />
@@ -407,7 +416,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               setPage((currentPage) => Math.max(1, currentPage - 1))
             }
             disabled={page === 1 || isSearching}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/75 transition-colors hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Vorherige Seite"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -430,7 +439,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                   className={`inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     paginationItem === page
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
+                      : "hover:bg-muted/70"
                   }`}
                 >
                   {paginationItem}
@@ -444,7 +453,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
               setPage((currentPage) => Math.min(totalPages, currentPage + 1))
             }
             disabled={page >= totalPages || isSearching}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/75 transition-colors hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Naechste Seite"
           >
             <ChevronRight className="h-4 w-4" />
@@ -453,7 +462,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             type="button"
             onClick={() => setPage(totalPages)}
             disabled={page >= totalPages || isSearching}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/75 transition-colors hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Letzte Seite"
           >
             <ChevronsRight className="h-4 w-4" />
@@ -466,7 +475,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   const renderState = () => {
     if (!shouldSearch) {
       return (
-        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border/70 bg-card/55 p-4 text-sm text-muted-foreground">
           Suche mit mindestens 2 Zeichen oder starte mit Kategorien wie
           "cases", "stickers", "music kits". Alternativ oben direkt per
           Kategorie browsen.
@@ -476,9 +485,9 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
     if (isSearching) {
       return (
-        <div className="space-y-2.5 rounded-lg border p-3">
+        <div className="space-y-2.5 rounded-xl border border-border/70 bg-card/65 p-3">
           {[1, 2, 3].map((entry) => (
-            <div key={entry} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+            <div key={entry} className="flex items-center gap-3 rounded-xl border border-border/70 px-3 py-2.5">
               <Skeleton className="h-12 w-12 rounded-md" />
               <div className="min-w-0 flex-1 space-y-2">
                 <Skeleton className="h-4 w-3/4" />
@@ -497,7 +506,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
 
     if (results.length === 0) {
       return (
-        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border/70 bg-card/55 p-4 text-sm text-muted-foreground">
           Keine passenden Items fuer diese Kombination gefunden. Tipp: Nutze
           die Kategorie-Chips oder versuche Begriffe wie "case", "sticker",
           "ak-47", "moto".
@@ -508,17 +517,17 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
     return (
       <div className="space-y-2.5">
         {selectedItems.length > 0 ? (
-          <div className="space-y-2 rounded-lg border px-3 py-2">
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-card/65 px-3 py-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 {selectedItems.length} in Auswahl
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setSelectedItems([])}
                   disabled={isBatchSubmitting || submittingItem !== ""}
-                  className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 flex-1 items-center justify-center rounded-xl border border-border/75 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:flex-none sm:px-2.5"
                 >
                   Auswahl leeren
                 </button>
@@ -526,7 +535,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                   type="button"
                   onClick={handleBatchAdd}
                   disabled={selectedItems.length === 0 || isBatchSubmitting || submittingItem !== ""}
-                  className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-[0_10px_22px_rgba(255,255,255,0.14)] transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:min-w-28 sm:flex-none"
                 >
                   {isBatchSubmitting ? (
                     <>
@@ -575,39 +584,39 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
           return (
             <div
               key={candidate.marketHashName}
-              className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+              className="rounded-2xl border border-border/70 bg-card/65 px-3 py-3"
             >
-              <div className="h-12 w-12 overflow-hidden rounded-md ">
-                {candidate.iconUrl ? (
-                  <img
-                    src={candidate.iconUrl}
-                    alt={candidate.displayName}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                    N/A
-                  </div>
-                )}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{candidate.displayName}</p>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  <span className="rounded-full px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {candidate.itemTypeLabel}
-                  </span>
-                  {candidate.wearLabel && (
-                    <span className="rounded-full px-2 py-0.5 text-[11px] text-muted-foreground">
-                      {candidate.wearLabel}
-                    </span>
+              <div className="flex items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-muted/25">
+                  {candidate.iconUrl ? (
+                    <img
+                      src={candidate.iconUrl}
+                      alt={candidate.displayName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                      N/A
+                    </div>
                   )}
-                  <span className="rounded-full px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {candidate.marketTypeLabel}
-                  </span>
                 </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-primary">
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{candidate.displayName}</p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    <span className="rounded-full border border-border/60 bg-card/80 px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {candidate.itemTypeLabel}
+                    </span>
+                    {candidate.wearLabel && (
+                      <span className="rounded-full border border-border/60 bg-card/80 px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {candidate.wearLabel}
+                      </span>
+                    )}
+                    <span className="rounded-full border border-border/60 bg-card/80 px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {candidate.marketTypeLabel}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-primary">
                     {typeof candidate.livePriceEur === "number"
                       ? `${candidate.livePriceEur.toFixed(2)} EUR`
                       : "Preis folgt"}
@@ -615,12 +624,12 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                 </div>
               </div>
 
-              <div className="flex min-w-[160px] flex-col items-end gap-1.5">
+              <div className="mt-3 flex flex-wrap items-center gap-2 sm:justify-end">
                 <button
                   type="button"
                   onClick={() => handleAddItem(candidate)}
                   disabled={alreadyAdded || isSubmitting || submittingItem !== "" || isBatchSubmitting}
-                  className="inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 min-w-[126px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-[0_10px_22px_rgba(255,255,255,0.14)] transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:min-w-24 sm:flex-none"
                 >
                   {isSubmitting ? (
                     <>
@@ -645,7 +654,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                         : addToSelection(candidate.marketHashName)
                     }
                     disabled={isSubmitting || submittingItem !== "" || isBatchSubmitting}
-                    className="inline-flex min-w-24 items-center justify-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-9 min-w-[126px] flex-1 items-center justify-center rounded-xl border border-border/75 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:min-w-24 sm:flex-none"
                   >
                     {isSelected ? "Auswahl entfernen" : "Zur Auswahl"}
                   </button>
@@ -659,14 +668,14 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-lg">
+    <Card className="overflow-hidden border-border/70 bg-card/70">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-lg font-bold">
           <Search className="h-4 w-4" />
-          Search-to-Add
+          Suche & Hinzufuegen
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3.5">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -674,7 +683,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="Zum Beispiel: Kilowatt Case, AK-47 Redline oder Music Kit"
-            className="h-10 w-full rounded-lg border bg-background py-2 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="h-11 w-full rounded-xl border border-input bg-card/85 py-2 pl-10 pr-4 text-sm text-foreground shadow-[0_12px_30px_rgba(0,0,0,0.18)] focus:outline-none focus:ring-2 focus:ring-ring/60"
             disabled={submittingItem !== ""}
           />
         </div>
@@ -685,7 +694,7 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
           </p>
         )}
 
-        <div className="rounded-lg border p-2.5">
+        <div className="rounded-2xl border border-border/70 bg-card/70 p-2.5">
           <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Compass className="h-3.5 w-3.5" />
             Schnell browsebar nach Kategorie
@@ -696,10 +705,10 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
                 key={chip.type}
                 type="button"
                 onClick={() => handleQuickBrowse(chip.type)}
-                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
                   itemType === chip.type
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "bg-background hover:bg-muted"
+                    ? "border-primary/60 bg-primary text-primary-foreground"
+                    : "bg-muted/35 hover:bg-muted/70"
                 }`}
                 disabled={submittingItem !== ""}
               >
@@ -709,58 +718,76 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <label className="space-y-2 text-sm">
-            <span className="font-medium">Item Type</span>
-            <select
-              value={itemType}
-              onChange={(event) => handleTypeChange(event.target.value)}
-              className="h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={submittingItem !== ""}
-            >
-              {ITEM_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="rounded-2xl border border-border/70 bg-card/65 p-2.5">
+          <button
+            type="button"
+            onClick={() => setShowFiltersOnMobile((current) => !current)}
+            className="inline-flex w-full items-center justify-between rounded-xl border border-border/70 bg-card/70 px-3 py-2 text-sm font-semibold transition-colors hover:bg-accent/60 sm:hidden"
+          >
+            <span className="inline-flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              Filter & Sortierung
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {showFiltersOnMobile ? "Verbergen" : "Anzeigen"}
+            </span>
+          </button>
 
-          <label className="space-y-2 text-sm">
-            <span className="font-medium">Wear / Condition</span>
-            <select
-              value={wear}
-              onChange={(event) => setWear(event.target.value)}
-              className="h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!wearEnabled || submittingItem !== ""}
-            >
-              {WEAR_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {!wearEnabled && (
-              <p className="text-xs text-muted-foreground">
-                Der Wear-Filter ist nur fuer den Item-Typ Skin aktiv.
-              </p>
-            )}
-          </label>
-          <label className="space-y-2 text-sm">
-            <span className="font-medium">Sortierung</span>
-            <select
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              className="h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={submittingItem !== ""}
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className={`${showFiltersOnMobile ? "mt-3 block" : "hidden"} sm:mt-0 sm:block`}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <label className="space-y-2 text-sm">
+                <span className="font-medium">Item Type</span>
+                <select
+                  value={itemType}
+                  onChange={(event) => handleTypeChange(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-input bg-card/80 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/60"
+                  disabled={submittingItem !== ""}
+                >
+                  {ITEM_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-2 text-sm">
+                <span className="font-medium">Wear / Condition</span>
+                <select
+                  value={wear}
+                  onChange={(event) => setWear(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-input bg-card/80 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!wearEnabled || submittingItem !== ""}
+                >
+                  {WEAR_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {!wearEnabled && (
+                  <p className="text-xs text-muted-foreground">
+                    Der Wear-Filter ist nur fuer den Item-Typ Skin aktiv.
+                  </p>
+                )}
+              </label>
+              <label className="space-y-2 text-sm">
+                <span className="font-medium">Sortierung</span>
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-input bg-card/80 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/60"
+                  disabled={submittingItem !== ""}
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -768,8 +795,6 @@ export const ItemSearch = ({ onAddToWatchlist, existingItems = [] }) => {
             {error}
           </div>
         )}
-
-        <ApiWarnings warnings={warnings} />
 
         {renderState()}
         {renderPagination()}

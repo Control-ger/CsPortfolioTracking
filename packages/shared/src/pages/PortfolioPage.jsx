@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Package, Search } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
-import { ApiWarnings } from "@shared/components";
 import { InventoryTable } from "@shared/components";
 import { ItemDetailsModal } from "@shared/components";
 import { ItemDetailPanel } from "@shared/components";
@@ -80,13 +79,13 @@ function formatAge(seconds) {
 
 function freshnessBadgeClass(staleRatio) {
   if (staleRatio <= 0) {
-    return "border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-900/60 dark:text-emerald-300";
+    return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
   }
   if (staleRatio < 50) {
-    return "border-amber-200 bg-amber-500/10 text-amber-700 dark:border-amber-900/60 dark:text-amber-300";
+    return "border-amber-400/35 bg-amber-500/12 text-amber-300";
   }
 
-  return "border-red-200 bg-red-500/10 text-red-700 dark:border-red-900/60 dark:text-red-300";
+  return "border-red-400/35 bg-red-500/12 text-red-300";
 }
 
 function formatRelativeHours(hours) {
@@ -362,6 +361,43 @@ function formatSteamSyncError(error) {
   return raw || "Steam Sync fehlgeschlagen.";
 }
 
+function formatApiWarningMetaLine(warning) {
+  const metaParts = [];
+  if (warning?.statusCode) {
+    metaParts.push(`HTTP ${warning.statusCode}`);
+  }
+  if (warning?.occurrences > 1) {
+    metaParts.push(`${warning.occurrences} Vorgaenge`);
+  }
+  if (Array.isArray(warning?.items) && warning.items.length > 0) {
+    metaParts.push(`Items: ${warning.items.join(", ")}`);
+  }
+  return metaParts.join(" | ");
+}
+
+function mapWarningsToNotifications(warnings, { sourceKey, sourceLabel }) {
+  if (!Array.isArray(warnings) || warnings.length === 0) {
+    return [];
+  }
+
+  return warnings.map((warning, index) => {
+    const warningMeta = formatApiWarningMetaLine(warning);
+    const metaParts = [];
+    if (sourceLabel) {
+      metaParts.push(`Quelle: ${sourceLabel}`);
+    }
+    if (warningMeta) {
+      metaParts.push(warningMeta);
+    }
+
+    return {
+      id: `csfloat-warning-${sourceKey}-${warning?.code || "warning"}-${warning?.statusCode || "na"}-${index}`,
+      message: warning?.message || "CSFloat Warnung",
+      meta: metaParts.join(" | "),
+    };
+  });
+}
+
 export function PortfolioPage({ initialTab = "overview" }) {
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const isDesktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
@@ -457,6 +493,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     lastSyncedAt: null,
   });
   const [syncNotifications, setSyncNotifications] = useState([]);
+  const [uiWarningNotificationsBySource, setUiWarningNotificationsBySource] = useState({});
   const [appUpdateNotification, setAppUpdateNotification] = useState({
     state: "idle",
     version: null,
@@ -1592,18 +1629,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
   })();
   const appUpdateNotificationClass = (() => {
     if (appUpdateState === "downloaded") {
-      return "w-full rounded-md border border-emerald-300 bg-emerald-500/10 px-2 py-2 text-left hover:bg-emerald-500/20";
+      return "w-full rounded-xl border border-emerald-400/35 bg-emerald-500/12 px-2 py-2 text-left hover:bg-emerald-500/18";
     }
     if (appUpdateState === "downloading") {
-      return "w-full rounded-md border border-blue-300 bg-blue-500/10 px-2 py-2 text-left hover:bg-blue-500/20";
+      return "w-full rounded-xl border border-blue-400/35 bg-blue-500/12 px-2 py-2 text-left hover:bg-blue-500/18";
     }
     if (appUpdateState === "available") {
-      return "w-full rounded-md border border-amber-300 bg-amber-500/10 px-2 py-2 text-left hover:bg-amber-500/20";
+      return "w-full rounded-xl border border-amber-400/35 bg-amber-500/12 px-2 py-2 text-left hover:bg-amber-500/18";
     }
     if (appUpdateState === "error") {
-      return "w-full rounded-md border border-destructive/60 bg-destructive/10 px-2 py-2 text-left hover:bg-destructive/20";
+      return "w-full rounded-xl border border-destructive/60 bg-destructive/12 px-2 py-2 text-left hover:bg-destructive/20";
     }
-    return "w-full rounded-md border px-2 py-2 text-left hover:bg-accent";
+    return "w-full rounded-xl border border-border/70 bg-card/70 px-2 py-2 text-left hover:bg-accent/70";
   })();
   const appUpdateHintLabel = (() => {
     if (appUpdateState === "downloaded") {
@@ -1623,7 +1660,53 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const hasVisibleAppUpdateNotification = ["available", "downloading", "downloaded", "error"].includes(appUpdateState);
   const hasUnreadAppUpdate =
     appUpdateUnread && ["available", "downloading", "downloaded", "error"].includes(appUpdateState);
-  const unreadNotificationCount = syncNotification.newItemsCount + (hasUnreadAppUpdate ? 1 : 0);
+  const handleUiWarningsChange = useCallback((sourceKey, sourceLabel, nextWarnings = []) => {
+    const mappedNotifications = mapWarningsToNotifications(nextWarnings, {
+      sourceKey,
+      sourceLabel,
+    });
+
+    setUiWarningNotificationsBySource((current) => {
+      if (mappedNotifications.length === 0) {
+        if (!current[sourceKey]) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[sourceKey];
+        return nextState;
+      }
+
+      return {
+        ...current,
+        [sourceKey]: mappedNotifications,
+      };
+    });
+  }, []);
+  const handleWatchlistWarningsChange = useCallback((nextWarnings = []) => {
+    handleUiWarningsChange("watchlist-live", "Watchlist", nextWarnings);
+  }, [handleUiWarningsChange]);
+  const handleWatchlistOverviewWarningsChange = useCallback((nextWarnings = []) => {
+    handleUiWarningsChange("watchlist-overview", "Watchlist Uebersicht", nextWarnings);
+  }, [handleUiWarningsChange]);
+  const portfolioWarningNotifications = useMemo(
+    () => mapWarningsToNotifications(warnings, { sourceKey: "portfolio", sourceLabel: "Portfolio" }),
+    [warnings],
+  );
+  const uiWarningNotifications = useMemo(
+    () => Object.values(uiWarningNotificationsBySource).flat(),
+    [uiWarningNotificationsBySource],
+  );
+  const warningNotifications = useMemo(() => {
+    const uniqueById = new Map();
+    [...portfolioWarningNotifications, ...uiWarningNotifications].forEach((entry) => {
+      uniqueById.set(entry.id, entry);
+    });
+    return Array.from(uniqueById.values());
+  }, [portfolioWarningNotifications, uiWarningNotifications]);
+  const unreadNotificationCount =
+    syncNotification.newItemsCount +
+    (hasUnreadAppUpdate ? 1 : 0) +
+    (warningNotifications.length > 0 ? 1 : 0);
   const formatCompactNewCount = (count) => {
     const value = Number(count || 0);
     if (value > 999) {
@@ -1707,6 +1790,22 @@ export function PortfolioPage({ initialTab = "overview" }) {
             <p className="text-[11px] text-muted-foreground">{appUpdateStatusLabel}</p>
             <p className="text-[11px] text-muted-foreground">{appUpdateHintLabel}</p>
           </button>
+        ) : null}
+
+        {warningNotifications.length > 0 ? (
+          <div className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-2">
+            <p className="text-xs font-semibold">Systemhinweise</p>
+            <div className="mt-1.5 space-y-1.5">
+              {warningNotifications.slice(0, 4).map((entry) => (
+                <div key={entry.id} className="rounded-lg border border-amber-300/25 bg-amber-500/8 px-2 py-1.5">
+                  <p className="text-sm">{entry.message}</p>
+                  {entry.meta ? (
+                    <p className="text-[11px] text-amber-200/80">{entry.meta}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
 
         <div className="rounded-md border p-2">
@@ -2032,7 +2131,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     <div
       className={`${isElectronRuntime ? "h-full box-border" : "min-h-screen"} ${
         useDesktopSidebarShell ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
-      } font-sans text-foreground pb-20 md:pb-0 touch-pan-y ${
+      } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
       onTouchStart={onTouchStart}
@@ -2044,18 +2143,21 @@ export function PortfolioPage({ initialTab = "overview" }) {
           showSetupJourney
             ? "mx-auto flex w-full max-w-5xl flex-col gap-8 p-4 pb-12 pt-8 sm:p-8"
             : useDesktopSidebarShell
-              ? "flex w-full flex-col gap-6 p-4 sm:gap-8 sm:p-6 md:p-8 lg:h-full lg:min-h-0 lg:gap-0 lg:p-0"
-              : "mx-auto flex max-w-7xl flex-col gap-6 p-4 sm:gap-8 sm:p-6 md:p-8"
+              ? "flex w-full flex-col gap-6 px-3.5 pb-6 pt-3 sm:gap-8 sm:p-6 md:p-8 lg:h-full lg:min-h-0 lg:gap-0 lg:p-0"
+              : "mx-auto flex max-w-7xl flex-col gap-6 px-3.5 pb-6 pt-3 sm:gap-8 sm:p-6 md:p-8"
         }
       >
         {/* Mobile Header - nur auf Mobile sichtbar */}
-        <header className="flex sm:hidden items-center justify-between">
-          <h1 className="text-lg font-bold tracking-tight text-primary">CS Investor Hub</h1>
+        <header className="flex items-center justify-between pt-[max(0.35rem,env(safe-area-inset-top))] sm:hidden">
+          <div className="flex items-end gap-3">
+            <h1 className="text-[1.9rem] font-extrabold leading-none tracking-tight text-foreground">Portfolio</h1>
+            <span className="pb-0.5 text-[1.9rem] font-extrabold leading-none tracking-tight text-muted-foreground/55">Cash</span>
+          </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="relative h-10 w-10 rounded-full p-0">
+                <Button variant="outline" size="icon" className="relative h-10 w-10 rounded-full border-border/80 bg-card/75 p-0">
                   <Bell className="h-5 w-5" />
                   {unreadNotificationCount > 0 ? (
                     <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -2076,14 +2178,14 @@ export function PortfolioPage({ initialTab = "overview" }) {
           useDesktopSidebarShell ? "lg:hidden" : ""
         }`}>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold tracking-tight text-primary md:text-3xl">CS Investor Hub</h1>
-            <p className="text-sm text-muted-foreground md:text-base">Live Tracking via CSFloat and Currency API</p>
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">Portfolio</h1>
+            <p className="text-sm text-muted-foreground md:text-base">Investments, Inventar und Watchlist</p>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full p-0">
+                <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
                   <Bell className="h-5 w-5" />
                   {unreadNotificationCount > 0 ? (
                     <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -2099,8 +2201,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
             <UserMenu />
           </div>
         </header>
-
-        <ApiWarnings warnings={warnings} />
 
         {showJourneyBannerLegacy ? (
           <Card className="border-primary/30 bg-primary/5">
@@ -2611,10 +2711,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {!showSetupJourney ? (
-        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[88px_minmax(0,1fr)]" : "w-full"}>
+        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[92px_minmax(0,1fr)]" : "w-full"}>
           {useDesktopSidebarShell ? (
             <aside className="hidden lg:block lg:h-full lg:min-h-0">
-              <div className="h-full min-h-0 w-[88px] overflow-hidden border-r border-border/70 bg-card/90 backdrop-blur">
+              <div className="tr-desktop-rail h-full min-h-0 w-[92px] overflow-hidden">
                 <div className="flex h-full flex-col items-center py-4">
                   <nav className="flex w-full flex-col items-center gap-2 px-2">
                     {DESKTOP_SIDEBAR_TABS
@@ -2641,8 +2741,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
                             }}
                             className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
                               isActive
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
+                                ? "border-primary/35 bg-primary text-primary-foreground shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
+                                : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-accent/70 hover:text-foreground"
                             }`}
                             title={tab.label}
                             aria-label={tab.label}
@@ -2657,7 +2757,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     <ThemeToggle />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full p-0">
+                        <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
                           <Bell className="h-5 w-5" />
                           {unreadNotificationCount > 0 ? (
                             <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -2682,6 +2782,55 @@ export function PortfolioPage({ initialTab = "overview" }) {
             onValueChange={handleTabSelect}
             className={`w-full min-w-0 ${useDesktopSidebarShell ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
           >
+            {useDesktopSidebarShell ? (
+              <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:justify-between lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-9 w-9 flex-col items-center justify-center gap-1 rounded-lg bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(255,255,255,0.14)]">
+                    <span className="h-[3px] w-5 rounded-full bg-primary-foreground" />
+                    <span className="h-[3px] w-5 rounded-full bg-primary-foreground/92" />
+                  </div>
+                  <div className="relative w-[340px] max-w-[46vw]">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <div className="h-11 w-full rounded-xl border border-border/70 bg-card/75 pl-10 pr-3 text-sm text-muted-foreground shadow-[0_12px_28px_rgba(0,0,0,0.2)] flex items-center">
+                      Suche nach Items, ETFs, Kategorien...
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => handleTabSelect("overview")}
+                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "overview" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
+                  >
+                    Portfolio
+                  </button>
+                  {isDesktopRuntime ? (
+                    <button
+                      type="button"
+                      onClick={() => handleTabSelect("management")}
+                      className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "management" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
+                    >
+                      Auftraege
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleTabSelect("inventory")}
+                      className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "inventory" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
+                    >
+                      Auftraege
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => navigate("/settings", { replace: true })}
+                    className={`rounded-lg px-3 py-1.5 transition-colors ${location.pathname === "/settings" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
+                  >
+                    Profil
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {error && (
               <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
@@ -2697,7 +2846,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </TabsList>
             </div>
 
-          <TabsContent value="overview" className="space-y-4 sm:space-y-5 lg:space-y-4">
+          <TabsContent value="overview" className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
             {/* Mobile: PortfolioHeaderCard oben, Desktop: Alte Stats-Cards */}
             <div className="sm:hidden">
               <PortfolioHeaderCard
@@ -2767,17 +2916,22 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   maxItems={useDesktopSidebarShell ? 4 : 5}
                   allowExpand={!useDesktopSidebarShell}
                   onOpenItem={handleOpenWatchlistItem}
+                  onWarningsChange={handleWatchlistOverviewWarningsChange}
                 />
               </div>
             </div>
 
             {/* Mobile: Watchlist full-width */}
-            <div className="sm:hidden">
-              <WatchlistOverview maxItems={5} onOpenItem={handleOpenWatchlistItem} />
+            <div className="sm:hidden pt-1">
+              <WatchlistOverview
+                maxItems={5}
+                onOpenItem={handleOpenWatchlistItem}
+                onWarningsChange={handleWatchlistOverviewWarningsChange}
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:gap-5">
-              <div>
+              <div className="sm:pt-1">
                 <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
                 {compositionLoading ? (
                   <div className="space-y-4">
@@ -2808,10 +2962,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
             </div>
 
             {showCsUpdateBanner && latestCsUpdate ? (
-              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 shadow-sm">
+              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
                       CS Update
                     </p>
                     <p className="truncate text-sm font-semibold text-foreground sm:text-base">
@@ -2865,7 +3019,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </div>
             </div>
 
-            <div className="overflow-x-auto md:col-span-1 sm:rounded-lg sm:border sm:bg-card">
+            <div className="overflow-x-auto md:col-span-1 sm:rounded-2xl sm:border sm:border-border/70 sm:bg-card/65">
               <InventoryTable
                 investments={inventoryTabItems}
                 onSelectItem={(item) => {
@@ -2910,7 +3064,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
           </TabsContent>
 
           <TabsContent value="watchlist" className="space-y-4 sm:space-y-6">
-            <Watchlist focusTarget={watchlistFocusTarget} />
+            <Watchlist
+              focusTarget={watchlistFocusTarget}
+              onWarningsChange={handleWatchlistWarningsChange}
+            />
           </TabsContent>
 
           {isDesktopRuntime ? (

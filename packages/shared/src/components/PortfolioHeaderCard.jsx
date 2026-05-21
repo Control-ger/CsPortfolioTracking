@@ -32,8 +32,8 @@ const formatPercent = (value, fractionDigits = 2) => {
 };
 
 /**
- * PortfolioHeaderCard - Minimalistische Portfolio-Übersicht für mobiles Design
- * Zeigt: Portfolio-Wert mit Trend, Prozentuale Änderung, Total Items und Data Freshness
+ * PortfolioHeaderCard - Minimalistische Portfolio-Uebersicht fuer mobiles Design
+ * Zeigt: Portfolio-Wert mit Trend, prozentuale Aenderung, Total Items und Data Freshness
  */
 export const PortfolioHeaderCard = ({
   totalValue = 0,
@@ -50,30 +50,30 @@ export const PortfolioHeaderCard = ({
   const hasValidRoiPercent = Number.isFinite(numericRoiPercent);
   const effectiveIsPositive = hasValidRoiPercent ? numericRoiPercent >= 0 : isPositive;
   const Icon = effectiveIsPositive ? TrendingUp : TrendingDown;
-  const trendColor = effectiveIsPositive ? "text-green-600" : "text-red-600";
+  const trendColor = effectiveIsPositive ? "text-emerald-400" : "text-red-400";
   const hasStaleItems = staleItemsCount > 0;
   const freshnessTitle = hasStaleItems
-    ? `${staleItemsCount}/${liveItemsCount + staleItemsCount} Items veraltet • ältest: ${formatAge(oldestDataAgeSeconds)}`
-    : `Aktuell • frischestes Update: ${formatAge(freshestDataAgeSeconds)}`;
+    ? `${staleItemsCount}/${liveItemsCount + staleItemsCount} Items veraltet - aeltest: ${formatAge(oldestDataAgeSeconds)}`
+    : `Aktuell - frischestes Update: ${formatAge(freshestDataAgeSeconds)}`;
 
   return (
-    <div className="space-y-3">
-      {/* Mobile: Portfolio als Überschrift */}
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground sm:hidden">
-        Portfolio
+    <div className="space-y-3 rounded-2xl border border-border/70 bg-card/65 p-3.5">
+      {/* Mobile: Brokerage als Ueberschrift */}
+      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:hidden">
+        Brokerage
       </h2>
 
       {/* Hauptwert mit Trend und Frische-Indikator */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight">
+            <span className="text-3xl font-extrabold tracking-tight">
               {formatPrice(totalValue || 0, {
                 useUsd: true,
                 buyPriceUsd: totalValue || 0,
               }).replace(/^[^\d-]+/, "")}
             </span>
-            <span className="text-sm text-muted-foreground">{currency}</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{currency}</span>
           </div>
           <div className={`mt-1 flex items-center gap-1 ${trendColor}`}>
             <Icon className="h-4 w-4" />
@@ -87,14 +87,14 @@ export const PortfolioHeaderCard = ({
         <div className="flex flex-col items-end gap-2 text-right">
           {hasStaleItems ? (
             <div
-              className="rounded-full bg-amber-500/10 p-2 text-amber-600"
+              className="rounded-full border border-amber-400/30 bg-amber-500/12 p-2 text-amber-300"
               title={freshnessTitle}
             >
               <RotateCw className="h-4 w-4" />
             </div>
           ) : (
             <div
-              className="rounded-full bg-emerald-500/10 p-2 text-emerald-600"
+              className="rounded-full border border-emerald-400/30 bg-emerald-500/12 p-2 text-emerald-300"
               title={freshnessTitle}
             >
               <Clock className="h-4 w-4" />
@@ -110,13 +110,12 @@ export const PortfolioHeaderCard = ({
         </div>
       </div>
 
-      {/* Zusätzliche Infos in kleinerer Schrift */}
+      {/* Zusaetzliche Infos in kleinerer Schrift */}
       <div className="text-xs text-muted-foreground">
-        <span>{totalQuantity} Items • </span>
+        <span>{totalQuantity} Items - </span>
         <span className="font-medium">{liveItemsCount} live</span>
         {hasStaleItems && <span>, {staleItemsCount} veraltet</span>}
       </div>
     </div>
   );
 };
-
