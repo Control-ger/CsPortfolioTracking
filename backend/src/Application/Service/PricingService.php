@@ -234,7 +234,8 @@ final class PricingService
         ?string $wearFilter = null,
         int $page = 1,
         ?string $sortBy = null,
-        int $userId = 1
+        int $userId = 1,
+        ?string $priceSourceOverride = null
     ): array {
         $this->ensureCacheTables();
 
@@ -323,7 +324,7 @@ final class PricingService
             }
         }
 
-        $matchedItems = $this->prepareSearchMatches($matchedItems, $userId);
+        $matchedItems = $this->prepareSearchMatches($matchedItems, $userId, $priceSourceOverride);
         $this->sortSearchMatches($matchedItems, $normalizedSortBy);
 
         $totalItems = count($matchedItems);
@@ -891,13 +892,59 @@ final class PricingService
         };
     }
 
-    private function prepareSearchMatches(array $matchedItems, int $userId): array
+    private function prepareSearchMatches(array $matchedItems, int $userId, ?string $priceSourceOverride = null): array
     {
         $preparedMatches = [];
         $presentationCache = [];
+        $forceSteamOnly = strtolower(trim((string) $priceSourceOverride)) === self::PRICE_SOURCE_STEAM;
         foreach ($matchedItems as $match) {
             $marketHashName = (string) ($match['marketHashName'] ?? '');
             if ($marketHashName === '') {
+                continue;
+            }
+
+            if ($forceSteamOnly) {
+                $steamHint = is_array($match['steamHint'] ?? null) ? $match['steamHint'] : null;
+                $steamSnapshot = $this->resolveSteamPriceSnapshot($marketHashName, $steamHint);
+                $resolvedSteamHint = is_array($steamSnapshot['steamHint'] ?? null)
+                    ? $steamSnapshot['steamHint']
+                    : $steamHint;
+
+                $priceUsd = isset($steamSnapshot['priceUsd']) && is_numeric($steamSnapshot['priceUsd'])
+                    ? round((float) $steamSnapshot['priceUsd'], 2)
+                    : null;
+                $priceEur = $priceUsd !== null
+                    ? round($priceUsd * $this->getUsdToEurRate(), 2)
+                    : null;
+
+                if ($priceEur !== null) {
+                    $match['sortPriceEur'] = $priceEur;
+                }
+
+                if (is_array($resolvedSteamHint)) {
+                    $steamDisplayName = trim((string) ($resolvedSteamHint['displayName'] ?? ''));
+                    $steamTypeLabel = trim((string) ($resolvedSteamHint['typeLabel'] ?? ''));
+                    $steamIconUrl = isset($resolvedSteamHint['iconUrl']) ? (string) $resolvedSteamHint['iconUrl'] : null;
+
+                    if ($steamDisplayName !== '') {
+                        $match['displayName'] = $steamDisplayName;
+                    }
+                    if ($steamTypeLabel !== '') {
+                        $match['marketTypeLabel'] = $steamTypeLabel;
+                    }
+                    if ($steamIconUrl !== null && trim($steamIconUrl) !== '') {
+                        $match['iconUrl'] = $steamIconUrl;
+                    }
+                }
+
+                $match['displayName'] = (string) ($match['displayName'] ?? $marketHashName);
+                $match['itemType'] = (string) ($match['itemType'] ?? 'other');
+                $match['itemTypeLabel'] = (string) ($match['itemTypeLabel'] ?? 'Other');
+                $match['marketTypeLabel'] = (string) ($match['marketTypeLabel'] ?? 'CS2 Item');
+                $match['priceSource'] = self::PRICE_SOURCE_STEAM;
+                $match['livePriceEur'] = $priceEur;
+                $match['livePriceUsd'] = $priceUsd;
+                $preparedMatches[] = $match;
                 continue;
             }
 

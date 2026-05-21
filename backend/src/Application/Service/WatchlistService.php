@@ -100,7 +100,6 @@ final class WatchlistService
         $normalizedWear = trim((string) $wearFilter);
         $resolvedLimit = max(1, min($limit, 20));
         $resolvedPage = max(1, $page);
-        $offset = ($resolvedPage - 1) * $resolvedLimit;
         $browseMode = $normalizedQuery === '' && $this->canBrowseByFilter($normalizedItemType);
         $normalizedSortBy = trim((string) $sortBy) !== '' ? trim((string) $sortBy) : 'relevance';
 
@@ -132,59 +131,16 @@ final class WatchlistService
         if ($searchQuery === '' && $browseMode) {
             $searchQuery = '';
         }
-
-        $rows = $this->itemRepository->searchCatalog(
+        return $this->pricingService->searchWatchlistCandidates(
             $searchQuery,
+            $resolvedLimit,
             $normalizedItemType !== '' ? $normalizedItemType : null,
             $normalizedWear !== '' ? $normalizedWear : null,
+            $resolvedPage,
             $normalizedSortBy,
-            $resolvedLimit,
-            $offset
+            $userId,
+            'steam'
         );
-        $totalItems = $this->itemRepository->countCatalog(
-            $searchQuery,
-            $normalizedItemType !== '' ? $normalizedItemType : null,
-            $normalizedWear !== '' ? $normalizedWear : null
-        );
-        $totalPages = $totalItems > 0 ? (int) ceil($totalItems / $resolvedLimit) : 0;
-
-        $items = [];
-        foreach ($rows as $row) {
-            $marketHashName = (string) ($row['market_hash_name'] ?? '');
-            $presentation = $marketHashName !== ''
-                ? $this->pricingService->getItemPresentation($marketHashName, null, $userId)
-                : [];
-
-            $items[] = [
-                'id' => isset($row['id']) ? (int) $row['id'] : 0,
-                'itemId' => isset($row['id']) ? (int) $row['id'] : 0,
-                'marketHashName' => $marketHashName,
-                'displayName' => (string) (($row['name'] ?? '') ?: ($row['market_hash_name'] ?? '')),
-                'itemType' => (string) (($presentation['itemType'] ?? '') ?: ($row['item_type'] ?? '') ?: ($row['type'] ?? 'other')),
-                'itemTypeLabel' => (string) (($presentation['itemTypeLabel'] ?? '') ?: ($row['item_type_label'] ?? '') ?: (($row['type'] ?? 'Other'))),
-                'marketTypeLabel' => (string) (($presentation['marketTypeLabel'] ?? '') ?: ($row['market_type_label'] ?? '') ?: (($row['item_type_label'] ?? '') ?: 'CS2 Item')),
-                'wear' => isset($presentation['wear']) ? (string) $presentation['wear'] : (isset($row['wear_key']) ? (string) $row['wear_key'] : null),
-                'wearLabel' => isset($presentation['wearLabel']) ? (string) $presentation['wearLabel'] : (isset($row['wear_label']) ? (string) $row['wear_label'] : null),
-                'iconUrl' => isset($presentation['iconUrl']) ? (string) $presentation['iconUrl'] : (isset($row['image_url']) ? (string) $row['image_url'] : null),
-                'priceSource' => isset($presentation['priceSource']) ? (string) $presentation['priceSource'] : (isset($row['price_source']) ? (string) $row['price_source'] : null),
-                'livePriceEur' => isset($presentation['priceEur']) && is_numeric($presentation['priceEur'])
-                    ? round((float) $presentation['priceEur'], 2)
-                    : (isset($row['price_eur']) && is_numeric($row['price_eur']) ? round((float) $row['price_eur'], 2) : null),
-                'livePriceUsd' => isset($presentation['priceUsd']) && is_numeric($presentation['priceUsd'])
-                    ? round((float) $presentation['priceUsd'], 2)
-                    : (isset($row['price_usd']) && is_numeric($row['price_usd']) ? round((float) $row['price_usd'], 2) : null),
-            ];
-        }
-
-        return [
-            'items' => $items,
-            'page' => $resolvedPage,
-            'limit' => $resolvedLimit,
-            'totalItems' => $totalItems,
-            'totalPages' => $totalPages,
-            'sortBy' => $normalizedSortBy,
-            'browseMode' => $browseMode,
-        ];
     }
 
     private function stringLength(string $value): int

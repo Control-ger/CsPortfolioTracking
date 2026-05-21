@@ -77,6 +77,7 @@ export default function App() {
             <Route path="/" element={<PortfolioPage initialTab="overview" />} />
             <Route path="/inventory" element={<PortfolioPage initialTab="inventory" />} />
             <Route path="/watchlist" element={<PortfolioPage initialTab="watchlist" />} />
+            <Route path="/search" element={<PortfolioPage initialTab="search" />} />
             <Route
               path="/cs-updates"
               element={(

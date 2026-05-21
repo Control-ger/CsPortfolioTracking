@@ -16,6 +16,7 @@ import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
 import { Watchlist } from "@shared/components";
 import { WatchlistOverview } from "@shared/components";
+import { ItemSearch } from "@shared/components";
 import { Badge } from "@shared/components";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components";
 import { Button } from "@shared/components";
@@ -40,11 +41,13 @@ import {
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
   fetchCS2Inventory,
+  fetchWatchlistData,
   getPortfolioPreferences,
   getCurrentUser,
   importInventoryAsInvestments,
   resolveDesktopLocalUserId as resolveDesktopRuntimeUserId,
   resolveMetricsScopeFromPreferences,
+  createWatchlistItemData,
   fetchCsFloatApiKeyStatus,
   updateCsFloatApiKey,
   toggleExcludeInvestment,
@@ -125,14 +128,49 @@ const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
+const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
 const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "matching", "management"];
 const DESKTOP_SIDEBAR_TABS = [
   { key: "overview", label: "Uebersicht", icon: LayoutGrid },
   { key: "inventory", label: "Inventar", icon: Package },
   { key: "watchlist", label: "Watchlist", icon: Eye },
+  { key: "search", label: "Suche", icon: Search },
   { key: "management", label: "Verwaltung", icon: FolderCog, desktopOnly: true },
   { key: "settings", label: "Einstellungen", icon: Cog, route: "/settings" },
 ];
+const GLOBAL_SEARCH_CATEGORIES = [
+  { key: "all", label: "All" },
+  { key: "skins", label: "Skins" },
+  { key: "cases", label: "Cases" },
+  { key: "stickers", label: "Sticker" },
+  { key: "agents", label: "Agents" },
+  { key: "capsules", label: "Capsules" },
+  { key: "everything_else", label: "Everything else" },
+];
+
+function normalizeGlobalSearchInput(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function resolveCatalogCategory(itemType) {
+  const normalized = String(itemType || "").trim().toLowerCase();
+  if (normalized === "skin") {
+    return "skins";
+  }
+  if (normalized === "case" || normalized === "souvenir_package" || normalized === "container") {
+    return "cases";
+  }
+  if (normalized === "sticker" || normalized === "patch" || normalized === "graffiti" || normalized === "charm") {
+    return "stickers";
+  }
+  if (normalized === "agent") {
+    return "agents";
+  }
+  if (normalized === "sticker_capsule") {
+    return "capsules";
+  }
+  return "everything_else";
+}
 
 function readStartupWelcomeDismissed() {
   if (typeof window === "undefined") {
@@ -402,13 +440,17 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const isDesktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
   const runtimeTabs = isDesktopRuntime
-    ? ["overview", "inventory", "watchlist", "management"]
-    : ["overview", "inventory", "watchlist"];
+    ? ["overview", "inventory", "watchlist", "search", "management"]
+    : ["overview", "inventory", "watchlist", "search"];
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const resolvedInitialTab = searchParams.get("tab") || initialTab;
+  const searchPageInitialTerm = useMemo(
+    () => String(searchParams.get("q") || "").trim(),
+    [searchParams],
+  );
   const [showStartupWelcome, setShowStartupWelcome] = useState(
     () => isElectronRuntime && !readStartupWelcomeDismissed(),
   );
@@ -528,7 +570,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const touchStartY = useRef(null);
   const touchEndX = useRef(null);
   const touchEndY = useRef(null);
-  const searchInputRef = useRef(null);
+  const globalSearchInputRef = useRef(null);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [globalSearchTerm, setGlobalSearchTerm] = useState("");
+  const [globalSearchCommittedTerm, setGlobalSearchCommittedTerm] = useState("");
+  const [globalSearchCategory, setGlobalSearchCategory] = useState("all");
+  const [globalSearchCatalogResults, setGlobalSearchCatalogResults] = useState([]);
+  const [globalSearchCatalogLoading, setGlobalSearchCatalogLoading] = useState(false);
+  const [globalSearchCatalogError, setGlobalSearchCatalogError] = useState("");
+  const [globalSearchWatchlistItems, setGlobalSearchWatchlistItems] = useState([]);
+  const [globalSearchAddingItem, setGlobalSearchAddingItem] = useState("");
+  const [globalSearchRecentTerms, setGlobalSearchRecentTerms] = useState([]);
+  const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
 
   // Keyboard shortcuts for tab navigation and search
   useKeyboard({
@@ -537,7 +590,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
       if (currentIndex > 0) {
         const newTab = runtimeTabs[currentIndex - 1];
         setActiveTab(newTab);
-        navigate(`/?tab=${newTab}`, { replace: true });
+        navigate(newTab === "search" ? "/search" : `/?tab=${newTab}`, { replace: true });
       }
     },
     onArrowRight: () => {
@@ -545,19 +598,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
       if (currentIndex < runtimeTabs.length - 1) {
         const newTab = runtimeTabs[currentIndex + 1];
         setActiveTab(newTab);
-        navigate(`/?tab=${newTab}`, { replace: true });
+        navigate(newTab === "search" ? "/search" : `/?tab=${newTab}`, { replace: true });
       }
     },
     onSearch: () => {
-      // Focus search input if on watchlist tab, otherwise navigate to watchlist
-      if (activeTab === 'watchlist' && searchInputRef.current) {
-        searchInputRef.current.focus();
-      } else {
-        setActiveTab('watchlist');
-        navigate('/?tab=watchlist', { replace: true });
-        // Focus after navigation
-        setTimeout(() => searchInputRef.current?.focus(), 100);
-      }
+      setGlobalSearchOpen(true);
+      setTimeout(() => globalSearchInputRef.current?.focus(), 40);
     }
   }, true);
 
@@ -1047,7 +1093,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
       return;
     }
     setActiveTab(nextTab);
-    navigate(`/?tab=${nextTab}`, { replace: true });
+    navigate(nextTab === "search" ? "/search" : `/?tab=${nextTab}`, { replace: true });
   };
 
   const handleOpenWatchlistItem = (item) => {
@@ -1061,6 +1107,492 @@ export function PortfolioPage({ initialTab = "overview" }) {
     });
     handleTabSelect("watchlist");
   };
+
+  const loadGlobalSearchWatchlistItems = useCallback(async () => {
+    try {
+      const response = await fetchWatchlistData({ syncLive: false });
+      setGlobalSearchWatchlistItems(Array.isArray(response?.data) ? response.data : []);
+    } catch (watchlistError) {
+      console.warn("Failed to preload watchlist for global search", watchlistError);
+      setGlobalSearchWatchlistItems([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadGlobalSearchWatchlistItems();
+  }, [compositionRefreshToken, loadGlobalSearchWatchlistItems]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadRecentSearches = async () => {
+      const stored = await readLocalState(GLOBAL_SEARCH_RECENTS_KEY, { terms: [] });
+      if (cancelled) {
+        return;
+      }
+      const terms = Array.isArray(stored?.terms)
+        ? stored.terms.map((entry) => normalizeGlobalSearchInput(entry)).filter(Boolean).slice(0, 8)
+        : [];
+      setGlobalSearchRecentTerms(terms);
+    };
+
+    void loadRecentSearches();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const storeGlobalRecentSearch = useCallback((term) => {
+    const normalized = normalizeGlobalSearchInput(term);
+    if (normalized.length < 2) {
+      return;
+    }
+
+    setGlobalSearchRecentTerms((current) => {
+      const next = [normalized, ...current.filter((entry) => entry !== normalized)].slice(0, 8);
+      void writeLocalState(GLOBAL_SEARCH_RECENTS_KEY, { terms: next });
+      return next;
+    });
+  }, []);
+
+  const clearGlobalRecentSearches = useCallback(() => {
+    setGlobalSearchRecentTerms([]);
+    void writeLocalState(GLOBAL_SEARCH_RECENTS_KEY, { terms: [] });
+  }, []);
+
+  const globalSearchTermNormalized = useMemo(
+    () => normalizeSearchText(normalizeGlobalSearchInput(globalSearchTerm)),
+    [globalSearchTerm],
+  );
+  const canRunGlobalCatalogSearch = globalSearchTermNormalized.length >= 2;
+  const hasPendingCatalogSearch =
+    canRunGlobalCatalogSearch &&
+    normalizeSearchText(globalSearchCommittedTerm) !== globalSearchTermNormalized;
+
+  const globalSearchKnownItems = useMemo(() => {
+    const grouped = new Map();
+
+    enrichedInvestments.forEach((item) => {
+      const name = String(item?.name || item?.marketHashName || item?.itemName || "").trim();
+      if (!name) {
+        return;
+      }
+      const bucket = normalizeBucket(item?.bucket, "investment");
+      const source = bucket === "inventory" ? "inventory" : "investment";
+      const key = `${source}:${normalizeSearchText(name)}`;
+      const quantity = Math.max(1, Number(item?.quantity || 1));
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          source,
+          sourcePriority: source === "investment" ? 0 : 1,
+          sourceLabel: source === "investment" ? "Investments" : "Inventar",
+          name,
+          nameKey: normalizeSearchText(name),
+          quantity,
+          itemType: String(item?.type || item?.itemType || "other").trim().toLowerCase(),
+          imageUrl: item?.imageUrl || item?.iconUrl || null,
+          matchPayload: { source, nameKey: normalizeSearchText(name) },
+          searchText: normalizeSearchText(
+            [
+              name,
+              item?.marketHashName,
+              item?.itemName,
+              item?.type,
+              item?.itemType,
+              item?.wear,
+              item?.wearLabel,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          ),
+        });
+        return;
+      }
+
+      const existing = grouped.get(key);
+      existing.quantity += quantity;
+      if (!existing.imageUrl) {
+        existing.imageUrl = item?.imageUrl || item?.iconUrl || null;
+      }
+    });
+
+    globalSearchWatchlistItems.forEach((item) => {
+      const name = String(item?.name || item?.marketHashName || "").trim();
+      if (!name) {
+        return;
+      }
+      const key = `watchlist:${normalizeSearchText(name)}`;
+      const quantity = Math.max(1, Number(item?.quantity || 1));
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          source: "watchlist",
+          sourcePriority: 2,
+          sourceLabel: "Watchlist",
+          name,
+          nameKey: normalizeSearchText(name),
+          quantity,
+          itemType: String(item?.type || item?.itemType || "other").trim().toLowerCase(),
+          imageUrl: item?.imageUrl || item?.iconUrl || null,
+          matchPayload: { source: "watchlist", id: item?.id, nameKey: normalizeSearchText(name) },
+          searchText: normalizeSearchText(
+            [
+              name,
+              item?.marketHashName,
+              item?.type,
+              item?.itemType,
+              item?.wear,
+              item?.wearLabel,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          ),
+        });
+        return;
+      }
+
+      const existing = grouped.get(key);
+      existing.quantity += quantity;
+      if (!existing.imageUrl) {
+        existing.imageUrl = item?.imageUrl || item?.iconUrl || null;
+      }
+    });
+
+    return Array.from(grouped.values());
+  }, [enrichedInvestments, globalSearchWatchlistItems]);
+
+  const globalSearchKnownItemsByName = useMemo(() => {
+    const map = new Map();
+    globalSearchKnownItems.forEach((entry) => {
+      const nameKey = normalizeSearchText(entry?.name || "");
+      if (!nameKey) {
+        return;
+      }
+      const existing = map.get(nameKey) || {
+        hasInvestment: false,
+        hasInventory: false,
+        hasWatchlist: false,
+      };
+      existing.hasInvestment = existing.hasInvestment || entry.source === "investment";
+      existing.hasInventory = existing.hasInventory || entry.source === "inventory";
+      existing.hasWatchlist = existing.hasWatchlist || entry.source === "watchlist";
+      map.set(nameKey, existing);
+    });
+    return map;
+  }, [globalSearchKnownItems]);
+
+  const globalSearchKnownPrimaryByName = useMemo(() => {
+    const map = new Map();
+    globalSearchKnownItems.forEach((entry) => {
+      const nameKey = normalizeSearchText(entry?.name || "");
+      if (!nameKey) {
+        return;
+      }
+      const existing = map.get(nameKey);
+      if (!existing || entry.sourcePriority < existing.sourcePriority) {
+        map.set(nameKey, entry);
+      }
+    });
+    return map;
+  }, [globalSearchKnownItems]);
+
+  const globalSearchLocalSuggestions = useMemo(() => {
+    if (!globalSearchTermNormalized) {
+      return [];
+    }
+
+    return globalSearchKnownItems
+      .filter((entry) => entry.searchText.includes(globalSearchTermNormalized))
+      .map((entry) => {
+        const startsWith = entry.searchText.startsWith(globalSearchTermNormalized);
+        return {
+          ...entry,
+          matchScore: startsWith ? 0 : 1,
+        };
+      })
+      .sort((left, right) => {
+        if (left.sourcePriority !== right.sourcePriority) {
+          return left.sourcePriority - right.sourcePriority;
+        }
+        if (left.matchScore !== right.matchScore) {
+          return left.matchScore - right.matchScore;
+        }
+        return left.name.localeCompare(right.name, "de");
+      })
+      .slice(0, 8);
+  }, [globalSearchKnownItems, globalSearchTermNormalized]);
+  const globalSearchLocalSuggestionGroups = useMemo(() => {
+    const order = [
+      { key: "investment", label: "Investments" },
+      { key: "inventory", label: "Inventar" },
+      { key: "watchlist", label: "Watchlist" },
+    ];
+    return order
+      .map((group) => ({
+        ...group,
+        entries: globalSearchLocalSuggestions.filter((entry) => entry.source === group.key),
+      }))
+      .filter((group) => group.entries.length > 0);
+  }, [globalSearchLocalSuggestions]);
+
+  const globalSearchFilteredCatalogResults = useMemo(() => {
+    if (globalSearchCategory === "all") {
+      return globalSearchCatalogResults;
+    }
+    return globalSearchCatalogResults.filter(
+      (candidate) => resolveCatalogCategory(candidate?.itemType || candidate?.type) === globalSearchCategory,
+    );
+  }, [globalSearchCatalogResults, globalSearchCategory]);
+
+  const openGlobalSearchBrowser = useCallback(
+    (rawTerm) => {
+      const query = normalizeGlobalSearchInput(rawTerm);
+      if (query.length >= 2) {
+        storeGlobalRecentSearch(query);
+      }
+      const queryParam = query ? `?q=${encodeURIComponent(query)}` : "";
+      setGlobalSearchOpen(false);
+      navigate(`/search${queryParam}`);
+    },
+    [navigate, storeGlobalRecentSearch],
+  );
+
+  const handleGlobalSearchSubmit = useCallback(
+    async (event) => {
+      event?.preventDefault?.();
+      openGlobalSearchBrowser(globalSearchTerm);
+    },
+    [globalSearchTerm, openGlobalSearchBrowser],
+  );
+
+  const handleGlobalSearchSelectKnownItem = useCallback(
+    (entry) => {
+      if (!entry?.matchPayload) {
+        return;
+      }
+
+      if (entry.matchPayload.source === "watchlist") {
+        const fallbackWatchlist = globalSearchWatchlistItems.find(
+          (item) => normalizeSearchText(item?.name || item?.marketHashName || "") === entry.matchPayload.nameKey,
+        );
+        const watchlistId = Number(entry.matchPayload.id || fallbackWatchlist?.id || 0);
+        if (watchlistId > 0) {
+          setWatchlistFocusTarget({
+            id: watchlistId,
+            requestedAt: Date.now(),
+          });
+        }
+        handleTabSelect("watchlist");
+        setGlobalSearchOpen(false);
+        return;
+      }
+
+      const targetBucket = entry.matchPayload.source === "inventory" ? "inventory" : "investment";
+      const item = enrichedInvestments.find((candidate) => {
+        const candidateName = normalizeSearchText(
+          candidate?.name || candidate?.marketHashName || candidate?.itemName || "",
+        );
+        const candidateBucket = normalizeBucket(candidate?.bucket, "investment");
+        return candidateName === entry.matchPayload.nameKey && candidateBucket === targetBucket;
+      });
+
+      setInventoryScope(targetBucket);
+      if (item) {
+        setSelectedItem(item);
+      }
+      handleTabSelect("inventory");
+      setGlobalSearchOpen(false);
+    },
+    [enrichedInvestments, globalSearchWatchlistItems, handleTabSelect],
+  );
+
+  const handleGlobalSearchAddToWatchlist = useCallback(
+    async (candidate) => {
+      const marketHashName = String(candidate?.marketHashName || candidate?.displayName || "").trim();
+      if (!marketHashName) {
+        return;
+      }
+
+      try {
+        setGlobalSearchAddingItem(marketHashName);
+        await createWatchlistItemData(marketHashName, String(candidate?.itemType || "other"));
+        await loadGlobalSearchWatchlistItems();
+      } catch (watchlistError) {
+        setGlobalSearchCatalogError(watchlistError?.message || "Konnte Item nicht zur Watchlist hinzufuegen.");
+      } finally {
+        setGlobalSearchAddingItem("");
+      }
+    },
+    [loadGlobalSearchWatchlistItems],
+  );
+
+  const globalSearchKeyboardEntries = useMemo(() => {
+    const entries = [];
+    if (!globalSearchTermNormalized) {
+      globalSearchRecentTerms.forEach((term, index) => {
+        entries.push({
+          kind: "recent",
+          id: `recent:${term}:${index}`,
+          payload: term,
+        });
+      });
+    }
+    globalSearchLocalSuggestions.forEach((entry) => {
+      entries.push({ kind: "local", id: `local:${entry.key}`, payload: entry });
+    });
+    if (canRunGlobalCatalogSearch) {
+      entries.push({ kind: "search_action", id: "search-action", payload: null });
+    }
+    if (globalSearchCommittedTerm && !globalSearchCatalogLoading && !globalSearchCatalogError) {
+      globalSearchFilteredCatalogResults.slice(0, 10).forEach((entry, index) => {
+        const key = String(entry?.marketHashName || entry?.displayName || `catalog-${index}`);
+        entries.push({
+          kind: "catalog",
+          id: `catalog:${key}:${index}`,
+          payload: entry,
+        });
+      });
+    }
+    return entries;
+  }, [
+    canRunGlobalCatalogSearch,
+    globalSearchCatalogError,
+    globalSearchCatalogLoading,
+    globalSearchCommittedTerm,
+    globalSearchFilteredCatalogResults,
+    globalSearchLocalSuggestions,
+    globalSearchRecentTerms,
+    globalSearchTermNormalized,
+  ]);
+  const globalSearchActiveEntryId =
+    globalSearchActiveIndex >= 0 && globalSearchActiveIndex < globalSearchKeyboardEntries.length
+      ? globalSearchKeyboardEntries[globalSearchActiveIndex].id
+      : null;
+
+  const handleGlobalSearchSelectCatalogItem = useCallback(
+    async (candidate) => {
+      const marketHashName = String(candidate?.marketHashName || candidate?.displayName || "").trim();
+      if (!marketHashName) {
+        return;
+      }
+      const nameKey = normalizeSearchText(marketHashName);
+      const known = globalSearchKnownPrimaryByName.get(nameKey) || null;
+      if (known) {
+        handleGlobalSearchSelectKnownItem(known);
+        return;
+      }
+      await handleGlobalSearchAddToWatchlist(candidate);
+    },
+    [globalSearchKnownPrimaryByName, handleGlobalSearchAddToWatchlist, handleGlobalSearchSelectKnownItem],
+  );
+
+  const handleGlobalSearchExecuteKeyboardEntry = useCallback(
+    async (entry) => {
+      if (!entry) {
+        return;
+      }
+      if (entry.kind === "local") {
+        handleGlobalSearchSelectKnownItem(entry.payload);
+        return;
+      }
+      if (entry.kind === "search_action") {
+        openGlobalSearchBrowser(globalSearchTerm);
+        return;
+      }
+      if (entry.kind === "recent") {
+        openGlobalSearchBrowser(entry.payload);
+        return;
+      }
+      if (entry.kind === "catalog") {
+        await handleGlobalSearchSelectCatalogItem(entry.payload);
+      }
+    },
+    [
+      globalSearchTerm,
+      handleGlobalSearchSelectCatalogItem,
+      handleGlobalSearchSelectKnownItem,
+      openGlobalSearchBrowser,
+    ],
+  );
+
+  const handleGlobalSearchInputKeyDown = useCallback(
+    (event) => {
+      if (!globalSearchOpen) {
+        return;
+      }
+      const totalEntries = globalSearchKeyboardEntries.length;
+      if (event.key === "ArrowDown" && totalEntries > 0) {
+        event.preventDefault();
+        setGlobalSearchActiveIndex((current) => (current + 1 + totalEntries) % totalEntries);
+        return;
+      }
+      if (event.key === "ArrowUp" && totalEntries > 0) {
+        event.preventDefault();
+        setGlobalSearchActiveIndex((current) => (current - 1 + totalEntries) % totalEntries);
+        return;
+      }
+      if (event.key === "Enter" && globalSearchActiveIndex >= 0 && totalEntries > 0) {
+        event.preventDefault();
+        const entry = globalSearchKeyboardEntries[globalSearchActiveIndex];
+        void handleGlobalSearchExecuteKeyboardEntry(entry);
+        return;
+      }
+      if (
+        event.key === "Enter" &&
+        globalSearchTermNormalized.length === 0 &&
+        globalSearchRecentTerms.length > 0 &&
+        globalSearchActiveIndex < 0
+      ) {
+        event.preventDefault();
+        setGlobalSearchActiveIndex(0);
+      }
+    },
+    [
+      globalSearchActiveIndex,
+      globalSearchKeyboardEntries,
+      globalSearchOpen,
+      globalSearchRecentTerms.length,
+      globalSearchTermNormalized.length,
+      handleGlobalSearchExecuteKeyboardEntry,
+    ],
+  );
+
+  useEffect(() => {
+    if (!globalSearchOpen) {
+      setGlobalSearchActiveIndex(-1);
+      return;
+    }
+    if (globalSearchKeyboardEntries.length === 0) {
+      setGlobalSearchActiveIndex(-1);
+      return;
+    }
+    setGlobalSearchActiveIndex((current) =>
+      current >= 0 && current < globalSearchKeyboardEntries.length ? current : 0,
+    );
+  }, [globalSearchKeyboardEntries, globalSearchOpen]);
+
+  useEffect(() => {
+    if (!globalSearchOpen || typeof document === "undefined") {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusTimer = window.setTimeout(() => globalSearchInputRef.current?.focus(), 50);
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setGlobalSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [globalSearchOpen]);
 
   const handleSwipeNavigation = (direction) => {
     const currentIndex = runtimeTabs.indexOf(activeTab);
@@ -1132,7 +1664,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     !csUpdatesLoading &&
     Boolean(latestCsUpdate) &&
     Number.isFinite(latestCsUpdateAgeHours) &&
-    latestCsUpdateAgeHours <= 24;
+    latestCsUpdateAgeHours <= 24 * 7;
   const portfolioValueLabel = formatPrice(stats.totalValue || 0, {
     useUsd: true,
     buyPriceUsd: stats.totalValue || 0,
@@ -2745,7 +3277,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                             }}
                             className={`group flex h-12 w-12 items-center justify-center rounded-xl border transition-colors ${
                               isActive
-                                ? "border-primary/35 bg-primary text-primary-foreground shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
+                                ? "border-primary/35 bg-primary text-primary-foreground shadow-none dark:shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
                                 : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-accent/70 hover:text-foreground"
                             }`}
                             title={tab.label}
@@ -2789,12 +3321,27 @@ export function PortfolioPage({ initialTab = "overview" }) {
             {useDesktopSidebarShell ? (
               <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:justify-between lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="relative w-[340px] max-w-[46vw]">
+                  <form
+                    className="relative w-[340px] max-w-[46vw]"
+                    onSubmit={(event) => {
+                      setGlobalSearchOpen(true);
+                      void handleGlobalSearchSubmit(event);
+                    }}
+                  >
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <div className="h-11 w-full rounded-xl border border-border/70 bg-card/75 pl-10 pr-3 text-sm text-muted-foreground shadow-[0_12px_28px_rgba(0,0,0,0.2)] flex items-center">
-                      Suche nach Items, ETFs, Kategorien...
-                    </div>
-                  </div>
+                    <input
+                      ref={globalSearchInputRef}
+                      value={globalSearchTerm}
+                      onFocus={() => setGlobalSearchOpen(true)}
+                      onChange={(event) => {
+                        setGlobalSearchTerm(event.target.value);
+                        setGlobalSearchOpen(true);
+                      }}
+                      onKeyDown={handleGlobalSearchInputKeyDown}
+                      placeholder="Suche nach Item, Typ oder Kategorie..."
+                      className="flex h-11 w-full items-center rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground shadow-none outline-none transition-colors focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
+                    />
+                  </form>
                 </div>
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <button
@@ -2818,6 +3365,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   >
                     Watchlist
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabSelect("search")}
+                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "search" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
+                  >
+                    Suche
+                  </button>
                   {isDesktopRuntime ? (
                     <button
                       type="button"
@@ -2830,6 +3384,28 @@ export function PortfolioPage({ initialTab = "overview" }) {
                 </div>
               </div>
             ) : null}
+            <div className={`${useDesktopSidebarShell ? "mb-3 lg:hidden" : "mb-3"} px-0`}>
+              <form
+                className="relative"
+                onSubmit={(event) => {
+                  setGlobalSearchOpen(true);
+                  void handleGlobalSearchSubmit(event);
+                }}
+              >
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={globalSearchTerm}
+                  onFocus={() => setGlobalSearchOpen(true)}
+                  onChange={(event) => {
+                    setGlobalSearchTerm(event.target.value);
+                    setGlobalSearchOpen(true);
+                  }}
+                  onKeyDown={handleGlobalSearchInputKeyDown}
+                  placeholder="Suche nach Item, Typ oder Kategorie..."
+                  className="h-11 w-full rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground shadow-none outline-none focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75"
+                />
+              </form>
+            </div>
             {error && (
               <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
@@ -2837,10 +3413,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
             )}
             {/* Tab Navigation - auf Desktop Runtime durch Sidebar ersetzt */}
             <div className={useDesktopSidebarShell ? "hidden sm:block lg:hidden" : "hidden sm:block"}>
-              <TabsList className={`grid w-full gap-1 sm:max-w-200 ${isDesktopRuntime ? "grid-cols-4" : "grid-cols-3"}`}>
+              <TabsList className={`grid w-full gap-1 sm:max-w-200 ${isDesktopRuntime ? "grid-cols-5" : "grid-cols-4"}`}>
                 <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
                 <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
                 <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
+                <TabsTrigger value="search" className="text-xs sm:text-sm">Suche</TabsTrigger>
                 {isDesktopRuntime ? <TabsTrigger value="management" className="text-xs sm:text-sm">Verwaltung</TabsTrigger> : null}
               </TabsList>
             </div>
@@ -3068,6 +3645,42 @@ export function PortfolioPage({ initialTab = "overview" }) {
               onWarningsChange={handleWatchlistWarningsChange}
             />
           </TabsContent>
+          <TabsContent value="search" className="space-y-4 sm:space-y-6">
+            <section className="rounded-lg border border-border/70 bg-transparent p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">Alle Produkte</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Suche, filtere und browse neue Items fuer deine Watchlist.
+                  </p>
+                </div>
+                {searchPageInitialTerm ? (
+                  <Badge variant="secondary" className="text-xs">
+                    Suche: "{searchPageInitialTerm}"
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-border/70 bg-background/30 p-3 sm:p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Search className="h-4 w-4" />
+                  Produktsuche
+                  <span className="text-xs font-normal text-muted-foreground">
+                    ({globalSearchWatchlistItems.length} bekannte Watchlist-Items)
+                  </span>
+                </div>
+                <ItemSearch
+                  onAddToWatchlist={loadGlobalSearchWatchlistItems}
+                  existingItems={globalSearchWatchlistItems}
+                  onWarningsChange={(nextWarnings = []) => {
+                    handleUiWarningsChange("search-browser", "Produktsuche", nextWarnings);
+                  }}
+                  initialSearchTerm={searchPageInitialTerm}
+                  autoFocus={true}
+                />
+              </div>
+            </section>
+          </TabsContent>
           {isDesktopRuntime ? (
           <TabsContent value="management" className="space-y-4 sm:space-y-6">
             {typeof window !== "undefined" && !window.electronAPI?.localStore ? (
@@ -3081,33 +3694,40 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </Card>
             ) : (
               <>
-                <div className="rounded-lg border p-3 sm:p-4 space-y-3">
-                  <div>
-                    <h3 className="text-base font-semibold">Inbox</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Neue Aufgaben aus dem letzten Steam-Sync.
-                    </p>
+                <div className="space-y-4 rounded-lg border border-border/70 bg-background/35 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold tracking-tight">Inbox</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Aufgaben aus dem letzten Steam-Sync in einer Uebersicht.
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="h-7 px-3 text-xs">
+                      Auto-Sync: {autoSyncEnabled ? "An" : "Aus"}
+                    </Badge>
                   </div>
+
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <Card>
-                      <CardContent className="p-3">
-                        <p className="text-[10px] uppercase text-muted-foreground">Neue Steam-Items</p>
-                        <p className="text-lg font-bold">{syncNotification.newItemsCount}</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-3">
-                        <p className="text-[10px] uppercase text-muted-foreground">Matching offen</p>
-                        <p className="text-lg font-bold">{matchingSuggestedCount}</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-3">
-                        <p className="text-[10px] uppercase text-muted-foreground">Ohne Einkaufspreis</p>
-                        <p className="text-lg font-bold">{priceMissingCount}</p>
-                      </CardContent>
-                    </Card>
+                    <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                      <p className="text-xs font-medium text-muted-foreground">Neue Steam-Items</p>
+                      <p className="mt-1 text-2xl font-semibold leading-none tracking-tight">
+                        {syncNotification.newItemsCount}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                      <p className="text-xs font-medium text-muted-foreground">Matching offen</p>
+                      <p className="mt-1 text-2xl font-semibold leading-none tracking-tight">
+                        {matchingSuggestedCount}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                      <p className="text-xs font-medium text-muted-foreground">Ohne Einkaufspreis</p>
+                      <p className="mt-1 text-2xl font-semibold leading-none tracking-tight">
+                        {priceMissingCount}
+                      </p>
+                    </div>
                   </div>
+
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
@@ -3115,24 +3735,47 @@ export function PortfolioPage({ initialTab = "overview" }) {
                       disabled={isSteamSyncing}
                       onClick={() => void runSteamSync({ manual: true })}
                     >
-                      {isSteamSyncing ? "Sync laeuft..." : "Jetzt Steam Sync"}
+                      {isSteamSyncing ? "Sync laeuft..." : "Steam Sync starten"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => void handleToggleAutoSync()}>
-                      Auto-Sync: {autoSyncEnabled ? "An" : "Aus"}
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setManagementSection("matching")}>
-                      Matching pruefen
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setManagementSection("prices")}>
-                      Preise setzen
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setManagementSection("exclude")}>
-                      Exclude pruefen
+                      Auto-Sync umschalten
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
                       CSFloat Sync
                     </Button>
                   </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant={managementSection === "matching" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setManagementSection("matching")}
+                    >
+                      Matching
+                    </Button>
+                    <Button
+                      variant={managementSection === "prices" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setManagementSection("prices")}
+                    >
+                      Preise
+                    </Button>
+                    <Button
+                      variant={managementSection === "exclude" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setManagementSection("exclude")}
+                    >
+                      Exclude
+                    </Button>
+                    <Button
+                      variant={managementSection === "create" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setManagementSection("create")}
+                    >
+                      Hinzufuegen
+                    </Button>
+                  </div>
+
                   <TooltipProvider delayDuration={140}>
                     <div className="flex flex-wrap items-center gap-2">
                       {managementQuickHints.map((hint) => (
@@ -3153,6 +3796,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                       ))}
                     </div>
                   </TooltipProvider>
+
                   {steamSyncError ? (
                     <p className="text-xs text-destructive">{steamSyncError}</p>
                   ) : null}
@@ -3160,36 +3804,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     Datenabruf erfolgt nur lokal fuer deinen Account. Auto-Sync laeuft maximal alle 30 Minuten
                     pro App-Instanz und kann jederzeit deaktiviert werden.
                   </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant={managementSection === "matching" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setManagementSection("matching")}
-                  >
-                    Matching
-                  </Button>
-                  <Button
-                    variant={managementSection === "prices" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setManagementSection("prices")}
-                  >
-                    Preise
-                  </Button>
-                  <Button
-                    variant={managementSection === "exclude" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setManagementSection("exclude")}
-                  >
-                    Exclude
-                  </Button>
-                  <Button
-                    variant={managementSection === "create" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setManagementSection("create")}
-                  >
-                    Hinzufuegen
-                  </Button>
                 </div>
 
                 {managementError ? (
@@ -3864,6 +4478,287 @@ export function PortfolioPage({ initialTab = "overview" }) {
         </div>
         ) : null}
 
+        {globalSearchOpen ? (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            onClick={() => setGlobalSearchOpen(false)}
+          >
+            <div
+              className="mx-auto mt-4 flex h-[calc(100vh-2rem)] w-[min(1080px,96vw)] flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-none dark:rounded-2xl dark:bg-card/96 dark:shadow-[0_22px_60px_rgba(0,0,0,0.55)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="border-b border-border/70 px-4 py-3 sm:px-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <form
+                    className="relative min-w-0 flex-1"
+                    onSubmit={(event) => {
+                      void handleGlobalSearchSubmit(event);
+                    }}
+                  >
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      ref={globalSearchInputRef}
+                      value={globalSearchTerm}
+                      onChange={(event) => setGlobalSearchTerm(event.target.value)}
+                      onKeyDown={handleGlobalSearchInputKeyDown}
+                      placeholder="Suche nach Item, Typ oder Kategorie..."
+                      className="h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm text-foreground outline-none focus:border-border/80 dark:rounded-xl dark:border-border/70 dark:bg-card/85"
+                    />
+                  </form>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setGlobalSearchOpen(false)}
+                  >
+                    Schliessen
+                  </Button>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+                <div className="space-y-5">
+                  {!globalSearchTermNormalized && globalSearchRecentTerms.length > 0 ? (
+                    <section className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-foreground">Letzte Suchvorgaenge</h3>
+                        <button
+                          type="button"
+                          onClick={clearGlobalRecentSearches}
+                          className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                        >
+                          Verlauf loeschen
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {globalSearchRecentTerms.map((term, index) => {
+                          const keyboardEntryId = `recent:${term}:${index}`;
+                          const isKeyboardActive = globalSearchActiveEntryId === keyboardEntryId;
+                          return (
+                          <button
+                            key={`recent-${term}`}
+                            type="button"
+                            onClick={() => {
+                              openGlobalSearchBrowser(term);
+                            }}
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                              isKeyboardActive
+                                ? "border-primary/55 bg-primary/10"
+                                : "border-border/70 bg-transparent hover:bg-accent/55"
+                            }`}
+                          >
+                            {term}
+                          </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {globalSearchLocalSuggestions.length > 0 ? (
+                    <section className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Bereits in deinem Bestand</h3>
+                      <div className="space-y-3">
+                        {globalSearchLocalSuggestionGroups.map((group, groupIndex) => (
+                          <div
+                            key={group.key}
+                            className={`${groupIndex > 0 ? "border-t border-border/60 pt-3" : ""}`}
+                          >
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                              {group.label}
+                            </p>
+                            <div className="space-y-2">
+                              {group.entries.map((entry) => {
+                                const keyboardEntryId = `local:${entry.key}`;
+                                const isKeyboardActive = globalSearchActiveEntryId === keyboardEntryId;
+                                return (
+                                  <button
+                                    key={entry.key}
+                                    type="button"
+                                    onClick={() => handleGlobalSearchSelectKnownItem(entry)}
+                                    className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors dark:rounded-xl ${
+                                      isKeyboardActive
+                                        ? "border-primary/55 bg-primary/10"
+                                        : "border-border bg-transparent hover:bg-accent/45 dark:border-border/70 dark:bg-card/65"
+                                    }`}
+                                  >
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/25">
+                                      {entry.imageUrl ? (
+                                        <img
+                                          src={entry.imageUrl}
+                                          alt={entry.name}
+                                          className="h-full w-full object-cover"
+                                        />
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground">N/A</span>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-sm font-semibold">{entry.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {entry.sourceLabel} | {entry.quantity} Stk.
+                                      </p>
+                                    </div>
+                                    <Badge variant="secondary" className="shrink-0 text-[10px]">
+                                      {entry.sourceLabel}
+                                    </Badge>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {canRunGlobalCatalogSearch ? (
+                    <section className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => openGlobalSearchBrowser(globalSearchTerm)}
+                        className={`flex w-full items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors dark:rounded-xl ${
+                          globalSearchActiveEntryId === "search-action"
+                            ? "border-primary/55 bg-primary/10"
+                            : "border-border bg-transparent hover:bg-accent/50 dark:border-border/70 dark:bg-card/65"
+                        }`}
+                      >
+                        <span className="truncate text-sm font-semibold">
+                          Alle Produkte durchsuchen: "{normalizeGlobalSearchInput(globalSearchTerm)}"
+                        </span>
+                        <span className="text-xs text-muted-foreground">Enter</span>
+                      </button>
+                      {hasPendingCatalogSearch ? (
+                        <p className="text-xs text-muted-foreground">
+                          Enter oeffnet die Produktsuche mit Filtern auf der Suchseite.
+                        </p>
+                      ) : null}
+                    </section>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Mindestens 2 Zeichen eingeben, um den Item-Browser zu starten.
+                    </p>
+                  )}
+
+                  {globalSearchCommittedTerm ? (
+                    <section className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {GLOBAL_SEARCH_CATEGORIES.map((category) => (
+                          <button
+                            key={category.key}
+                            type="button"
+                            onClick={() => setGlobalSearchCategory(category.key)}
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                              globalSearchCategory === category.key
+                                ? "border-primary/55 bg-primary text-primary-foreground"
+                                : "border-border/70 bg-transparent text-foreground hover:bg-accent/55"
+                            }`}
+                          >
+                            {category.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {globalSearchCatalogLoading ? (
+                        <div className="space-y-2">
+                          <Skeleton className="h-14 w-full" />
+                          <Skeleton className="h-14 w-full" />
+                          <Skeleton className="h-14 w-full" />
+                        </div>
+                      ) : globalSearchCatalogError ? (
+                        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                          {globalSearchCatalogError}
+                        </div>
+                      ) : globalSearchFilteredCatalogResults.length === 0 ? (
+                        <div className="rounded-md border border-border/70 p-3 text-sm text-muted-foreground">
+                          Keine Treffer im Katalog fuer "{globalSearchCommittedTerm}".
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {globalSearchFilteredCatalogResults.map((candidate, index) => {
+                            const marketHashName = String(
+                              candidate?.marketHashName || candidate?.displayName || "",
+                            ).trim();
+                            const keyboardEntryId = `catalog:${marketHashName}:${index}`;
+                            const isKeyboardActive = globalSearchActiveEntryId === keyboardEntryId;
+                            const nameKey = normalizeSearchText(marketHashName);
+                            const knownPresence = globalSearchKnownItemsByName.get(nameKey) || null;
+                            const canAddToWatchlist = !knownPresence?.hasWatchlist;
+                            const preferredKnownMatch = globalSearchKnownPrimaryByName.get(nameKey) || null;
+
+                            return (
+                              <div
+                                key={`${marketHashName}-${candidate?.itemType || candidate?.type || "other"}`}
+                                className={`flex items-center gap-3 rounded-md border px-3 py-2.5 dark:rounded-xl ${
+                                  isKeyboardActive
+                                    ? "border-primary/55 bg-primary/10"
+                                    : "border-border/70 bg-background/35 dark:bg-card/65"
+                                }`}
+                                onClick={() => void handleGlobalSearchSelectCatalogItem(candidate)}
+                              >
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/25">
+                                  {candidate?.iconUrl ? (
+                                    <img
+                                      src={candidate.iconUrl}
+                                      alt={candidate.displayName || marketHashName}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-[11px] text-muted-foreground">N/A</span>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold">
+                                    {candidate?.displayName || marketHashName}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {candidate?.itemTypeLabel || candidate?.itemType || "Other"}
+                                  </p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {preferredKnownMatch ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleGlobalSearchSelectKnownItem(preferredKnownMatch);
+                                      }}
+                                    >
+                                      Im Bestand
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={canAddToWatchlist ? "default" : "outline"}
+                                    disabled={!canAddToWatchlist || globalSearchAddingItem === marketHashName}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleGlobalSearchAddToWatchlist(candidate);
+                                    }}
+                                  >
+                                    {!canAddToWatchlist
+                                      ? "In Watchlist"
+                                      : globalSearchAddingItem === marketHashName
+                                        ? "Speichert..."
+                                        : "Zur Watchlist"}
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <CsFloatTradeSyncModal
           isOpen={isCsFloatSyncOpen}
           onClose={() => setIsCsFloatSyncOpen(false)}
@@ -3888,3 +4783,4 @@ export function PortfolioPage({ initialTab = "overview" }) {
     </div>
   );
 }
+
