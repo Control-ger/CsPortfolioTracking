@@ -14,57 +14,36 @@ import { Button } from "@shared/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { WatchlistItemModal } from "./WatchlistItemModal";
 
-function WatchlistLoadingSkeleton() {
+function WatchlistItemsLoadingSkeleton() {
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-4 w-72" />
-      </div>
-
-      <Card>
-        <CardContent className="space-y-3 p-4 sm:p-6">
-          <Skeleton className="h-10 w-full" />
-          <div className="grid gap-3 md:grid-cols-3">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 md:gap-6">
-        <Card>
-          <CardHeader className="pb-2 sm:pb-4">
-            <Skeleton className="h-5 w-36" />
-          </CardHeader>
-          <CardContent className="space-y-2 sm:space-y-3">
-            {[1, 2, 3, 4].map((entry) => (
-              <div key={entry} className="rounded-xl border border-border/70 bg-card/65 p-3">
-                <div className="flex items-start gap-3">
-                  <Skeleton className="h-12 w-12 rounded-md" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-4/5" />
-                    <Skeleton className="h-3 w-2/3" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                </div>
+    <Card>
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 sm:space-y-3">
+        {[1, 2, 3, 4].map((entry) => (
+          <div
+            key={entry}
+            className="flex w-full items-center justify-between gap-3 rounded-md border border-border bg-transparent p-3 shadow-none dark:rounded-2xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_14px_30px_rgba(0,0,0,0.2)]"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Skeleton className="h-12 w-12 flex-shrink-0 rounded-xl sm:h-14 sm:w-14" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
               </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="hidden md:block">
-          <CardHeader className="pb-2 sm:pb-4">
-            <Skeleton className="h-5 w-48" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-[320px] w-full" />
-            <Skeleton className="h-12 w-full" />
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+            </div>
+            <div className="flex flex-shrink-0 items-center gap-2">
+              <div className="flex flex-col items-end gap-1">
+                <Skeleton className="h-4 w-4 rounded-full" />
+                <Skeleton className="h-3 w-10" />
+              </div>
+              <Skeleton className="h-4 w-4 rounded-full" />
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -202,10 +181,6 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     }
   };
 
-  if (loading) {
-    return <WatchlistLoadingSkeleton />;
-  }
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
@@ -231,7 +206,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         </div>
       )}
 
-      {watchlistItems.length === 0 ? (
+      {loading ? (
+        <WatchlistItemsLoadingSkeleton />
+      ) : watchlistItems.length === 0 ? (
         <Card>
           <CardContent className="p-4 sm:p-8 text-center text-muted-foreground">
             <p className="text-sm">

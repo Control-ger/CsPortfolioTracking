@@ -15,7 +15,6 @@ import { getCurrentUser, getSession, logout, validateSession } from "@shared/lib
 
 const NAV_ITEMS = [
   { label: "Portfolio", to: "/" },
-  { label: "Auftraege", to: "/inventory" },
   { label: "Einstellungen", to: "/settings" },
 ]
 

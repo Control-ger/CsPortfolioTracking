@@ -20,7 +20,7 @@ final class SteamDbRssClient
             return $configured;
         }
 
-        return 'https://steamdb.info/app/730/patchnotes/rss/';
+        return 'https://steamdb.info/api/PatchnotesRSS/?appid=730';
     }
 
     public function fetchRawXml(): string
@@ -44,5 +44,39 @@ final class SteamDbRssClient
         }
 
         return (string) $raw;
+    }
+
+    /**
+     * @return array<int,array<string,string>>
+     */
+    public function fetchItems(): array
+    {
+        $xmlRaw = $this->fetchRawXml();
+        $xml = @simplexml_load_string($xmlRaw, \SimpleXMLElement::class, LIBXML_NOCDATA);
+        if (!$xml instanceof \SimpleXMLElement) {
+            throw new RuntimeException('SteamDB RSS response is not valid XML.');
+        }
+
+        $channelItems = $xml->channel->item ?? null;
+        if (!($channelItems instanceof \SimpleXMLElement)) {
+            return [];
+        }
+
+        $items = [];
+        foreach ($channelItems as $entry) {
+            if (!$entry instanceof \SimpleXMLElement) {
+                continue;
+            }
+
+            $items[] = [
+                'guid' => trim((string) ($entry->guid ?? '')),
+                'title' => trim((string) ($entry->title ?? '')),
+                'link' => trim((string) ($entry->link ?? '')),
+                'description' => trim((string) ($entry->description ?? '')),
+                'pubDate' => trim((string) ($entry->pubDate ?? '')),
+            ];
+        }
+
+        return $items;
     }
 }

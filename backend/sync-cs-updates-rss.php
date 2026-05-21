@@ -19,6 +19,7 @@ require_once $bootstrapPath;
 
 use App\Application\Service\CsUpdatesIngestService;
 use App\Config\DatabaseConfig;
+use App\Infrastructure\External\SteamDbRssClient;
 use App\Infrastructure\External\SteamNewsClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
@@ -28,7 +29,7 @@ $startedAt = microtime(true);
 try {
     $pdo = (new DatabaseConnectionFactory(new DatabaseConfig()))->create();
     $repository = new CsUpdatesFeedRepository($pdo);
-    $service = new CsUpdatesIngestService(new SteamNewsClient(), $repository);
+    $service = new CsUpdatesIngestService(new SteamDbRssClient(), new SteamNewsClient(), $repository);
 
     $result = $service->ingest();
     $duration = round(microtime(true) - $startedAt, 2);

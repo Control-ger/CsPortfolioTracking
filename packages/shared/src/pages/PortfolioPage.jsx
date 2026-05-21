@@ -134,7 +134,6 @@ const DESKTOP_SIDEBAR_TABS = [
   { key: "overview", label: "Uebersicht", icon: LayoutGrid },
   { key: "inventory", label: "Inventar", icon: Package },
   { key: "watchlist", label: "Watchlist", icon: Eye },
-  { key: "search", label: "Suche", icon: Search },
   { key: "management", label: "Verwaltung", icon: FolderCog, desktopOnly: true },
   { key: "settings", label: "Einstellungen", icon: Cog, route: "/settings" },
 ];

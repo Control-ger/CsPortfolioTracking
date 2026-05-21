@@ -5,7 +5,7 @@ import { getMockCsUpdatesFeed } from "@shared/lib/csUpdatesFeed.mock";
 
 const DEFAULT_STALE_AFTER_SECONDS = 6 * 60 * 60;
 const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
-const FALLBACK_POLL_INTERVAL_MS = 60 * 1000;
+const FALLBACK_POLL_INTERVAL_MS = 15 * 1000;
 const WS_RECONNECT_BACKOFF_STEPS_MS = [1000, 2000, 5000, 10000, 30000];
 const WS_RECONNECT_COOLDOWN_MS = 5 * 60 * 1000;
 

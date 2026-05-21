@@ -3,12 +3,15 @@ declare(strict_types=1);
 
 namespace App\Application\Service;
 
+use App\Infrastructure\External\SteamDbRssClient;
 use App\Infrastructure\External\SteamNewsClient;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
+use Throwable;
 
 final class CsUpdatesIngestService
 {
     public function __construct(
+        private readonly SteamDbRssClient $steamDbRssClient,
         private readonly SteamNewsClient $steamNewsClient,
         private readonly CsUpdatesFeedRepository $repository
     ) {
@@ -20,8 +23,23 @@ final class CsUpdatesIngestService
     public function ingest(): array
     {
         $this->repository->ensureTable();
-        $newsItems = $this->steamNewsClient->fetchNewsItems();
-        $entries = $this->mapNewsItemsToEntries($newsItems);
+
+        $entries = [];
+        $sourceUrl = '';
+
+        try {
+            $rssItems = $this->steamDbRssClient->fetchItems();
+            $entries = $this->mapRssItemsToEntries($rssItems);
+            $sourceUrl = $this->steamDbRssClient->resolveRssUrl();
+        } catch (Throwable) {
+            $entries = [];
+        }
+
+        if (count($entries) === 0) {
+            $newsItems = $this->steamNewsClient->fetchNewsItems();
+            $entries = $this->mapNewsItemsToEntries($newsItems);
+            $sourceUrl = $this->steamNewsClient->resolveEndpointUrl();
+        }
 
         $inserted = 0;
         $updated = 0;
@@ -44,7 +62,7 @@ final class CsUpdatesIngestService
         }
 
         return [
-            'sourceUrl' => $this->steamNewsClient->resolveEndpointUrl(),
+            'sourceUrl' => $sourceUrl,
             'totalEntries' => count($entries),
             'insertedCount' => $inserted,
             'updatedCount' => $updated,
@@ -53,6 +71,7 @@ final class CsUpdatesIngestService
     }
 
     /**
+     * @param array<int,array<string,mixed>> $newsItems
      * @return array<int,array<string,mixed>>
      */
     private function mapNewsItemsToEntries(array $newsItems): array
@@ -71,7 +90,7 @@ final class CsUpdatesIngestService
                 continue;
             }
 
-            $publishedAt = $this->parsePublishedAt($dateUnix);
+            $publishedAt = $this->parsePublishedAtUnix($dateUnix);
             $meta = $this->extractSteamMeta($title . "\n" . $contents);
             $externalId = $gid !== ''
                 ? $gid
@@ -96,10 +115,64 @@ final class CsUpdatesIngestService
         return $items;
     }
 
-    private function parsePublishedAt(int $unixTimestamp): \DateTimeImmutable
+    /**
+     * @param array<int,array<string,string>> $rssItems
+     * @return array<int,array<string,mixed>>
+     */
+    private function mapRssItemsToEntries(array $rssItems): array
+    {
+        $items = [];
+
+        foreach ($rssItems as $item) {
+            $title = trim((string) ($item['title'] ?? ''));
+            $link = trim((string) ($item['link'] ?? ''));
+            $guid = trim((string) ($item['guid'] ?? ''));
+            $description = trim((string) ($item['description'] ?? ''));
+            $pubDate = trim((string) ($item['pubDate'] ?? ''));
+
+            if ($title === '' && $link === '') {
+                continue;
+            }
+
+            $publishedAt = $this->parsePublishedAtDateString($pubDate);
+            $meta = $this->extractSteamMeta($title . "\n" . $description);
+            $externalId = $guid !== ''
+                ? $guid
+                : sha1($link . '|' . $publishedAt->format(DATE_ATOM) . '|' . $title);
+            $summary = $this->buildSummary($description);
+
+            $items[] = [
+                'source' => 'steamdb_rss',
+                'external_id' => $externalId,
+                'title' => $title !== '' ? $title : 'CS2 Update',
+                'url' => $link !== '' ? $link : 'https://steamdb.info/app/730/patchnotes/',
+                'summary_raw' => $summary !== '' ? $summary : $description,
+                'published_at' => $publishedAt->format('Y-m-d H:i:s'),
+                'changelist_id' => $meta['changelist_id'],
+                'build_id' => $meta['build_id'],
+                'branch' => $meta['branch'],
+            ];
+        }
+
+        usort($items, static fn(array $a, array $b): int => strcmp((string) $b['published_at'], (string) $a['published_at']));
+
+        return $items;
+    }
+
+    private function parsePublishedAtUnix(int $unixTimestamp): \DateTimeImmutable
     {
         if ($unixTimestamp > 0) {
             return (new \DateTimeImmutable('@' . $unixTimestamp))->setTimezone(new \DateTimeZone('UTC'));
+        }
+
+        return new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+    }
+
+    private function parsePublishedAtDateString(string $dateValue): \DateTimeImmutable
+    {
+        $timestamp = strtotime($dateValue);
+        if ($timestamp !== false && $timestamp > 0) {
+            return (new \DateTimeImmutable('@' . $timestamp))->setTimezone(new \DateTimeZone('UTC'));
         }
 
         return new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
@@ -150,6 +223,6 @@ final class CsUpdatesIngestService
             return $plain;
         }
 
-        return rtrim(mb_substr($plain, 0, 420)) . '…';
+        return rtrim(mb_substr($plain, 0, 420)) . '...';
     }
 }
