@@ -1042,30 +1042,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
     void loadItemHistory();
   }, [selectedItemWithLive]);
 
-  // Keep this return after all hooks. Returning before the other hooks run changes
-  // hook order after login and triggers React's minified error #310.
-  if (isElectronRuntime && showStartupWelcome) {
-    return (
-      <div className="steam-startup-shell flex min-h-full items-center justify-center p-4">
-        <SteamLoginPrompt
-          onLoginSuccess={async () => {
-            await refreshPortfolio();
-            writeStartupWelcomeDismissed();
-            setShowStartupWelcome(false);
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (authRequired && !portfolioLoading) {
-    return (
-      <div className={`flex items-center justify-center p-4 ${isElectronRuntime ? "min-h-full" : "min-h-screen"}`}>
-        <SteamLoginPrompt onLoginSuccess={refreshPortfolio} />
-      </div>
-    );
-  }
-
   const handleTabSelect = (nextTab) => {
     if (!runtimeTabs.includes(nextTab)) {
       return;
@@ -1223,7 +1199,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
       }
       return left.name.localeCompare(right.name, "de");
     });
-
     return rows;
   })();
   const managementTypeOptions = (() => {
@@ -1280,7 +1255,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
       }
       return rightScore - leftScore;
     });
-
     return rows;
   })();
   const matchingSuggestedCount = pendingMatchingRows.length;
@@ -1335,7 +1309,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
       }
       return String(left.name || "").localeCompare(String(right.name || ""), "de");
     });
-
     return rows;
   })();
   const suggestedPriceByNameKey = (() => {
@@ -2125,6 +2098,31 @@ export function PortfolioPage({ initialTab = "overview" }) {
     await refreshPortfolio();
     setCompositionRefreshToken((current) => current + 1);
   };
+
+  // Keep this return after all hooks. Returning before the other hooks run changes
+  // hook order after login and triggers React's minified error #310.
+  if (isElectronRuntime && showStartupWelcome) {
+    return (
+      <div className="steam-startup-shell flex min-h-full items-center justify-center p-4">
+        <SteamLoginPrompt
+          onLoginSuccess={async () => {
+            await refreshPortfolio();
+            writeStartupWelcomeDismissed();
+            setShowStartupWelcome(false);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (authRequired && !portfolioLoading) {
+    return (
+      <div className={`flex items-center justify-center p-4 ${isElectronRuntime ? "min-h-full" : "min-h-screen"}`}>
+        <SteamLoginPrompt onLoginSuccess={refreshPortfolio} />
+      </div>
+    );
+  }
+
   const useDesktopSidebarShell = !showSetupJourney;
 
   return (
@@ -2425,7 +2423,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                               setPortfolioPreferences(updated);
                             }}
                           >
-                            <option value="inventory">In Inventar einsortieren</option>
+                            <option value="inventory">Inventar einsortieren</option>
                             <option value="investment">In Investments einsortieren</option>
                           </select>
                         </div>
@@ -2632,7 +2630,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                         </div>
                         <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
                           <p className="text-xs font-semibold uppercase text-slate-200">Preise</p>
-                          <p className="mt-1 text-xs text-slate-300">Fehlende Einkaufswerte schnell nachpflegen.</p>
+                          <p className="mt-1 text-xs text-slate-300">Fehlende Einkaufspreise schnell nachpflegen.</p>
                         </div>
                         <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
                           <p className="text-xs font-semibold uppercase text-slate-200">Exclude</p>
@@ -2711,7 +2709,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
         ) : null}
 
         {!showSetupJourney ? (
-        <div className={useDesktopSidebarShell ? "w-full lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[92px_minmax(0,1fr)]" : "w-full"}>
+        <div
+          className={
+            useDesktopSidebarShell
+              ? "w-full lg:grid lg:min-h-0 lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 lg:overflow-y-auto lg:px-0 xl:px-0"
+              : "w-full"
+          }
+        >
           {useDesktopSidebarShell ? (
             <aside className="hidden lg:block lg:h-full lg:min-h-0">
               <div className="tr-desktop-rail h-full min-h-0 w-[92px] overflow-hidden">
@@ -2988,7 +2992,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
             {/*
             
-                  Manueller CSFloat-Sync: zuerst Preview prüfen, dann Import starten.
+                  Manueller CSFloat-Sync: zuerst Preview prüfen, dann Import starten.
 
 
             */}
@@ -3069,7 +3073,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
               onWarningsChange={handleWatchlistWarningsChange}
             />
           </TabsContent>
-
           {isDesktopRuntime ? (
           <TabsContent value="management" className="space-y-4 sm:space-y-6">
             {typeof window !== "undefined" && !window.electronAPI?.localStore ? (
@@ -3451,7 +3454,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                           className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         >
                           <option value="investment">Bucket: Investment</option>
-                          <option value="inventory">Bucket: Inventory</option>
+                          <option value="inventory">Bucket: Inventar</option>
                         </select>
                         <select
                           value={manualItemDraft.fundingMode}
