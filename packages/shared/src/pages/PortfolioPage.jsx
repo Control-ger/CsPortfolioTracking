@@ -2712,13 +2712,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
         <div
           className={
             useDesktopSidebarShell
-              ? "w-full lg:grid lg:min-h-0 lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 lg:overflow-y-auto lg:px-0 xl:px-0"
+              ? "w-full lg:grid lg:min-h-0 lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 lg:px-0 xl:px-0"
               : "w-full"
           }
         >
           {useDesktopSidebarShell ? (
-            <aside className="hidden lg:block lg:h-full lg:min-h-0">
-              <div className="tr-desktop-rail h-full min-h-0 w-[92px] overflow-hidden">
+            <aside className="hidden lg:flex lg:justify-center lg:pt-2">
+              <div className="tr-desktop-rail h-[98vh] w-[92px] overflow-hidden rounded-2xl">
                 <div className="flex h-full flex-col items-center py-4">
                   <nav className="flex w-full flex-col items-center gap-2 px-2">
                     {DESKTOP_SIDEBAR_TABS
@@ -2789,10 +2789,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
             {useDesktopSidebarShell ? (
               <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:justify-between lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-9 w-9 flex-col items-center justify-center gap-1 rounded-lg bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(255,255,255,0.14)]">
-                    <span className="h-[3px] w-5 rounded-full bg-primary-foreground" />
-                    <span className="h-[3px] w-5 rounded-full bg-primary-foreground/92" />
-                  </div>
                   <div className="relative w-[340px] max-w-[46vw]">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <div className="h-11 w-full rounded-xl border border-border/70 bg-card/75 pl-10 pr-3 text-sm text-muted-foreground shadow-[0_12px_28px_rgba(0,0,0,0.2)] flex items-center">
@@ -2808,30 +2804,29 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   >
                     Portfolio
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabSelect("inventory")}
+                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "inventory" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
+                  >
+                    Inventar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabSelect("watchlist")}
+                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "watchlist" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
+                  >
+                    Watchlist
+                  </button>
                   {isDesktopRuntime ? (
                     <button
                       type="button"
                       onClick={() => handleTabSelect("management")}
                       className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "management" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
                     >
-                      Auftraege
+                      Verwaltung
                     </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleTabSelect("inventory")}
-                      className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "inventory" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                    >
-                      Auftraege
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => navigate("/settings", { replace: true })}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${location.pathname === "/settings" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Profil
-                  </button>
+                  ) : null}
                 </div>
               </div>
             ) : null}

@@ -844,7 +844,7 @@ export function SettingsPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${useDesktopSidebarShell ? "lg:hidden" : ""}`}>
           <ThemeToggle />
           <div className="hidden sm:block">
             <UserMenu />
@@ -878,8 +878,8 @@ export function SettingsPage() {
     >
       {useDesktopSidebarShell ? (
         <div className="w-full lg:grid lg:min-h-0 lg:h-full lg:grid-cols-[92px_minmax(0,1fr)]">
-          <aside className="hidden lg:block lg:h-full lg:min-h-0">
-            <div className="tr-desktop-rail h-full min-h-0 w-[92px] overflow-hidden">
+          <aside className="hidden lg:flex lg:justify-center lg:pt-2">
+            <div className="tr-desktop-rail h-[98vh] w-[92px] overflow-hidden rounded-2xl">
               <div className="flex h-full flex-col items-center py-4">
                 <nav className="flex w-full flex-col items-center gap-2 px-2">
                   {DESKTOP_SIDEBAR_ITEMS
@@ -905,6 +905,10 @@ export function SettingsPage() {
                       );
                     })}
                 </nav>
+                <div className="mt-auto flex w-full flex-col items-center gap-2 px-2 pb-2">
+                  <ThemeToggle />
+                  <UserMenu menuSide="right" menuAlign="end" menuSideOffset={8} />
+                </div>
               </div>
             </div>
           </aside>

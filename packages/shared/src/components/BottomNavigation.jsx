@@ -5,7 +5,7 @@ import { getCurrentUser, getSession, validateSession } from "@shared/lib/auth";
 
 const NAV_ITEMS = [
   { path: "/", label: "Portfolio", icon: Home },
-  { path: "/inventory", label: "Auftraege", icon: Archive },
+  { path: "/inventory", label: "Inventar", icon: Archive },
   { path: "/watchlist", label: "Watchlist", icon: Eye },
 ];
 
