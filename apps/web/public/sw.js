@@ -2,6 +2,7 @@
 // Wichtig: Kein cache-first fuer Navigation/HTML, sonst bleiben alte App-Versionen haengen.
 const CACHE_NAME = "cs-portfolio-v2";
 const STATIC_ASSETS = ["/icon.png", "/manifest.json"];
+const CS_UPDATE_NOTIFICATION_TAG = "cs-updates-latest";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -77,5 +78,68 @@ self.addEventListener("fetch", (event) => {
               })
           )
       )
+  );
+});
+
+async function fetchLatestCsUpdate() {
+  try {
+    const response = await fetch("/api/index.php/api/v1/cs-updates?limit=1", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+    return items[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    (async () => {
+      const latest = await fetchLatestCsUpdate();
+      const title = latest?.title || "Neues CS Update";
+      const body = latest?.summary || "Ein neues Counter-Strike Update ist verfuegbar.";
+      const targetUrl = "/#/cs-updates";
+
+      await self.registration.showNotification(title, {
+        body,
+        icon: "/icon.png",
+        badge: "/icon.png",
+        tag: CS_UPDATE_NOTIFICATION_TAG,
+        renotify: true,
+        data: {
+          url: targetUrl,
+          itemId: latest?.id || null,
+        },
+      });
+    })(),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const targetUrl = event.notification?.data?.url || "/#/cs-updates";
+      const allClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of allClients) {
+        const clientUrl = new URL(client.url);
+        if (clientUrl.origin === self.location.origin) {
+          if (typeof client.navigate === "function") {
+            await client.navigate(targetUrl);
+          }
+          await client.focus();
+          return;
+        }
+      }
+      await clients.openWindow(targetUrl);
+    })(),
   );
 });

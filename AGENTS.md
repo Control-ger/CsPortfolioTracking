@@ -305,3 +305,14 @@ Change: Preisquellen-Praeferenz + getrennte Live-Quotes pro Source
 - Neue zentrale Repository-Komponente: `backend/src/Infrastructure/Persistence/Repository/UserPriceSourcePreferenceRepository.php`.
 - Datenmodell-Regel erweitert: `item_live_cache` speichert jetzt getrennte Quotes je `item_id + price_source` (mind. `csfloat`/`steam`), nicht mehr eine einzelne ueberschriebene Zeile pro Item.
 - Pricing-Flow in `backend/src/Application/Service/PricingService.php` nutzt User-Praeferenz (`auto`/`csfloat`/`steam`) fuer Source-Selection und vermeidet Source-Mischung durch Fallback-Ueberschreiben.
+
+---
+
+Updated: 2026-05-22
+Change: Web Push fuer CS-Updates + SteamDB RSS Ingest-Latenz reduziert
+- Neue zentrale Backend-Komponenten:
+  - `backend/src/Http/Controller/WebPushController.php` (Public-Key + Subscribe/Unsubscribe API)
+  - `backend/src/Infrastructure/Persistence/Repository/WebPushSubscriptionRepository.php` (Persistenz fuer Browser-Subscriptions)
+  - `backend/src/Application/Service/WebPushService.php` (VAPID-Signierung + Push-Dispatch)
+- `backend/src/Application/Service/CsUpdatesIngestService.php` nutzt SteamDB Patchnotes RSS primaer und sendet Web Push bei neuen Feed-Eintraegen.
+- Supervisor-Konfiguration erweitert um `csportfolio-cs-updates-ingest` (alle 30s), damit CS-Update-Ingest nahezu in Echtzeit laeuft.

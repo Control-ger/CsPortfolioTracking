@@ -977,3 +977,29 @@ export async function fetchCsUpdatesFeed(options = {}) {
     },
   );
 }
+
+export async function fetchWebPushPublicKey() {
+  return requestWithMeta("/api/v1/push/public-key");
+}
+
+export async function subscribeWebPush(subscription, userId = 1) {
+  return requestWithMeta("/api/v1/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId,
+      subscription,
+    }),
+  });
+}
+
+export async function unsubscribeWebPush(endpoint, userId = 1) {
+  return requestWithMeta("/api/v1/push/unsubscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId,
+      endpoint,
+    }),
+  });
+}

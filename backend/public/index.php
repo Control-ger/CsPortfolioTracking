@@ -8,6 +8,7 @@ use App\Application\Service\PricingService;
 use App\Application\Service\RequestRateLimiter;
 use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistService;
+use App\Application\Service\WebPushService;
 use App\Application\Service\SyncService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
@@ -20,6 +21,7 @@ use App\Http\Controller\SettingsController;
 use App\Http\Controller\SteamAuthController;
 use App\Http\Controller\SyncStatusController;
 use App\Http\Controller\SyncController;
+use App\Http\Controller\WebPushController;
 use App\Http\Controller\WatchlistController;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\CsFloatTradeClient;
@@ -38,6 +40,7 @@ use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\UserPriceSourcePreferenceRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
+use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
 use App\Infrastructure\Persistence\Repository\AuthStateRepository;
 use App\Infrastructure\Persistence\Repository\CacheMaintenanceRepository;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
@@ -437,6 +440,8 @@ function obs_apply_security_rate_limit(Request $request): void
         ['method' => 'GET', 'path' => '/api/v1/auth/steam/callback', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_CALLBACK_PER_MINUTE', 40, 0, 300), 'window' => 60],
         ['method' => 'GET', 'path' => '/api/v1/auth/session/validate', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_VALIDATE_PER_MINUTE', 240, 0, 5000), 'window' => 60],
         ['method' => 'GET', 'path' => '/api/v1/auth/steam/inventory', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_INVENTORY_PER_MINUTE', 60, 0, 1000), 'window' => 60],
+        ['method' => 'POST', 'path' => '/api/v1/push/subscribe', 'limit' => obs_env_int_range('RATE_LIMIT_PUSH_SUBSCRIBE_PER_MINUTE', 30, 0, 600), 'window' => 60],
+        ['method' => 'POST', 'path' => '/api/v1/push/unsubscribe', 'limit' => obs_env_int_range('RATE_LIMIT_PUSH_UNSUBSCRIBE_PER_MINUTE', 30, 0, 600), 'window' => 60],
     ];
 
     $matchedRule = null;
@@ -699,6 +704,12 @@ try {
     $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
     $exchangeRateController = new ExchangeRateController(new ExchangeRateClient());
     $csUpdatesController = new CsUpdatesController(new CsUpdatesFeedRepository($pdo));
+    $webPushSubscriptionRepository = new WebPushSubscriptionRepository($pdo);
+    $webPushSubscriptionRepository->ensureTable();
+    $webPushController = new WebPushController(
+        $webPushSubscriptionRepository,
+        WebPushService::fromEnv()
+    );
     $steamAuthController = new SteamAuthController($pdo, $userRepository);
 
     $router = new Router();
@@ -726,6 +737,9 @@ try {
     $router->register('POST', '/api/v1/settings/csfloat-api-key', [$settingsController, 'updateCsFloatApiKey']);
     $router->register('GET', '/api/v1/exchange-rate', [$exchangeRateController, 'getRates']);
     $router->register('GET', '/api/v1/cs-updates', [$csUpdatesController, 'list']);
+    $router->register('GET', '/api/v1/push/public-key', [$webPushController, 'publicKey']);
+    $router->register('POST', '/api/v1/push/subscribe', [$webPushController, 'subscribe']);
+    $router->register('POST', '/api/v1/push/unsubscribe', [$webPushController, 'unsubscribe']);
 
     $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
     $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);

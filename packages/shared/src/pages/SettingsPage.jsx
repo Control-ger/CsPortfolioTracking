@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign, LineChart, LayoutGrid, Package, FolderCog, Cog } from "lucide-react";
+import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign, LineChart, LayoutGrid, Package, FolderCog, Cog, Bell } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { useTheme } from "@shared/contexts";
 
@@ -19,8 +19,12 @@ import {
   updateCsFloatApiKey,
   fetchPriceSourcePreference,
   updatePriceSourcePreference,
+  fetchWebPushPublicKey,
+  subscribeWebPush,
+  unsubscribeWebPush,
 } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
+import { getCurrentUser } from "@shared/lib/auth";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 
 const DEFAULT_FORM = {
@@ -57,6 +61,19 @@ function normalizePriceSourceMode(value) {
     return "steam";
   }
   return "auto";
+}
+
+function base64UrlToUint8Array(base64Url) {
+  const padding = "=".repeat((4 - (base64Url.length % 4)) % 4);
+  const base64 = `${base64Url}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
 }
 
 const DESKTOP_SIDEBAR_ITEMS = [
@@ -96,8 +113,22 @@ export function SettingsPage() {
   const [serverConfigTesting, setServerConfigTesting] = useState(false);
   const [serverConfigMessage, setServerConfigMessage] = useState("");
   const [serverConfigError, setServerConfigError] = useState("");
+  const [webPushLoading, setWebPushLoading] = useState(false);
+  const [webPushSaving, setWebPushSaving] = useState(false);
+  const [webPushConfigured, setWebPushConfigured] = useState(false);
+  const [webPushSubscribed, setWebPushSubscribed] = useState(false);
+  const [webPushPermission, setWebPushPermission] = useState("default");
+  const [webPushPublicKey, setWebPushPublicKey] = useState("");
+  const [webPushError, setWebPushError] = useState("");
+  const [webPushSuccess, setWebPushSuccess] = useState("");
   const desktopRuntime = isDesktopRuntime();
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
+  const webPushSupported =
+    !isElectronRuntime &&
+    typeof window !== "undefined" &&
+    "Notification" in window &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window;
   const useDesktopSidebarShell = isElectronRuntime;
   const location = useLocation();
   const navigate = useNavigate();
@@ -184,6 +215,36 @@ export function SettingsPage() {
     void loadServerConfig();
   }, []);
 
+  useEffect(() => {
+    const loadWebPushState = async () => {
+      if (!webPushSupported) {
+        return;
+      }
+
+      try {
+        setWebPushLoading(true);
+        setWebPushError("");
+        setWebPushPermission(Notification.permission);
+
+        const keyResponse = await fetchWebPushPublicKey();
+        const configured = Boolean(keyResponse?.data?.configured);
+        const publicKey = String(keyResponse?.data?.publicKey || "");
+        setWebPushConfigured(configured);
+        setWebPushPublicKey(publicKey);
+
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        setWebPushSubscribed(Boolean(subscription));
+      } catch (error) {
+        setWebPushError(error?.message || "Push-Status konnte nicht geladen werden.");
+      } finally {
+        setWebPushLoading(false);
+      }
+    };
+
+    void loadWebPushState();
+  }, [webPushSupported]);
+
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
     setSuccess("");
@@ -254,6 +315,106 @@ export function SettingsPage() {
       setSuccess("");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const resolveCurrentUserId = async () => {
+    const user = await getCurrentUser();
+    const userId = Number(user?.id || 1);
+    return Number.isFinite(userId) && userId > 0 ? userId : 1;
+  };
+
+  const handleEnableWebPush = async () => {
+    if (!webPushSupported) {
+      setWebPushError("Browser Push wird in dieser Umgebung nicht unterstuetzt.");
+      return;
+    }
+
+    try {
+      setWebPushSaving(true);
+      setWebPushError("");
+      setWebPushSuccess("");
+
+      const keyResponse = await fetchWebPushPublicKey();
+      const configured = Boolean(keyResponse?.data?.configured);
+      const publicKey = String(keyResponse?.data?.publicKey || "");
+      setWebPushConfigured(configured);
+      setWebPushPublicKey(publicKey);
+
+      if (!configured || !publicKey) {
+        setWebPushError("Push ist serverseitig noch nicht konfiguriert (VAPID Keys fehlen).");
+        return;
+      }
+
+      if (Notification.permission === "denied") {
+        setWebPushPermission("denied");
+        setWebPushError("Browser-Benachrichtigungen sind blockiert. Bitte im Browser erlauben.");
+        return;
+      }
+
+      const permission =
+        Notification.permission === "granted"
+          ? "granted"
+          : await Notification.requestPermission();
+      setWebPushPermission(permission);
+      if (permission !== "granted") {
+        setWebPushError("Benachrichtigungsberechtigung wurde nicht erteilt.");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64UrlToUint8Array(publicKey),
+        });
+      }
+
+      const userId = await resolveCurrentUserId();
+      const payload =
+        typeof subscription.toJSON === "function" ? subscription.toJSON() : subscription;
+      await subscribeWebPush(payload, userId);
+
+      setWebPushSubscribed(true);
+      setWebPushSuccess("Browser Push fuer CS-Updates ist aktiviert.");
+    } catch (error) {
+      setWebPushError(error?.message || "Browser Push konnte nicht aktiviert werden.");
+    } finally {
+      setWebPushSaving(false);
+    }
+  };
+
+  const handleDisableWebPush = async () => {
+    if (!webPushSupported) {
+      setWebPushError("Browser Push wird in dieser Umgebung nicht unterstuetzt.");
+      return;
+    }
+
+    try {
+      setWebPushSaving(true);
+      setWebPushError("");
+      setWebPushSuccess("");
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      const endpoint = String(subscription?.endpoint || "");
+
+      if (subscription) {
+        await subscription.unsubscribe();
+      }
+
+      if (endpoint) {
+        const userId = await resolveCurrentUserId();
+        await unsubscribeWebPush(endpoint, userId);
+      }
+
+      setWebPushSubscribed(false);
+      setWebPushSuccess("Browser Push wurde deaktiviert.");
+    } catch (error) {
+      setWebPushError(error?.message || "Browser Push konnte nicht deaktiviert werden.");
+    } finally {
+      setWebPushSaving(false);
     }
   };
 
@@ -438,6 +599,72 @@ export function SettingsPage() {
                 }}
               >
                 {priceSourceSaving ? "Speichert..." : "Praeferenz speichern"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              <CardTitle>Browser Push (CS Updates)</CardTitle>
+              <Badge variant="outline" className="ml-auto">
+                {webPushSubscribed ? "Aktiv" : "Inaktiv"}
+              </Badge>
+            </div>
+            <CardDescription>
+              Erhalte Benachrichtigungen bei neuen CS-Updates auf Mobile und Desktop (PWA/Web).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!webPushSupported ? (
+              <div className="rounded-lg border border-border bg-transparent p-3 text-sm text-muted-foreground dark:border-border/70 dark:bg-card/65">
+                Browser Push ist hier nicht verfuegbar (z.B. Electron Runtime oder fehlende Push-Unterstuetzung).
+              </div>
+            ) : null}
+
+            {webPushLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-56" />
+                <Skeleton className="h-4 w-44" />
+              </div>
+            ) : null}
+
+            {webPushError ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {webPushError}
+              </div>
+            ) : null}
+
+            {webPushSuccess ? (
+              <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
+                {webPushSuccess}
+              </div>
+            ) : null}
+
+            <div className="rounded-lg border border-border bg-transparent p-3 text-xs text-muted-foreground dark:border-border/70 dark:bg-card/65">
+              <p>
+                Berechtigung: <span className="font-semibold text-foreground">{webPushPermission}</span>
+              </p>
+              <p>
+                Server konfiguriert: <span className="font-semibold text-foreground">{webPushConfigured ? "ja" : "nein"}</span>
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => void handleEnableWebPush()}
+                disabled={!webPushSupported || webPushSaving}
+              >
+                {webPushSaving ? "Aktiviere..." : "Push aktivieren"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void handleDisableWebPush()}
+                disabled={!webPushSupported || webPushSaving || !webPushSubscribed}
+              >
+                {webPushSaving ? "Deaktiviere..." : "Push deaktivieren"}
               </Button>
             </div>
           </CardContent>
