@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Cog, Eye, FolderCog, LayoutGrid, Package } from "lucide-react";
 
@@ -21,22 +22,27 @@ export default function CsUpdatesPage() {
   const useDesktopSidebarShell = true;
   const location = useLocation();
   const navigate = useNavigate();
+  const preferredOpenItemId = useMemo(
+    () => String(new URLSearchParams(location.search).get("item") || "").trim(),
+    [location.search],
+  );
 
   const updatesContent = (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <div className="flex flex-col gap-6 lg:py-6">
-        <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Live Feed
-            </p>
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-              CS Updates
-            </h1>
-            <p className="text-sm text-muted-foreground sm:text-base">
-              Aktuelle Counter-Strike-Updates im Fullscreen-View.
-            </p>
-          </div>
+      <div className="flex flex-col gap-4 lg:py-6">
+        <header className="rounded-2xl border border-border/70 bg-card/55 p-4 sm:p-5">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Portfolio Tracking
+              </p>
+              <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+                CS Updates
+              </h1>
+              <p className="text-sm text-muted-foreground sm:text-base">
+                Live-Radar fuer Counter-Strike-Patchnotes und Markt-Impact.
+              </p>
+            </div>
           <div className={`flex items-center gap-2 ${useDesktopSidebarShell ? "lg:hidden" : ""}`}>
             <ThemeToggle />
             <UserMenu />
@@ -49,9 +55,10 @@ export default function CsUpdatesPage() {
               <Link to="/">Zurueck zum Portfolio</Link>
             </Button>
           </div>
+          </div>
         </header>
 
-        <CsUpdatesFeed />
+        <CsUpdatesFeed preferredOpenItemId={preferredOpenItemId} />
       </div>
     </div>
   );
