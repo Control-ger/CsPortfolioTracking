@@ -18,10 +18,12 @@ if (!is_file($bootstrapPath)) {
 require_once $bootstrapPath;
 
 use App\Application\Service\CsUpdatesAiRatingService;
+use App\Application\Service\WebPushService;
 use App\Config\DatabaseConfig;
 use App\Infrastructure\External\GeminiUpdateRaterClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
+use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
 
 $startedAt = microtime(true);
 
@@ -33,9 +35,12 @@ try {
     }
 
     $pdo = (new DatabaseConnectionFactory(new DatabaseConfig()))->create();
+    $webPushSubscriptionRepository = new WebPushSubscriptionRepository($pdo);
     $service = new CsUpdatesAiRatingService(
         new CsUpdatesFeedRepository($pdo),
-        $client
+        $client,
+        $webPushSubscriptionRepository,
+        WebPushService::fromEnv()
     );
 
     $limit = (int) (getenv('CS_UPDATES_AI_BATCH_SIZE') ?: 12);
@@ -70,4 +75,3 @@ try {
     fwrite(STDERR, $exception->getTraceAsString() . "\n");
     exit(1);
 }
-

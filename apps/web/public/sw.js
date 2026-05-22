@@ -104,8 +104,16 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       const latest = await fetchLatestCsUpdate();
-      const title = latest?.title || "Neues CS Update";
-      const body = latest?.summary || "Ein neues Counter-Strike Update ist verfuegbar.";
+      const impactLevel = String(latest?.aiImpactLevel || "").trim().toLowerCase();
+      const aiAction = String(latest?.aiRecommendedAction || "").trim();
+      const isHighImpact = impactLevel === "high";
+
+      const title = isHighImpact
+        ? "HIGH IMPACT: CS Update"
+        : (latest?.title || "Neues CS Update");
+      const body = isHighImpact
+        ? (aiAction || "KI meldet hohen Markt-Impact. Jetzt Feed und Preise pruefen.")
+        : (latest?.summary || "Ein neues Counter-Strike Update ist verfuegbar.");
       const targetUrl = "/#/cs-updates";
 
       await self.registration.showNotification(title, {
