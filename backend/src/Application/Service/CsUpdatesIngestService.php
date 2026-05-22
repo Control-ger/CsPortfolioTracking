@@ -218,7 +218,18 @@ final class CsUpdatesIngestService
             return '';
         }
 
-        $plain = trim(preg_replace('/\s+/', ' ', strip_tags($contents)) ?? '');
+        $normalized = html_entity_decode($contents, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // Steam news often contains BBCode-style tags ([p], [list], [*], [img], ...).
+        // Strip/normalize them so feed entries stay readable in the UI.
+        $normalized = preg_replace('/\[img\].*?\[\/img\]/is', ' ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[url=([^\]]+)\](.*?)\[\/url\]/is', '$2', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[url\](.*?)\[\/url\]/is', '$1', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[\*\]/', ' - ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[(?:\/)?(?:p|h1|h2|h3|b|i|u|list|quote|code)\]/i', ' ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[(?:\/)?[a-z0-9_*]+(?:=[^\]]+)?\]/i', ' ', $normalized) ?? $normalized;
+
+        $plain = trim(preg_replace('/\s+/', ' ', strip_tags($normalized)) ?? '');
         if ($plain === '') {
             return '';
         }

@@ -1,6 +1,6 @@
 ﻿// Service Worker fuer CS Portfolio Tracker PWA
 // Wichtig: Kein cache-first fuer Navigation/HTML, sonst bleiben alte App-Versionen haengen.
-const CACHE_NAME = "cs-portfolio-v2";
+const CACHE_NAME = "cs-portfolio-v3";
 const STATIC_ASSETS = ["/icon.png", "/manifest.json"];
 const CS_UPDATE_NOTIFICATION_TAG = "cs-updates-latest";
 

@@ -54,13 +54,14 @@ final class CsUpdatesController
         $publishedIso = $publishedAt !== ''
             ? (new \DateTimeImmutable($publishedAt, new \DateTimeZone('UTC')))->format(DATE_ATOM)
             : gmdate(DATE_ATOM);
-        $summary = trim((string) ($row['summary_raw'] ?? ''));
+        $summary = $this->sanitizeFeedText((string) ($row['summary_raw'] ?? ''));
+        $title = $this->sanitizeFeedText((string) ($row['title'] ?? ''));
 
         return [
             'id' => (string) ($row['id'] ?? ''),
             'source' => (string) ($row['source'] ?? 'steam_news_api'),
             'sourceLabel' => $this->resolveSourceLabel((string) ($row['source'] ?? 'steam_news_api')),
-            'title' => (string) ($row['title'] ?? 'CS2 Update'),
+            'title' => $title !== '' ? $title : 'CS2 Update',
             'summary' => $summary !== '' ? $summary : 'Neue Aenderung in Counter-Strike 2 erkannt.',
             'details' => $summary !== '' ? $summary : 'Keine weiteren Details verfuegbar.',
             'url' => (string) ($row['url'] ?? ''),
@@ -90,5 +91,22 @@ final class CsUpdatesController
             'steam_news_api' => 'Steam News',
             default => 'CS Feed',
         };
+    }
+
+    private function sanitizeFeedText(string $text): string
+    {
+        if (trim($text) === '') {
+            return '';
+        }
+
+        $normalized = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $normalized = preg_replace('/\[img\].*?\[\/img\]/is', ' ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[url=([^\]]+)\](.*?)\[\/url\]/is', '$2', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[url\](.*?)\[\/url\]/is', '$1', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[\*\]/', ' - ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[(?:\/)?(?:p|h1|h2|h3|b|i|u|list|quote|code)\]/i', ' ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[(?:\/)?[a-z0-9_*]+(?:=[^\]]+)?\]/i', ' ', $normalized) ?? $normalized;
+
+        return trim(preg_replace('/\s+/', ' ', strip_tags($normalized)) ?? '');
     }
 }
