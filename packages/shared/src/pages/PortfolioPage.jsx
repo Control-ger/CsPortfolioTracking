@@ -192,6 +192,42 @@ function deriveCsUpdateImpact(item) {
   };
 }
 
+function getCsUpdateBannerTone(level) {
+  if (level === "high") {
+    return {
+      wrapper:
+        "border-red-500/35 bg-gradient-to-r from-red-950/80 via-background to-amber-950/60 shadow-[0_16px_38px_rgba(127,29,29,0.35)]",
+      eyebrow: "text-red-300",
+      panel: "border-red-500/35 bg-red-950/35",
+    };
+  }
+
+  if (level === "medium") {
+    return {
+      wrapper:
+        "border-amber-500/35 bg-gradient-to-r from-amber-950/65 via-background to-card shadow-[0_14px_30px_rgba(146,64,14,0.22)]",
+      eyebrow: "text-amber-300",
+      panel: "border-amber-500/35 bg-amber-950/30",
+    };
+  }
+
+  if (level === "pending") {
+    return {
+      wrapper:
+        "border-cyan-400/30 bg-gradient-to-r from-cyan-950/60 via-background to-card shadow-[0_12px_26px_rgba(8,47,73,0.25)]",
+      eyebrow: "text-cyan-300",
+      panel: "border-cyan-400/30 bg-cyan-950/30",
+    };
+  }
+
+  return {
+    wrapper:
+      "border-cyan-400/25 bg-gradient-to-r from-cyan-500/12 via-background to-amber-500/12 shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
+    eyebrow: "text-cyan-300",
+    panel: "border-border/70 bg-card/70",
+  };
+}
+
 const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
@@ -1818,6 +1854,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
     () => deriveCsUpdateImpact(latestCsUpdate),
     [latestCsUpdate],
   );
+  const latestCsUpdateBannerTone = useMemo(
+    () => getCsUpdateBannerTone(latestCsUpdateImpact.level),
+    [latestCsUpdateImpact.level],
+  );
+  const latestCsUpdateAiModelLabel = String(latestCsUpdate?.aiModel || "").trim();
   const hasUrgentCsUpdate =
     showCsUpdateBanner &&
     (latestCsUpdateImpact.level === "high" ||
@@ -3676,6 +3717,74 @@ export function PortfolioPage({ initialTab = "overview" }) {
               />
             </div>
 
+            {showCsUpdateBanner && latestCsUpdate ? (
+              <div
+                className={`rounded-2xl border px-4 py-4 sm:px-5 ${latestCsUpdateBannerTone.wrapper}`}
+              >
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${latestCsUpdateBannerTone.eyebrow}`}>
+                        CS Update Alert
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-foreground sm:text-base">
+                        Neues CS Update seit {formatRelativeHours(latestCsUpdateAgeHours)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className={latestCsUpdateImpact.badgeClass}>
+                        {latestCsUpdateImpact.label}
+                      </Badge>
+                      <Badge variant="outline" className="border-violet-400/30 bg-violet-500/10 text-violet-200">
+                        KI generiert
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className={`rounded-xl border p-3 ${latestCsUpdateBannerTone.panel}`}>
+                    <p className="line-clamp-2 text-sm font-semibold text-foreground">{latestCsUpdate.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      KI Aktion: <span className="text-foreground">{latestCsUpdateImpact.actionLabel}</span>
+                    </p>
+                    {latestCsUpdate?.aiReasoning ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                        KI Begruendung: {latestCsUpdate.aiReasoning}
+                      </p>
+                    ) : null}
+                    {latestCsUpdateAiModelLabel ? (
+                      <p className="mt-1 text-[11px] text-muted-foreground">Modell: {latestCsUpdateAiModelLabel}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild size="sm">
+                      <Link to="/cs-updates" onClick={markLatestCsUpdateSeen}>
+                        Update Feed oeffnen
+                      </Link>
+                    </Button>
+                    {hasUnreadCsUpdate ? (
+                      <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-300">
+                        neu
+                      </Badge>
+                    ) : null}
+                    <Button size="sm" variant="outline" onClick={() => handleTabSelect("watchlist")}>
+                      Watchlist checken
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setActiveTab("management");
+                        setManagementSection("prices");
+                      }}
+                    >
+                      Preise pruefen
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {/* Desktop: Alte Stats-Cards */}
             <div className="hidden sm:grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
               <StatCard
@@ -3776,64 +3885,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </div>
             </div>
 
-            {showCsUpdateBanner && latestCsUpdate ? (
-              <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-r from-cyan-500/12 via-background to-amber-500/12 px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.2)] sm:px-5">
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
-                        Market Pulse
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-foreground sm:text-base">
-                        Neues CS Update seit {formatRelativeHours(latestCsUpdateAgeHours)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className={latestCsUpdateImpact.badgeClass}>
-                        {latestCsUpdateImpact.label}
-                      </Badge>
-                      <Badge variant="outline" className="border-border/70 text-muted-foreground">
-                        {latestCsUpdateImpact.actionLabel}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-border/70 bg-card/70 p-3">
-                    <p className="line-clamp-2 text-sm font-semibold text-foreground">{latestCsUpdate.title}</p>
-                    <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">
-                      {latestCsUpdate.summary || latestCsUpdate.details || "Keine Details verfuegbar."}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button asChild size="sm">
-                      <Link to="/cs-updates" onClick={markLatestCsUpdateSeen}>
-                        Update Feed oeffnen
-                      </Link>
-                    </Button>
-                    {hasUnreadCsUpdate ? (
-                      <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-300">
-                        neu
-                      </Badge>
-                    ) : null}
-                    <Button size="sm" variant="outline" onClick={() => handleTabSelect("watchlist")}>
-                      Watchlist checken
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setActiveTab("management");
-                        setManagementSection("prices");
-                      }}
-                    >
-                      Preise pruefen
-                    </Button>
-                  </div>
-
-                </div>
-              </div>
-            ) : null}
           </TabsContent>
 
           <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">

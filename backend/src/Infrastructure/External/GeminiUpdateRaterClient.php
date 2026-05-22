@@ -65,7 +65,7 @@ final class GeminiUpdateRaterClient
             '- impact_level: one of ["none","low","medium","high"]',
             '- impact_score: integer 0..100',
             '- urgency: one of ["none","observe","today","fast","immediate"]',
-            '- recommended_action: kurze Aktion (max 120 Zeichen)',
+            '- recommended_action: konkrete Aktion (buy/hold/sell + Zielsegment, max 120 Zeichen)',
             '- confidence: one of ["low","medium","high"]',
             '- reasoning: kurze Begruendung (max 280 Zeichen)',
             '',
@@ -73,6 +73,8 @@ final class GeminiUpdateRaterClient
             '- Reine Bugfixes/UI/Audio meist none/low.',
             '- Ban waves koennen Markt-Impact haben.',
             '- Trade-up, Sticker-Entfernung, neue Sticker/Cases/Capsules/Collections meist medium/high.',
+            '- Wenn moeglich: nenne Segment im recommended_action (z.B. Souvenir, Sticker Capsule, High-Tier Skins).',
+            '- Formuliere handlungsorientiert, z.B. "SELL High-Tier Skins heute", "BUY alte Major Capsules staffeln".',
             '- Bei Unsicherheit konservativ bleiben.',
             '',
             'INPUT:',
@@ -300,4 +302,3 @@ final class GeminiUpdateRaterClient
         };
     }
 }
-

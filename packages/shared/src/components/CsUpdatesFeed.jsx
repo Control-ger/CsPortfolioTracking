@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, Clock3, ExternalLink, Radio, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, Bot, Clock3, ExternalLink, Radio, RefreshCw, Sparkles } from "lucide-react";
 
 import { useCsUpdatesFeed } from "@shared/hooks/useCsUpdatesFeed";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@shared/components/ui/accordion";
@@ -67,6 +67,7 @@ function deriveMarketImpact(item) {
       label: "KI Rating laeuft",
       action: "Eilmeldung jetzt beachten; KI-Rating folgt.",
       className: "border-cyan-500/30 bg-cyan-500/12 text-cyan-300",
+      panelClass: "border-cyan-500/30 bg-cyan-500/12",
       confidence: null,
       source: "ai_pending",
     };
@@ -77,21 +78,25 @@ function deriveMarketImpact(item) {
       none: {
         label: "Impact none",
         className: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+        panelClass: "border-slate-500/30 bg-slate-500/10",
         action: "Kein akuter Markt-Impact.",
       },
       low: {
         label: "Impact niedrig",
         className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+        panelClass: "border-emerald-500/30 bg-emerald-500/8",
         action: "Nur beobachten.",
       },
       medium: {
         label: "Impact mittel",
         className: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+        panelClass: "border-amber-500/35 bg-amber-500/12",
         action: "Heute monitoren.",
       },
       high: {
         label: "Impact hoch",
         className: "border-red-500/35 bg-red-500/12 text-red-300",
+        panelClass: "border-red-500/40 bg-red-500/12",
         action: "Schnell Watchlist und Preise pruefen.",
       },
     };
@@ -101,6 +106,7 @@ function deriveMarketImpact(item) {
       label: mapped.label,
       action: aiAction || mapped.action,
       className: mapped.className,
+      panelClass: mapped.panelClass,
       confidence: ["low", "medium", "high"].includes(aiConfidence) ? aiConfidence : null,
       source: "ai_rated",
     };
@@ -112,6 +118,7 @@ function deriveMarketImpact(item) {
       label: "KI Rating fehlgeschlagen",
       action: "Details lesen und manuell entscheiden.",
       className: "border-red-500/30 bg-red-500/10 text-red-300",
+      panelClass: "border-red-500/30 bg-red-500/10",
       confidence: null,
       source: "ai_failed",
     };
@@ -122,6 +129,7 @@ function deriveMarketImpact(item) {
     label: "KI Rating ausstehend",
     action: "Noch keine Bewertung verfuegbar.",
     className: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+    panelClass: "border-slate-500/30 bg-slate-500/10",
     confidence: null,
     source: "ai_unrated",
   };
@@ -140,7 +148,39 @@ function getSeverityClass(severity) {
   }
 }
 
-function getFeedItemClass(isFresh, isOpen, severity) {
+function getFeedItemClass(isFresh, isOpen, severity, marketImpact) {
+  if (marketImpact.level === "high") {
+    return cn(
+      "overflow-hidden rounded-xl border bg-gradient-to-r from-red-950/70 via-card to-amber-950/60 text-card-foreground transition-all duration-200",
+      "border-red-500/45 shadow-[0_0_0_1px_rgba(239,68,68,0.2),0_14px_34px_rgba(127,29,29,0.28)]",
+      isOpen ? "ring-1 ring-red-400/40" : "",
+    );
+  }
+
+  if (marketImpact.level === "medium") {
+    return cn(
+      "overflow-hidden rounded-xl border bg-gradient-to-r from-amber-950/40 via-card to-card text-card-foreground transition-all duration-200",
+      "border-amber-500/35 shadow-[0_0_0_1px_rgba(245,158,11,0.08)]",
+      isOpen ? "ring-1 ring-amber-400/35" : "",
+    );
+  }
+
+  if (marketImpact.level === "pending") {
+    return cn(
+      "overflow-hidden rounded-xl border bg-gradient-to-r from-cyan-950/35 via-card to-card text-card-foreground transition-all duration-200",
+      "border-cyan-500/30",
+      isOpen ? "ring-1 ring-cyan-400/35" : "",
+    );
+  }
+
+  if (marketImpact.level === "failed") {
+    return cn(
+      "overflow-hidden rounded-xl border bg-card text-card-foreground transition-all duration-200",
+      "border-red-500/35",
+      isOpen ? "ring-1 ring-red-400/30" : "",
+    );
+  }
+
   return cn(
     "overflow-hidden rounded-xl border bg-card text-card-foreground transition-all duration-200",
     isFresh ? "border-emerald-400/30 bg-emerald-500/10" : "border-border",
@@ -202,16 +242,24 @@ function ErrorState({ message, onRetry, hasItems }) {
 function FeedItem({ item, isOpen, isFresh, compact }) {
   const severityClass = getSeverityClass(item.severity);
   const marketImpact = deriveMarketImpact(item);
+  const hasAiText = Boolean(item?.aiRecommendedAction || item?.aiReasoning);
+  const aiModelLabel = String(item?.aiModel || "").trim();
+  const isHighImpact = marketImpact.level === "high";
 
   return (
-    <AccordionItem value={String(item.id)} className={cn("border-0", getFeedItemClass(isFresh, isOpen, item.severity))}>
+    <AccordionItem
+      value={String(item.id)}
+      className={cn("border-0", getFeedItemClass(isFresh, isOpen, item.severity, marketImpact))}
+    >
       <AccordionTrigger className={cn("items-start px-3 text-left sm:px-4", compact ? "py-3" : "py-4")}>
         <div className={cn("flex w-full items-start", compact ? "gap-2" : "gap-3")}>
           <div
             className={cn(
               "mt-1 flex shrink-0 items-center justify-center rounded-full border",
               compact ? "h-7 w-7" : "h-9 w-9",
-              isFresh
+              isHighImpact
+                ? "border-red-500/55 bg-red-500/15 text-red-300"
+                : isFresh
                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
                 : "border-border text-muted-foreground",
             )}
@@ -238,7 +286,12 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
                 <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>{item.summary}</p>
                 {!compact ? (
                   <p className="text-[11px] font-medium text-muted-foreground">
-                    Aktion: <span className="text-foreground">{marketImpact.action}</span>
+                    KI Hinweis: <span className="text-foreground">{marketImpact.action}</span>
+                  </p>
+                ) : null}
+                {!compact && isHighImpact ? (
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-red-300">
+                    Hoher Markt-Impact erkannt
                   </p>
                 ) : null}
               </div>
@@ -247,6 +300,12 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
                 <Badge variant="outline" className={marketImpact.className}>
                   {marketImpact.label}
                 </Badge>
+                {!compact ? (
+                  <Badge variant="outline" className="border-violet-400/30 bg-violet-500/10 text-violet-200">
+                    <Bot className="mr-1 h-3 w-3" />
+                    KI generiert
+                  </Badge>
+                ) : null}
                 {!compact && marketImpact.confidence ? (
                   <Badge variant="outline" className="border-border/70 text-muted-foreground">
                     KI {marketImpact.confidence}
@@ -279,6 +338,24 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
       <AccordionContent className={cn(compact ? "px-3" : "px-4")}>
         <Separator className="mb-3" />
         <div className="space-y-3">
+          {!compact && hasAiText ? (
+            <div className={cn("rounded-lg border px-3 py-2.5", marketImpact.panelClass)}>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-foreground/90">
+                KI-generierte Einschaetzung {aiModelLabel ? `(${aiModelLabel})` : ""}
+              </p>
+              {item.aiRecommendedAction ? (
+                <p className="text-xs text-foreground">
+                  <span className="font-semibold">Aktion:</span> {item.aiRecommendedAction}
+                </p>
+              ) : null}
+              {item.aiReasoning ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground/90">Begruendung:</span> {item.aiReasoning}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <p className={cn("leading-6 text-muted-foreground", compact ? "text-xs" : "text-sm")}>{item.details}</p>
 
           {Array.isArray(item.highlights) && item.highlights.length > 0 ? (
