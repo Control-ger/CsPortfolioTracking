@@ -122,21 +122,13 @@ function normalizeSearchText(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function normalizeLooseText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\u00c0-\u024f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function deriveCsUpdateImpact(item) {
   if (!item || typeof item !== "object") {
     return {
-      level: "low",
-      label: "Impact niedrig",
-      actionLabel: "Beobachten",
-      badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      level: "unrated",
+      label: "KI Rating ausstehend",
+      actionLabel: "Noch keine Bewertung verfuegbar",
+      badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
     };
   }
 
@@ -184,157 +176,20 @@ function deriveCsUpdateImpact(item) {
       badgeClass: mapped.badgeClass,
     };
   }
-
-  const text = normalizeLooseText(
-    [
-      item.title,
-      item.summary,
-      item.details,
-      Array.isArray(item.tags) ? item.tags.join(" ") : "",
-      item.severity,
-    ].join(" "),
-  );
-
-  const highKeywords = [
-    "major", "operation", "case", "capsule", "sticker", "collection", "drop",
-    "market", "economy", "price", "shop", "store", "pass", "armory", "music kit",
-  ];
-  const mediumKeywords = [
-    "map", "maps", "weapon", "balance", "meta", "gameplay", "ranking", "premier",
-    "matchmaking", "server", "anti cheat", "vac",
-  ];
-
-  let score = 0;
-  if (item.isBreaking) {
-    score += 3;
-  }
-  if (String(item.severity || "").toLowerCase() === "critical") {
-    score += 3;
-  } else if (String(item.severity || "").toLowerCase() === "warning") {
-    score += 2;
-  }
-
-  highKeywords.forEach((keyword) => {
-    if (text.includes(keyword)) {
-      score += 2;
-    }
-  });
-  mediumKeywords.forEach((keyword) => {
-    if (text.includes(keyword)) {
-      score += 1;
-    }
-  });
-
-  if (score >= 7) {
+  if (aiStatus === "failed") {
     return {
-      level: "high",
-      label: "Impact hoch",
-      actionLabel: "Schnell pruefen",
-      badgeClass: "border-red-500/35 bg-red-500/12 text-red-300",
-    };
-  }
-  if (score >= 3) {
-    return {
-      level: "medium",
-      label: "Impact mittel",
-      actionLabel: "Heute pruefen",
-      badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+      level: "failed",
+      label: "KI Rating fehlgeschlagen",
+      actionLabel: "Manuell pruefen",
+      badgeClass: "border-red-500/30 bg-red-500/10 text-red-300",
     };
   }
   return {
-    level: "low",
-    label: "Impact niedrig",
-    actionLabel: "Beobachten",
-    badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    level: "unrated",
+    label: "KI Rating ausstehend",
+    actionLabel: "Noch keine Bewertung verfuegbar",
+    badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
   };
-}
-
-function scoreUpdateMentionForItem(itemName, normalizedUpdateText) {
-  const normalizedName = normalizeLooseText(itemName);
-  if (!normalizedName || !normalizedUpdateText) {
-    return 0;
-  }
-  if (normalizedUpdateText.includes(normalizedName)) {
-    return 10;
-  }
-
-  const tokens = normalizedName.split(" ").filter((token) => token.length >= 3);
-  if (tokens.length === 0) {
-    return 0;
-  }
-
-  const hits = tokens.filter((token) => normalizedUpdateText.includes(token));
-  if (tokens.length >= 3 && hits.length >= 2) {
-    return hits.length + 1;
-  }
-  if (tokens.length === 2 && hits.length === 2) {
-    return 3;
-  }
-  if (tokens.length === 1 && hits.length === 1 && tokens[0].length >= 5) {
-    return 2;
-  }
-  return 0;
-}
-
-function normalizeHistoryPoints(history = []) {
-  if (!Array.isArray(history)) {
-    return [];
-  }
-  return history
-    .map((entry) => {
-      const ts = Date.parse(
-        String(
-          entry?.timestamp ||
-            entry?.date ||
-            entry?.recordedAt ||
-            entry?.createdAt ||
-            "",
-        ),
-      );
-      const price = Number(
-        entry?.price ?? entry?.value ?? entry?.currentPrice ?? entry?.priceUsd ?? entry?.close,
-      );
-      return {
-        ts: Number.isFinite(ts) ? ts : null,
-        price: Number.isFinite(price) ? price : null,
-      };
-    })
-    .filter((entry) => entry.ts !== null && entry.price !== null)
-    .sort((left, right) => left.ts - right.ts);
-}
-
-function calculateHistoryChangePercent(history = [], currentPrice, lookbackHours) {
-  const points = normalizeHistoryPoints(history);
-  const fallbackLatestPrice = points.length > 0 ? points[points.length - 1].price : null;
-  const latestPrice = Number.isFinite(Number(currentPrice))
-    ? Number(currentPrice)
-    : fallbackLatestPrice;
-
-  if (!Number.isFinite(latestPrice) || latestPrice <= 0) {
-    return null;
-  }
-
-  if (points.length === 0) {
-    return null;
-  }
-
-  const targetTs = Date.now() - lookbackHours * 60 * 60 * 1000;
-  let basePoint = null;
-  for (let index = points.length - 1; index >= 0; index -= 1) {
-    if (points[index].ts <= targetTs) {
-      basePoint = points[index];
-      break;
-    }
-  }
-  if (!basePoint) {
-    basePoint = points[0];
-  }
-
-  if (!basePoint || !Number.isFinite(basePoint.price) || basePoint.price <= 0) {
-    return null;
-  }
-
-  return ((latestPrice - basePoint.price) / basePoint.price) * 100;
 }
 
 const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
@@ -1963,57 +1818,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
     () => deriveCsUpdateImpact(latestCsUpdate),
     [latestCsUpdate],
   );
-  const latestCsUpdateText = useMemo(
-    () =>
-      normalizeLooseText(
-        [
-          latestCsUpdate?.title,
-          latestCsUpdate?.summary,
-          latestCsUpdate?.details,
-          Array.isArray(latestCsUpdate?.tags) ? latestCsUpdate.tags.join(" ") : "",
-        ].join(" "),
-      ),
-    [latestCsUpdate],
-  );
-  const csUpdateActionItems = useMemo(() => {
-    if (!showCsUpdateBanner || !latestCsUpdateText) {
-      return [];
-    }
-
-    const scoredItems = globalSearchKnownItems
-      .map((entry) => {
-        const mentionScore = scoreUpdateMentionForItem(entry?.name, latestCsUpdateText);
-        if (mentionScore <= 0) {
-          return null;
-        }
-        const pct1h = calculateHistoryChangePercent(
-          entry?.priceHistory,
-          entry?.currentPrice,
-          1,
-        );
-        const pct24h = calculateHistoryChangePercent(
-          entry?.priceHistory,
-          entry?.currentPrice,
-          24,
-        );
-        return {
-          ...entry,
-          mentionScore,
-          pct1h,
-          pct24h,
-          abs24h: Number.isFinite(pct24h) ? Math.abs(pct24h) : 0,
-        };
-      })
-      .filter(Boolean)
-      .sort((left, right) => {
-        if (right.mentionScore !== left.mentionScore) {
-          return right.mentionScore - left.mentionScore;
-        }
-        return right.abs24h - left.abs24h;
-      });
-
-    return scoredItems.slice(0, 6);
-  }, [globalSearchKnownItems, latestCsUpdateText, showCsUpdateBanner]);
   const hasUrgentCsUpdate =
     showCsUpdateBanner &&
     (latestCsUpdateImpact.level === "high" ||
@@ -2030,13 +1834,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
     setSeenCsUpdateId(latestId);
     writeLastSeenCsUpdateId(latestId);
   }, [latestCsUpdate?.id]);
-  const formatDeltaLabel = (value) => {
-    if (!Number.isFinite(Number(value))) {
-      return "-";
-    }
-    const numericValue = Number(value);
-    return `${numericValue >= 0 ? "+" : ""}${numericValue.toFixed(2)}%`;
-  };
   const portfolioValueLabel = formatPrice(stats.totalValue || 0, {
     useUsd: true,
     buyPriceUsd: stats.totalValue || 0,
@@ -4034,40 +3831,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     </Button>
                   </div>
 
-                  {csUpdateActionItems.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Betroffene Items in deinem Bestand
-                      </p>
-                      <div className="grid gap-2 md:grid-cols-2">
-                        {csUpdateActionItems.slice(0, 4).map((entry) => (
-                          <button
-                            key={`cs-update-item-${entry.key}`}
-                            type="button"
-                            onClick={() => handleGlobalSearchSelectKnownItem(entry)}
-                            className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/75 px-3 py-2 text-left transition-colors hover:bg-accent/55"
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-foreground">{entry.name}</p>
-                              <p className="text-[11px] text-muted-foreground">
-                                {entry.sourceLabel} | {entry.quantity}x
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <p className="text-[11px] text-muted-foreground">1h {formatDeltaLabel(entry.pct1h)}</p>
-                              <p
-                                className={`text-xs font-semibold ${
-                                  Number(entry.pct24h) >= 0 ? "text-emerald-400" : "text-red-400"
-                                }`}
-                              >
-                                24h {formatDeltaLabel(entry.pct24h)}
-                              </p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               </div>
             ) : null}

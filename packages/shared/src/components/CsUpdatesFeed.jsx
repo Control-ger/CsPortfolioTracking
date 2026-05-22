@@ -55,14 +55,6 @@ function formatDateTime(value) {
   }).format(timestamp);
 }
 
-function normalizeFeedText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\u00c0-\u024f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function deriveMarketImpact(item) {
   const aiStatus = String(item?.aiRatingStatus || "").toLowerCase();
   const aiImpactLevel = String(item?.aiImpactLevel || "").toLowerCase();
@@ -114,67 +106,24 @@ function deriveMarketImpact(item) {
     };
   }
 
-  const text = normalizeFeedText(
-    [
-      item?.title,
-      item?.summary,
-      item?.details,
-      Array.isArray(item?.tags) ? item.tags.join(" ") : "",
-      item?.severity,
-    ].join(" "),
-  );
-
-  let score = 0;
-  if (item?.isBreaking) {
-    score += 3;
-  }
-  const severity = String(item?.severity || "").toLowerCase();
-  if (severity === "critical") {
-    score += 3;
-  } else if (severity === "warning") {
-    score += 2;
-  }
-
-  ["major", "operation", "case", "capsule", "sticker", "collection", "drop", "market", "economy", "price", "shop", "store", "armory", "music kit"].forEach(
-    (keyword) => {
-      if (text.includes(keyword)) {
-        score += 2;
-      }
-    },
-  );
-  ["map", "balance", "meta", "gameplay", "weapon", "vac", "anti cheat"].forEach((keyword) => {
-    if (text.includes(keyword)) {
-      score += 1;
-    }
-  });
-
-  if (score >= 7) {
+  if (aiStatus === "failed") {
     return {
-      level: "high",
-      label: "Impact hoch",
-      action: "Sofort watchlist/prices checken",
-      className: "border-red-500/35 bg-red-500/12 text-red-300",
+      level: "failed",
+      label: "KI Rating fehlgeschlagen",
+      action: "Details lesen und manuell entscheiden.",
+      className: "border-red-500/30 bg-red-500/10 text-red-300",
       confidence: null,
-      source: "heuristic",
+      source: "ai_failed",
     };
   }
-  if (score >= 3) {
-    return {
-      level: "medium",
-      label: "Impact mittel",
-      action: "Heute monitoren",
-      className: "border-amber-500/35 bg-amber-500/12 text-amber-300",
-      confidence: null,
-      source: "heuristic",
-    };
-  }
+
   return {
-    level: "low",
-    label: "Impact niedrig",
-    action: "Nur beobachten",
-    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    level: "unrated",
+    label: "KI Rating ausstehend",
+    action: "Noch keine Bewertung verfuegbar.",
+    className: "border-slate-500/30 bg-slate-500/10 text-slate-300",
     confidence: null,
-    source: "heuristic",
+    source: "ai_unrated",
   };
 }
 
