@@ -316,3 +316,15 @@ Change: Web Push fuer CS-Updates + SteamDB RSS Ingest-Latenz reduziert
   - `backend/src/Application/Service/WebPushService.php` (VAPID-Signierung + Push-Dispatch)
 - `backend/src/Application/Service/CsUpdatesIngestService.php` nutzt SteamDB Patchnotes RSS primaer und sendet Web Push bei neuen Feed-Eintraegen.
 - Supervisor-Konfiguration erweitert um `csportfolio-cs-updates-ingest` (alle 30s), damit CS-Update-Ingest nahezu in Echtzeit laeuft.
+
+---
+
+Updated: 2026-05-22
+Change: Asynchrones KI-Rating fuer CS-Updates (Gemini Free Tier vorbereitet)
+- Neue zentrale Backend-Komponenten:
+  - `backend/src/Infrastructure/External/GeminiUpdateRaterClient.php` (Gemini API Client fuer strukturierte Impact-Bewertung)
+  - `backend/src/Application/Service/CsUpdatesAiRatingService.php` (batchweises Nachziehen von Ratings fuer pending Feed-Eintraege)
+  - `backend/sync-cs-updates-ai-rating.php` (separater Worker-Entry)
+- `backend/src/Infrastructure/Persistence/Repository/CsUpdatesFeedRepository.php` erweitert `cs_updates_feed` um AI-Rating-Spalten und Pending-Queue-Methoden.
+- `backend/src/Http/Controller/CsUpdatesController.php` liefert AI-Rating-Felder (`aiImpactLevel`, `aiUrgency`, `aiRecommendedAction`, etc.) an Web/Desktop aus.
+- Supervisor-Konfiguration erweitert um `csportfolio-cs-updates-ai-rating` (alle 60s), damit Eilmeldung sofort bleibt und Bewertung asynchron nachgereicht wird.

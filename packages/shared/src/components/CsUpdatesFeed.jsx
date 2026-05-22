@@ -55,6 +55,129 @@ function formatDateTime(value) {
   }).format(timestamp);
 }
 
+function normalizeFeedText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u00c0-\u024f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function deriveMarketImpact(item) {
+  const aiStatus = String(item?.aiRatingStatus || "").toLowerCase();
+  const aiImpactLevel = String(item?.aiImpactLevel || "").toLowerCase();
+  const aiAction = String(item?.aiRecommendedAction || "").trim();
+  const aiConfidence = String(item?.aiConfidence || "").toLowerCase();
+
+  if (aiStatus === "pending") {
+    return {
+      level: "pending",
+      label: "KI Rating laeuft",
+      action: "Eilmeldung jetzt beachten; KI-Rating folgt.",
+      className: "border-cyan-500/30 bg-cyan-500/12 text-cyan-300",
+      confidence: null,
+      source: "ai_pending",
+    };
+  }
+
+  if (aiStatus === "rated" && ["none", "low", "medium", "high"].includes(aiImpactLevel)) {
+    const levelMap = {
+      none: {
+        label: "Impact none",
+        className: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+        action: "Kein akuter Markt-Impact.",
+      },
+      low: {
+        label: "Impact niedrig",
+        className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+        action: "Nur beobachten.",
+      },
+      medium: {
+        label: "Impact mittel",
+        className: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+        action: "Heute monitoren.",
+      },
+      high: {
+        label: "Impact hoch",
+        className: "border-red-500/35 bg-red-500/12 text-red-300",
+        action: "Schnell Watchlist und Preise pruefen.",
+      },
+    };
+    const mapped = levelMap[aiImpactLevel];
+    return {
+      level: aiImpactLevel,
+      label: mapped.label,
+      action: aiAction || mapped.action,
+      className: mapped.className,
+      confidence: ["low", "medium", "high"].includes(aiConfidence) ? aiConfidence : null,
+      source: "ai_rated",
+    };
+  }
+
+  const text = normalizeFeedText(
+    [
+      item?.title,
+      item?.summary,
+      item?.details,
+      Array.isArray(item?.tags) ? item.tags.join(" ") : "",
+      item?.severity,
+    ].join(" "),
+  );
+
+  let score = 0;
+  if (item?.isBreaking) {
+    score += 3;
+  }
+  const severity = String(item?.severity || "").toLowerCase();
+  if (severity === "critical") {
+    score += 3;
+  } else if (severity === "warning") {
+    score += 2;
+  }
+
+  ["major", "operation", "case", "capsule", "sticker", "collection", "drop", "market", "economy", "price", "shop", "store", "armory", "music kit"].forEach(
+    (keyword) => {
+      if (text.includes(keyword)) {
+        score += 2;
+      }
+    },
+  );
+  ["map", "balance", "meta", "gameplay", "weapon", "vac", "anti cheat"].forEach((keyword) => {
+    if (text.includes(keyword)) {
+      score += 1;
+    }
+  });
+
+  if (score >= 7) {
+    return {
+      level: "high",
+      label: "Impact hoch",
+      action: "Sofort watchlist/prices checken",
+      className: "border-red-500/35 bg-red-500/12 text-red-300",
+      confidence: null,
+      source: "heuristic",
+    };
+  }
+  if (score >= 3) {
+    return {
+      level: "medium",
+      label: "Impact mittel",
+      action: "Heute monitoren",
+      className: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+      confidence: null,
+      source: "heuristic",
+    };
+  }
+  return {
+    level: "low",
+    label: "Impact niedrig",
+    action: "Nur beobachten",
+    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    confidence: null,
+    source: "heuristic",
+  };
+}
+
 function getSeverityClass(severity) {
   switch (severity) {
     case "critical":
@@ -129,6 +252,7 @@ function ErrorState({ message, onRetry, hasItems }) {
 
 function FeedItem({ item, isOpen, isFresh, compact }) {
   const severityClass = getSeverityClass(item.severity);
+  const marketImpact = deriveMarketImpact(item);
 
   return (
     <AccordionItem value={String(item.id)} className={cn("border-0", getFeedItemClass(isFresh, isOpen, item.severity))}>
@@ -163,9 +287,22 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
                   ) : null}
                 </div>
                 <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>{item.summary}</p>
+                {!compact ? (
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    Aktion: <span className="text-foreground">{marketImpact.action}</span>
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
+                <Badge variant="outline" className={marketImpact.className}>
+                  {marketImpact.label}
+                </Badge>
+                {!compact && marketImpact.confidence ? (
+                  <Badge variant="outline" className="border-border/70 text-muted-foreground">
+                    KI {marketImpact.confidence}
+                  </Badge>
+                ) : null}
                 <Badge variant="outline" className={severityClass}>
                   {item.severity || "info"}
                 </Badge>
@@ -326,7 +463,7 @@ export function CsUpdatesFeed({ compact = false, maxVisibleItems = compact ? 3 :
             <CardTitle className={compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}>CS Updates Feed</CardTitle>
             {!compact ? (
               <CardDescription>
-                Die letzten Counter-Strike-Updates im Fullscreen-View mit Details zum Aufklappen.
+                Die letzten Counter-Strike-Updates mit Impact-Einstufung, damit du schneller Buy/Sell-Entscheidungen treffen kannst.
               </CardDescription>
             ) : null}
           </div>

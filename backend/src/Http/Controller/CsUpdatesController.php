@@ -56,6 +56,17 @@ final class CsUpdatesController
             : gmdate(DATE_ATOM);
         $summary = $this->sanitizeFeedText((string) ($row['summary_raw'] ?? ''));
         $title = $this->sanitizeFeedText((string) ($row['title'] ?? ''));
+        $aiImpactLevel = $this->normalizeAiImpactLevel($row['ai_impact_level'] ?? null);
+        $aiUrgency = $this->normalizeAiUrgency($row['ai_urgency'] ?? null);
+        $aiConfidence = $this->normalizeAiConfidence($row['ai_confidence'] ?? null);
+        $aiStatus = $this->normalizeAiStatus($row['ai_rating_status'] ?? null);
+        $aiRatedAt = isset($row['ai_rated_at']) && trim((string) $row['ai_rated_at']) !== ''
+            ? (new \DateTimeImmutable((string) $row['ai_rated_at'], new \DateTimeZone('UTC')))->format(DATE_ATOM)
+            : null;
+        $aiRecommendedAction = trim((string) ($row['ai_recommended_action'] ?? ''));
+        $aiReasoning = trim((string) ($row['ai_reasoning'] ?? ''));
+        $aiModel = trim((string) ($row['ai_model'] ?? ''));
+        $aiScore = isset($row['ai_impact_score']) ? (int) $row['ai_impact_score'] : null;
 
         return [
             'id' => (string) ($row['id'] ?? ''),
@@ -67,20 +78,31 @@ final class CsUpdatesController
             'url' => (string) ($row['url'] ?? ''),
             'publishedAt' => $publishedIso,
             'updatedAt' => $publishedIso,
-            'severity' => 'info',
+            'severity' => $this->mapSeverityFromAiImpactLevel($aiImpactLevel),
             'tags' => array_values(array_filter([
                 isset($row['branch']) && trim((string) $row['branch']) !== '' ? 'branch:' . trim((string) $row['branch']) : null,
                 isset($row['build_id']) && (int) $row['build_id'] > 0 ? 'build:' . (string) (int) $row['build_id'] : null,
                 isset($row['changelist_id']) && (int) $row['changelist_id'] > 0 ? 'changelist:' . (string) (int) $row['changelist_id'] : null,
+                $aiImpactLevel !== null ? 'impact:' . $aiImpactLevel : null,
             ])),
             'highlights' => array_values(array_filter([
                 isset($row['changelist_id']) && (int) $row['changelist_id'] > 0 ? 'Changelist #' . (int) $row['changelist_id'] : null,
                 isset($row['build_id']) && (int) $row['build_id'] > 0 ? 'Build ' . (int) $row['build_id'] : null,
                 isset($row['branch']) && trim((string) $row['branch']) !== '' ? 'Branch: ' . trim((string) $row['branch']) : null,
+                $aiRecommendedAction !== '' ? 'Aktion: ' . $aiRecommendedAction : null,
             ])),
             'changelistId' => isset($row['changelist_id']) ? (int) $row['changelist_id'] : null,
             'buildId' => isset($row['build_id']) ? (int) $row['build_id'] : null,
             'branch' => isset($row['branch']) ? (string) $row['branch'] : null,
+            'aiRatingStatus' => $aiStatus,
+            'aiImpactLevel' => $aiImpactLevel,
+            'aiImpactScore' => $aiScore,
+            'aiUrgency' => $aiUrgency,
+            'aiRecommendedAction' => $aiRecommendedAction !== '' ? $aiRecommendedAction : null,
+            'aiReasoning' => $aiReasoning !== '' ? $aiReasoning : null,
+            'aiConfidence' => $aiConfidence,
+            'aiModel' => $aiModel !== '' ? $aiModel : null,
+            'aiRatedAt' => $aiRatedAt,
         ];
     }
 
@@ -108,5 +130,43 @@ final class CsUpdatesController
         $normalized = preg_replace('/\[(?:\/)?[a-z0-9_*]+(?:=[^\]]+)?\]/i', ' ', $normalized) ?? $normalized;
 
         return trim(preg_replace('/\s+/', ' ', strip_tags($normalized)) ?? '');
+    }
+
+    private function mapSeverityFromAiImpactLevel(?string $impactLevel): string
+    {
+        return match ($impactLevel) {
+            'high' => 'critical',
+            'medium' => 'warning',
+            'low' => 'notice',
+            'none' => 'info',
+            default => 'info',
+        };
+    }
+
+    private function normalizeAiImpactLevel(mixed $value): ?string
+    {
+        $normalized = strtolower(trim((string) $value));
+        return in_array($normalized, ['none', 'low', 'medium', 'high'], true) ? $normalized : null;
+    }
+
+    private function normalizeAiUrgency(mixed $value): ?string
+    {
+        $normalized = strtolower(trim((string) $value));
+        return in_array($normalized, ['none', 'observe', 'today', 'fast', 'immediate'], true) ? $normalized : null;
+    }
+
+    private function normalizeAiConfidence(mixed $value): ?string
+    {
+        $normalized = strtolower(trim((string) $value));
+        return in_array($normalized, ['low', 'medium', 'high'], true) ? $normalized : null;
+    }
+
+    private function normalizeAiStatus(mixed $value): string
+    {
+        $normalized = strtolower(trim((string) $value));
+        if (in_array($normalized, ['pending', 'rated', 'failed'], true)) {
+            return $normalized;
+        }
+        return 'pending';
     }
 }

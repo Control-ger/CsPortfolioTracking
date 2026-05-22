@@ -36,13 +36,8 @@ const calculateTopMovers = (items) => {
 };
 
 // Spezielle ItemRow fuer Top Mover mit Highlighting
-const TopMoverItemRow = ({ item, rank, type, onClick }) => {
+const TopMoverItemRow = ({ item, type, onClick }) => {
   const isGainer = type === "gainer";
-  const rankColors = isGainer
-    ? ["bg-emerald-500/20 text-emerald-200 border-emerald-400/35", "bg-emerald-500/15 text-emerald-200 border-emerald-400/25"]
-    : ["bg-red-500/20 text-red-200 border-red-400/35", "bg-red-500/15 text-red-200 border-red-400/25"];
-
-  const rankColor = rankColors[rank - 1] || rankColors[1];
   const Icon = isGainer ? TrendingUp : TrendingDown;
   const derivedPercentCandidate = Number(item.priceChangePercent);
   const derivedPercent = Number.isFinite(derivedPercentCandidate) ? derivedPercentCandidate : 0;
@@ -67,9 +62,6 @@ const TopMoverItemRow = ({ item, rank, type, onClick }) => {
           ) : (
             <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
           )}
-          <div className={cn("absolute -bottom-1 -right-1 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold", rankColor)}>
-            #{rank}
-          </div>
         </div>
         <div className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-medium">{item.name}</h4>
@@ -228,11 +220,10 @@ export const WatchlistOverview = ({
                 <h3 className="text-xs font-semibold uppercase tracking-wide">Top Gewinner (7 Tage)</h3>
               </div>
               <div className="space-y-2">
-                {gainers.map((item, index) => (
+                {gainers.map((item) => (
                   <TopMoverItemRow
                     key={item.id}
                     item={item}
-                    rank={index + 1}
                     type="gainer"
                     onClick={() => onOpenItem?.(item)}
                   />
@@ -249,11 +240,10 @@ export const WatchlistOverview = ({
                 <h3 className="text-xs font-semibold uppercase tracking-wide">Top Verlierer (7 Tage)</h3>
               </div>
               <div className="space-y-2">
-                {losers.map((item, index) => (
+                {losers.map((item) => (
                   <TopMoverItemRow
                     key={item.id}
                     item={item}
-                    rank={index + 1}
                     type="loser"
                     onClick={() => onOpenItem?.(item)}
                   />

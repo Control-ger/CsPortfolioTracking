@@ -122,6 +122,221 @@ function normalizeSearchText(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeLooseText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u00c0-\u024f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function deriveCsUpdateImpact(item) {
+  if (!item || typeof item !== "object") {
+    return {
+      level: "low",
+      label: "Impact niedrig",
+      actionLabel: "Beobachten",
+      badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    };
+  }
+
+  const aiStatus = String(item.aiRatingStatus || "").toLowerCase();
+  const aiImpactLevel = String(item.aiImpactLevel || "").toLowerCase();
+  const aiAction = String(item.aiRecommendedAction || "").trim();
+
+  if (aiStatus === "pending") {
+    return {
+      level: "pending",
+      label: "KI Rating laeuft",
+      actionLabel: "Eilmeldung jetzt pruefen",
+      badgeClass: "border-cyan-500/30 bg-cyan-500/12 text-cyan-300",
+    };
+  }
+
+  if (aiStatus === "rated" && ["none", "low", "medium", "high"].includes(aiImpactLevel)) {
+    const aiMap = {
+      none: {
+        label: "Impact none",
+        actionLabel: "Kein akuter Handlungsbedarf",
+        badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+      },
+      low: {
+        label: "Impact niedrig",
+        actionLabel: "Beobachten",
+        badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      },
+      medium: {
+        label: "Impact mittel",
+        actionLabel: "Heute pruefen",
+        badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+      },
+      high: {
+        label: "Impact hoch",
+        actionLabel: "Schnell pruefen",
+        badgeClass: "border-red-500/35 bg-red-500/12 text-red-300",
+      },
+    };
+    const mapped = aiMap[aiImpactLevel];
+    return {
+      level: aiImpactLevel,
+      label: mapped.label,
+      actionLabel: aiAction !== "" ? aiAction : mapped.actionLabel,
+      badgeClass: mapped.badgeClass,
+    };
+  }
+
+  const text = normalizeLooseText(
+    [
+      item.title,
+      item.summary,
+      item.details,
+      Array.isArray(item.tags) ? item.tags.join(" ") : "",
+      item.severity,
+    ].join(" "),
+  );
+
+  const highKeywords = [
+    "major", "operation", "case", "capsule", "sticker", "collection", "drop",
+    "market", "economy", "price", "shop", "store", "pass", "armory", "music kit",
+  ];
+  const mediumKeywords = [
+    "map", "maps", "weapon", "balance", "meta", "gameplay", "ranking", "premier",
+    "matchmaking", "server", "anti cheat", "vac",
+  ];
+
+  let score = 0;
+  if (item.isBreaking) {
+    score += 3;
+  }
+  if (String(item.severity || "").toLowerCase() === "critical") {
+    score += 3;
+  } else if (String(item.severity || "").toLowerCase() === "warning") {
+    score += 2;
+  }
+
+  highKeywords.forEach((keyword) => {
+    if (text.includes(keyword)) {
+      score += 2;
+    }
+  });
+  mediumKeywords.forEach((keyword) => {
+    if (text.includes(keyword)) {
+      score += 1;
+    }
+  });
+
+  if (score >= 7) {
+    return {
+      level: "high",
+      label: "Impact hoch",
+      actionLabel: "Schnell pruefen",
+      badgeClass: "border-red-500/35 bg-red-500/12 text-red-300",
+    };
+  }
+  if (score >= 3) {
+    return {
+      level: "medium",
+      label: "Impact mittel",
+      actionLabel: "Heute pruefen",
+      badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+    };
+  }
+  return {
+    level: "low",
+    label: "Impact niedrig",
+    actionLabel: "Beobachten",
+    badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+  };
+}
+
+function scoreUpdateMentionForItem(itemName, normalizedUpdateText) {
+  const normalizedName = normalizeLooseText(itemName);
+  if (!normalizedName || !normalizedUpdateText) {
+    return 0;
+  }
+  if (normalizedUpdateText.includes(normalizedName)) {
+    return 10;
+  }
+
+  const tokens = normalizedName.split(" ").filter((token) => token.length >= 3);
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  const hits = tokens.filter((token) => normalizedUpdateText.includes(token));
+  if (tokens.length >= 3 && hits.length >= 2) {
+    return hits.length + 1;
+  }
+  if (tokens.length === 2 && hits.length === 2) {
+    return 3;
+  }
+  if (tokens.length === 1 && hits.length === 1 && tokens[0].length >= 5) {
+    return 2;
+  }
+  return 0;
+}
+
+function normalizeHistoryPoints(history = []) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+  return history
+    .map((entry) => {
+      const ts = Date.parse(
+        String(
+          entry?.timestamp ||
+            entry?.date ||
+            entry?.recordedAt ||
+            entry?.createdAt ||
+            "",
+        ),
+      );
+      const price = Number(
+        entry?.price ?? entry?.value ?? entry?.currentPrice ?? entry?.priceUsd ?? entry?.close,
+      );
+      return {
+        ts: Number.isFinite(ts) ? ts : null,
+        price: Number.isFinite(price) ? price : null,
+      };
+    })
+    .filter((entry) => entry.ts !== null && entry.price !== null)
+    .sort((left, right) => left.ts - right.ts);
+}
+
+function calculateHistoryChangePercent(history = [], currentPrice, lookbackHours) {
+  const points = normalizeHistoryPoints(history);
+  const fallbackLatestPrice = points.length > 0 ? points[points.length - 1].price : null;
+  const latestPrice = Number.isFinite(Number(currentPrice))
+    ? Number(currentPrice)
+    : fallbackLatestPrice;
+
+  if (!Number.isFinite(latestPrice) || latestPrice <= 0) {
+    return null;
+  }
+
+  if (points.length === 0) {
+    return null;
+  }
+
+  const targetTs = Date.now() - lookbackHours * 60 * 60 * 1000;
+  let basePoint = null;
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    if (points[index].ts <= targetTs) {
+      basePoint = points[index];
+      break;
+    }
+  }
+  if (!basePoint) {
+    basePoint = points[0];
+  }
+
+  if (!basePoint || !Number.isFinite(basePoint.price) || basePoint.price <= 0) {
+    return null;
+  }
+
+  return ((latestPrice - basePoint.price) / basePoint.price) * 100;
+}
+
 const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
@@ -129,12 +344,14 @@ const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
 const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
-const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "matching", "management"];
+const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
+const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "push_notifications", "matching", "management"];
 const DESKTOP_SIDEBAR_TABS = [
   { key: "overview", label: "Uebersicht", icon: LayoutGrid },
   { key: "inventory", label: "Inventar", icon: Package },
   { key: "watchlist", label: "Watchlist", icon: Eye },
   { key: "management", label: "Verwaltung", icon: FolderCog, desktopOnly: true },
+  { key: "updates", label: "Updates", icon: Bell, route: "/cs-updates" },
   { key: "settings", label: "Einstellungen", icon: Cog, route: "/settings" },
 ];
 const GLOBAL_SEARCH_CATEGORIES = [
@@ -190,6 +407,28 @@ function writeStartupWelcomeDismissed() {
     sessionStorage.setItem(STARTUP_WELCOME_DISMISS_KEY, "1");
   } catch {
     // Ignore storage failures; welcome fallback remains functional.
+  }
+}
+
+function readLastSeenCsUpdateId() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  try {
+    return String(localStorage.getItem(CS_UPDATES_SEEN_KEY) || "");
+  } catch {
+    return "";
+  }
+}
+
+function writeLastSeenCsUpdateId(value) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    localStorage.setItem(CS_UPDATES_SEEN_KEY, String(value || ""));
+  } catch {
+    // Ignore storage failures and continue with in-memory state.
   }
 }
 
@@ -541,6 +780,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     percent: 0,
     message: "",
   });
+  const [seenCsUpdateId, setSeenCsUpdateId] = useState("");
   const [installedAppVersion, setInstalledAppVersion] = useState("");
   const [appUpdateUnread, setAppUpdateUnread] = useState(false);
   const [journeyState, setJourneyState] = useState({ skipped: false });
@@ -634,6 +874,10 @@ export function PortfolioPage({ initialTab = "overview" }) {
       writeStartupWelcomeDismissed();
     };
   }, [isElectronRuntime, showStartupWelcome]);
+
+  useEffect(() => {
+    setSeenCsUpdateId(readLastSeenCsUpdateId());
+  }, []);
 
   useEffect(() => {
     const loadJourneyState = async () => {
@@ -1212,11 +1456,17 @@ export function PortfolioPage({ initialTab = "overview" }) {
           source,
           sourcePriority: source === "investment" ? 0 : 1,
           sourceLabel: source === "investment" ? "Investments" : "Inventar",
+          sourceItemId: item?.id || null,
           name,
           nameKey: normalizeSearchText(name),
           quantity,
           itemType: String(item?.type || item?.itemType || "other").trim().toLowerCase(),
           imageUrl: item?.imageUrl || item?.iconUrl || null,
+          currentPrice: item?.currentPrice ?? item?.livePrice ?? null,
+          priceHistory: Array.isArray(item?.priceHistory) ? item.priceHistory : [],
+          priceChangePercent: Number.isFinite(Number(item?.priceChangePercent))
+            ? Number(item.priceChangePercent)
+            : null,
           matchPayload: { source, nameKey: normalizeSearchText(name) },
           searchText: normalizeSearchText(
             [
@@ -1240,6 +1490,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
       if (!existing.imageUrl) {
         existing.imageUrl = item?.imageUrl || item?.iconUrl || null;
       }
+      if (!Number.isFinite(Number(existing.currentPrice)) && Number.isFinite(Number(item?.currentPrice ?? item?.livePrice))) {
+        existing.currentPrice = Number(item.currentPrice ?? item.livePrice);
+      }
+      if ((!Array.isArray(existing.priceHistory) || existing.priceHistory.length === 0) && Array.isArray(item?.priceHistory)) {
+        existing.priceHistory = item.priceHistory;
+      }
     });
 
     globalSearchWatchlistItems.forEach((item) => {
@@ -1255,11 +1511,17 @@ export function PortfolioPage({ initialTab = "overview" }) {
           source: "watchlist",
           sourcePriority: 2,
           sourceLabel: "Watchlist",
+          sourceItemId: item?.id || null,
           name,
           nameKey: normalizeSearchText(name),
           quantity,
           itemType: String(item?.type || item?.itemType || "other").trim().toLowerCase(),
           imageUrl: item?.imageUrl || item?.iconUrl || null,
+          currentPrice: item?.currentPrice ?? null,
+          priceHistory: Array.isArray(item?.priceHistory) ? item.priceHistory : [],
+          priceChangePercent: Number.isFinite(Number(item?.priceChangePercent))
+            ? Number(item.priceChangePercent)
+            : null,
           matchPayload: { source: "watchlist", id: item?.id, nameKey: normalizeSearchText(name) },
           searchText: normalizeSearchText(
             [
@@ -1281,6 +1543,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
       existing.quantity += quantity;
       if (!existing.imageUrl) {
         existing.imageUrl = item?.imageUrl || item?.iconUrl || null;
+      }
+      if (!Number.isFinite(Number(existing.currentPrice)) && Number.isFinite(Number(item?.currentPrice))) {
+        existing.currentPrice = Number(item.currentPrice);
+      }
+      if ((!Array.isArray(existing.priceHistory) || existing.priceHistory.length === 0) && Array.isArray(item?.priceHistory)) {
+        existing.priceHistory = item.priceHistory;
       }
     });
 
@@ -1691,6 +1959,84 @@ export function PortfolioPage({ initialTab = "overview" }) {
     Boolean(latestCsUpdate) &&
     Number.isFinite(latestCsUpdateAgeHours) &&
     latestCsUpdateAgeHours <= 24 * 7;
+  const latestCsUpdateImpact = useMemo(
+    () => deriveCsUpdateImpact(latestCsUpdate),
+    [latestCsUpdate],
+  );
+  const latestCsUpdateText = useMemo(
+    () =>
+      normalizeLooseText(
+        [
+          latestCsUpdate?.title,
+          latestCsUpdate?.summary,
+          latestCsUpdate?.details,
+          Array.isArray(latestCsUpdate?.tags) ? latestCsUpdate.tags.join(" ") : "",
+        ].join(" "),
+      ),
+    [latestCsUpdate],
+  );
+  const csUpdateActionItems = useMemo(() => {
+    if (!showCsUpdateBanner || !latestCsUpdateText) {
+      return [];
+    }
+
+    const scoredItems = globalSearchKnownItems
+      .map((entry) => {
+        const mentionScore = scoreUpdateMentionForItem(entry?.name, latestCsUpdateText);
+        if (mentionScore <= 0) {
+          return null;
+        }
+        const pct1h = calculateHistoryChangePercent(
+          entry?.priceHistory,
+          entry?.currentPrice,
+          1,
+        );
+        const pct24h = calculateHistoryChangePercent(
+          entry?.priceHistory,
+          entry?.currentPrice,
+          24,
+        );
+        return {
+          ...entry,
+          mentionScore,
+          pct1h,
+          pct24h,
+          abs24h: Number.isFinite(pct24h) ? Math.abs(pct24h) : 0,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        if (right.mentionScore !== left.mentionScore) {
+          return right.mentionScore - left.mentionScore;
+        }
+        return right.abs24h - left.abs24h;
+      });
+
+    return scoredItems.slice(0, 6);
+  }, [globalSearchKnownItems, latestCsUpdateText, showCsUpdateBanner]);
+  const hasUrgentCsUpdate =
+    showCsUpdateBanner &&
+    (latestCsUpdateImpact.level === "high" ||
+      (Number.isFinite(latestCsUpdateAgeHours) && latestCsUpdateAgeHours <= 24));
+  const hasUnreadCsUpdate =
+    hasUrgentCsUpdate &&
+    String(latestCsUpdate?.id || "") !== "" &&
+    String(latestCsUpdate?.id || "") !== String(seenCsUpdateId || "");
+  const markLatestCsUpdateSeen = useCallback(() => {
+    const latestId = String(latestCsUpdate?.id || "").trim();
+    if (!latestId) {
+      return;
+    }
+    setSeenCsUpdateId(latestId);
+    writeLastSeenCsUpdateId(latestId);
+  }, [latestCsUpdate?.id]);
+  const formatDeltaLabel = (value) => {
+    if (!Number.isFinite(Number(value))) {
+      return "-";
+    }
+    const numericValue = Number(value);
+    return `${numericValue >= 0 ? "+" : ""}${numericValue.toFixed(2)}%`;
+  };
   const portfolioValueLabel = formatPrice(stats.totalValue || 0, {
     useUsd: true,
     buyPriceUsd: stats.totalValue || 0,
@@ -2237,6 +2583,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const unreadNotificationCount =
     syncNotification.newItemsCount +
     (hasUnreadAppUpdate ? 1 : 0) +
+    (hasUnreadCsUpdate ? 1 : 0) +
     (warningNotifications.length > 0 ? 1 : 0);
   const formatCompactNewCount = (count) => {
     const value = Number(count || 0);
@@ -2320,6 +2667,29 @@ export function PortfolioPage({ initialTab = "overview" }) {
             ) : null}
             <p className="text-[11px] text-muted-foreground">{appUpdateStatusLabel}</p>
             <p className="text-[11px] text-muted-foreground">{appUpdateHintLabel}</p>
+          </button>
+        ) : null}
+        {showCsUpdateBanner && latestCsUpdate ? (
+          <button
+            type="button"
+            onClick={() => {
+              markLatestCsUpdateSeen();
+              navigate("/cs-updates");
+            }}
+            className="w-full rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-2 py-2 text-left hover:bg-cyan-500/15"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">CS Update Feed</p>
+              {hasUnreadCsUpdate ? (
+                <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  neu
+                </span>
+              ) : null}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {latestCsUpdateImpact.label} - {latestCsUpdateImpact.actionLabel}
+            </p>
+            <p className="truncate text-[11px] text-muted-foreground">{latestCsUpdate.title}</p>
           </button>
         ) : null}
 
@@ -2413,6 +2783,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
       id: "csfloat_import",
       label: "CSFloat-Import entschieden",
       done: Boolean(journeyState?.csfloatImportCompletedAt || journeyState?.csfloatImportSkippedAt),
+    },
+    {
+      id: "push_notifications",
+      label: "Push-Benachrichtigung entschieden",
+      done: Boolean(journeyState?.pushPreferenceSetAt),
     },
     {
       id: "matching",
@@ -2523,6 +2898,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
     await updateJourneyState({
       matchingReviewedAt: new Date().toISOString(),
       currentStepId: resolveNextJourneyStepId("matching"),
+    });
+  };
+  const handleSetJourneyPushPreference = async (enabled) => {
+    await updateJourneyState({
+      pushNotificationsWanted: Boolean(enabled),
+      pushPreferenceSetAt: new Date().toISOString(),
+      currentStepId: resolveNextJourneyStepId("push_notifications"),
     });
   };
   const handleManagementHintsSeen = async () => {
@@ -2848,7 +3230,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               {!journeyStarted ? (
                 <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
                   <p className="text-slate-200">
-                    Reihenfolge: Login, Server, Steam-Importziel, CSFloat-Key, CSFloat-Import, Matching, Verwaltung.
+                    Reihenfolge: Login, Server, Steam-Importziel, CSFloat-Key, CSFloat-Import, Push, Matching, Verwaltung.
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button onClick={() => void handleStartJourney()}>Journey starten</Button>
@@ -3148,10 +3530,36 @@ export function PortfolioPage({ initialTab = "overview" }) {
                       </p>
                     </div>
                   ) : null}
+                  {activeJourneyStepId === "push_notifications" ? (
+                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-100">5. Push-Benachrichtigungen fuer CS-Updates</p>
+                        <p className="mt-1 text-xs text-slate-300">
+                          Browser Push laeuft in der Web/PWA-Version. In der Desktop-App siehst du Updates weiter im integrierten Feed.
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-cyan-300/25 bg-cyan-500/10 p-3 text-xs text-cyan-100">
+                        Wenn du Push willst: Web/PWA oeffnen und unter Einstellungen - Allgemein - Browser Push aktivieren.
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" onClick={() => void handleSetJourneyPushPreference(true)}>
+                          Ja, Push nutzen
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          onClick={() => void handleSetJourneyPushPreference(false)}
+                        >
+                          Nein, erstmal ohne Push
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                   {activeJourneyStepId === "matching" ? (
                     <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">5. Steam und CSFloat Matching pruefen</p>
+                        <p className="font-semibold text-slate-100">6. Steam und CSFloat Matching pruefen</p>
                         <p className="mt-1 text-xs text-slate-300">
                           Offene Matching-Vorschlaege: <span className="font-semibold">{matchingSuggestedCount}</span>
                         </p>
@@ -3176,7 +3584,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   {activeJourneyStepId === "management" ? (
                     <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">6. Verwaltung kurz erklaert</p>
+                        <p className="font-semibold text-slate-100">7. Verwaltung kurz erklaert</p>
                         <p className="mt-1 text-xs text-slate-300">
                           Hier steuerst du Matching, Preise und Exclude-Logik fuer deine Items.
                         </p>
@@ -3309,7 +3717,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
                             title={tab.label}
                             aria-label={tab.label}
                           >
-                            <Icon className="h-5 w-5" />
+                            <span className="relative inline-flex">
+                              <Icon className="h-5 w-5" />
+                              {tab.key === "updates" && hasUnreadCsUpdate ? (
+                                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-400" />
+                              ) : null}
+                            </span>
                           </button>
                         );
                       })}
@@ -3567,24 +3980,94 @@ export function PortfolioPage({ initialTab = "overview" }) {
             </div>
 
             {showCsUpdateBanner && latestCsUpdate ? (
-              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                      CS Update
-                    </p>
-                    <p className="truncate text-sm font-semibold text-foreground sm:text-base">
-                      Neues Update seit {formatRelativeHours(latestCsUpdateAgeHours)}: {latestCsUpdate.title}
+              <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-r from-cyan-500/12 via-background to-amber-500/12 px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.2)] sm:px-5">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                        Market Pulse
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-foreground sm:text-base">
+                        Neues CS Update seit {formatRelativeHours(latestCsUpdateAgeHours)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className={latestCsUpdateImpact.badgeClass}>
+                        {latestCsUpdateImpact.label}
+                      </Badge>
+                      <Badge variant="outline" className="border-border/70 text-muted-foreground">
+                        {latestCsUpdateImpact.actionLabel}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/70 bg-card/70 p-3">
+                    <p className="line-clamp-2 text-sm font-semibold text-foreground">{latestCsUpdate.title}</p>
+                    <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">
+                      {latestCsUpdate.summary || latestCsUpdate.details || "Keine Details verfuegbar."}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      Feed oeffnen
-                    </span>
-                    <Button asChild size="sm" variant="outline">
-                      <Link to="/cs-updates">Fullscreen</Link>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild size="sm">
+                      <Link to="/cs-updates" onClick={markLatestCsUpdateSeen}>
+                        Update Feed oeffnen
+                      </Link>
+                    </Button>
+                    {hasUnreadCsUpdate ? (
+                      <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-300">
+                        neu
+                      </Badge>
+                    ) : null}
+                    <Button size="sm" variant="outline" onClick={() => handleTabSelect("watchlist")}>
+                      Watchlist checken
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setActiveTab("management");
+                        setManagementSection("prices");
+                      }}
+                    >
+                      Preise pruefen
                     </Button>
                   </div>
+
+                  {csUpdateActionItems.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Betroffene Items in deinem Bestand
+                      </p>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {csUpdateActionItems.slice(0, 4).map((entry) => (
+                          <button
+                            key={`cs-update-item-${entry.key}`}
+                            type="button"
+                            onClick={() => handleGlobalSearchSelectKnownItem(entry)}
+                            className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/75 px-3 py-2 text-left transition-colors hover:bg-accent/55"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-foreground">{entry.name}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {entry.sourceLabel} | {entry.quantity}x
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-[11px] text-muted-foreground">1h {formatDeltaLabel(entry.pct1h)}</p>
+                              <p
+                                className={`text-xs font-semibold ${
+                                  Number(entry.pct24h) >= 0 ? "text-emerald-400" : "text-red-400"
+                                }`}
+                              >
+                                24h {formatDeltaLabel(entry.pct24h)}
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}

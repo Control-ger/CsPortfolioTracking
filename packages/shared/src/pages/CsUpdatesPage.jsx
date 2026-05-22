@@ -18,7 +18,7 @@ const DESKTOP_SIDEBAR_ITEMS = [
 export default function CsUpdatesPage() {
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const desktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
-  const useDesktopSidebarShell = isElectronRuntime;
+  const useDesktopSidebarShell = true;
   const location = useLocation();
   const navigate = useNavigate();
 
