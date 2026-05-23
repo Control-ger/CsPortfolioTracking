@@ -19,6 +19,7 @@ require_once $bootstrapPath;
 
 use App\Application\Service\CsUpdatesIngestService;
 use App\Application\Service\WebPushService;
+use App\Infrastructure\External\SteamDbPatchnotesClient;
 use App\Config\DatabaseConfig;
 use App\Infrastructure\External\SteamDbRssClient;
 use App\Infrastructure\External\SteamNewsClient;
@@ -36,6 +37,7 @@ try {
         new SteamDbRssClient(),
         new SteamNewsClient(),
         $repository,
+        new SteamDbPatchnotesClient(),
         $webPushSubscriptionRepository,
         WebPushService::fromEnv()
     );

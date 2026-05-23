@@ -690,6 +690,7 @@ $router->register('GET', '/api/v1/cs-updates', static function (Request $request
             'fetchedAt' => gmdate(DATE_ATOM),
             'lastRefreshAt' => gmdate(DATE_ATOM),
             'staleAfterSeconds' => 120,
+            'bannerVisibleHours' => max(1, min(24 * 30, (int) (getenv('CS_UPDATES_BANNER_DURATION_HOURS') ?: 168))),
             'isStale' => true,
             'nextBefore' => null,
             'proxyAttempts' => $proxied['attempts'] ?? [],

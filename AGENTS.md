@@ -320,6 +320,16 @@ Change: Web Push fuer CS-Updates + SteamDB RSS Ingest-Latenz reduziert
 ---
 
 Updated: 2026-05-22
+Change: CS-Updates Feed Enrichment fuer bessere KI-Bewertungen
+- Neue Backend-Komponente: `backend/src/Infrastructure/External/SteamDbPatchnotesClient.php` (best-effort Nachladen und Text-Extraktion von SteamDB-Patchnotes-Links).
+- `backend/src/Application/Service/CsUpdatesIngestService.php` reichert SteamDB-RSS-Eintraege jetzt mit Steam-News-Inhalten (Build/Title-Matching) und optionalem Patchnotes-Link-Fetch an.
+- Neue ENV-Optionen fuer Ingest-Enrichment:
+  - `CS_UPDATES_ENRICH_MAX_PER_RUN` (Default 3)
+  - `CS_UPDATES_SUMMARY_MAX_LENGTH` (Default 1600)
+
+---
+
+Updated: 2026-05-22
 Change: Asynchrones KI-Rating fuer CS-Updates (Gemini Free Tier vorbereitet)
 - Neue zentrale Backend-Komponenten:
   - `backend/src/Infrastructure/External/GeminiUpdateRaterClient.php` (Gemini API Client fuer strukturierte Impact-Bewertung)

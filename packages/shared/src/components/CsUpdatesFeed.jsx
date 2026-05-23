@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Bot, Clock3, ExternalLink, RefreshCw } from "lucide-react";
 
 import { useCsUpdatesFeed } from "@shared/hooks/useCsUpdatesFeed";
@@ -63,8 +63,7 @@ function deriveMarketImpact(item) {
       label: "KI laeuft",
       action: "Eilmeldung lesen, Bewertung folgt.",
       badgeClass: "border-sky-500/25 bg-sky-500/8 text-sky-300",
-      itemClass: "border-border bg-card",
-      panelClass: "border-sky-500/20 bg-sky-500/5",
+      itemClass: "border-border bg-transparent",
     };
   }
 
@@ -73,25 +72,21 @@ function deriveMarketImpact(item) {
       none: {
         label: "Impact none",
         badgeClass: "border-border bg-muted/30 text-muted-foreground",
-        panelClass: "border-border bg-muted/20",
         action: "Kein akuter Markt-Impact.",
       },
       low: {
         label: "Impact niedrig",
         badgeClass: "border-emerald-500/20 bg-emerald-500/8 text-emerald-300",
-        panelClass: "border-emerald-500/20 bg-emerald-500/5",
         action: "Beobachten.",
       },
       medium: {
         label: "Impact mittel",
         badgeClass: "border-amber-500/20 bg-amber-500/8 text-amber-300",
-        panelClass: "border-amber-500/20 bg-amber-500/5",
         action: "Heute monitoren.",
       },
       high: {
         label: "Impact hoch",
         badgeClass: "border-red-500/25 bg-red-500/8 text-red-300",
-        panelClass: "border-red-500/25 bg-red-500/5",
         action: "Schnell relevante Positionen pruefen.",
       },
     };
@@ -102,8 +97,7 @@ function deriveMarketImpact(item) {
       label: mapped.label,
       action: aiAction || mapped.action,
       badgeClass: mapped.badgeClass,
-      itemClass: aiImpactLevel === "high" ? "border-red-500/25 bg-card" : "border-border bg-card",
-      panelClass: mapped.panelClass,
+      itemClass: aiImpactLevel === "high" ? "border-red-500/25 bg-transparent" : "border-border bg-transparent",
     };
   }
 
@@ -113,8 +107,7 @@ function deriveMarketImpact(item) {
       label: "KI fehlgeschlagen",
       action: "Patchnotes manuell bewerten.",
       badgeClass: "border-rose-500/25 bg-rose-500/8 text-rose-300",
-      itemClass: "border-border bg-card",
-      panelClass: "border-rose-500/25 bg-rose-500/5",
+      itemClass: "border-border bg-transparent",
     };
   }
 
@@ -123,8 +116,7 @@ function deriveMarketImpact(item) {
     label: "KI ausstehend",
     action: "Noch keine Bewertung verfuegbar.",
     badgeClass: "border-border bg-muted/30 text-muted-foreground",
-    itemClass: "border-border bg-card",
-    panelClass: "border-border bg-muted/20",
+    itemClass: "border-border bg-transparent",
   };
 }
 
@@ -132,7 +124,7 @@ function LoadingState() {
   return (
     <div className="space-y-2.5">
       {[1, 2, 3].map((index) => (
-        <div key={index} className="rounded-xl border border-border bg-card p-4">
+        <div key={index} className="py-2">
           <div className="space-y-2">
             <Skeleton className="h-5 w-56" />
             <Skeleton className="h-4 w-full" />
@@ -146,7 +138,7 @@ function LoadingState() {
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
+    <div className="p-2 text-center">
       <p className="text-sm font-semibold text-foreground">Noch keine CS-Updates verfuegbar</p>
       <p className="mt-1 text-xs text-muted-foreground">
         Neue Meldungen erscheinen automatisch, sobald sie erkannt werden.
@@ -157,7 +149,7 @@ function EmptyState() {
 
 function ErrorState({ message, onRetry, hasItems }) {
   return (
-    <div className={cn("rounded-xl border p-4", hasItems ? "border-amber-500/25 bg-amber-500/8" : "border-red-500/25 bg-red-500/8")}> 
+    <div className={cn("rounded-xl border p-4", hasItems ? "border-amber-500/25 bg-amber-500/8" : "border-red-500/25 bg-red-500/8")}>
       <div className="flex items-start gap-2">
         <AlertCircle className={cn("mt-0.5 h-4 w-4", hasItems ? "text-amber-300" : "text-red-300")} />
         <div className="min-w-0 flex-1">
@@ -182,7 +174,7 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
     <AccordionItem
       value={String(item.id)}
       className={cn(
-        "rounded-xl border bg-card transition-colors",
+        "rounded-xl border bg-transparent transition-colors",
         impact.itemClass,
         isOpen ? "ring-1 ring-primary/20" : "hover:bg-accent/20",
       )}
@@ -226,7 +218,7 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
       <AccordionContent className={cn("px-4", compact ? "pb-3" : "pb-4")}>
         <div className="space-y-3 border-t border-border/70 pt-3">
           {!compact && hasAiText ? (
-            <div className={cn("rounded-lg border p-3", impact.panelClass)}>
+            <div className="p-1">
               <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" />
                 KI Signal{aiModelLabel ? ` (${aiModelLabel})` : ""}
@@ -284,6 +276,7 @@ export function CsUpdatesFeed({
   compact = false,
   maxVisibleItems = compact ? 3 : Number.POSITIVE_INFINITY,
   preferredOpenItemId = null,
+  onLatestVisible = null,
 } = {}) {
   const {
     items,
@@ -293,8 +286,12 @@ export function CsUpdatesFeed({
     freshItemIds,
     isLoading,
     isRefreshing,
+    isLoadingOlder,
+    hasMore,
+    windowDays,
     error,
     refresh,
+    loadOlder,
   } = useCsUpdatesFeed();
   const [userOpenItemId, setUserOpenItemId] = useState(null);
 
@@ -337,6 +334,17 @@ export function CsUpdatesFeed({
 
   const hasItems = items.length > 0;
 
+  useEffect(() => {
+    if (typeof onLatestVisible !== "function" || isLoading) {
+      return;
+    }
+    const latestId = String(latestItem?.id || "").trim();
+    if (!latestId) {
+      return;
+    }
+    onLatestVisible(latestItem);
+  }, [isLoading, latestItem, onLatestVisible]);
+
   const feedItems = (
     <Accordion
       type="single"
@@ -355,7 +363,7 @@ export function CsUpdatesFeed({
   );
 
   return (
-    <section className={cn("rounded-2xl border border-border bg-card/70", compact ? "p-3" : "p-4 sm:p-5")}>
+    <section className="bg-transparent">
       <div className="space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
@@ -374,6 +382,9 @@ export function CsUpdatesFeed({
                   Neueste Meldung: {formatRelativeTime(newestFreshItem.publishedAt)}
                 </Badge>
               ) : null}
+              <Badge variant="outline" className="border-border text-muted-foreground">
+                Letzte {windowDays} Tage
+              </Badge>
             </div>
           </div>
 
@@ -394,7 +405,16 @@ export function CsUpdatesFeed({
           compact ? (
             <ScrollArea className="h-72 pr-2 sm:h-80">{feedItems}</ScrollArea>
           ) : (
-            feedItems
+            <div className="space-y-4">
+              {feedItems}
+              {hasMore ? (
+                <div className="flex justify-center pt-1">
+                  <Button variant="outline" size="sm" onClick={loadOlder} disabled={isLoadingOlder || isRefreshing}>
+                    {isLoadingOlder ? "Lade..." : "Load older"}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           )
         ) : null}
       </div>

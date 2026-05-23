@@ -966,11 +966,13 @@ export async function fetchCacheMaintenanceStats() {
 export async function fetchCsUpdatesFeed(options = {}) {
   const limit = Number.isFinite(options.limit) ? Number(options.limit) : undefined;
   const before = typeof options.before === "string" ? options.before : undefined;
+  const since = typeof options.since === "string" ? options.since : undefined;
 
   return requestWithMeta(
     buildPath("/api/v1/cs-updates", {
       limit,
       before,
+      since,
     }),
     {
       signal: options.signal,

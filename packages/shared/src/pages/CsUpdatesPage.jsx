@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Cog, Eye, FolderCog, LayoutGrid, Package } from "lucide-react";
 
@@ -15,6 +15,7 @@ const DESKTOP_SIDEBAR_ITEMS = [
   { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
   { key: "updates", label: "Updates", icon: Bell, to: "/cs-updates" },
 ];
+const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
 
 export default function CsUpdatesPage() {
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
@@ -26,6 +27,17 @@ export default function CsUpdatesPage() {
     () => String(new URLSearchParams(location.search).get("item") || "").trim(),
     [location.search],
   );
+  const handleLatestVisible = useCallback((item) => {
+    const latestId = String(item?.id || "").trim();
+    if (!latestId || typeof window === "undefined") {
+      return;
+    }
+    try {
+      localStorage.setItem(CS_UPDATES_SEEN_KEY, latestId);
+    } catch {
+      // Ignore storage failures.
+    }
+  }, []);
 
   const updatesContent = (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -56,7 +68,7 @@ export default function CsUpdatesPage() {
           </div>
         </header>
 
-        <CsUpdatesFeed preferredOpenItemId={preferredOpenItemId} />
+        <CsUpdatesFeed preferredOpenItemId={preferredOpenItemId} onLatestVisible={handleLatestVisible} />
       </div>
     </div>
   );

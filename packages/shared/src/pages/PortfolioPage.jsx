@@ -236,6 +236,7 @@ const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
 const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
+const DEFAULT_CS_UPDATES_BANNER_VISIBLE_HOURS = 24 * 7;
 const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "push_notifications", "matching", "management"];
 const DESKTOP_SIDEBAR_TABS = [
   { key: "overview", label: "Uebersicht", icon: LayoutGrid },
@@ -610,6 +611,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const {
     latestItem: latestCsUpdate,
     latestItemAgeHours: latestCsUpdateAgeHours,
+    meta: csUpdatesMeta,
     isLoading: csUpdatesLoading,
   } = useCsUpdatesFeed();
   const [compositionRefreshToken, setCompositionRefreshToken] = useState(0);
@@ -686,6 +688,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [isSteamSyncing, setIsSteamSyncing] = useState(false);
   const [steamSyncError, setSteamSyncError] = useState("");
+  const [manualSteamSyncInfo, setManualSteamSyncInfo] = useState("");
+  const [showStartupAutoSyncEmptyHint, setShowStartupAutoSyncEmptyHint] = useState(false);
   const [serverSetup, setServerSetup] = useState({
     loading: true,
     configured: true,
@@ -696,6 +700,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [serverSetupError, setServerSetupError] = useState("");
   const [serverSetupMessage, setServerSetupMessage] = useState("");
   const autoSyncStartedRef = useRef(false);
+  const manualSteamSyncInfoTimeoutRef = useRef(null);
+  const startupAutoSyncHintTimeoutRef = useRef(null);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const touchEndX = useRef(null);
@@ -757,14 +763,15 @@ export function PortfolioPage({ initialTab = "overview" }) {
   }, [location.pathname, searchPageInitialTerm]);
 
   useEffect(() => {
-    if (!isElectronRuntime || !showStartupWelcome) {
+    if (!isElectronRuntime || !showStartupWelcome || portfolioLoading) {
       return;
     }
 
-    return () => {
+    if (!authRequired) {
       writeStartupWelcomeDismissed();
-    };
-  }, [isElectronRuntime, showStartupWelcome]);
+      setShowStartupWelcome(false);
+    }
+  }, [authRequired, isElectronRuntime, portfolioLoading, showStartupWelcome]);
 
   useEffect(() => {
     setSeenCsUpdateId(readLastSeenCsUpdateId());
@@ -1099,11 +1106,33 @@ export function PortfolioPage({ initialTab = "overview" }) {
           newItemsCount: imported,
           lastSyncedAt: syncedAt,
         });
+        if (manual) {
+          setManualSteamSyncInfo("");
+        }
       } else {
         setSyncNotification((current) => ({
           ...current,
           lastSyncedAt: syncedAt,
         }));
+        if (manual) {
+          setManualSteamSyncInfo("Keine neuen Steam Items gefunden.");
+          if (manualSteamSyncInfoTimeoutRef.current) {
+            window.clearTimeout(manualSteamSyncInfoTimeoutRef.current);
+          }
+          manualSteamSyncInfoTimeoutRef.current = window.setTimeout(() => {
+            setManualSteamSyncInfo("");
+            manualSteamSyncInfoTimeoutRef.current = null;
+          }, 5000);
+        } else if (isElectronRuntime) {
+          setShowStartupAutoSyncEmptyHint(true);
+          if (startupAutoSyncHintTimeoutRef.current) {
+            window.clearTimeout(startupAutoSyncHintTimeoutRef.current);
+          }
+          startupAutoSyncHintTimeoutRef.current = window.setTimeout(() => {
+            setShowStartupAutoSyncEmptyHint(false);
+            startupAutoSyncHintTimeoutRef.current = null;
+          }, 3000);
+        }
       }
       if (window.electronAPI?.localStore?.listNotifications) {
         const notifications = await window.electronAPI.localStore.listNotifications(userId, { limit: 20 });
@@ -1127,7 +1156,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
     } finally {
       setIsSteamSyncing(false);
     }
-  }, [authRequired, isSteamSyncing, portfolioPreferences.steamImportBucket, refreshPortfolio]);
+  }, [authRequired, isElectronRuntime, isSteamSyncing, portfolioPreferences.steamImportBucket, refreshPortfolio]);
+
+  useEffect(() => () => {
+    if (manualSteamSyncInfoTimeoutRef.current) {
+      window.clearTimeout(manualSteamSyncInfoTimeoutRef.current);
+    }
+    if (startupAutoSyncHintTimeoutRef.current) {
+      window.clearTimeout(startupAutoSyncHintTimeoutRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     const loadServerSetup = async () => {
@@ -1845,11 +1883,15 @@ export function PortfolioPage({ initialTab = "overview" }) {
       : (headerPortfolioValue || 0) - Number(stats.totalInvested || 0)
     : Number(stats.totalProfitEuro || 0);
   const headerPortfolioPositive = hoveredChartData ? headerProfitEuro >= 0 : Boolean(stats.isPositive);
+  const csUpdateBannerVisibleHoursRaw = Number(csUpdatesMeta?.bannerVisibleHours);
+  const csUpdateBannerVisibleHours = Number.isFinite(csUpdateBannerVisibleHoursRaw)
+    ? Math.max(1, csUpdateBannerVisibleHoursRaw)
+    : DEFAULT_CS_UPDATES_BANNER_VISIBLE_HOURS;
   const showCsUpdateBanner =
     !csUpdatesLoading &&
     Boolean(latestCsUpdate) &&
     Number.isFinite(latestCsUpdateAgeHours) &&
-    latestCsUpdateAgeHours <= 24 * 7;
+    latestCsUpdateAgeHours <= csUpdateBannerVisibleHours;
   const latestCsUpdateImpact = useMemo(
     () => deriveCsUpdateImpact(latestCsUpdate),
     [latestCsUpdate],
@@ -1875,6 +1917,15 @@ export function PortfolioPage({ initialTab = "overview" }) {
     setSeenCsUpdateId(latestId);
     writeLastSeenCsUpdateId(latestId);
   }, [latestCsUpdate?.id]);
+  const handleOpenLatestCsUpdateFeed = useCallback(() => {
+    const latestId = String(latestCsUpdate?.id || "").trim();
+    markLatestCsUpdateSeen();
+    if (!latestId) {
+      navigate("/cs-updates");
+      return;
+    }
+    navigate(`/cs-updates?item=${encodeURIComponent(latestId)}`);
+  }, [latestCsUpdate?.id, markLatestCsUpdateSeen, navigate]);
   const portfolioValueLabel = formatPrice(stats.totalValue || 0, {
     useUsd: true,
     buyPriceUsd: stats.totalValue || 0,
@@ -2439,14 +2490,44 @@ export function PortfolioPage({ initialTab = "overview" }) {
     }
     return { section: "matching", label: "Inbox" };
   };
+  const unreadSteamSyncNotifications = useMemo(
+    () => syncNotifications.filter((entry) => entry.category === "steam_sync" && entry.unread),
+    [syncNotifications],
+  );
   const handleNotificationClick = async (entry) => {
     if (window.electronAPI?.localStore?.markNotificationRead) {
       await window.electronAPI.localStore.markNotificationRead(entry.id);
     }
+    setSyncNotifications((current) =>
+      current.map((item) => (item.id === entry.id ? { ...item, unread: false, readAt: new Date().toISOString() } : item)),
+    );
+    setSyncNotification((current) => ({
+      ...current,
+      newItemsCount: Math.max(0, Number(current.newItemsCount || 0) - 1),
+    }));
     const target = resolveNotificationActionTarget();
     setActiveTab("management");
     setManagementSection(target.section);
     navigate("/?tab=management", { replace: true });
+    setCompositionRefreshToken((current) => current + 1);
+  };
+  const handleMarkAllSteamNotificationsRead = async () => {
+    const user = await getCurrentUser();
+    const userId = resolveDesktopRuntimeUserId(user, 1);
+    if (window.electronAPI?.localStore?.markAllNotificationsRead) {
+      await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
+    }
+    setSyncNotifications((current) =>
+      current.map((entry) =>
+        entry.category === "steam_sync" && entry.unread
+          ? { ...entry, unread: false, readAt: new Date().toISOString() }
+          : entry,
+      ),
+    );
+    setSyncNotification((current) => ({
+      ...current,
+      newItemsCount: 0,
+    }));
     setCompositionRefreshToken((current) => current + 1);
   };
   const handleAppUpdateInstall = async () => {
@@ -2549,14 +2630,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
         <div className="rounded-md border p-2">
           <p className="text-xs font-semibold">Neue Steam Items</p>
-          {syncNotification.newItemsCount === 0 ? (
-            <p className="text-[11px] text-muted-foreground">Keine neuen Items seit letztem App-Start.</p>
-          ) : (
+          {syncNotification.newItemsCount > 0 ? (
             <div className="mt-1 space-y-1">
-              {syncNotifications
-                .filter((entry) => entry.category === "steam_sync")
-                .slice(0, 5)
-                .map((entry) => (
+              {unreadSteamSyncNotifications.slice(0, 5).map((entry) => (
                   <button
                     key={entry.id}
                     type="button"
@@ -2576,23 +2652,15 @@ export function PortfolioPage({ initialTab = "overview" }) {
                       {new Date(entry.createdAt).toLocaleString("de-DE")}
                     </p>
                   </button>
-                ))}
+              ))}
             </div>
-          )}
-          {syncNotification.newItemsCount > 0 ? (
+          ) : null}
+          {manualSteamSyncInfo ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">{manualSteamSyncInfo}</p>
+          ) : null}
+          {unreadSteamSyncNotifications.length > 0 ? (
             <div className="mt-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={async () => {
-                  const user = await getCurrentUser();
-                  const userId = resolveDesktopRuntimeUserId(user, 1);
-                  if (window.electronAPI?.localStore?.markAllNotificationsRead) {
-                    await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
-                  }
-                  setCompositionRefreshToken((current) => current + 1);
-                }}
-              >
+              <Button size="sm" variant="ghost" onClick={() => void handleMarkAllSteamNotificationsRead()}>
                 Alle als gelesen
               </Button>
             </div>
@@ -2879,7 +2947,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
   // Keep this return after all hooks. Returning before the other hooks run changes
   // hook order after login and triggers React's minified error #310.
-  if (isElectronRuntime && showStartupWelcome) {
+  if (isElectronRuntime && showStartupWelcome && !portfolioLoading && authRequired) {
     return (
       <div className="steam-startup-shell flex min-h-full items-center justify-center p-4">
         <SteamLoginPrompt
@@ -3031,6 +3099,11 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </p>
             </CardHeader>
             <CardContent className="space-y-6 text-sm">
+              {showStartupAutoSyncEmptyHint ? (
+                <div className="rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100">
+                  Keine neuen Steam Items beim letzten Auto-Sync.
+                </div>
+              ) : null}
               <div className="space-y-3 rounded-xl border border-white/15 bg-white/5 p-4">
                 <div className="flex items-center justify-between text-xs text-slate-300">
                   <span>Fortschritt</span>
@@ -3719,7 +3792,16 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
             {showCsUpdateBanner && latestCsUpdate ? (
               <div
-                className={`rounded-2xl border px-4 py-4 sm:px-5 ${latestCsUpdateBannerTone.wrapper}`}
+                role="button"
+                tabIndex={0}
+                onClick={handleOpenLatestCsUpdateFeed}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleOpenLatestCsUpdateFeed();
+                  }
+                }}
+                className={`rounded-2xl border px-4 py-4 sm:px-5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${latestCsUpdateBannerTone.wrapper}`}
               >
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3757,29 +3839,18 @@ export function PortfolioPage({ initialTab = "overview" }) {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button asChild size="sm">
-                      <Link to="/cs-updates" onClick={markLatestCsUpdateSeen}>
-                        Update Feed oeffnen
-                      </Link>
-                    </Button>
+                    {latestCsUpdate?.url ? (
+                      <Button asChild size="sm" onClick={(event) => event.stopPropagation()}>
+                        <a href={latestCsUpdate.url} target="_blank" rel="noreferrer">
+                          Original Update oeffnen
+                        </a>
+                      </Button>
+                    ) : null}
                     {hasUnreadCsUpdate ? (
                       <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-300">
                         neu
                       </Badge>
                     ) : null}
-                    <Button size="sm" variant="outline" onClick={() => handleTabSelect("watchlist")}>
-                      Watchlist checken
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setActiveTab("management");
-                        setManagementSection("prices");
-                      }}
-                    >
-                      Preise pruefen
-                    </Button>
                   </div>
                 </div>
               </div>

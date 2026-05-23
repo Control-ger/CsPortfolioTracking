@@ -129,7 +129,7 @@ export function SettingsPage() {
     "Notification" in window &&
     "serviceWorker" in navigator &&
     "PushManager" in window;
-  const useDesktopSidebarShell = isElectronRuntime;
+  const useDesktopSidebarShell = true;
   const location = useLocation();
   const navigate = useNavigate();
   const activePortfolioTab = new URLSearchParams(location.search).get("tab") || "overview";

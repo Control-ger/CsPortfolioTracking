@@ -10,6 +10,11 @@ use Throwable;
 
 final class CsUpdatesController
 {
+    private const DEFAULT_BANNER_DURATION_HOURS = 168;
+    private const MIN_BANNER_DURATION_HOURS = 1;
+    private const MAX_BANNER_DURATION_HOURS = 24 * 30;
+    private const DEFAULT_FEED_WINDOW_DAYS = 7;
+
     public function __construct(private readonly CsUpdatesFeedRepository $repository)
     {
     }
@@ -19,13 +24,19 @@ final class CsUpdatesController
         try {
             $limit = isset($request->query['limit']) && is_numeric($request->query['limit'])
                 ? (int) $request->query['limit']
-                : 50;
+                : 30;
+            $resolvedLimit = max(1, min(100, $limit));
             $before = isset($request->query['before']) ? (string) $request->query['before'] : null;
+            $since = isset($request->query['since']) ? (string) $request->query['since'] : null;
+            $beforeUtc = $this->parseDateQueryToUtc($before);
+            $sinceUtc = $this->parseDateQueryToUtc($since);
 
-            $rows = $this->repository->listLatest($limit, $before);
-            $items = array_map([$this, 'mapRowToApiItem'], $rows);
+            $rows = $this->repository->listLatest($resolvedLimit + 1, $beforeUtc, $sinceUtc);
+            $hasMore = count($rows) > $resolvedLimit;
+            $visibleRows = $hasMore ? array_slice($rows, 0, $resolvedLimit) : $rows;
+            $items = array_map([$this, 'mapRowToApiItem'], $visibleRows);
             $lastItem = end($items);
-            $nextBefore = is_array($lastItem) ? ($lastItem['publishedAt'] ?? null) : null;
+            $nextBefore = $hasMore && is_array($lastItem) ? ($lastItem['publishedAt'] ?? null) : null;
 
             JsonResponseFactory::success(
                 [
@@ -35,7 +46,10 @@ final class CsUpdatesController
                     'fetchedAt' => gmdate(DATE_ATOM),
                     'sourceMode' => 'backend',
                     'nextBefore' => $nextBefore,
+                    'hasMore' => $hasMore,
+                    'defaultWindowDays' => self::DEFAULT_FEED_WINDOW_DAYS,
                     'staleAfterSeconds' => 120,
+                    'bannerVisibleHours' => $this->resolveBannerDurationHours(),
                     'isStale' => false,
                 ]
             );
@@ -168,5 +182,38 @@ final class CsUpdatesController
             return $normalized;
         }
         return 'pending';
+    }
+
+    private function parseDateQueryToUtc(?string $raw): ?string
+    {
+        if ($raw === null || trim($raw) === '') {
+            return null;
+        }
+
+        try {
+            return (new \DateTimeImmutable($raw))
+                ->setTimezone(new \DateTimeZone('UTC'))
+                ->format('Y-m-d H:i:s');
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function resolveBannerDurationHours(): int
+    {
+        $raw = getenv('CS_UPDATES_BANNER_DURATION_HOURS');
+        if ($raw === false) {
+            return self::DEFAULT_BANNER_DURATION_HOURS;
+        }
+
+        $hours = (int) $raw;
+        if ($hours < self::MIN_BANNER_DURATION_HOURS) {
+            return self::MIN_BANNER_DURATION_HOURS;
+        }
+        if ($hours > self::MAX_BANNER_DURATION_HOURS) {
+            return self::MAX_BANNER_DURATION_HOURS;
+        }
+
+        return $hours;
     }
 }

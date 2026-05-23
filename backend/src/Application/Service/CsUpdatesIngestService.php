@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Application\Service;
 
+use App\Infrastructure\External\SteamDbPatchnotesClient;
 use App\Infrastructure\External\SteamDbRssClient;
 use App\Infrastructure\External\SteamNewsClient;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
@@ -15,6 +16,7 @@ final class CsUpdatesIngestService
         private readonly SteamDbRssClient $steamDbRssClient,
         private readonly SteamNewsClient $steamNewsClient,
         private readonly CsUpdatesFeedRepository $repository,
+        private readonly ?SteamDbPatchnotesClient $steamDbPatchnotesClient = null,
         private readonly ?WebPushSubscriptionRepository $webPushSubscriptionRepository = null,
         private readonly ?WebPushService $webPushService = null
     ) {
@@ -29,6 +31,7 @@ final class CsUpdatesIngestService
 
         $entries = [];
         $sourceUrl = '';
+        $steamNewsItems = [];
 
         try {
             $rssItems = $this->steamDbRssClient->fetchItems();
@@ -39,10 +42,19 @@ final class CsUpdatesIngestService
         }
 
         if (count($entries) === 0) {
-            $newsItems = $this->steamNewsClient->fetchNewsItems();
-            $entries = $this->mapNewsItemsToEntries($newsItems);
+            $steamNewsItems = $this->steamNewsClient->fetchNewsItems();
+            $entries = $this->mapNewsItemsToEntries($steamNewsItems);
             $sourceUrl = $this->steamNewsClient->resolveEndpointUrl();
+        } else {
+            try {
+                $steamNewsItems = $this->steamNewsClient->fetchNewsItems();
+            } catch (Throwable) {
+                $steamNewsItems = [];
+            }
         }
+
+        [$newsByBuildId, $newsByTitleKey] = $this->buildSteamNewsEnrichmentIndexes($steamNewsItems);
+        $enrichmentBudget = $this->resolveEnrichmentBudget();
 
         $inserted = 0;
         $updated = 0;
@@ -55,6 +67,20 @@ final class CsUpdatesIngestService
             }
 
             $exists = $this->repository->findByExternalId((string) $entry['external_id']);
+            if ($this->shouldEnrichEntry($entry, $exists, $newsByBuildId, $newsByTitleKey)) {
+                $canFetchPatchnotes = $enrichmentBudget > 0;
+                $enrichmentResult = $this->enrichEntrySummary(
+                    $entry,
+                    $newsByBuildId,
+                    $newsByTitleKey,
+                    $canFetchPatchnotes
+                );
+                $entry = $enrichmentResult['entry'];
+                if (($enrichmentResult['usedPatchnotesFetch'] ?? false) === true) {
+                    $enrichmentBudget = max(0, $enrichmentBudget - 1);
+                }
+            }
+
             $isInserted = $this->repository->upsert($entry);
 
             if ($isInserted || $exists === null) {
@@ -99,7 +125,7 @@ final class CsUpdatesIngestService
             $externalId = $gid !== ''
                 ? $gid
                 : sha1($link . '|' . $publishedAt->format(DATE_ATOM) . '|' . $title);
-            $summary = $this->buildSummary($contents);
+            $summary = $this->buildSummary($contents, $this->resolveSummaryMaxLength());
 
             $items[] = [
                 'source' => 'steam_news_api',
@@ -143,7 +169,7 @@ final class CsUpdatesIngestService
             $externalId = $guid !== ''
                 ? $guid
                 : sha1($link . '|' . $publishedAt->format(DATE_ATOM) . '|' . $title);
-            $summary = $this->buildSummary($description);
+            $summary = $this->buildSummary($description, min(1200, $this->resolveSummaryMaxLength()));
 
             $items[] = [
                 'source' => 'steamdb_rss',
@@ -212,13 +238,204 @@ final class CsUpdatesIngestService
         ];
     }
 
-    private function buildSummary(string $contents): string
+    /**
+     * @param array<int,array<string,mixed>> $newsItems
+     * @return array{0:array<int,string>,1:array<string,string>}
+     */
+    private function buildSteamNewsEnrichmentIndexes(array $newsItems): array
     {
-        if ($contents === '') {
-            return '';
+        $byBuildId = [];
+        $byTitleKey = [];
+
+        foreach ($newsItems as $item) {
+            $title = trim((string) ($item['title'] ?? ''));
+            $contents = trim((string) ($item['contents'] ?? ''));
+            $combined = $title . "\n" . $contents;
+            $meta = $this->extractSteamMeta($combined);
+            $summary = $this->buildSummary($contents, 2200);
+            if ($summary === '') {
+                continue;
+            }
+
+            $buildId = isset($meta['build_id']) ? (int) ($meta['build_id'] ?? 0) : 0;
+            if ($buildId > 0) {
+                $byBuildId[$buildId] = $summary;
+            }
+
+            $titleKey = $this->toTitleKey($title);
+            if ($titleKey !== '' && (!isset($byTitleKey[$titleKey]) || strlen($byTitleKey[$titleKey]) < strlen($summary))) {
+                $byTitleKey[$titleKey] = $summary;
+            }
         }
 
-        $normalized = html_entity_decode($contents, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return [$byBuildId, $byTitleKey];
+    }
+
+    /**
+     * @param array<string,mixed> $entry
+     * @param array<string,mixed>|null $existingRow
+     * @param array<int,string> $newsByBuildId
+     * @param array<string,string> $newsByTitleKey
+     */
+    private function shouldEnrichEntry(array $entry, ?array $existingRow, array $newsByBuildId, array $newsByTitleKey): bool
+    {
+        $source = strtolower(trim((string) ($entry['source'] ?? '')));
+        if ($source !== 'steamdb_rss') {
+            return false;
+        }
+
+        $summary = trim((string) ($entry['summary_raw'] ?? ''));
+        if ($this->isSummaryThin($summary)) {
+            return true;
+        }
+
+        $buildId = isset($entry['build_id']) ? (int) ($entry['build_id'] ?? 0) : 0;
+        if ($buildId > 0 && isset($newsByBuildId[$buildId])) {
+            return true;
+        }
+
+        $titleKey = $this->toTitleKey((string) ($entry['title'] ?? ''));
+        if ($titleKey !== '' && isset($newsByTitleKey[$titleKey])) {
+            return true;
+        }
+
+        if ($existingRow === null) {
+            return true;
+        }
+
+        $existingSummary = trim((string) ($existingRow['summary_raw'] ?? ''));
+        return $this->isSummaryThin($existingSummary);
+    }
+
+    /**
+     * @param array<string,mixed> $entry
+     * @param array<int,string> $newsByBuildId
+     * @param array<string,string> $newsByTitleKey
+     * @return array{entry:array<string,mixed>,usedPatchnotesFetch:bool}
+     */
+    private function enrichEntrySummary(array $entry, array $newsByBuildId, array $newsByTitleKey, bool $allowPatchnotesFetch): array
+    {
+        $summaryMaxLength = $this->resolveSummaryMaxLength();
+        $baseSummary = trim((string) ($entry['summary_raw'] ?? ''));
+        $candidates = [];
+        if ($baseSummary !== '') {
+            $candidates[] = $baseSummary;
+        }
+
+        $buildId = isset($entry['build_id']) ? (int) ($entry['build_id'] ?? 0) : 0;
+        if ($buildId > 0 && isset($newsByBuildId[$buildId])) {
+            $candidates[] = $newsByBuildId[$buildId];
+        }
+
+        $titleKey = $this->toTitleKey((string) ($entry['title'] ?? ''));
+        if ($titleKey !== '' && isset($newsByTitleKey[$titleKey])) {
+            $candidates[] = $newsByTitleKey[$titleKey];
+        }
+
+        $usedPatchnotesFetch = false;
+        $bestBeforePatchnotes = $this->selectBestSummaryCandidate($candidates);
+
+        if (
+            $allowPatchnotesFetch
+            && $this->steamDbPatchnotesClient instanceof SteamDbPatchnotesClient
+            && $this->isSummaryThin($bestBeforePatchnotes)
+        ) {
+            $url = trim((string) ($entry['url'] ?? ''));
+            if ($url !== '') {
+                try {
+                    $patchnotesText = $this->steamDbPatchnotesClient->fetchSummaryText($url, $summaryMaxLength);
+                    if ($patchnotesText !== '') {
+                        $candidates[] = $patchnotesText;
+                    }
+                    $usedPatchnotesFetch = true;
+                } catch (Throwable) {
+                    $usedPatchnotesFetch = true;
+                }
+            }
+        }
+
+        $finalSummary = $this->selectBestSummaryCandidate($candidates);
+        if ($finalSummary !== '') {
+            $entry['summary_raw'] = $this->truncate($finalSummary, $summaryMaxLength);
+        }
+
+        return [
+            'entry' => $entry,
+            'usedPatchnotesFetch' => $usedPatchnotesFetch,
+        ];
+    }
+
+    private function resolveEnrichmentBudget(): int
+    {
+        $raw = (int) (getenv('CS_UPDATES_ENRICH_MAX_PER_RUN') ?: 3);
+        return max(0, min(20, $raw));
+    }
+
+    private function resolveSummaryMaxLength(): int
+    {
+        $raw = (int) (getenv('CS_UPDATES_SUMMARY_MAX_LENGTH') ?: 1600);
+        return max(420, min(6000, $raw));
+    }
+
+    private function toTitleKey(string $title): string
+    {
+        $normalized = strtolower(trim($title));
+        if ($normalized === '') {
+            return '';
+        }
+        return preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+    }
+
+    private function isSummaryThin(string $summary): bool
+    {
+        $normalized = strtolower(trim($summary));
+        if ($normalized === '') {
+            return true;
+        }
+        if (strlen($normalized) < 120) {
+            return true;
+        }
+        if (preg_match('/^steamdb build \d+/i', $normalized) === 1) {
+            return true;
+        }
+        if (preg_match('/^counter-strike 2 update \(steamdb build \d+\)/i', $normalized) === 1) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * @param array<int,string> $candidates
+     */
+    private function selectBestSummaryCandidate(array $candidates): string
+    {
+        $best = '';
+        $bestScore = 0;
+
+        foreach ($candidates as $candidate) {
+            $normalized = $this->normalizeText($candidate);
+            if ($normalized === '') {
+                continue;
+            }
+
+            $lengthScore = min(strlen($normalized), 2600);
+            $keywordScore = preg_match('/\b(sticker|souvenir|capsule|trade|case|major|market|map|weapon|fixed|release)\b/i', $normalized) === 1
+                ? 240
+                : 0;
+            $score = $lengthScore + $keywordScore;
+
+            if ($score > $bestScore) {
+                $best = $normalized;
+                $bestScore = $score;
+            }
+        }
+
+        return $best;
+    }
+
+    private function normalizeText(string $text): string
+    {
+        $normalized = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
         // Steam news often contains BBCode-style tags ([p], [list], [*], [img], ...).
         // Strip/normalize them so feed entries stay readable in the UI.
@@ -230,15 +447,33 @@ final class CsUpdatesIngestService
         $normalized = preg_replace('/\[(?:\/)?[a-z0-9_*]+(?:=[^\]]+)?\]/i', ' ', $normalized) ?? $normalized;
 
         $plain = trim(preg_replace('/\s+/', ' ', strip_tags($normalized)) ?? '');
+        return $plain;
+    }
+
+    private function buildSummary(string $contents, int $maxLength = 420): string
+    {
+        if ($contents === '') {
+            return '';
+        }
+
+        $plain = $this->normalizeText($contents);
         if ($plain === '') {
             return '';
         }
 
-        if (mb_strlen($plain) <= 420) {
+        if (mb_strlen($plain) <= $maxLength) {
             return $plain;
         }
 
-        return rtrim(mb_substr($plain, 0, 420)) . '...';
+        return $this->truncate($plain, $maxLength);
+    }
+
+    private function truncate(string $text, int $maxLength): string
+    {
+        if (mb_strlen($text) <= $maxLength) {
+            return $text;
+        }
+        return rtrim(mb_substr($text, 0, $maxLength)) . '...';
     }
 
     /**

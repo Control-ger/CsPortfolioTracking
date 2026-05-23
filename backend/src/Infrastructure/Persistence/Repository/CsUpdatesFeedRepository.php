@@ -168,7 +168,7 @@ final class CsUpdatesFeedRepository
     /**
      * @return array<int,array<string,mixed>>
      */
-    public function listLatest(int $limit = 50, ?string $beforeIso = null): array
+    public function listLatest(int $limit = 50, ?string $beforeUtc = null, ?string $sinceUtc = null): array
     {
         $resolvedLimit = max(1, min(200, $limit));
         $params = [];
@@ -197,10 +197,17 @@ final class CsUpdatesFeedRepository
                     updated_at
                 FROM cs_updates_feed";
 
-        if ($beforeIso !== null && trim($beforeIso) !== '') {
-            $before = (new \DateTimeImmutable($beforeIso))->setTimezone(new \DateTimeZone('UTC'));
-            $sql .= ' WHERE published_at < ?';
-            $params[] = $before->format('Y-m-d H:i:s');
+        $whereParts = [];
+        if ($beforeUtc !== null && trim($beforeUtc) !== '') {
+            $whereParts[] = 'published_at < ?';
+            $params[] = $beforeUtc;
+        }
+        if ($sinceUtc !== null && trim($sinceUtc) !== '') {
+            $whereParts[] = 'published_at >= ?';
+            $params[] = $sinceUtc;
+        }
+        if ($whereParts !== []) {
+            $sql .= ' WHERE ' . implode(' AND ', $whereParts);
         }
 
         $sql .= ' ORDER BY published_at DESC, id DESC LIMIT ?';
@@ -220,7 +227,7 @@ final class CsUpdatesFeedRepository
                 __FUNCTION__,
                 $sql,
                 $exception,
-                ['limit' => $resolvedLimit, 'beforeIso' => $beforeIso]
+                ['limit' => $resolvedLimit, 'beforeUtc' => $beforeUtc, 'sinceUtc' => $sinceUtc]
             );
             throw $exception;
         }

@@ -4,6 +4,10 @@ import { fetchCsUpdatesFeed } from "@shared/lib/apiClient";
 import { getMockCsUpdatesFeed } from "@shared/lib/csUpdatesFeed.mock";
 
 const DEFAULT_STALE_AFTER_SECONDS = 6 * 60 * 60;
+const DEFAULT_BANNER_VISIBLE_HOURS = 24 * 7;
+const MAX_BANNER_VISIBLE_HOURS = 24 * 30;
+const DEFAULT_FEED_WINDOW_DAYS = 7;
+const DEFAULT_PAGE_SIZE = 30;
 const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
 const FALLBACK_POLL_INTERVAL_MS = 15 * 1000;
 const WS_RECONNECT_BACKOFF_STEPS_MS = [1000, 2000, 5000, 10000, 30000];
@@ -39,6 +43,19 @@ function sortFeedItems(items) {
   });
 }
 
+function resolveFeedWindowDays(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_FEED_WINDOW_DAYS;
+  }
+  return Math.max(1, Math.min(30, Math.round(parsed)));
+}
+
+function getFeedSinceIso(windowDays = DEFAULT_FEED_WINDOW_DAYS) {
+  const since = new Date(Date.now() - resolveFeedWindowDays(windowDays) * TWENTY_FOUR_HOURS_IN_MS);
+  return since.toISOString();
+}
+
 function normalizeFeedPayload(payload) {
   const rawData = payload?.data ?? payload;
   const meta = payload?.meta ?? rawData?.meta ?? {};
@@ -57,7 +74,17 @@ function normalizeFeedPayload(payload) {
       staleAfterSeconds: Number.isFinite(meta.staleAfterSeconds)
         ? meta.staleAfterSeconds
         : DEFAULT_STALE_AFTER_SECONDS,
+      bannerVisibleHours: (() => {
+        const parsed = Number(meta.bannerVisibleHours);
+        if (!Number.isFinite(parsed)) {
+          return DEFAULT_BANNER_VISIBLE_HOURS;
+        }
+        return Math.max(1, Math.min(MAX_BANNER_VISIBLE_HOURS, parsed));
+      })(),
       isStale: Boolean(meta.isStale),
+      nextBefore: typeof meta.nextBefore === "string" ? meta.nextBefore : null,
+      hasMore: Boolean(meta.hasMore),
+      defaultWindowDays: resolveFeedWindowDays(meta.defaultWindowDays),
     },
   };
 }
@@ -93,6 +120,13 @@ function deriveFreshness(items, meta) {
     isStale: meta.isStale || staleByTime,
     fetchedAt,
   };
+}
+
+function mergeFeedCollections(prevItems, incomingItems) {
+  return (Array.isArray(incomingItems) ? incomingItems : []).reduce(
+    (accumulator, item) => mergeIncomingItem(accumulator, item),
+    [...prevItems],
+  );
 }
 
 function mergeIncomingItem(prevItems, item) {
@@ -136,8 +170,20 @@ function resolveWsUrl() {
   return `${wsProtocol}//${window.location.host}/ws/updates`;
 }
 
-async function defaultLoader() {
-  return fetchCsUpdatesFeed({ limit: 100 });
+async function defaultLoader(options = {}) {
+  const hasCustomSince = typeof options?.since === "string" && options.since.trim() !== "";
+  const hasBefore = typeof options?.before === "string" && options.before.trim() !== "";
+  const resolvedSince = hasCustomSince
+    ? options.since
+    : hasBefore
+      ? undefined
+      : getFeedSinceIso(DEFAULT_FEED_WINDOW_DAYS);
+
+  return fetchCsUpdatesFeed({
+    limit: Number.isFinite(options?.limit) ? options.limit : DEFAULT_PAGE_SIZE,
+    before: typeof options?.before === "string" ? options.before : undefined,
+    since: resolvedSince,
+  });
 }
 
 export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
@@ -147,11 +193,19 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
     fetchedAt: null,
     lastRefreshAt: null,
     staleAfterSeconds: DEFAULT_STALE_AFTER_SECONDS,
+    bannerVisibleHours: DEFAULT_BANNER_VISIBLE_HOURS,
     isStale: false,
+    nextBefore: null,
+    hasMore: false,
+    defaultWindowDays: DEFAULT_FEED_WINDOW_DAYS,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [error, setError] = useState(null);
+  const [nextBefore, setNextBefore] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [windowDays, setWindowDays] = useState(DEFAULT_FEED_WINDOW_DAYS);
 
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
@@ -163,22 +217,45 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
   const load = useCallback(
     async (mode = "initial") => {
       const isRefresh = mode === "refresh";
+      const isLoadOlder = mode === "older";
 
-      if (isRefresh) {
+      if (isLoadOlder) {
+        if (!nextBefore) {
+          setHasMore(false);
+          return;
+        }
+        setIsLoadingOlder(true);
+      } else if (isRefresh) {
         setIsRefreshing(true);
       } else {
         setIsLoading(true);
       }
 
-      if (!manualRefreshRef.current) {
+      if (!manualRefreshRef.current && !isLoadOlder) {
         setError(null);
       }
 
       try {
-        const payload = await loader();
+        const requestParams = isLoadOlder
+          ? {
+              limit: DEFAULT_PAGE_SIZE,
+              before: nextBefore,
+            }
+          : {
+              limit: DEFAULT_PAGE_SIZE,
+              since: getFeedSinceIso(windowDays),
+            };
+        const payload = await loader(requestParams);
         const normalized = normalizeFeedPayload(payload);
-        setItems(normalized.items);
+        if (isLoadOlder) {
+          setItems((prevItems) => mergeFeedCollections(prevItems, normalized.items));
+        } else {
+          setItems(normalized.items);
+        }
         setMeta(normalized.meta);
+        setNextBefore(normalized.meta.nextBefore);
+        setHasMore(Boolean(normalized.meta.hasMore && normalized.meta.nextBefore));
+        setWindowDays(resolveFeedWindowDays(normalized.meta.defaultWindowDays));
       } catch (loadError) {
         setError(loadError?.message || "CS Updates konnten nicht geladen werden.");
 
@@ -186,15 +263,23 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
           const fallbackPayload = await getMockCsUpdatesFeed();
           const fallbackNormalized = normalizeFeedPayload(fallbackPayload);
           setItems(fallbackNormalized.items);
-          setMeta({ ...fallbackNormalized.meta, sourceMode: "mock-fallback" });
+          setMeta({
+            ...fallbackNormalized.meta,
+            sourceMode: "mock-fallback",
+            nextBefore: null,
+            hasMore: false,
+          });
+          setNextBefore(null);
+          setHasMore(false);
         }
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
+        setIsLoadingOlder(false);
         manualRefreshRef.current = false;
       }
     },
-    [loader],
+    [loader, nextBefore, windowDays],
   );
 
   const startFallbackPolling = useCallback(() => {
@@ -343,10 +428,14 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
     freshItemIds: derived.freshItemIds,
     isLoading,
     isRefreshing,
+    isLoadingOlder,
+    hasMore,
+    windowDays,
     error,
     refresh: () => {
       manualRefreshRef.current = true;
       return load("refresh");
     },
+    loadOlder: () => load("older"),
   };
 }
