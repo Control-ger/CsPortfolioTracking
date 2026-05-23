@@ -139,6 +139,19 @@ Empfohlenes Update-Format am Dateiende:
 - `Updated: YYYY-MM-DD`
 - `Change: <kurze Beschreibung>`
 
+## Release-Regel (verbindlich)
+
+Wenn der User "release" sagt, ist damit ein echter Electron-Release gemeint, nicht nur ein Git-Push.
+
+Pflichtablauf:
+- `package.json` Version erhoehen (und `package-lock.json` mitziehen).
+- Commit mit der Release-Version erstellen.
+- Git-Tag `v<version>` erstellen (muss exakt zur `package.json` Version passen).
+- Branch + Tag pushen.
+- Sicherstellen, dass der Workflow `.github/workflows/desktop-release.yml` dadurch triggert (Tag `v*`).
+
+Ohne neuen Tag gibt es keinen neuen Electron/GitHub-Release.
+
 ## Bekannte offene Punkte
 
 - `toggleExcludeInvestment` in `backend/src/Application/Service/PortfolioService.php` ist aktuell defensiv/placeholder.
@@ -338,3 +351,10 @@ Change: Asynchrones KI-Rating fuer CS-Updates (Gemini Free Tier vorbereitet)
 - `backend/src/Infrastructure/Persistence/Repository/CsUpdatesFeedRepository.php` erweitert `cs_updates_feed` um AI-Rating-Spalten und Pending-Queue-Methoden.
 - `backend/src/Http/Controller/CsUpdatesController.php` liefert AI-Rating-Felder (`aiImpactLevel`, `aiUrgency`, `aiRecommendedAction`, etc.) an Web/Desktop aus.
 - Supervisor-Konfiguration erweitert um `csportfolio-cs-updates-ai-rating` (alle 60s), damit Eilmeldung sofort bleibt und Bewertung asynchron nachgereicht wird.
+
+---
+
+Updated: 2026-05-23
+Change: Verbindliche Release-Regel fuer Agents ergaenzt
+- "Release" bedeutet explizit Electron-Release mit Version-Bump, Tag `v<version>` und Push von Branch + Tag.
+- Klarstellung aufgenommen, dass ohne neuen Tag kein GitHub/Electron-Release erzeugt wird.
