@@ -569,9 +569,14 @@ function mapWarningsToNotifications(warnings, { sourceKey, sourceLabel }) {
 export function PortfolioPage({ initialTab = "overview" }) {
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const isDesktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
-  const runtimeTabs = isDesktopRuntime
-    ? ["overview", "inventory", "watchlist", "search", "management"]
-    : ["overview", "inventory", "watchlist", "search"];
+  const runtimeTabs = useMemo(
+    () => (
+      isDesktopRuntime
+        ? ["overview", "inventory", "watchlist", "search", "management"]
+        : ["overview", "inventory", "watchlist", "search"]
+    ),
+    [isDesktopRuntime],
+  );
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
@@ -624,7 +629,9 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
   const [selectedItemHistoryLoading, setSelectedItemHistoryLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState(resolvedInitialTab);
+  const initialVisitedTab = runtimeTabs.includes(resolvedInitialTab) ? resolvedInitialTab : runtimeTabs[0];
+  const [activeTab, setActiveTab] = useState(initialVisitedTab);
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set([initialVisitedTab]));
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
   const [hoveredChartData, setHoveredChartData] = useState(null);
@@ -711,8 +718,8 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const [globalSearchTerm, setGlobalSearchTerm] = useState("");
   const [globalSearchCommittedTerm, setGlobalSearchCommittedTerm] = useState("");
   const [globalSearchCategory, setGlobalSearchCategory] = useState("all");
-  const [globalSearchCatalogResults, setGlobalSearchCatalogResults] = useState([]);
-  const [globalSearchCatalogLoading, setGlobalSearchCatalogLoading] = useState(false);
+  const [globalSearchCatalogResults, _setGlobalSearchCatalogResults] = useState([]);
+  const [globalSearchCatalogLoading, _setGlobalSearchCatalogLoading] = useState(false);
   const [globalSearchCatalogError, setGlobalSearchCatalogError] = useState("");
   const [globalSearchWatchlistItems, setGlobalSearchWatchlistItems] = useState([]);
   const [globalSearchAddingItem, setGlobalSearchAddingItem] = useState("");
@@ -749,8 +756,23 @@ export function PortfolioPage({ initialTab = "overview" }) {
   }, true);
 
   useEffect(() => {
-    setActiveTab((current) => (current === resolvedInitialTab ? current : resolvedInitialTab));
-  }, [resolvedInitialTab]);
+    const normalizedTab = runtimeTabs.includes(resolvedInitialTab) ? resolvedInitialTab : runtimeTabs[0];
+    setActiveTab((current) => (current === normalizedTab ? current : normalizedTab));
+  }, [resolvedInitialTab, runtimeTabs]);
+
+  useEffect(() => {
+    if (!runtimeTabs.includes(activeTab)) {
+      return;
+    }
+    setVisitedTabs((current) => {
+      if (current.has(activeTab)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab, runtimeTabs]);
 
   useEffect(() => {
     if (location.pathname !== "/search") {
@@ -1275,7 +1297,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     void loadItemHistory();
   }, [selectedItemWithLive]);
 
-  const handleTabSelect = (nextTab) => {
+  const handleTabSelect = useCallback((nextTab) => {
     if (!runtimeTabs.includes(nextTab)) {
       return;
     }
@@ -1293,7 +1315,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
     if (currentPathWithQuery !== targetPath) {
       navigate(targetPath, { replace: true });
     }
-  };
+  }, [activeTab, location.pathname, location.search, navigate, runtimeTabs]);
 
   const handleOpenWatchlistItem = (item) => {
     if (!item?.id) {
@@ -3775,7 +3797,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </TabsList>
             </div>
 
-          <TabsContent value="overview" className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
+          <TabsContent value="overview" forceMount={visitedTabs.has("overview")} className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
             {/* Mobile: PortfolioHeaderCard oben, Desktop: Alte Stats-Cards */}
             <div className="sm:hidden">
               <PortfolioHeaderCard
@@ -3958,7 +3980,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
 
           </TabsContent>
 
-          <TabsContent value="inventory" className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
+          <TabsContent value="inventory" forceMount={visitedTabs.has("inventory")} className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
             {/*
             
                   Manueller CSFloat-Sync: zuerst Preview prüfen, dann Import starten.
@@ -4036,13 +4058,13 @@ export function PortfolioPage({ initialTab = "overview" }) {
             )}
           </TabsContent>
 
-          <TabsContent value="watchlist" className="space-y-4 sm:space-y-6">
+          <TabsContent value="watchlist" forceMount={visitedTabs.has("watchlist")} className="space-y-4 sm:space-y-6">
             <Watchlist
               focusTarget={watchlistFocusTarget}
               onWarningsChange={handleWatchlistWarningsChange}
             />
           </TabsContent>
-          <TabsContent value="search" className="space-y-4 sm:space-y-6">
+          <TabsContent value="search" forceMount={visitedTabs.has("search")} className="space-y-4 sm:space-y-6">
             <ItemSearch
               onAddToWatchlist={loadGlobalSearchWatchlistItems}
               existingItems={globalSearchKnownItems.map((entry) => ({ name: entry.name }))}
@@ -4056,7 +4078,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
             />
           </TabsContent>
           {isDesktopRuntime ? (
-          <TabsContent value="management" className="space-y-4 sm:space-y-6">
+          <TabsContent value="management" forceMount={visitedTabs.has("management")} className="space-y-4 sm:space-y-6">
             {typeof window !== "undefined" && !window.electronAPI?.localStore ? (
               <Card>
                 <CardHeader>

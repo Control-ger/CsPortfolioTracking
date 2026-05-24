@@ -129,10 +129,34 @@ async function requestPayload(path, options = {}) {
   const method = String(options?.method || "GET").toUpperCase();
   const cacheKey = getCacheKey(path, method);
   let apiBase = await resolveApiBase();
+  const requestHeaders = new Headers(options?.headers || {});
+  const isDesktopSidecarBase = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/i.test(apiBase);
+  if (
+    isDesktopSidecarBase &&
+    typeof window !== "undefined" &&
+    window.electronAPI?.backend?.getAuthHeaders
+  ) {
+    try {
+      const authHeaders = await window.electronAPI.backend.getAuthHeaders();
+      if (authHeaders && typeof authHeaders === "object") {
+        Object.entries(authHeaders).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && String(value).trim() !== "") {
+            requestHeaders.set(String(key), String(value));
+          }
+        });
+      }
+    } catch (headerError) {
+      console.warn("[apiClient] failed to resolve desktop sidecar auth headers", headerError);
+    }
+  }
+  const requestOptions = {
+    ...options,
+    headers: requestHeaders,
+  };
   let response;
 
   try {
-    response = await fetch(`${apiBase}${path}`, options);
+    response = await fetch(`${apiBase}${path}`, requestOptions);
   } catch (fetchError) {
     const isDesktop = typeof window !== "undefined" && Boolean(window.electronAPI?.backend?.getBaseUrl);
     const shouldRetry =
@@ -145,7 +169,7 @@ async function requestPayload(path, options = {}) {
         const refreshedBase = await window.electronAPI.backend.getBaseUrl();
         if (refreshedBase) {
           apiBase = normalizeApiBase(refreshedBase);
-          response = await fetch(`${apiBase}${path}`, options);
+          response = await fetch(`${apiBase}${path}`, requestOptions);
         } else {
           throw fetchError;
         }

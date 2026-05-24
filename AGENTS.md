@@ -24,9 +24,10 @@ Verstöße dagegen sind aktiv rückgängig zu machen.
 
 | Datei | Status | Inhalt |
 |---|---|---|
+| `docs/architecture-overview.md` | FINAL | Zentrale Architektur + Doc-Navigator |
 | `docs/local-db-schema.md` | FINAL | SQLite Schema |
 | `docs/sync-api.md` | IN PROGRESS | Sync API Contract |
-| `docs/repo-restructure-plan.md` | FINAL | Monorepo Struktur |
+| `docs/archive/repo-restructure-plan.md` | HISTORICAL | Monorepo Struktur (Archiv) |
 | `docs/desktop-local-sync-plan.md` | IN PROGRESS | Sync Roadmap |
 | `docs/server-scale-plan.md` | IN PROGRESS | Server scaling architecture + migration plan |
 | `docs/fee-settings-plan.md` | IN PROGRESS | Fee/Break-even Features |
@@ -34,17 +35,19 @@ Verstöße dagegen sind aktiv rückgängig zu machen.
 | `backend/MVC_API_CONTRACT.md` | FINAL | Backend API Contract |
 | `backend/OBSERVABILITY_IMPLEMENTATION_PLAN.md` | IN PROGRESS | Observability Plan |
 | `backend/STRANGLER_ROLLOUT.md` | IN PROGRESS | Backend Rollout Plan |
-| `MONOREPO_MIGRATION_STATUS.md` | STATUS | Migrationsstatus |
+| `docs/archive/MONOREPO_MIGRATION_STATUS.md` | HISTORICAL | Migrationsstatus (Archiv) |
 
 **Regel:** Keine neue MD anlegen ohne Eintrag in dieser Tabelle.
 Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstellt.
 
 ## Agent-Start (Kurzcheck)
 1. Diese Datei (`AGENTS.md`) komplett lesen — sie ist die einzige Wahrheit.
-2. Aktive Docs-Tabelle prüfen bevor neue MDs angelegt werden.
-3. `README.md` nur für Setup/Install-Befehle konsultieren, nicht für Architektur.
-4. Bei Backend-Änderungen zuerst `backend/public/index.php` und betroffene Services prüfen.
-5. Nach strukturellen Änderungen diese Datei im selben Commit aktualisieren.
+2. `docs/architecture-overview.md` lesen (zentrale Architekturreferenz).
+3. Aktive Docs-Tabelle prüfen bevor neue MDs angelegt werden.
+4. Detaildokus nur ueber den Doc-Navigator in `docs/architecture-overview.md` aufrufen.
+5. `README.md` nur für Setup/Install-Befehle konsultieren, nicht für Architektur.
+6. Bei Backend-Änderungen zuerst `backend/public/index.php` und betroffene Services prüfen.
+7. Nach strukturellen Änderungen diese Datei im selben Commit aktualisieren.
 
 ## Projektstruktur (Monorepo)
 
@@ -91,7 +94,8 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 ## Server-Zuständigkeiten
 
 - Server ist zuständig für: Web-read-only Ansicht von Investments, Preisdaten (Cronjob holt stündlich CSFloat-Preise), Sync-Endpunkte.
-- Investments importieren (CSFloat API / Steam API) passiert ausschließlich lokal im Desktop — nie auf dem Server.
+- Investments werden fuer Web-Tracking serverseitig persistiert, aber der primaere Schreib-/Import-Trigger bleibt Desktop.
+- CSFloat/Steam Import-Flows duerfen vom Desktop ueber Sidecar/Server-Endpunkte orchestriert werden; sie sind kein direkter Web-Client-Flow.
 - Der CSFloat API Key bleibt lokal — er kommt nie auf den Server und nie in den Web-Build.
 - Web/PWA fragt Preise beim Server ab, nicht direkt bei CSFloat.
 - Desktop bezieht Preise über den lokalen PHP-Sidecar; dieser nutzt die serverseitige Preislogik bzw. die Backend-Preisdaten.
@@ -102,7 +106,7 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 |---|---|---|---|
 | Investments | SQLite lokal + Server-DB (via Sync) | nur Desktop (Server empfängt nur) | Desktop + Web |
 | Preise | Server-DB | nur Server/Cronjob | Desktop (via Sidecar) + Web |
-| CSFloat/Steam Import | nur lokal | nur Desktop | nur Desktop |
+| CSFloat/Steam Import-Trigger | Desktop-initiiert (lokal + via Sidecar/Server-Endpoint) | Desktop (primaer) / Server (verarbeitend) | Desktop |
 
 ## Desktop Local-first Leitlinien
 
@@ -123,7 +127,7 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 
 - `users` ist Steam-orientiert (`steam_id`, `steam_name`, `steam_avatar`, `last_login_at`).
 - Default-User wird aktuell ueber `UserRepository::ensureDefaultUser()` abgesichert.
-- Eine vollstaendige Steam OpenID Login/Callback Session-Implementierung ist als naechster Ausbaupunkt vorgesehen.
+- Steam OpenID Login/Callback + Session-Validierung ist implementiert; weiterer Ausbaupunkt bleibt die Haertung/Produktiv-Session-Strategie.
 
 ## Aenderungs-Workflow fuer Agents
 
@@ -138,6 +142,25 @@ Empfohlenes Update-Format am Dateiende:
 
 - `Updated: YYYY-MM-DD`
 - `Change: <kurze Beschreibung>`
+
+## Dokumentations-Governance (verbindlich)
+
+Globale/architekturelle Aenderungen muessen im selben Commit dokumentiert werden.
+
+Als global gelten insbesondere:
+- Aenderungen an zentralen Runtime-Boundaries (`backend/public/index.php`, `backend/desktop/index.php`, `apps/desktop/main.js`, `apps/desktop/preload.js`, `packages/shared/src/lib/dataSource.js`)
+- neue/geaenderte zentrale Service-/Repository-/Controller-Boundaries im Backend
+- neue oder umstrukturierte Top-Level-Struktur
+- neue oder verschobene zentrale Markdown-Dokumente
+
+Pflicht bei globalen Aenderungen:
+- `AGENTS.md` aktualisieren
+- `docs/architecture-overview.md` aktualisieren
+- neue/verschobene `.md`-Dateien in der Active-Docs-Tabelle registrieren (oder als HISTORICAL/Archiv markieren)
+
+Automatischer Guard:
+- Lokal vor Push: `npm run docs:guard`
+- CI erzwingt dieselbe Regel ueber `.github/workflows/docs-governance.yml`
 
 ## Release-Regel (verbindlich)
 
@@ -358,3 +381,37 @@ Updated: 2026-05-23
 Change: Verbindliche Release-Regel fuer Agents ergaenzt
 - "Release" bedeutet explizit Electron-Release mit Version-Bump, Tag `v<version>` und Push von Branch + Tag.
 - Klarstellung aufgenommen, dass ohne neuen Tag kein GitHub/Electron-Release erzeugt wird.
+
+---
+
+Updated: 2026-05-23
+Change: Zentrale Architekturreferenz eingefuehrt
+- Neue zentrale Datei `docs/architecture-overview.md` als Architekturreferenz + Doc-Navigator hinzugefuegt.
+- `AGENTS.md` Agent-Start aktualisiert: verpflichtender Verweis auf `docs/architecture-overview.md`.
+- Active-Docs-Tabelle um die zentrale Architekturdatei erweitert.
+
+---
+
+Updated: 2026-05-23
+Change: Historische Dokus in Archiv verschoben
+- `docs/repo-restructure-plan.md` wurde nach `docs/archive/repo-restructure-plan.md` verschoben.
+- `MONOREPO_MIGRATION_STATUS.md` wurde nach `docs/archive/MONOREPO_MIGRATION_STATUS.md` verschoben.
+- Referenzen in `AGENTS.md` und `docs/architecture-overview.md` auf Archivpfade umgestellt.
+
+---
+
+Updated: 2026-05-23
+Change: Dokumentations-Governance + Auto-Guard eingefuehrt
+- Verbindliche Governance-Regeln fuer globale/architekturelle Aenderungen ergaenzt.
+- Pflicht: Bei globalen Aenderungen immer `AGENTS.md` + `docs/architecture-overview.md` im selben Commit aktualisieren.
+- Neuer Guard-Check `npm run docs:guard` ueber `scripts/docs-guard.mjs`.
+- Neuer CI-Workflow `.github/workflows/docs-governance.yml` validiert die Regeln automatisch.
+
+---
+
+Updated: 2026-05-23
+Change: Review-Findings eingearbeitet (Security + Konsistenz)
+- Desktop-Sidecar erzwingt jetzt `X-Desktop-Sidecar-Secret` gegen `DESKTOP_SIDECAR_SECRET` in `backend/desktop/index.php`.
+- Electron Main fuegt Sidecar-Header fuer lokale Requests hinzu und nutzt ihn auch beim Health-Check.
+- Sidecar-Proxy fuer `GET /api/v1/cs-updates` reicht `since` jetzt korrekt durch.
+- Architekturdoku auf Live-Tracking-Modell praezisiert: Investments bleiben server-synchronisiert fuer Web-Tracking, Import-Trigger bleiben desktop-initiiert.

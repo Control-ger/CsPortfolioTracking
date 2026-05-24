@@ -1,7 +1,7 @@
 {
   "name": "cs-portfolio-tracking-monorepo",
   "private": true,
-  "version": "0.1.36",
+  "version": "0.1.37",
   "main": "apps/desktop/main.js",
   "type": "module",
   "repository": {
@@ -25,6 +25,7 @@
     "build:desktop": "vite build && electron-builder",
     "rebuild:desktop-native": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint .",
+    "docs:guard": "node scripts/docs-guard.mjs",
     "preview": "vite preview"
   },
   "build": {

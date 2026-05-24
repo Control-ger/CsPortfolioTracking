@@ -25,6 +25,18 @@ Wenn sich eine der folgenden Grundlagen aendert, muss `AGENTS.md` im selben Comm
 - verbindliche Datenmodellregeln
 - Auth-/Session-Strategie
 
+## Dokumentationspflicht bei globalen Aenderungen
+
+Bei globalen/architekturellen Aenderungen gilt zusaetzlich:
+- `docs/architecture-overview.md` im selben Commit aktualisieren
+- neue oder verschobene zentrale `.md`-Dateien in `AGENTS.md` registrieren
+
+Vor dem Push:
+- `npm run docs:guard` ausfuehren
+
+CI:
+- Der Workflow `.github/workflows/docs-governance.yml` validiert diese Regeln automatisch.
+
 ## Erwartetes Vorgehen bei Antworten
 
 - Kurz begruenden, welche Dateien warum geaendert werden.

@@ -79,6 +79,7 @@ let backendBaseUrl = null;
 let sidecarSecret = null;
 let updateCheckTimer = null;
 let cloudflareAccessLoginPromise = null;
+let sidecarRequestHeaderBridgeInstalled = false;
 const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const shouldAutoOpenDevTools = !app.isPackaged || process.env.DEBUG === "1";
 
@@ -827,6 +828,39 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getSidecarAuthHeaders() {
+  if (!sidecarSecret) {
+    return {};
+  }
+
+  return {
+    "X-Desktop-Sidecar-Secret": sidecarSecret,
+  };
+}
+
+function installSidecarRequestHeaderBridge() {
+  if (sidecarRequestHeaderBridgeInstalled) {
+    return;
+  }
+
+  sidecarRequestHeaderBridgeInstalled = true;
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["http://127.0.0.1:*/*", "http://localhost:*/*"] },
+    (details, callback) => {
+      const requestHeaders = { ...(details.requestHeaders || {}) };
+      const targetBase = String(backendBaseUrl || "").trim().toLowerCase();
+      const requestUrl = String(details.url || "").trim().toLowerCase();
+      const isSidecarRequest = targetBase !== "" && requestUrl.startsWith(`${targetBase}/`);
+
+      if (isSidecarRequest && sidecarSecret && !requestHeaders["X-Desktop-Sidecar-Secret"]) {
+        requestHeaders["X-Desktop-Sidecar-Secret"] = sidecarSecret;
+      }
+
+      callback({ requestHeaders });
+    },
+  );
+}
+
 async function waitForSidecarReady(baseUrl) {
   if (typeof fetch !== "function" || !baseUrl) {
     return;
@@ -836,6 +870,7 @@ async function waitForSidecarReady(baseUrl) {
     try {
       const response = await fetch(`${baseUrl}/api/v1/desktop/health`, {
         cache: "no-store",
+        headers: getSidecarAuthHeaders(),
       });
 
       if (response.ok) {
@@ -1144,6 +1179,7 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     console.log("[main] App ready");
     registerProtocol();
+    installSidecarRequestHeaderBridge();
     await startPhpSidecar().catch((error) => {
       console.warn("[sidecar] failed to start PHP backend", error);
     });
@@ -1329,6 +1365,10 @@ ipcMain.handle("cloudflare-access-login", async (event, serverUrl) => {
 
 ipcMain.handle("backend-base-url", async () => {
   return await ensurePhpSidecarForRenderer();
+});
+ipcMain.handle("backend-auth-headers", async () => {
+  await ensurePhpSidecarForRenderer();
+  return getSidecarAuthHeaders();
 });
 ipcMain.handle("app-updater-check", async () => {
   if (!app.isPackaged) {

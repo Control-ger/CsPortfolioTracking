@@ -1,61 +1,70 @@
 # Desktop Local DB Schema
 
-Ziel: Electron ist local-first. Schreibende Portfolio- und Watchlist-Aktionen landen zuerst in der lokalen SQLite-DB. Der Server liefert langfristig nur Preisdaten und synchronisiert User-/Investment-Daten.
+Status: FINAL
+Updated: 2026-05-23
 
-## Datei
+Goal: Desktop remains local-first. Portfolio and watchlist writes are persisted to local SQLite first, then synced.
 
-- Runtime: Electron `app.getPath("userData") + "/cs-investor-hub.sqlite"`
-- Zugriff: nur Electron Main Process
-- Renderer: nur ueber `window.electronAPI.localStore`
+## 1. Storage Location and Access Boundary
 
-## Tabellen
+- SQLite file: `Electron app.getPath("userData") + "/cs-investor-hub.sqlite"`
+- DB access: only Electron main process
+- Renderer access: only via `window.electronAPI.localStore` IPC bridge
 
-- `meta`: Schema-/Client-Metadaten sowie userbezogene Portfolio-Preferences (`portfolio_pref:<userId>:*`).
-- `items`: Lokale Item-Stammdaten und optionale Server-ID.
-- `investments`: Lokale Investments mit `dirty`, `revision`, `deleted` fuer Sync.
-- `watchlist_items`: Lokale Watchlist mit `dirty`, `revision`, `deleted` fuer Sync.
-- `item_prices`: Letzter bekannter Preis pro Item.
-- `price_history`: Historische Itempreise.
-- `portfolio_snapshots`: Lokale Portfolio-Snapshots.
-- `operations_log`: Idempotente Aenderungsqueue fuer spaeteren Push-Sync.
-- `steam_inventory_state`: letzter bekannter Steam-Inventarstatus je Asset (`in_inventory`, `last_seen_at`, `last_missing_at`).
-- `steam_csfloat_matches`: Vorschlags-/Statusspeicher fuer Steam <-> CSFloat Matching (`suggested`, `auto_linked`, `manual_confirmed`, `rejected`).
-- `sync_notifications`: persistente lokale Benachrichtigungen inkl. Read-Status (`read_at`).
+## 2. Local Tables (current implementation)
 
-## Neue Notification-Tabelle (Stand 2026-05-05)
+Implemented in `apps/desktop/src/localStore/index.js`:
+- `meta`
+- `items`
+- `investments`
+- `watchlist_items`
+- `item_prices`
+- `price_history`
+- `portfolio_snapshots`
+- `operations_log`
+- `steam_inventory_state`
+- `steam_csfloat_matches`
+- `sync_notifications`
 
-- Zweck: Persistente Sync-Hinweise statt nur fluechtigem UI-State.
-- Felder:
-  - `id` (TEXT, PK)
-  - `user_id` (TEXT)
-  - `category` (TEXT, z. B. `steam_sync`)
-  - `title` (TEXT)
-  - `message` (TEXT)
-  - `payload` (TEXT JSON)
-  - `created_at` (TEXT ISO)
-  - `read_at` (TEXT ISO, nullable)
-- Index:
-  - `idx_sync_notifications_user (user_id, created_at DESC, read_at)`
+## 3. Notification Persistence
 
-## Regeln
+Table: `sync_notifications`
 
-- Renderer darf SQLite nie direkt oeffnen.
-- Lokale Schreibaktionen erzeugen immer einen `operations_log`-Eintrag.
-- `investments.payload.bucket` ist die fachliche Zuordnung pro Position (`investment` oder `inventory`).
-- Server-IDs sind optional; lokale IDs sind stabile UUIDs.
-- Deletes sind soft deletes (`deleted = 1`), damit Sync sie pushen kann.
-- Preise sind server-/providerseitige Daten und werden lokal nur gespiegelt.
+Purpose:
+- persistent desktop notifications for sync/import flows
+- read state survives restart
 
-## Naechster Schritt
+Relevant fields:
+- `id`
+- `user_id`
+- `category`
+- `title`
+- `message`
+- `payload` (json as text)
+- `created_at`
+- `read_at` (nullable)
 
-Die Shared-Hooks werden schrittweise auf eine Runtime-Data-Source umgestellt:
+Read-state behavior:
+- single notification can be marked read
+- category-wide or global "mark all as read" is supported
 
-- Desktop: `window.electronAPI.localStore`
-- Web: `apiClient`
+## 4. Core Rules
 
-## Aktueller Read Path
+- Renderer never opens SQLite directly.
+- Local writes produce `operations_log` entries for sync push.
+- Entity links use stable local ids; server ids stay optional.
+- Deletes are soft where needed for sync reconciliation.
+- `investments.payload.bucket` is mandatory domain classification (`investment` or `inventory`).
 
-- `packages/shared/src/lib/dataSource.js` entscheidet zur Laufzeit zwischen Desktop-Store und Web/API.
-- `usePortfolio` liest im Desktop zuerst aus SQLite.
-- Wenn die lokale Investment-Tabelle leer ist, wird einmal aus dem Backend gelesen und mit `importInvestments` in SQLite geseedet.
-- Imports erzeugen keine `operations_log`-Eintraege; nur lokale Schreibaktionen tun das.
+## 5. Current Read Path (cross-checked)
+
+- Runtime source selection happens in `packages/shared/src/lib/dataSource.js`.
+- Desktop portfolio/watchlist reads come from local store first.
+- If local data is empty, desktop currently returns empty state with reason metadata.
+- There is no automatic server seeding path in current desktop read flow.
+
+## 6. Sync Relationship
+
+- `operations_log` stores pending local mutations for `/api/v1/sync/push`.
+- Pull results from `/api/v1/sync/pull` are merged back into local SQLite.
+- Imports and sync apply paths avoid recursive re-logging of the same records.

@@ -136,7 +136,7 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     (async () => {
       const targetUrl = event.notification?.data?.url || "/#/cs-updates";
-      const allClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of allClients) {
         const clientUrl = new URL(client.url);
         if (clientUrl.origin === self.location.origin) {
@@ -147,7 +147,7 @@ self.addEventListener("notificationclick", (event) => {
           return;
         }
       }
-      await clients.openWindow(targetUrl);
+      await self.clients.openWindow(targetUrl);
     })(),
   );
 });

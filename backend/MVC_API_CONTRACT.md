@@ -1,174 +1,333 @@
 # MVC API Contract (v1)
 
-## Base Path
-- `http://localhost/cs-api/index.php/api/v1`
+Status: FINAL  
+Updated: 2026-05-23
 
-## Response Schema
+## 1. Base Routing
+
+Canonical route prefix:
+- `/api/v1`
+
+Deployment/mount variants:
+- Server (web): typically `https://<host>/api/index.php/api/v1`
+- Desktop sidecar: `http://127.0.0.1:<dynamic-port>/api/v1`
+
+Important:
+- Frontend `apiClient` normalizes base URLs and always appends `/api/v1/...` paths.
+- Contract is defined by route paths, not by one fixed hostname.
+
+## 2. Response Envelope
+
 - Success: `{ "data": ..., "meta": ... }`
 - Error: `{ "error": { "code": "STRING_CODE", "message": "Human readable", "details": {} } }`
-- `meta.warnings[]` can contain external API warnings, e.g. CSFloat HTTP errors with fallback usage
+- Some endpoints include warning hints in `meta.warnings[]`.
 
-## Portfolio Endpoints
+## 3. User Scoping
+
+- `userId` can be resolved from:
+  - headers: `x-user-id` / `user-id`
+  - query/body: `userId` / `user_id`
+- Fallback user is `1`.
+
+## 4. Portfolio Endpoints
 
 ### `GET /portfolio/investments`
-- Returns enriched investments with backend-calculated metrics.
-- `data[]` fields:
-  - `id: int`
-  - `name: string`
-  - `type: string`
-  - `imageUrl: string|null`
-  - `buyPrice: float`
-  - `quantity: int`
-  - `livePrice: float|null`
-  - `priceSource: "csfloat"|"steam"|null`
-  - `displayPrice: float`
-  - `roi: float`
-  - `isLive: bool`
-  - `pricingStatus: "csfloat"|"steam"|"fallback"`
-  - `fundingMode: "cash_in"|"wallet_funded"`
-  - `costBasisTotal: float`
-  - `costBasisUnit: float`
-  - `netPositionValue: float`
-  - `netProfitEuro: float`
-  - `netRoiPercent: float`
-  - `breakEvenPriceNet: float|null`
-  - `appliedFees: { fxFeePercent, sellerFeePercent, withdrawalFeePercent, depositFeePercent, depositFeeFixedEur, acquisitionFees, source }`
+
+Query:
+- `scope?: "investments" | "all"` (default: `investments`)
+
+Returns enriched rows with backend calculations (fees, freshness, change windows, etc.).
+
+Key `data[]` fields:
+- `id`
+- `itemId`
+- `name`
+- `type`
+- `bucket` (`investment` | `inventory`)
+- `imageUrl`
+- `buyPrice`
+- `buyPriceUsd`
+- `quantity`
+- `baseLivePrice`
+- `livePrice`
+- `displayPrice`
+- `priceSource` (`csfloat` | `steam` | `null`)
+- `priceScope` (`item` | `instance`)
+- `priceStrategy`
+- `priceConfidence`
+- `sampleSize`
+- `roi`
+- `isLive`
+- `pricingStatus`
+- `totalInvested`
+- `currentValue`
+- `profitEuro`
+- `breakEvenPrice`
+- `fundingMode` (`cash_in` | `wallet_funded`)
+- `costBasisTotal`
+- `costBasisUnit`
+- `netPositionValue`
+- `netProfitEuro`
+- `netRoiPercent`
+- `breakEvenPriceNet`
+- `appliedFees`
+- `change24hEuro`, `change24hPercent`
+- `change7dEuro`, `change7dPercent`
+- `change30dEuro`, `change30dPercent`
+- `lastPriceUpdateAt`
+- `priceAgeSeconds`
+- `freshnessStatus`
+- `freshnessLabel`
+
+Meta:
+- `warnings[]`
+- `scope`
+- `readPath` (`legacy` | `scaling_primary`)
 
 ### `GET /portfolio/summary`
-- Returns aggregate KPIs for cards/charts.
-- `data` fields:
-  - `totalValue: float`
-  - `totalInvested: float`
-  - `totalQuantity: int`
-  - `totalProfitEuro: float`
-  - `totalRoiPercent: float`
-  - `totalNetValue: float`
-  - `totalNetProfitEuro: float`
-  - `totalNetRoiPercent: float`
-  - `isPositive: bool`
-  - `chartColor: string`
 
-## Settings Endpoints
+Query:
+- `scope?: "investments" | "all"`
 
-### `GET /settings/fees`
-- Returns fee settings (DB values or defaults).
-- `data` fields:
-  - `fxFeePercent: float`
-  - `sellerFeePercent: float`
-  - `withdrawalFeePercent: float` (default `2.5`)
-  - `depositFeePercent: float`
-  - `depositFeeFixedEur: float`
-  - `source: "db"|"defaults"`
+Key `data` fields:
+- `totalValue`
+- `totalInvested`
+- `totalQuantity`
+- `totalProfitEuro`
+- `totalRoiPercent`
+- `totalNetValue`
+- `totalNetProfitEuro`
+- `totalNetRoiPercent`
+- `isPositive`
+- `chartColor`
+- `liveItemsCount`
+- `staleLiveItemsCount`
+- `staleLiveItemsRatioPercent`
+- `freshestDataAgeSeconds`
+- `oldestDataAgeSeconds`
 
-### `PUT /settings/fees`
-- Body fields (camelCase and snake_case are accepted):
-  - `fxFeePercent|fx_fee_percent: float (0..100)`
-  - `sellerFeePercent|seller_fee_percent: float (0..100)`
-  - `withdrawalFeePercent|withdrawal_fee_percent: float (0..100)`
-  - `depositFeePercent|deposit_fee_percent: float (0..100)`
-  - `depositFeeFixedEur|deposit_fee_fixed_eur: float (>=0)`
-- Returns persisted settings in `data`.
-- Errors:
-  - `400 SETTINGS_VALIDATION_FAILED`
-  - `500 SETTINGS_SAVE_FAILED`
+Meta may include:
+- `warnings[]`
+- `scope`
+- `readPath`
+- optional `shadowRead`
 
 ### `GET /portfolio/history`
-- Returns timeline for charting.
-- `data[]` fields:
-  - `id: int`
-  - `date: YYYY-MM-DD`
-  - `wert: float`
+
+Returns chart timeline rows:
+- `id`
+- `date`
+- `wert`
+- `invested`
+- `growthPercent`
+
+### `GET /portfolio/composition`
+
+Query:
+- `scope?: "investments" | "all"`
+
+Returns portfolio composition dataset for charting.
+
+### `GET /portfolio/investments/{id}/history`
+
+Returns position history for one investment item id.
+
+### `GET /items/{id}/price-history`
+
+Query:
+- `fromDate?: ISO/DATETIME`
+
+Returns historical price points for one global item id.
 
 ### `PUT /portfolio/daily-value`
-- Body:
-  - `totalValue?: float`
-- Upserts the daily value; if omitted, backend computes from investments.
-- Returns:
-  - `date: YYYY-MM-DD`
-  - `totalValue: float`
 
-## Watchlist Endpoints
+Body:
+- `totalValue?: float`
+
+Returns:
+- `date`
+- `totalValue`
+- `growthPercent`
+
+### `PUT /portfolio/investments/{id}/exclude`
+
+Body:
+- `exclude: boolean`
+
+Returns:
+- `success`
+- `investmentId`
+- `excluded`
+
+### `PUT /portfolio/investments/{id}/bucket`
+
+Body:
+- `bucket: "investment" | "inventory"`
+
+Returns:
+- `success`
+- `investmentId`
+- `bucket`
+
+Note:
+- `PortfolioController::updateInvestmentOverpay(...)` exists in code, but no public `/api/v1/portfolio/investments/{id}/overpay` route is currently registered in `backend/public/index.php`.
+
+## 5. Sync Endpoints
+
+### `GET /sync/pull`
+
+Query:
+- `since?: ISO timestamp`
+- `limit?: int` (service caps apply)
+- optional `userId`
+
+Returns sync payload with:
+- `serverTime`
+- `changes[]`
+- additional counters/metadata (service-dependent)
+
+### `POST /sync/push`
+
+Body:
+- `changes: array` (required)
+- optional `userId`
+
+Each change contains (contract level):
+- `op`
+- `table`
+- `id`
+- `payload`
+- `clientRevision`
+- `idempotencyKey`
+- `ts`
+
+Returns per-change apply status from sync service.
+
+## 6. Watchlist Endpoints
 
 ### `GET /watchlist`
-- Returns watchlist items with backend-calculated trend data.
-- Query:
-  - `syncLive?: 1|true` updates live prices from CSFloat before responding
-- `data[]` fields:
-  - `id: int`
-  - `name: string`
-  - `type: string`
-  - `imageUrl: string|null`
-  - `currentPrice: float|null`
-  - `priceSource: "csfloat"|"steam"|null`
-  - `priceChange: float|null`
-  - `priceChangePercent: float|null`
-  - `priceHistory: { date: YYYY-MM-DD, wert: float }[]`
-  - `trend: "up"|"down"|null`
-  - `changeLabel: string`
+
+Query:
+- `syncLive?: 1|true` (attempt live sync before response)
+
+Returns rows with price/trend fields and optional `meta.warnings[]`.
 
 ### `GET /watchlist/search`
-- Query:
-  - `query?: string` (min. 2 chars when provided)
-  - `limit?: int` (default `6`, max `12`)
-  - `page?: int` (default `1`)
-  - `sortBy?: string` (`relevance`, `name_asc`, `name_desc`, `price_asc`, `price_desc`)
-  - `itemType?: string` (`all`, `skin`, `case`, `souvenir_package`, `sticker_capsule`, `sticker`, `patch`, `music_kit`, `agent`, `key`, `terminal`, `charm`, `graffiti`, `tool`, `container`, `other`)
-  - `wear?: string` (`all`, `factory_new`, `minimal_wear`, `field_tested`, `well_worn`, `battle_scarred`) only effective for `itemType=skin`
-- Backend flow:
-  - candidate lookup via Steam Market search
-  - exact live-price validation via CSFloat
-  - Steam fallback if CSFloat is unavailable or returns an API error
-  - backend classification for all supported CS item categories
-- Special behavior:
-  - with empty `query` and a concrete `itemType`, endpoint switches to browse mode
-- `data` fields:
-  - `items: []`
-  - `page: int`
-  - `limit: int`
-  - `totalItems: int`
-  - `totalPages: int`
-  - `sortBy: string`
-  - `browseMode: bool`
-- `data.items[]` fields:
-  - `marketHashName: string`
-  - `displayName: string`
-  - `itemType: string`
-  - `itemTypeLabel: string`
-  - `marketTypeLabel: string`
-  - `wear: string|null`
-  - `wearLabel: string|null`
-  - `iconUrl: string|null`
-  - `priceSource: "csfloat"|"steam"|null`
-  - `livePriceEur: float`
-  - `livePriceUsd: float`
+
+Query:
+- `query?: string`
+- `itemType?: string`
+- `wear?: string`
+- `sortBy?: string`
+- `limit?: int`
+- `page?: int`
+
+Returns paged catalog/search result with `items[]`.
 
 ### `POST /watchlist`
-- Body:
-  - `name: string` (required)
-  - `type?: string` (default: `skin`)
-- Returns:
-  - `id: int`
-  - `currentPrice: float|null`
-  - `isLiveSynced: bool`
-- Errors:
-  - `409 WATCHLIST_CONFLICT` for duplicates
-  - `400 WATCHLIST_CREATE_FAILED` for invalid payload
+
+Body:
+- `name: string` (required)
+- `type?: string`
+
+### `POST /watchlist/batch`
+
+Body:
+- `items: array`
 
 ### `DELETE /watchlist/{id}`
-- Returns:
-  - `deleted: true`
-- Errors:
-  - `404 WATCHLIST_NOT_FOUND`
+
+Deletes one watchlist row.
 
 ### `POST /watchlist/prices/refresh`
-- Triggers server-side refresh from external APIs.
-- Returns:
-  - `updated: int`
-  - `totalItems: int`
 
-## React View-only Mapping
-- `src/hooks/usePortfolio.jsx`: only orchestrates endpoint calls and stores response state.
-- `src/components/ItemDetailPanel.jsx`: no live-price fetching; shows provided `item`.
-- `src/components/ItemSearch.jsx`: no pricing/search rules; only renders API search results and selection state.
-- `src/components/Watchlist.jsx`: no table init / SQL-shape assumptions; consumes API DTO only and can request live-sync via query flag.
-- `src/components/WatchlistOverview.jsx`: no business calculations; formatting only.
+Triggers server-side watchlist price refresh.
+
+## 7. Settings Endpoints
+
+### `GET /settings/fees`
+
+Returns:
+- `fxFeePercent`
+- `sellerFeePercent`
+- `withdrawalFeePercent`
+- `depositFeePercent`
+- `depositFeeFixedEur`
+- `source` (`db` | `defaults`)
+
+### `PUT /settings/fees`
+
+Accepted body keys (camelCase and snake_case):
+- `fxFeePercent` / `fx_fee_percent`
+- `sellerFeePercent` / `seller_fee_percent`
+- `withdrawalFeePercent` / `withdrawal_fee_percent`
+- `depositFeePercent` / `deposit_fee_percent`
+- `depositFeeFixedEur` / `deposit_fee_fixed_eur`
+
+Validation:
+- percentages `0..100`
+- fixed fee `>= 0`
+
+### `GET /settings/price-source`
+
+Returns user preference mode (`auto` | `csfloat` | `steam`).
+
+### `PUT /settings/price-source`
+
+Body:
+- `mode: "auto" | "csfloat" | "steam"`
+
+### `GET /settings/csfloat-api-key`
+
+Returns key status (`configured`, `lastFour`).
+
+### `POST /settings/csfloat-api-key`
+
+Server API expects encrypted payload (`encryptedKey`).
+Desktop app primarily writes CSFloat keys via Electron safe-storage IPC.
+
+## 8. CS Updates + Push Endpoints
+
+### `GET /cs-updates`
+
+Query:
+- `limit?: int` (default 30, max 100)
+- `before?: date string`
+- `since?: date string`
+
+Returns:
+- `data.items[]` with feed + AI rating fields
+- `meta`: `fetchedAt`, `sourceMode`, `nextBefore`, `hasMore`, `defaultWindowDays`, `staleAfterSeconds`, `bannerVisibleHours`, `isStale`
+
+### `GET /push/public-key`
+
+Returns web-push VAPID public key status.
+
+### `POST /push/subscribe`
+
+Body:
+- `userId`
+- `subscription` (PushSubscription JSON)
+
+### `POST /push/unsubscribe`
+
+Body:
+- `userId`
+- `endpoint`
+
+## 9. Frontend Mapping (View-only Boundaries)
+
+- `packages/shared/src/lib/dataSource.js`
+  - chooses runtime data source (desktop local store vs API), no backend business logic duplication.
+- `packages/shared/src/hooks/usePortfolio.jsx`
+  - orchestrates portfolio loading and caching only.
+- `packages/shared/src/components/ItemDetailPanel.jsx`
+  - renders server-provided item fields.
+- `packages/shared/src/components/Watchlist.jsx`
+  - renders watchlist DTOs, requests optional live sync via query flag.
+- `packages/shared/src/components/WatchlistOverview.jsx`
+  - presentation-only watchlist overview.
+- `packages/shared/src/components/CsUpdatesFeed.jsx`
+  - feed rendering, refresh/load-older actions, realtime state handling via hook.
+- `packages/shared/src/pages/SettingsPage.jsx`
+  - settings forms calling `/settings/*` and `/push/*` APIs.

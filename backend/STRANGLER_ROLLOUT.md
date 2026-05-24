@@ -1,42 +1,48 @@
-# Strangler Rollout Guide
+# Strangler Rollout Status
 
-## Goal
-Migrate from script-style PHP endpoints to strict MVC routes without breaking the running frontend.
+Status: IN PROGRESS
+Updated: 2026-05-23
 
-## Completed in this iteration
-1. Added front controller: `backend/public/index.php`
-2. Added API router and versioned routes under `/api/v1`
-3. Added OOP layers:
-   - Controllers
-   - Services
-   - Repositories
-   - DTOs
-   - External API adapters
-4. Switched React data access to the new API contract.
+## 1. Original Goal
 
-## Parallel Run (Legacy + MVC)
-- Legacy files remain available:
-  - `backend/getPortfolioData.php`
-  - `backend/getPortfolioHistory.php`
-  - `backend/manage_watchlist.php`
-  - `backend/get_watchlist_data.php`
-  - `backend/savePortfolioValue.php`
-- New routes run through:
-  - `backend/index.php` -> `backend/public/index.php`
+Migrate from script-style PHP endpoints to versioned MVC routing without frontend breakage.
 
-## Risk Controls
-- Keep payload compatibility (`wert` in history) for existing chart component behavior.
-- Keep legacy endpoints untouched during transition.
-- Centralize response schema to reduce frontend branching.
-- Use server-side upsert logic to avoid duplicate daily entries.
+## 2. Current Cutover State (cross-checked)
 
-## Cutover Criteria
-- All frontend calls use `/api/v1` only.
-- No React component contains domain calculations or external-price decisions.
-- No runtime table creation calls from frontend flows.
-- Monitoring shows stable response times and no elevated 4xx/5xx rates.
+### 2.1 MVC front controller is active
 
-## Final Cleanup
-1. Remove dead frontend services (`csfloatService.js`, `currencyService.js`) if no longer imported.
-2. Deprecate and remove legacy PHP scripts after one stable release cycle.
-3. Move `CREATE TABLE IF NOT EXISTS` from runtime repositories to proper DB migrations.
+- Canonical entry: `backend/public/index.php`
+- Compatibility wrapper remains: `backend/index.php` -> `backend/public/index.php`
+
+### 2.2 Versioned routes are active
+
+- API contract runs under `/api/v1/...`
+- Portfolio, watchlist, sync, settings, auth, cs-updates, push, debug, observability routes are registered in `backend/public/index.php`
+
+### 2.3 Legacy script endpoints from early migration docs are no longer present
+
+The following files are not present in current repo root anymore:
+- `backend/getPortfolioData.php`
+- `backend/getPortfolioHistory.php`
+- `backend/manage_watchlist.php`
+- `backend/get_watchlist_data.php`
+- `backend/savePortfolioValue.php`
+
+## 3. Residual Cleanup Items
+
+1. Remove dead frontend legacy helper:
+- `packages/shared/src/hooks/ajax.jsx` still references `/api/getPortfolioData.php` but is not used.
+
+2. Align overpay endpoint contract:
+- frontend `apiClient` contains `/api/v1/portfolio/investments/{id}/overpay`
+- route is currently not registered in `backend/public/index.php`
+- either add backend route or remove client call path.
+
+3. Decide whether `backend/index.php` compatibility wrapper should remain permanently or be retired after deployment policy confirms no direct dependency.
+
+## 4. Done Criteria for this document
+
+This rollout can be marked DONE when:
+1. no dead legacy endpoint references remain in shared/frontend code,
+2. API contract and registered routes are fully aligned,
+3. compatibility wrapper decision (`backend/index.php`) is explicitly finalized.

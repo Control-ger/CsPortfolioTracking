@@ -1,6 +1,28 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchPortfolioData } from "@shared/lib/dataSource.js";
 
+const portfolioViewCache = new Map();
+const PORTFOLIO_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function resolveCacheKey(options = {}) {
+  const scope = String(options.scope || "default");
+  const rowScope = String(options.rowScope || "default");
+  return `${scope}::${rowScope}`;
+}
+
+function getValidPortfolioSnapshot(cacheKey) {
+  const snapshot = portfolioViewCache.get(cacheKey) || null;
+  if (!snapshot) {
+    return null;
+  }
+  const updatedAt = Number(snapshot.updatedAt || 0);
+  if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > PORTFOLIO_CACHE_TTL_MS) {
+    portfolioViewCache.delete(cacheKey);
+    return null;
+  }
+  return snapshot;
+}
+
 function mergeWarnings(...warningGroups) {
   const warningsByKey = new Map();
 
@@ -39,6 +61,9 @@ function mergeWarnings(...warningGroups) {
 
 export function usePortfolio(options = {}) {
   const abortControllerRef = useRef(null);
+  const cacheKey = resolveCacheKey(options);
+  const cachedSnapshot = getValidPortfolioSnapshot(cacheKey);
+
   const [investments, setInvestments] = useState([]);
   const [authRequired, setAuthRequired] = useState(true); // Default to auth required until checked
   const [isLoading, setIsLoading] = useState(true);
@@ -63,7 +88,21 @@ export function usePortfolio(options = {}) {
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
 
-  const loadData = useCallback(async () => {
+  useEffect(() => {
+    if (!cachedSnapshot) {
+      return;
+    }
+
+    setInvestments(cachedSnapshot.investments || []);
+    setAuthRequired(Boolean(cachedSnapshot.authRequired));
+    setStats(cachedSnapshot.stats || {});
+    setPortfolioHistory(cachedSnapshot.portfolioHistory || []);
+    setWarnings(cachedSnapshot.warnings || []);
+    setError("");
+    setIsLoading(false);
+  }, [cacheKey, cachedSnapshot]);
+
+  const loadData = useCallback(async ({ showLoading = true } = {}) => {
     // Abort previous request if still pending
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -71,7 +110,9 @@ export function usePortfolio(options = {}) {
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    setIsLoading(true);
+    if (showLoading) {
+      setIsLoading(true);
+    }
     try {
       const { rows: rowsResponse, summary: summaryResponse, history, requiresAuth } =
         await fetchPortfolioData({
@@ -88,13 +129,21 @@ export function usePortfolio(options = {}) {
       setInvestments(rowsResponse?.data || []);
       setStats(summaryResponse?.data || {});
       setPortfolioHistory(history || []);
-      setWarnings(
-        mergeWarnings(
-          rowsResponse?.meta?.warnings || [],
-          summaryResponse?.meta?.warnings || []
-        )
+      const nextWarnings = mergeWarnings(
+        rowsResponse?.meta?.warnings || [],
+        summaryResponse?.meta?.warnings || []
       );
+      setWarnings(nextWarnings);
       setError("");
+
+      portfolioViewCache.set(cacheKey, {
+        investments: rowsResponse?.data || [],
+        authRequired: requiresAuth || false,
+        stats: summaryResponse?.data || {},
+        portfolioHistory: history || [],
+        warnings: nextWarnings,
+        updatedAt: Date.now(),
+      });
     } catch (err) {
       // Don't update state for abort errors
       if (err.name === 'AbortError') return;
@@ -103,7 +152,7 @@ export function usePortfolio(options = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [options.rowScope, options.scope]);
+  }, [cacheKey, options.rowScope, options.scope]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -115,14 +164,23 @@ export function usePortfolio(options = {}) {
   }, []);
 
   const removeInvestmentFromView = useCallback((investmentId) => {
-    setInvestments((currentInvestments) =>
-      currentInvestments.filter((investment) => investment.id !== investmentId)
-    );
-  }, []);
+    setInvestments((currentInvestments) => {
+      const nextInvestments = currentInvestments.filter((investment) => investment.id !== investmentId);
+      const currentCache = portfolioViewCache.get(cacheKey);
+      if (currentCache) {
+        portfolioViewCache.set(cacheKey, {
+          ...currentCache,
+          investments: nextInvestments,
+          updatedAt: Date.now(),
+        });
+      }
+      return nextInvestments;
+    });
+  }, [cacheKey]);
 
   useEffect(() => {
-    void Promise.resolve().then(loadData);
-  }, [loadData]);
+    void Promise.resolve().then(() => loadData({ showLoading: !cachedSnapshot }));
+  }, [cachedSnapshot, loadData]);
 
   return {
     enrichedInvestments: investments,

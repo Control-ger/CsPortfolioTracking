@@ -14,6 +14,31 @@ import { Button } from "@shared/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { WatchlistItemModal } from "./WatchlistItemModal";
 
+let watchlistViewSnapshot = {
+  loaded: false,
+  items: [],
+  warnings: [],
+  updatedAt: 0,
+};
+const WATCHLIST_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function getValidWatchlistSnapshot() {
+  const updatedAt = Number(watchlistViewSnapshot.updatedAt || 0);
+  if (!watchlistViewSnapshot.loaded || !Number.isFinite(updatedAt)) {
+    return null;
+  }
+  if (Date.now() - updatedAt > WATCHLIST_CACHE_TTL_MS) {
+    watchlistViewSnapshot = {
+      loaded: false,
+      items: [],
+      warnings: [],
+      updatedAt: 0,
+    };
+    return null;
+  }
+  return watchlistViewSnapshot;
+}
+
 function WatchlistItemsLoadingSkeleton() {
   return (
     <Card>
@@ -49,12 +74,13 @@ function WatchlistItemsLoadingSkeleton() {
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const navigate = useNavigate();
-  const [watchlistItems, setWatchlistItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const validSnapshot = getValidWatchlistSnapshot();
+  const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
+  const [loading, setLoading] = useState(() => !validSnapshot);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
-  const [warnings, setWarnings] = useState([]);
+  const [warnings, setWarnings] = useState(() => validSnapshot?.warnings || []);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
@@ -62,16 +88,25 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const hasFiniteNumber = (value) => Number.isFinite(Number(value));
   const combinedWarnings = useMemo(() => [...warnings], [warnings]);
 
-  const loadWatchlistData = async () => {
+  const loadWatchlistData = async ({ showLoading = true } = {}) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       setError("");
 
       const response = await fetchWatchlistData({ syncLive: true });
       const nextItems = response?.data || [];
+      const nextWarnings = response?.meta?.warnings || [];
 
       setWatchlistItems(nextItems);
-      setWarnings(response?.meta?.warnings || []);
+      setWarnings(nextWarnings);
+      watchlistViewSnapshot = {
+        loaded: true,
+        items: nextItems,
+        warnings: nextWarnings,
+        updatedAt: Date.now(),
+      };
       setSelectedItem((currentSelection) => {
         if (!currentSelection) {
           return null;
@@ -90,6 +125,18 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           const fallbackItems = fallbackResponse?.data || [];
 
           setWatchlistItems(fallbackItems);
+          watchlistViewSnapshot = {
+            loaded: true,
+            items: fallbackItems,
+            warnings: [
+              {
+                code: "WATCHLIST_SYNC_FALLBACK",
+                label: "Live-Sync eingeschraenkt",
+                message: "Watchlist wurde ohne Live-Sync geladen. Bitte spaeter erneut versuchen.",
+              },
+            ],
+            updatedAt: Date.now(),
+          };
           setWarnings([
             {
               code: "WATCHLIST_SYNC_FALLBACK",
@@ -113,7 +160,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   };
 
   useEffect(() => {
-    loadWatchlistData();
+    void loadWatchlistData({ showLoading: !getValidWatchlistSnapshot() });
   }, []);
 
   useEffect(() => {

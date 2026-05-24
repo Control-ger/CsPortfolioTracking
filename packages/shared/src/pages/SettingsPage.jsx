@@ -118,7 +118,7 @@ export function SettingsPage() {
   const [webPushConfigured, setWebPushConfigured] = useState(false);
   const [webPushSubscribed, setWebPushSubscribed] = useState(false);
   const [webPushPermission, setWebPushPermission] = useState("default");
-  const [webPushPublicKey, setWebPushPublicKey] = useState("");
+  const [_webPushPublicKey, setWebPushPublicKey] = useState("");
   const [webPushError, setWebPushError] = useState("");
   const [webPushSuccess, setWebPushSuccess] = useState("");
   const desktopRuntime = isDesktopRuntime();

@@ -7,6 +7,31 @@ import { fetchWatchlistData } from "@shared/lib/dataSource.js";
 import { cn } from "@shared/lib/utils";
 import { UI } from "@shared/lib/constants";
 
+let watchlistOverviewSnapshot = {
+  loaded: false,
+  items: [],
+  warnings: [],
+  updatedAt: 0,
+};
+const WATCHLIST_OVERVIEW_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function getValidWatchlistOverviewSnapshot() {
+  const updatedAt = Number(watchlistOverviewSnapshot.updatedAt || 0);
+  if (!watchlistOverviewSnapshot.loaded || !Number.isFinite(updatedAt)) {
+    return null;
+  }
+  if (Date.now() - updatedAt > WATCHLIST_OVERVIEW_CACHE_TTL_MS) {
+    watchlistOverviewSnapshot = {
+      loaded: false,
+      items: [],
+      warnings: [],
+      updatedAt: 0,
+    };
+    return null;
+  }
+  return watchlistOverviewSnapshot;
+}
+
 // Hilfsfunktion: Berechne Top Mover (2 Gewinner, 2 Verlierer)
 const calculateTopMovers = (items) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -89,19 +114,27 @@ export const WatchlistOverview = ({
   allowExpand = true,
   onWarningsChange,
 }) => {
-  const [allWatchlistItems, setAllWatchlistItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [warnings, setWarnings] = useState([]);
+  const validSnapshot = getValidWatchlistOverviewSnapshot();
+  const [allWatchlistItems, setAllWatchlistItems] = useState(() => validSnapshot?.items || []);
+  const [loading, setLoading] = useState(() => !validSnapshot);
+  const [warnings, setWarnings] = useState(() => validSnapshot?.warnings || []);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     const loadWatchlistData = async () => {
       try {
-        setLoading(true);
+        setLoading(!getValidWatchlistOverviewSnapshot());
         const response = await fetchWatchlistData();
         const items = response?.data || [];
+        const nextWarnings = response?.meta?.warnings || [];
         setAllWatchlistItems(items);
-        setWarnings(response?.meta?.warnings || []);
+        setWarnings(nextWarnings);
+        watchlistOverviewSnapshot = {
+          loaded: true,
+          items,
+          warnings: nextWarnings,
+          updatedAt: Date.now(),
+        };
       } catch (err) {
         console.error("Fehler beim Laden der Watchlist:", err);
         setWarnings([]);

@@ -44,6 +44,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     exit;
 }
 
+$expectedSidecarSecret = trim((string) (getenv('DESKTOP_SIDECAR_SECRET') ?: ($_ENV['DESKTOP_SIDECAR_SECRET'] ?? '')));
+$providedSidecarSecret = trim((string) ($_SERVER['HTTP_X_DESKTOP_SIDECAR_SECRET'] ?? ''));
+
+if ($expectedSidecarSecret === '') {
+    JsonResponseFactory::error(
+        'DESKTOP_SIDECAR_SECRET_MISSING',
+        'Desktop sidecar secret missing in runtime environment.',
+        [],
+        503
+    );
+    exit;
+}
+
+if ($providedSidecarSecret === '' || !hash_equals($expectedSidecarSecret, $providedSidecarSecret)) {
+    JsonResponseFactory::error(
+        'DESKTOP_SIDECAR_UNAUTHORIZED',
+        'Missing or invalid desktop sidecar secret.',
+        [],
+        401
+    );
+    exit;
+}
+
 $request = Request::fromGlobals();
 $steamAuthController = new DesktopSteamAuthController();
 $csFloatController = new DesktopCsFloatController(new CsFloatTradeClient());
@@ -671,6 +694,9 @@ $router->register('GET', '/api/v1/cs-updates', static function (Request $request
     }
     if (isset($request->query['before'])) {
         $query['before'] = (string) $request->query['before'];
+    }
+    if (isset($request->query['since'])) {
+        $query['since'] = (string) $request->query['since'];
     }
 
     $proxied = $proxyUpstreamGet('/api/v1/cs-updates', $query);

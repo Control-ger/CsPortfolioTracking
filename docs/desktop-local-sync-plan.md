@@ -1,199 +1,69 @@
-```markdown
-# Desktop-local-first Sync Plan — Umsetzungsschritte für nächsten Agenten
+# Desktop Local-First Sync Plan
 
-Ziel: Desktop (Electron) als primärer, offline-fähiger Client mit lokaler Persistenz (SQLite) und robustem bidirektionalem Sync (push/pull) zum Server. Shared-Business‑Logic liegt in `packages/shared`. Web bleibt read-only bzw. optional PWA‑Cache.
+Status: IN PROGRESS
+Updated: 2026-05-23
 
-Wichtig: Bei jeder strukturellen Änderung (Top-Level-Ordner, Datenmodell, Auth-Strategie) MUSS `AGENTS.md` im selben Commit aktualisiert werden.
+## 1. Goal
 
-Kurzüberblick (High Level)
-- Phase 0: Design & API‑Contract
-- Phase 1: Quick fallback (low-risk) — macht UI offline-fähig mit Cache
-- Phase 2: Local persistence MVP (SQLite) für Desktop
-- Phase 3: Sync Engine + Server sync endpoints (push/pull)
-- Phase 4: Hardening (Verschlüsselung, Key‑Storage, Tests)
-- Phase 5: Optional PWA‑offline (IndexedDB)
+Keep desktop as primary write client with local-first UX and reliable bidirectional sync against server APIs.
 
-Akzeptanzkriterien (Definition of Done)
-- Desktop speichert Portfolio/Watchlist/Inventory lokal und zeigt sie an ohne Server.
-- Sync‑Engine kann Änderungen pushen/pullen, einfache Konflikte automatisch lösen, komplexe Konflikte markieren.
-- Business‑Logic (Wertberechnung u.Ä.) liegt in `packages/shared` und ist per Unit‑Tests abgesichert.
-- Server bietet `/api/v1/prices` und Sync‑endpoints `/api/v1/sync/pull` + `/api/v1/sync/push`.
+## 2. Current Architecture (verified)
 
-Phase 0 — Design & Vertrag (1–2 Tage)
-- Task 0.1: Erstelle `docs/sync-api.md` (OpenAPI minimal) — Push/Pull Schema.
-- Task 0.2: Definiere SQLite Schema inkl. sync‑Metafeldern.
-- Deliverables:
-  - `docs/sync-api.md`
-  - `docs/local-db-schema.md`
+### 2.1 Desktop runtime boundary
 
-Phase 1 — Quick fallback (0.5–1 Tag) — unblocker
-- Ziel: UI zeigt gecachte lokale Daten wenn API unreachable.
-- Tasks:
-  - `packages/shared/src/lib/localCache.js` implementieren (API: get/set/remove).
-  - `packages/shared/src/lib/apiClient.js` erweitern: bei fetch‑Fehler fallback auf localCache.
-  - Desktop: localCache über Preload/Electron filesystem (JSON) implementieren; Web: IndexedDB/localStorage.
-- Verifikation:
-  - Electron offline → UI zeigt Cache oder freundliche Offline‑Meldung.
+- Electron main process starts local PHP sidecar (`backend/desktop/index.php`) on `127.0.0.1` with dynamic port.
+- Sidecar access is protected by per-start secret (`X-Desktop-Sidecar-Secret`) validated in sidecar runtime.
+- Renderer talks to backend via sidecar base URL from preload bridge.
 
-Phase 2 — Local persistence MVP (3–7 Tage)
-- Ziel: Desktop persistiert in SQLite; Renderer liest standardmäßig daraus.
-- Tasks:
-  - `apps/desktop/src/localStore/` (better-sqlite3 wrapper) erstellen: init, migrations, CRUD-APIs.
-  - `apps/desktop/preload.js`: sichere IPC‑APIs exportieren (read/write/sync control).
-  - `packages/shared/src/lib/logic.js`: deterministische Business‑Logic exportieren (Value calc, Formatter).
-  - Renderer Hooks anpassen: bei Desktop lokale APIs nutzen (feature‑flag `useIsDesktopApp()`).
-- Verifikation:
-  - Erstelle Investition in Desktop UI → DB‑File enthält den Eintrag; Restart behält Daten.
+### 2.2 Local persistence
 
-Phase 3 — Sync Engine + Server endpoints (5–10 Tage)
-- Ziel: Zuverlässiger bidirektionaler Sync (incremental) mit Konfliktbehandlung.
-- Server (PHP) — Endpoints:
-  - `GET  /api/v1/sync/pull?since=TIMESTAMP`
-  - `POST /api/v1/sync/push`
-  - `GET  /api/v1/prices/latest?symbols=...`
-- Client (Desktop) — Sync Engine:
-  - Background Worker (worker thread / child process) mit Queue, retry/backoff, batching.
-  - operations_log in local DB für idempotente Änderungen.
-  - Apply responses: applied | conflict | rejected.
-- Conflict Strategy: LWW für einfache Felder; bei komplexen Konflikten markieren und UI zur Lösung anbieten.
-- Verifikation:
-  - Local change -> push -> server applies -> client pull confirms revision.
-  - Simulierter Konflikt → Konfliktmarkierung sichtbar.
+Local SQLite lives in Electron `userData` and is accessed only through `window.electronAPI.localStore`.
 
-Phase 4 — Hardening, Encryption, Tests (3–7 Tage)
-- Tasks:
-  - Schlüsselmanagement: `keytar` für CSFloat API key / encryption key.
-  - Encrypt sensitive fields in DB if required (AES‑GCM).
-  - Unit Tests (Jest) für `packages/shared` logic.
-  - Integration tests: mock server / sync roundtrip.
-  - Observability: Telemetry events for sync errors/queue length.
+Core local tables:
+- `investments`, `watchlist_items`
+- `operations_log` (pending mutations)
+- `sync_notifications` (persistent read/unread notifications)
+- price/history and metadata tables (see `docs/local-db-schema.md`)
 
-Phase 5 — PWA offline (optional, 3–6 Tage)
-- IndexedDB (Dexie) cache für Web read‑only fallback.
-- ServiceWorker: stale‑while‑revalidate für prices.
+### 2.3 Sync engine
 
-Datenmodell / Sync‑Metadaten (empfohlen)
-- Für jede Entität (investments, watchlist, inventory):
-  - id TEXT PRIMARY KEY
-  - user_id TEXT
-  - payload domain fields
-  - updated_at TEXT (ISO)
-  - revision INTEGER DEFAULT 1
-  - deleted INTEGER DEFAULT 0
-  - conflict INTEGER DEFAULT 0
-- Zusätzliche Tabellen:
-  - operations_log(id, client_id, op_type, table_name, record_id, payload JSON, created_at, idempotency_key, applied_at)
-  - sync_meta(key, last_sync_at)
+Shared desktop sync client:
+- `packages/shared/src/lib/desktopSync.js`
 
-Beispiel SQLite SQL (Minimal):
-```sql
-CREATE TABLE investments (
-  id TEXT PRIMARY KEY,
-  user_id TEXT,
-  name TEXT,
-  qty INTEGER,
-  price_usd REAL,
-  updated_at TEXT,
-  revision INTEGER DEFAULT 1,
-  deleted INTEGER DEFAULT 0,
-  conflict INTEGER DEFAULT 0
-);
-CREATE TABLE operations_log (
-  id TEXT PRIMARY KEY,
-  client_id TEXT,
-  op_type TEXT,
-  table_name TEXT,
-  record_id TEXT,
-  payload TEXT,
-  created_at TEXT,
-  idempotency_key TEXT,
-  applied_at TEXT
-);
-CREATE TABLE sync_meta (key TEXT PRIMARY KEY, last_sync_at TEXT);
-```
+Server endpoints:
+- `POST /api/v1/sync/push`
+- `GET /api/v1/sync/pull`
 
-Sync‑Protokoll (kurz)
-- Push: POST /api/v1/sync/push
-  - Body: { clientId, changes: [{ op:'upsert'|'delete', table, id, payload, clientRevision, idempotencyKey, ts }] }
-  - Response: per change { status:'applied'|'conflict'|'rejected', serverRevision, serverPayload }
-- Pull: GET /api/v1/sync/pull?since=TIMESTAMP
-  - Response: { changes: [{ table, id, op, payload, serverRevision, updatedAt }], serverTime }
+Behavior:
+- push pending `operations_log` entries
+- apply pull changes into local store
+- mark successful/conflict-applied local operations as applied
+- cooldown and background auto-sync (`runDesktopSyncNowIfDue`, `startDesktopAutoSync`)
 
-Security‑Musspunkte
-- Keine Secrets in `packages/shared` oder im Frontend‑Build.
-- CSFloat API Key nur in main/background (Desktop) oder Server; niemals in renderer.
-- TLS für alle Serverendpoints.
-- `keytar` für OS‑Keyring; falls nicht verfügbar, AES‑GCM verschlüsselte Datei mit user passphrase.
+### 2.4 Secret handling
 
-Tests & CI
-- Unit tests (Jest) für `packages/shared` logic.
-- Integration tests: local SQLite + mock server for sync flows.
-- NPM scripts: `test:unit`, `test:integration`.
+- CSFloat key and session/encryption artifacts use Electron `safeStorage` in desktop main process.
+- No key persistence in web build.
+- No `keytar` dependency in current production path.
 
-Developer Checklist (konkret)
-- Zu erstellen/zu ändern:
-  - `packages/shared/src/lib/localCache.js` (phase1)
-  - `packages/shared/src/lib/logic.js` (shared business logic)
-  - `packages/shared/src/lib/apiClient.js` (fallback adaptions)
-  - `apps/desktop/src/localStore/index.js` (SQLite wrapper)
-  - `apps/desktop/preload.js` (IPC safe facade)
-  - `apps/desktop/src/sync/engine.js` (sync background worker)
-  - `backend/src/Http/Controller/SyncController.php` + SyncService
-  - `docs/sync-api.md`, `docs/local-db-schema.md`
+## 3. Current UX Rules
 
-Quick Test Commands (PowerShell)
-```powershell
-# Start local backend via docker-compose
-Copy-Item .env.example .env
-# edit .env: set DB creds + VITE_API_BASE_URL (z.B. http://127.0.0.1:8080)
-docker-compose up -d
-docker-compose logs -f web
+- Desktop pages should render from local cache/store first, then refresh in background.
+- Notification center uses persistent local `sync_notifications` and supports:
+  - mark single read
+  - mark all read
+  - unread filtering by `read_at`
 
-# Restart dev (Electron + Vite watch)
-npm install
-npm run dev
+## 4. Remaining Work
 
-# Test API
-Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8080/api/index.php/api/v1/portfolio/summary" -TimeoutSec 5
-```
+1. Add stronger sync observability metrics for push/pull outcomes and queue depth.
+2. Add integration tests for sync conflict and idempotency flows.
+3. Document and enforce cache TTL policy per data-heavy page (preload + bounded cache + background refresh).
+4. Keep API contract and local schema docs in lockstep with each sync change.
 
-PR/Commit Guidance
-- Branch: `feat/desktop-local-sync`
-- Commit message template:
-```
-feat(desktop): add local persistence and sync prototype
+## 5. Done Criteria
 
-- Add localCache fallback in apiClient
-- Add localStore (SQLite) wrapper
-- Add sync engine scaffold
-- Move business logic into packages/shared/lib/logic.js
-- Update AGENTS.md and docs/sync-api.md
-```
-- PR Checklist:
-  - [ ] Unit tests for shared logic pass
-  - [ ] Integration test for sync (or documented manual verification)
-  - [ ] `AGENTS.md` updated in same commit if top-level changes
-
-Rollout Empfehlung
-- 1) Merge fallback + shared logic (unblock users)
-- 2) Ship Desktop local persistence MVP to beta users
-- 3) Roll out server endpoints and enable sync for opt‑in users
-- 4) Full rollout + monitoring
-
-Final Note für nächsten Agenten
-- Halte Änderungen klein und iterativ. Starte mit Phase 1 (Quick fallback) um Offline‑Erlebnis sofort zu verbessern. Aktualisiere `AGENTS.md` bei jeder strukturellen Änderung.
-
----
-
-Updated: 2026-04-30
-Change: Desktop-local-first / Sync Roadmap (Agent-Plan)
-
----
-
-Updated: 2026-05-05
-Change: Lokale Steam-Sync-UX und Persistenz erweitert (Desktop)
-- Persistente lokale Sync-Benachrichtigungen in SQLite (sync_notifications) inkl. Read-Status (read_at).
-- Notification-Workflow im Desktop: erstellen, listen, einzeln als gelesen markieren, alle als gelesen markieren.
-- Steam Auto-Sync lokal begrenzt (Cooldown), plus manueller "Jetzt Steam Sync"-Trigger in der Verwaltung.
-- Fehler-Handling fuer Steam-Import verbessert (Inventory access denied, Rate-Limit, invalid response, Netzwerkfehler) mit klaren Retry-Hinweisen.
-- Onboarding/Journey um sichtbaren Schrittfortschritt erweitert (Steam verbunden, Inventory importiert, CSFloat Key, Matching-Status).
+This plan is DONE when:
+1. sync reliability and conflict handling are covered by automated integration tests,
+2. cache/preload policy is consistently applied across all heavy pages,
+3. observability for sync health is available in operations tooling.
