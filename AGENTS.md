@@ -167,8 +167,10 @@ Automatischer Guard:
 Wenn der User "release" sagt, ist damit ein echter Electron-Release gemeint, nicht nur ein Git-Push.
 
 Pflichtablauf:
+- Fachliche Aenderungen zuerst in logischen Einzel-Commits mit klaren, beschreibenden Commit-Messages committen.
+- Vor dem eigentlichen Release muss der Arbeitsbaum sauber sein (keine uncommitteten fachlichen Aenderungen).
 - `package.json` Version erhoehen (und `package-lock.json` mitziehen).
-- Commit mit der Release-Version erstellen.
+- Separaten Release-Commit nur fuer den Version-Bump erstellen (z. B. `release: v0.1.55`).
 - Git-Tag `v<version>` erstellen (muss exakt zur `package.json` Version passen).
 - Branch + Tag pushen.
 - Sicherstellen, dass der Workflow `.github/workflows/desktop-release.yml` dadurch triggert (Tag `v*`).
@@ -181,6 +183,8 @@ Ohne neuen Tag gibt es keinen neuen Electron/GitHub-Release.
 - Reine Platzhalter wie `release: vX.Y.Z` ohne Kontext sind nicht erlaubt.
 - Release-Commits sollen neben der Version kurz die wichtigsten Aenderungen nennen.
   - Beispiel: `release: v0.1.54 (dashboard watchlist movers + pie chart sonstige <1%)`
+- Ausnahme: Der dedizierte Release-Commit fuer den reinen Version-Bump darf nur die Versionsangabe tragen (z. B. `release: v0.1.55`),
+  sofern die fachlichen Aenderungen bereits vorher in logischen Commits mit Inhalt dokumentiert wurden.
 
 ## Bekannte offene Punkte
 
@@ -492,3 +496,10 @@ Updated: 2026-05-25
 Change: Verbindliche Commit-Message-Regel ergaenzt
 - Commit-Messages muessen die inhaltlichen Aenderungen nennen (auch bei Releases).
 - Reine Versions-Release-Titel ohne Aenderungskontext sind nicht mehr erlaubt.
+
+---
+
+Updated: 2026-05-26
+Change: Release-Ablauf auf "logische Commits zuerst, separater Versions-Release danach" umgestellt
+- Vor einem Release muessen fachliche Aenderungen bereits in eigenen, inhaltlich benannten Commits vorliegen.
+- Der eigentliche Release-Commit darf als dedizierter Version-Bump nur die Versionsangabe tragen (z. B. `release: v0.1.55`).
