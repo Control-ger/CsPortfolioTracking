@@ -17,6 +17,14 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activePortfolioTab = new URLSearchParams(location.search).get("tab") || "overview";
+  const routeMappedTab = location.pathname === "/inventory"
+    ? "inventory"
+    : location.pathname === "/watchlist"
+      ? "watchlist"
+      : location.pathname === "/search"
+        ? "search"
+        : null;
+  const resolvedPortfolioTab = routeMappedTab || activePortfolioTab;
 
   const isItemActive = (item) => {
     if (item.key === "updates") {
@@ -25,7 +33,10 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
     if (item.key === "settings") {
       return location.pathname === "/settings";
     }
-    return location.pathname === "/" && activePortfolioTab === item.key;
+    if (location.pathname === "/" || routeMappedTab) {
+      return resolvedPortfolioTab === item.key;
+    }
+    return false;
   };
 
   return (
