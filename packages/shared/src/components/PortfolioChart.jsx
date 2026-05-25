@@ -401,7 +401,7 @@ export const PortfolioChart = ({
               />
               <Line
                 dataKey="displayValue"
-                type="monotone"
+                type="linear"
                 stroke="var(--color-growthPercent)"
                 strokeWidth={2.7}
                 dot={false}

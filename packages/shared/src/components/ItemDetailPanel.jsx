@@ -240,7 +240,7 @@ export const ItemDetailPanel = ({
                           <XAxis dataKey="month" hide />
                           <Tooltip />
                           <Area
-                              type="monotone"
+                              type="linear"
                               dataKey={item.type === "case" ? "opened" : "applied"}
                               stroke="hsl(var(--chart-1))"
                               fill="hsl(var(--chart-1))"
@@ -248,7 +248,7 @@ export const ItemDetailPanel = ({
                           />
                           {item.type === "case" && (
                               <Area
-                                  type="monotone"
+                                  type="linear"
                                   dataKey="dropped"
                                   stroke="hsl(var(--chart-2))"
                                   fill="hsl(var(--chart-2))"

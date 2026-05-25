@@ -186,7 +186,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
                   <XAxis dataKey="date" fontSize={10} />
                   <Tooltip formatter={(value) => `${Number(value).toFixed(2)} EUR`} />
                   <Area
-                    type="monotone"
+                    type="linear"
                     dataKey="wert"
                     stroke="#3b82f6"
                     fill="#3b82f6"
