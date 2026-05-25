@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
@@ -196,6 +196,9 @@ export const PortfolioChart = ({
   onMetricsScopeChange = null,
 }) => {
   const [rangeKey, setRangeKey] = useState("MAX");
+  const hoverAnimationFrameRef = useRef(null);
+  const lastHoveredIndexRef = useRef(null);
+  const lastHoverSignatureRef = useRef("");
 
   const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
   const visibleHistory = useMemo(
@@ -264,6 +267,74 @@ export const PortfolioChart = ({
       },
     }),
     [trendStats.lineColor, showAbsolute],
+  );
+
+  const dispatchHoverChange = useCallback(
+    (payload) => {
+      if (typeof onHoverChange !== "function") {
+        return;
+      }
+      const signature = payload
+        ? `${payload.date}|${payload.wert}|${payload.growthPercent}|${payload.profitEuro}`
+        : "null";
+      if (lastHoverSignatureRef.current === signature) {
+        return;
+      }
+      lastHoverSignatureRef.current = signature;
+      onHoverChange(payload);
+    },
+    [onHoverChange],
+  );
+
+  const handleChartMouseMove = useCallback(
+    (state) => {
+      const activeIndex = state?.activeTooltipIndex;
+      if (!Number.isInteger(activeIndex) || !chartData[activeIndex]) {
+        return;
+      }
+
+      if (lastHoveredIndexRef.current === activeIndex) {
+        return;
+      }
+      lastHoveredIndexRef.current = activeIndex;
+
+      if (hoverAnimationFrameRef.current) {
+        cancelAnimationFrame(hoverAnimationFrameRef.current);
+      }
+      hoverAnimationFrameRef.current = requestAnimationFrame(() => {
+        hoverAnimationFrameRef.current = null;
+        const hoveredData = chartData[activeIndex];
+        if (!hoveredData) {
+          return;
+        }
+        dispatchHoverChange({
+          wert: hoveredData.wert,
+          growthPercent: hoveredData.growthPercent,
+          invested: hoveredData.invested,
+          profitEuro: hoveredData.profitEuro,
+          date: hoveredData.date,
+        });
+      });
+    },
+    [chartData, dispatchHoverChange],
+  );
+
+  const handleChartMouseLeave = useCallback(() => {
+    lastHoveredIndexRef.current = null;
+    if (hoverAnimationFrameRef.current) {
+      cancelAnimationFrame(hoverAnimationFrameRef.current);
+      hoverAnimationFrameRef.current = null;
+    }
+    dispatchHoverChange(null);
+  }, [dispatchHoverChange]);
+
+  useEffect(
+    () => () => {
+      if (hoverAnimationFrameRef.current) {
+        cancelAnimationFrame(hoverAnimationFrameRef.current);
+      }
+    },
+    [],
   );
 
   return (
@@ -347,26 +418,8 @@ export const PortfolioChart = ({
                 top: 12,
                 bottom: 6,
               }}
-              onMouseMove={(state) => {
-                const activeIndex = state?.activeTooltipIndex;
-                if (!Number.isInteger(activeIndex) || !chartData[activeIndex]) {
-                  return;
-                }
-
-                if (onHoverChange) {
-                  const hoveredData = chartData[activeIndex];
-                  onHoverChange({
-                    wert: hoveredData.wert,
-                    growthPercent: hoveredData.growthPercent,
-                    invested: hoveredData.invested,
-                    profitEuro: hoveredData.profitEuro,
-                    date: hoveredData.date,
-                  });
-                }
-              }}
-              onMouseLeave={() => {
-                onHoverChange?.(null);
-              }}
+              onMouseMove={handleChartMouseMove}
+              onMouseLeave={handleChartMouseLeave}
             >
               <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.45} />
               <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.8} strokeDasharray="3 3" />
