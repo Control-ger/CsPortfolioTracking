@@ -93,6 +93,7 @@ From `apps/web/src/App.jsx`:
 - `Watchlist` uses in-memory snapshots with TTL `120s`.
 - `WatchlistOverview` uses in-memory snapshots with TTL `120s`.
 - `useCsUpdatesFeed` uses in-memory snapshots with TTL `120s`.
+- Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.
 - `GET /api/v1/portfolio/summary` uses enriched rows without live refresh (`allowLiveRefresh=false`) to avoid duplicate CSFloat load in the same page cycle.
 - Interactive pricing requests apply a capped CSFloat lookup budget per request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`), while CLI workers remain uncapped.
 - `CsFloatClient::fetchLowestListingResult()` uses `GET /api/v1/listings/price-list` as primary bulk source (90s in-memory cache), with per-item listing lookup as fallback.

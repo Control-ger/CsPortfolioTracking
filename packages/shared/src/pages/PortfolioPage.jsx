@@ -2422,10 +2422,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       return "Klick: Jetzt updaten.";
     }
     if (appUpdateState === "downloading") {
-      return "Klick: Download-Status ansehen.";
+      return "Download laeuft im Hintergrund.";
     }
     if (appUpdateState === "available") {
-      return "Klick: Update-Info ansehen.";
+      return "Klick: Jetzt updaten oder spaeter.";
     }
     if (appUpdateState === "error") {
       return "Klick: Fehlerdetails ansehen.";
@@ -2556,9 +2556,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
 
     if (appUpdateState === "available" || appUpdateState === "downloading") {
-      window.alert(
-        `${appUpdateVersionLabel} ist verfuegbar. Der Download laeuft im Hintergrund; sobald er fertig ist, kannst du direkt installieren.`,
-      );
+      if (appUpdateState === "available" && window.electronAPI?.updater?.download) {
+        await window.electronAPI.updater.download();
+      } else {
+        window.alert(
+          `${appUpdateVersionLabel}: Download laeuft. Nach Abschluss kannst du direkt installieren.`,
+        );
+      }
       setAppUpdateUnread(false);
       return;
     }

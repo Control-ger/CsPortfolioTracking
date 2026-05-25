@@ -469,3 +469,12 @@ Updated: 2026-05-25
 Change: Sidebar-Shell fuer alle Runtime-Pfade vereinheitlicht
 - Die gemeinsame Rail-Shell in `apps/web/src/App.jsx` gilt jetzt einheitlich fuer Desktop und Web statt nur fuer den Electron-Zweig.
 - Dadurch sind Sidebar-Verhalten und Active-State zwischen Dashboard, Einstellungen und Updates in allen Runtimes konsistent.
+
+---
+
+Updated: 2026-05-25
+Change: Electron-Update-Flow auf manuelles Download-Opt-in umgestellt
+- `apps/desktop/main.js`: `autoUpdater.autoDownload=false` und `autoInstallOnAppQuit=false`.
+- Bei `update-available` wird eine native Electron-Notification angezeigt; Klick oeffnet Dialog mit `Jetzt updaten` / `Spaeter`.
+- Download startet nur nach expliziter User-Bestaetigung (`app-updater-download`), danach bleibt Installation weiterhin manuell ueber `app-updater-install`.
+- `apps/desktop/preload.js` erweitert um `updater.download()`, UI-Hinweistext in `PortfolioPage` entsprechend angepasst.

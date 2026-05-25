@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { app, BrowserWindow, ipcMain, shell, safeStorage, session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell, safeStorage, session } from "electron";
 import { spawn } from "child_process";
 import { randomBytes } from "crypto";
 import fs from "fs/promises";
@@ -80,6 +80,9 @@ let sidecarSecret = null;
 let updateCheckTimer = null;
 let cloudflareAccessLoginPromise = null;
 let sidecarRequestHeaderBridgeInstalled = false;
+let latestAvailableUpdateInfo = null;
+let updateDownloadInProgress = false;
+const notifiedUpdateVersions = new Set();
 const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const shouldAutoOpenDevTools = !app.isPackaged || process.env.DEBUG === "1";
 
@@ -91,14 +94,103 @@ function emitUpdaterStatus(payload) {
   mainWindow.webContents.send("app-updater-status", payload);
 }
 
+function normalizeUpdateVersionLabel(info) {
+  const version = String(info?.version || "").trim();
+  return version ? `v${version}` : "eine neue Version";
+}
+
+function bringMainWindowToFront() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+async function startUpdateDownload(info = latestAvailableUpdateInfo) {
+  if (!app.isPackaged) {
+    return { ok: false, reason: "not-packaged" };
+  }
+  if (updateDownloadInProgress) {
+    return { ok: true, alreadyDownloading: true };
+  }
+
+  const versionLabel = normalizeUpdateVersionLabel(info);
+  updateDownloadInProgress = true;
+  emitUpdaterStatus({ state: "downloading", percent: 0, version: info?.version || null, info });
+  console.log("[updater] starting manual download:", versionLabel);
+
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (error) {
+    updateDownloadInProgress = false;
+    const message = error?.message || String(error);
+    console.warn("[updater] manual download failed:", message);
+    emitUpdaterStatus({ state: "error", message });
+    return { ok: false, error: message };
+  }
+}
+
+async function promptForUpdateDownload(info = latestAvailableUpdateInfo) {
+  if (!info) {
+    return { ok: false, reason: "no-update-info" };
+  }
+  if (updateDownloadInProgress) {
+    return { ok: true, alreadyDownloading: true };
+  }
+
+  const versionLabel = normalizeUpdateVersionLabel(info);
+  bringMainWindowToFront();
+
+  const response = await dialog.showMessageBox(mainWindow, {
+    type: "question",
+    buttons: ["Jetzt updaten", "Spaeter"],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+    title: "Update verfuegbar",
+    message: `${versionLabel} ist verfuegbar.`,
+    detail: "Moechtest du das Update jetzt herunterladen und nach dem Download installieren?",
+  });
+
+  if (response.response !== 0) {
+    emitUpdaterStatus({ state: "available", version: info?.version || null, info, deferred: true });
+    return { ok: true, deferred: true };
+  }
+
+  return await startUpdateDownload(info);
+}
+
+function showUpdateAvailableNotification(info) {
+  if (!Notification.isSupported()) {
+    return;
+  }
+
+  const versionLabel = normalizeUpdateVersionLabel(info);
+  const notification = new Notification({
+    title: "Update verfuegbar",
+    body: `${versionLabel} ist verfuegbar. Klick fuer "Jetzt updaten" oder "Spaeter".`,
+    silent: false,
+  });
+
+  notification.on("click", () => {
+    void promptForUpdateDownload(info);
+  });
+  notification.show();
+}
+
 function setupAutoUpdater() {
   if (!app.isPackaged) {
     console.log("[updater] skipped in development mode");
     return;
   }
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("checking-for-update", () => {
     console.log("[updater] checking for update");
@@ -107,15 +199,26 @@ function setupAutoUpdater() {
 
   autoUpdater.on("update-available", (info) => {
     console.log("[updater] update available:", info?.version || "unknown");
+    latestAvailableUpdateInfo = info || null;
+    updateDownloadInProgress = false;
     emitUpdaterStatus({ state: "available", version: info?.version || null, info });
+
+    const versionKey = String(info?.version || "unknown");
+    if (!notifiedUpdateVersions.has(versionKey)) {
+      notifiedUpdateVersions.add(versionKey);
+      showUpdateAvailableNotification(info);
+    }
   });
 
   autoUpdater.on("update-not-available", () => {
     console.log("[updater] no update available");
+    latestAvailableUpdateInfo = null;
+    updateDownloadInProgress = false;
     emitUpdaterStatus({ state: "not-available" });
   });
 
   autoUpdater.on("download-progress", (progress) => {
+    updateDownloadInProgress = true;
     emitUpdaterStatus({
       state: "downloading",
       percent: progress?.percent || 0,
@@ -127,11 +230,14 @@ function setupAutoUpdater() {
 
   autoUpdater.on("error", (error) => {
     console.error("[updater] error:", error?.message || error);
+    updateDownloadInProgress = false;
     emitUpdaterStatus({ state: "error", message: error?.message || String(error) });
   });
 
   autoUpdater.on("update-downloaded", async (info) => {
     console.log("[updater] update downloaded:", info?.version || "unknown");
+    latestAvailableUpdateInfo = info || latestAvailableUpdateInfo;
+    updateDownloadInProgress = false;
     emitUpdaterStatus({ state: "downloaded", version: info?.version || null, info });
   });
 
@@ -1388,6 +1494,12 @@ ipcMain.handle("app-updater-check", async () => {
       error: error?.message || String(error),
     };
   }
+});
+ipcMain.handle("app-updater-download", async () => {
+  if (!app.isPackaged) {
+    return { ok: false, reason: "not-packaged" };
+  }
+  return await promptForUpdateDownload(latestAvailableUpdateInfo);
 });
 ipcMain.handle("app-updater-install", async () => {
   if (!app.isPackaged) {
