@@ -796,17 +796,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   }, [location.pathname, searchPageInitialTerm]);
 
   useEffect(() => {
-    if (!isElectronRuntime || !showStartupWelcome || portfolioLoading) {
-      return;
-    }
-
-    if (!authRequired) {
-      writeStartupWelcomeDismissed();
-      setShowStartupWelcome(false);
-    }
-  }, [authRequired, isElectronRuntime, portfolioLoading, showStartupWelcome]);
-
-  useEffect(() => {
     setSeenCsUpdateId(readLastSeenCsUpdateId());
   }, []);
 
@@ -2973,9 +2962,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   // Keep this return after all hooks. Returning before the other hooks run changes
   // hook order after login and triggers React's minified error #310.
-  if (isElectronRuntime && showStartupWelcome && !portfolioLoading && authRequired) {
+  if (isElectronRuntime && showStartupWelcome && !portfolioLoading) {
     return (
-      <div className="steam-startup-shell flex min-h-full items-center justify-center p-4">
+      <div className="steam-startup-shell fixed inset-0 z-[120] flex items-center justify-center overflow-auto p-4">
         <SteamLoginPrompt
           onLoginSuccess={async () => {
             await refreshPortfolio();
