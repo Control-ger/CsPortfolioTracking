@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Newspaper, Package, Search } from "lucide-react";
+import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Newspaper, Package, Search, TrendingDown, TrendingUp } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
 import { InventoryTable } from "@shared/components";
@@ -115,6 +115,17 @@ function formatDateSafe(value) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function resolveWatchlistChangePercent(item) {
+  const candidates = [item?.priceChangePercent, item?.changePercent, item?.roi];
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+  return null;
 }
 
 function normalizeSearchText(value) {
@@ -2089,6 +2100,30 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     return bucket === inventoryScope;
   });
+  const watchlistTopMovers = useMemo(() => {
+    const rows = (Array.isArray(globalSearchWatchlistItems) ? globalSearchWatchlistItems : [])
+      .map((item) => ({
+        ...item,
+        moverId: String(item?.id || "").trim(),
+        changePercentValue: resolveWatchlistChangePercent(item),
+      }))
+      .filter((item) => item.moverId !== "" && Number.isFinite(item.changePercentValue));
+
+    const gainers = rows
+      .filter((item) => item.changePercentValue > 0)
+      .sort((left, right) => right.changePercentValue - left.changePercentValue)
+      .slice(0, 2);
+    const losers = rows
+      .filter((item) => item.changePercentValue < 0)
+      .sort((left, right) => left.changePercentValue - right.changePercentValue)
+      .slice(0, 2);
+
+    return {
+      gainers,
+      losers,
+      hasAny: gainers.length > 0 || losers.length > 0,
+    };
+  }, [globalSearchWatchlistItems]);
   const steamInventoryItemsAll = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     return platform === "steam_inventory" || Boolean(item.steamAssetId);
@@ -3939,18 +3974,146 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:gap-5">
-              <PortfolioChart
-                history={portfolioHistory}
-                isLoading={portfolioLoading}
-                onHoverChange={setHoveredChartData}
-                metricsScope={metricsScope}
-                onMetricsScopeChange={
-                  portfolioPreferences.metricsDisplayMode === "toggle_mode"
-                    ? (nextScope) => void handleMetricsScopeChange(nextScope)
-                    : null
-                }
-              />
+            <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="min-w-0">
+                <PortfolioChart
+                  history={portfolioHistory}
+                  isLoading={portfolioLoading}
+                  onHoverChange={setHoveredChartData}
+                  metricsScope={metricsScope}
+                  onMetricsScopeChange={
+                    portfolioPreferences.metricsDisplayMode === "toggle_mode"
+                      ? (nextScope) => void handleMetricsScopeChange(nextScope)
+                      : null
+                  }
+                />
+              </div>
+              <Card className="border-border/70 bg-card/70 lg:sticky lg:top-20 lg:self-start">
+                <CardHeader className="space-y-2 pb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-base">Watchlist Mover</CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleTabSelect("watchlist")}
+                    >
+                      Zur Watchlist
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Top 2 Gewinner und Top 2 Verlierer (7 Tage)</p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {watchlistTopMovers.hasAny ? (
+                    <>
+                      {watchlistTopMovers.gainers.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                            <TrendingUp className="h-4 w-4" />
+                            Top Gewinner
+                          </div>
+                          <div className="space-y-2">
+                            {watchlistTopMovers.gainers.map((item) => {
+                              const currentPrice = Number(item?.currentPrice);
+                              const currentPriceUsd = Number(item?.currentPriceUsd);
+                              const hasUsdPrice = Number.isFinite(currentPriceUsd);
+                              const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
+                              const priceLabel = hasUsdPrice
+                                ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
+                                : hasCurrentPrice
+                                  ? formatPrice(currentPrice)
+                                  : null;
+                              const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
+                              return (
+                                <button
+                                  key={`gainer-${item.moverId}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setWatchlistFocusTarget({ id: item.id });
+                                    handleTabSelect("watchlist");
+                                  }}
+                                  className="flex w-full items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-transparent p-2 text-left transition-colors hover:bg-emerald-500/10"
+                                >
+                                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                                    <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
+                                      {imageUrl ? (
+                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-semibold">{item.name}</p>
+                                      {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
+                                    </div>
+                                  </div>
+                                  <span className="text-xs font-semibold text-emerald-400">
+                                    +{item.changePercentValue.toFixed(2)}%
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {watchlistTopMovers.losers.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-400">
+                            <TrendingDown className="h-4 w-4" />
+                            Top Verlierer
+                          </div>
+                          <div className="space-y-2">
+                            {watchlistTopMovers.losers.map((item) => {
+                              const currentPrice = Number(item?.currentPrice);
+                              const currentPriceUsd = Number(item?.currentPriceUsd);
+                              const hasUsdPrice = Number.isFinite(currentPriceUsd);
+                              const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
+                              const priceLabel = hasUsdPrice
+                                ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
+                                : hasCurrentPrice
+                                  ? formatPrice(currentPrice)
+                                  : null;
+                              const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
+                              return (
+                                <button
+                                  key={`loser-${item.moverId}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setWatchlistFocusTarget({ id: item.id });
+                                    handleTabSelect("watchlist");
+                                  }}
+                                  className="flex w-full items-center justify-between gap-2 rounded-md border border-red-400/30 bg-transparent p-2 text-left transition-colors hover:bg-red-500/10"
+                                >
+                                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                                    <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
+                                      {imageUrl ? (
+                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-semibold">{item.name}</p>
+                                      {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
+                                    </div>
+                                  </div>
+                                  <span className="text-xs font-semibold text-red-400">
+                                    {item.changePercentValue.toFixed(2)}%
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Keine eindeutigen Gewinner/Verlierer verfuegbar.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:gap-5">

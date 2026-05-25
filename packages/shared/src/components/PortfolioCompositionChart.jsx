@@ -5,6 +5,76 @@ import { BREAKPOINTS } from "../lib/constants.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const COLOR_PALETTE = ["#5ca9ff", "#4d93ee", "#3e7cdc", "#2f67ca", "#2b56b1", "#23529a", "#1b4d82", "#144168"];
+const OTHER_SLICE_COLOR = "#64748b";
+const SMALL_SLICE_THRESHOLD_PERCENT = 1;
+
+function normalizeCompositionRows(data) {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data
+    .map((item) => ({
+      ...item,
+      value: Number(item?.value || 0),
+      count: Number(item?.count || 0),
+    }))
+    .filter((item) => Number.isFinite(item.value) && item.value > 0);
+}
+
+function groupSmallSlices(rows, thresholdPercent = SMALL_SLICE_THRESHOLD_PERCENT) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return rows || [];
+  }
+
+  const totalValue = rows.reduce((sum, item) => sum + item.value, 0);
+  if (!Number.isFinite(totalValue) || totalValue <= 0) {
+    return rows;
+  }
+
+  const majorRows = [];
+  const smallRows = [];
+
+  rows.forEach((item) => {
+    const sharePercent = (item.value / totalValue) * 100;
+    if (sharePercent < thresholdPercent) {
+      smallRows.push(item);
+      return;
+    }
+    majorRows.push(item);
+  });
+
+  if (smallRows.length === 0 || majorRows.length === 0) {
+    return rows;
+  }
+
+  const groupedOtherRow = {
+    name: `Sonstige (<${thresholdPercent}%)`,
+    type: "other",
+    count: smallRows.reduce((sum, item) => sum + item.count, 0),
+    value: smallRows.reduce((sum, item) => sum + item.value, 0),
+    isGroupedOther: true,
+  };
+
+  return [...majorRows, groupedOtherRow];
+}
+
+function decorateCompositionRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return [];
+  }
+
+  const totalValue = rows.reduce((sum, item) => sum + item.value, 0);
+  if (!Number.isFinite(totalValue) || totalValue <= 0) {
+    return [];
+  }
+
+  return rows.map((item, idx) => ({
+    ...item,
+    percentage: Number(((item.value / totalValue) * 100).toFixed(1)),
+    displayColor: item.isGroupedOther ? OTHER_SLICE_COLOR : COLOR_PALETTE[idx % COLOR_PALETTE.length],
+  }));
+}
 
 export function PortfolioCompositionChart({
   data,
@@ -34,10 +104,13 @@ export function PortfolioCompositionChart({
     );
   }
 
-  const displayData = data.map((item, idx) => ({ ...item, displayColor: COLOR_PALETTE[idx % COLOR_PALETTE.length] }));
-  const chartData = displayData.filter((item) => Number(item.value) > 0);
-  const totalValueFromData = displayData.reduce((sum, item) => sum + item.value, 0);
+  const normalizedRows = normalizeCompositionRows(data);
+  const groupedRows = groupSmallSlices(normalizedRows, SMALL_SLICE_THRESHOLD_PERCENT);
+  const displayData = decorateCompositionRows(groupedRows);
+  const chartData = displayData;
+  const totalValueFromData = normalizedRows.reduce((sum, item) => sum + item.value, 0);
   const totalValue = Number.isFinite(Number(totalValueOverride)) ? Number(totalValueOverride) : totalValueFromData;
+  const sourceAssetCount = normalizedRows.length;
   const hasRenderableChartData = chartData.length > 0;
 
   const renderTooltip = ({ payload }) => {
@@ -95,7 +168,7 @@ export function PortfolioCompositionChart({
                 <p className="text-xl sm:text-2xl font-bold">
                   {totalValueLabel || formatPrice(totalValue, { useUsd: true, buyPriceUsd: totalValue })}
                 </p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">{displayData.length} Assets</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">{sourceAssetCount} Assets</p>
                 {!hasRenderableChartData ? (
                   <p className="mt-1 text-[10px] text-muted-foreground">Noch keine csfloat-Livewerte</p>
                 ) : null}
