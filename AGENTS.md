@@ -447,3 +447,10 @@ Updated: 2026-05-25
 Change: MariaDB-Kompatibilitaet fuer `price_history_hourly` korrigiert
 - Partitionierung in `PriceHistoryRepository` entfernt, da MariaDB partitionierte Tabellen mit Foreign Keys nicht unterstuetzt (Error 1506).
 - `price_history_hourly` bleibt als normale InnoDB-Tabelle mit Foreign Keys auf `items` und `exchange_rates`.
+
+---
+
+Updated: 2026-05-25
+Change: Portfolio-Request-Loop im Frontend gestoppt
+- `usePortfolio` triggert den Initial-Load jetzt pro `cacheKey` statt indirekt ueber Snapshot-Objektwechsel.
+- `fetchApiPortfolioData` reduziert Requests auf `investments` + `history`; Summary wird aus Rows clientseitig berechnet.

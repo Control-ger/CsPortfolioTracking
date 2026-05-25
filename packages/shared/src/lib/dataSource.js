@@ -6,7 +6,6 @@ import {
   fetchPortfolioHistory as fetchApiPortfolioHistory,
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
   refreshPortfolioStalePrices as refreshApiPortfolioStalePrices,
-  fetchPortfolioSummary as fetchApiPortfolioSummary,
   fetchWatchlist as fetchApiWatchlist,
 } from "./apiClient.js";
 
@@ -789,12 +788,11 @@ async function fetchDesktopPortfolioData(options = {}) {
 }
 
 async function fetchApiPortfolioData(options = {}) {
-  const [rows, summary, history] = await Promise.all([
+  const [rows, history] = await Promise.all([
     fetchApiPortfolioInvestments({
       signal: options.signal,
       scope: options.rowScope || options.scope,
     }),
-    fetchApiPortfolioSummary({ signal: options.signal, scope: options.scope }),
     fetchApiPortfolioHistory({ signal: options.signal, scope: options.scope }),
   ]);
 
@@ -802,15 +800,15 @@ async function fetchApiPortfolioData(options = {}) {
     ...rows,
     data: Array.isArray(rows?.data) ? rows.data.map(enforceCsfloatOnlyRow) : [],
   };
-  const recomputedSummary =
-    sanitizedRows.data.length > 0
-      ? {
-          ...summary,
-          data: calculatePortfolioSummary(
-            filterRowsByScope(sanitizedRows.data, options.scope),
-          ),
-        }
-      : summary;
+  const recomputedSummary = {
+    data: calculatePortfolioSummary(
+      filterRowsByScope(sanitizedRows.data, options.scope),
+    ),
+    meta: {
+      ...(rows?.meta || {}),
+      scope: String(options.scope || "investments"),
+    },
+  };
 
   return {
     rows: sanitizedRows,

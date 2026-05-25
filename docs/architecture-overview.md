@@ -86,6 +86,7 @@ From `apps/web/src/App.jsx`:
 
 - `PortfolioPage` keeps visited tabs mounted (`visitedTabs` + `forceMount`).
 - `usePortfolio` uses in-memory snapshots with TTL `120s`.
+- `usePortfolio` initial API load is keyed by `cacheKey` (not by snapshot object identity) to prevent self-triggered fetch loops.
 - `Watchlist` uses in-memory snapshots with TTL `120s`.
 - `WatchlistOverview` uses in-memory snapshots with TTL `120s`.
 - `useCsUpdatesFeed` uses in-memory snapshots with TTL `120s`.
@@ -93,6 +94,7 @@ From `apps/web/src/App.jsx`:
 - Interactive pricing requests apply a capped CSFloat lookup budget per request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`), while CLI workers remain uncapped.
 - `CsFloatClient::fetchLowestListingResult()` uses `GET /api/v1/listings/price-list` as primary bulk source (90s in-memory cache), with per-item listing lookup as fallback.
 - Frontend stale handling calls `POST /api/v1/portfolio/prices/refresh-stale` (cooldown 120s) to refresh stale portfolio prices in background.
+- Portfolio fetch path uses two backend requests (`investments`, `history`) and computes summary client-side from rows.
 - CSFloat rate-limit handling uses a circuit-breaker file backoff and respects upstream `Retry-After` when present.
 
 ### 6.4 Hourly price write policy

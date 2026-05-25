@@ -64,8 +64,8 @@ export function usePortfolio(options = {}) {
   const abortControllerRef = useRef(null);
   const staleRefreshInFlightRef = useRef(false);
   const staleRefreshCooldownUntilRef = useRef(0);
+  const initialLoadKeyRef = useRef("");
   const cacheKey = resolveCacheKey(options);
-  const cachedSnapshot = getValidPortfolioSnapshot(cacheKey);
 
   const [investments, setInvestments] = useState([]);
   const [authRequired, setAuthRequired] = useState(true); // Default to auth required until checked
@@ -92,18 +92,19 @@ export function usePortfolio(options = {}) {
   const [warnings, setWarnings] = useState([]);
 
   useEffect(() => {
-    if (!cachedSnapshot) {
+    const snapshot = getValidPortfolioSnapshot(cacheKey);
+    if (!snapshot) {
       return;
     }
 
-    setInvestments(cachedSnapshot.investments || []);
-    setAuthRequired(Boolean(cachedSnapshot.authRequired));
-    setStats(cachedSnapshot.stats || {});
-    setPortfolioHistory(cachedSnapshot.portfolioHistory || []);
-    setWarnings(cachedSnapshot.warnings || []);
+    setInvestments(snapshot.investments || []);
+    setAuthRequired(Boolean(snapshot.authRequired));
+    setStats(snapshot.stats || {});
+    setPortfolioHistory(snapshot.portfolioHistory || []);
+    setWarnings(snapshot.warnings || []);
     setError("");
     setIsLoading(false);
-  }, [cacheKey, cachedSnapshot]);
+  }, [cacheKey]);
 
   const loadData = useCallback(async ({ showLoading = true } = {}) => {
     // Abort previous request if still pending
@@ -182,8 +183,13 @@ export function usePortfolio(options = {}) {
   }, [cacheKey]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => loadData({ showLoading: !cachedSnapshot }));
-  }, [cachedSnapshot, loadData]);
+    if (initialLoadKeyRef.current === cacheKey) {
+      return;
+    }
+    initialLoadKeyRef.current = cacheKey;
+    const hasSnapshot = getValidPortfolioSnapshot(cacheKey) !== null;
+    void Promise.resolve().then(() => loadData({ showLoading: !hasSnapshot }));
+  }, [cacheKey, loadData]);
 
   useEffect(() => {
     if (authRequired) {
