@@ -52,6 +52,103 @@ function formatDateTime(value) {
   }).format(timestamp);
 }
 
+function isGenericUpdateTitle(title) {
+  const normalized = String(title || "").trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  return normalized.startsWith("counter-strike 2 update for")
+    || normalized === "counter-strike 2 update"
+    || normalized === "cs2 update";
+}
+
+function normalizeComparableText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function resolveDisplayTitle(item) {
+  const rawTitle = String(item?.title || "").trim();
+  const rawSummary = String(item?.summary || "").trim();
+
+  if (isGenericUpdateTitle(rawTitle) && rawSummary && normalizeComparableText(rawSummary) !== normalizeComparableText(rawTitle)) {
+    return rawSummary;
+  }
+
+  if (rawTitle) {
+    return rawTitle;
+  }
+
+  if (rawSummary) {
+    return rawSummary;
+  }
+
+  return "CS2 Update";
+}
+
+function resolveUpdateDescription(item, displayTitle) {
+  const candidates = [
+    String(item?.details || "").trim(),
+    String(item?.summary || "").trim(),
+  ];
+
+  const normalizedTitle = normalizeComparableText(displayTitle);
+  const description = candidates.find((entry) => entry !== "" && normalizeComparableText(entry) !== normalizedTitle);
+
+  return description || "";
+}
+
+function extractImpactBullets(item) {
+  const normalizedSet = new Set();
+  const bullets = [];
+  const addBullet = (value) => {
+    const cleaned = String(value || "").trim().replace(/^[-\u2022]\s*/, "");
+    if (cleaned === "") {
+      return;
+    }
+    const normalized = normalizeComparableText(cleaned);
+    if (normalized === "" || normalizedSet.has(normalized)) {
+      return;
+    }
+    normalizedSet.add(normalized);
+    bullets.push(cleaned);
+  };
+
+  const highlights = Array.isArray(item?.highlights) ? item.highlights : [];
+  highlights.forEach((entry) => {
+    const text = String(entry || "").trim();
+    const lowered = text.toLowerCase();
+    if (
+      lowered.startsWith("build ")
+      || lowered.startsWith("changelist ")
+      || lowered.startsWith("branch:")
+      || lowered.startsWith("aktion:")
+    ) {
+      return;
+    }
+    addBullet(text);
+  });
+
+  const aiReasoning = String(item?.aiReasoning || "").trim();
+  if (aiReasoning !== "") {
+    aiReasoning
+      .split(/(?:\r?\n|[.!?]\s+)/)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => sentence.length >= 18)
+      .slice(0, 4)
+      .forEach((sentence) => addBullet(sentence));
+  }
+
+  if (bullets.length === 0 && item?.aiRecommendedAction) {
+    addBullet(item.aiRecommendedAction);
+  }
+
+  return bullets.slice(0, 4);
+}
+
 function deriveMarketImpact(item) {
   const aiStatus = String(item?.aiRatingStatus || "").toLowerCase();
   const aiImpactLevel = String(item?.aiImpactLevel || "").toLowerCase();
@@ -169,6 +266,9 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
   const impact = deriveMarketImpact(item);
   const hasAiText = Boolean(item?.aiRecommendedAction || item?.aiReasoning);
   const aiModelLabel = String(item?.aiModel || "").trim();
+  const displayTitle = resolveDisplayTitle(item);
+  const updateDescription = resolveUpdateDescription(item, displayTitle);
+  const impactBullets = extractImpactBullets(item);
 
   return (
     <AccordionItem
@@ -183,15 +283,25 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className={cn("font-semibold text-foreground", compact ? "text-sm" : "text-base")}>{item.title}</h3>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  {formatDateTime(item.publishedAt)}
+                </span>
                 {isFresh ? (
                   <Badge variant="outline" className="border-primary/25 bg-primary/8 text-primary">
                     Neu
                   </Badge>
                 ) : null}
               </div>
-              <p className={cn("mt-1 line-clamp-2 text-muted-foreground", compact ? "text-xs" : "text-sm")}>{item.summary}</p>
+              <h3 className={cn("mt-1 font-semibold text-foreground", compact ? "text-sm" : "text-base")}>
+                {displayTitle}
+              </h3>
+              {updateDescription ? (
+                <p className={cn("mt-1 line-clamp-2 text-muted-foreground", compact ? "text-xs" : "text-sm")}>
+                  {updateDescription}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -205,11 +315,6 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <Clock3 className="h-3.5 w-3.5" />
-              {formatDateTime(item.publishedAt)}
-            </span>
-            <span>-</span>
             <span>{item.sourceLabel}</span>
           </div>
         </div>
@@ -217,11 +322,22 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
 
       <AccordionContent className={cn("px-4", compact ? "pb-3" : "pb-4")}>
         <div className="space-y-3 border-t border-border/70 pt-3">
+          {updateDescription ? (
+            <div className="p-1">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Update
+              </p>
+              <p className={cn("leading-6 text-muted-foreground", compact ? "text-xs" : "text-sm")}>
+                {updateDescription}
+              </p>
+            </div>
+          ) : null}
+
           {!compact && hasAiText ? (
             <div className="p-1">
               <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" />
-                KI Signal{aiModelLabel ? ` (${aiModelLabel})` : ""}
+                KI Analyse{aiModelLabel ? ` (${aiModelLabel})` : ""}
               </p>
               {item.aiRecommendedAction ? (
                 <p className="text-xs text-foreground">
@@ -236,9 +352,20 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
             </div>
           ) : null}
 
-          <p className={cn("leading-6 text-muted-foreground", compact ? "text-xs" : "text-sm")}>{item.details}</p>
-
-          {Array.isArray(item.highlights) && item.highlights.length > 0 ? (
+          {impactBullets.length > 0 ? (
+            <div className="p-1">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Auswirkungen
+              </p>
+              <ul className="space-y-1.5">
+                {impactBullets.map((impactLine) => (
+                  <li key={impactLine} className="text-sm text-foreground">
+                    - {impactLine}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : Array.isArray(item.highlights) && item.highlights.length > 0 ? (
             <ul className="space-y-1.5">
               {item.highlights.slice(0, 4).map((highlight) => (
                 <li key={highlight} className="text-sm text-foreground">

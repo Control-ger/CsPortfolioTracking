@@ -382,6 +382,18 @@ async function writeJourneyState(nextState) {
   localStorage.setItem(JOURNEY_STORAGE_KEY, JSON.stringify(nextState));
 }
 
+function normalizeJourneyState(value) {
+  const baseState = value && typeof value === "object" ? value : { skipped: false };
+  if (typeof baseState.pushNotificationsWanted === "boolean") {
+    return baseState;
+  }
+
+  return {
+    ...baseState,
+    pushNotificationsWanted: false,
+  };
+}
+
 async function readLocalState(key, fallback) {
   if (typeof window === "undefined") {
     return fallback;
@@ -807,7 +819,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           getCurrentUser(),
         ]);
         const keyStatus = isDesktopRuntime ? await fetchCsFloatApiKeyStatus() : null;
-        setJourneyState(savedJourney && typeof savedJourney === "object" ? savedJourney : { skipped: false });
+        setJourneyState(normalizeJourneyState(savedJourney));
         setJourneyUserName(String(currentUser?.name || currentUser?.steamName || ""));
         const keyConnected = Boolean(keyStatus?.data?.hasKey || keyStatus?.data?.configured);
         setHasCsFloatKey(keyConnected);
@@ -2796,6 +2808,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!journeyStarted || activeJourneyStepId === "intro") {
       return;
     }
+    if (activeJourneyStepId === "push_notifications" && !journeyState?.pushPreferenceSetAt) {
+      await handleSetJourneyPushPreference(false);
+      return;
+    }
     await handleGoToJourneyStep(resolveNextJourneyStepId(activeJourneyStepId));
   };
   const handleConfirmImportDefaultsStep = async () => {
@@ -3461,19 +3477,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         </p>
                       </div>
                       <div className="rounded-md border border-cyan-300/25 bg-cyan-500/10 p-3 text-xs text-cyan-100">
-                        Wenn du Push willst: Web/PWA oeffnen und unter Einstellungen - Allgemein - Browser Push aktivieren.
+                        Standard ist deaktiviert. Wenn du Push willst: Web/PWA oeffnen und unter Einstellungen - Allgemein - Browser Push aktivieren.
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Button size="sm" onClick={() => void handleSetJourneyPushPreference(true)}>
-                          Ja, Push nutzen
+                        <Button size="sm" onClick={() => void handleSetJourneyPushPreference(false)}>
+                          Ohne Push weiter (Standard)
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
-                          onClick={() => void handleSetJourneyPushPreference(false)}
+                          onClick={() => void handleSetJourneyPushPreference(true)}
                         >
-                          Nein, erstmal ohne Push
+                          Ja, Push spaeter aktivieren
                         </Button>
                       </div>
                     </div>
