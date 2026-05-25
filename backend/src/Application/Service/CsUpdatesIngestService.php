@@ -373,8 +373,8 @@ final class CsUpdatesIngestService
 
     private function resolveSummaryMaxLength(): int
     {
-        $raw = (int) (getenv('CS_UPDATES_SUMMARY_MAX_LENGTH') ?: 1600);
-        return max(420, min(6000, $raw));
+        $raw = (int) (getenv('CS_UPDATES_SUMMARY_MAX_LENGTH') ?: 5000);
+        return max(420, min(12000, $raw));
     }
 
     private function toTitleKey(string $title): string
@@ -439,14 +439,20 @@ final class CsUpdatesIngestService
 
         // Steam news often contains BBCode-style tags ([p], [list], [*], [img], ...).
         // Strip/normalize them so feed entries stay readable in the UI.
-        $normalized = preg_replace('/\[img\].*?\[\/img\]/is', ' ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[img\].*?\[\/img\]/is', "\n", $normalized) ?? $normalized;
         $normalized = preg_replace('/\[url=([^\]]+)\](.*?)\[\/url\]/is', '$2', $normalized) ?? $normalized;
         $normalized = preg_replace('/\[url\](.*?)\[\/url\]/is', '$1', $normalized) ?? $normalized;
-        $normalized = preg_replace('/\[\*\]/', ' - ', $normalized) ?? $normalized;
-        $normalized = preg_replace('/\[(?:\/)?(?:p|h1|h2|h3|b|i|u|list|quote|code)\]/i', ' ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[\*\]/', "\n- ", $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[(?:\/)?(?:p|h1|h2|h3|list|quote|code)\]/i', "\n", $normalized) ?? $normalized;
+        $normalized = preg_replace('/\[(?:\/)?(?:b|i|u)\]/i', '', $normalized) ?? $normalized;
         $normalized = preg_replace('/\[(?:\/)?[a-z0-9_*]+(?:=[^\]]+)?\]/i', ' ', $normalized) ?? $normalized;
 
-        $plain = trim(preg_replace('/\s+/', ' ', strip_tags($normalized)) ?? '');
+        $plain = strip_tags($normalized);
+        $plain = str_replace(["\r\n", "\r"], "\n", $plain);
+        $plain = preg_replace('/[ \t\f\v]+/', ' ', $plain) ?? $plain;
+        $plain = preg_replace('/\s*\n\s*/', "\n", $plain) ?? $plain;
+        $plain = preg_replace('/\n{3,}/', "\n\n", $plain) ?? $plain;
+        $plain = trim($plain);
         return $plain;
     }
 

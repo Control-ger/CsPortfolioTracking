@@ -68,8 +68,10 @@ final class CsUpdatesController
         $publishedIso = $publishedAt !== ''
             ? (new \DateTimeImmutable($publishedAt, new \DateTimeZone('UTC')))->format(DATE_ATOM)
             : gmdate(DATE_ATOM);
-        $summary = $this->sanitizeFeedText((string) ($row['summary_raw'] ?? ''));
-        $title = $this->sanitizeFeedText((string) ($row['title'] ?? ''));
+        $details = $this->sanitizeFeedText((string) ($row['summary_raw'] ?? ''));
+        $titleRaw = $this->sanitizeFeedText((string) ($row['title'] ?? ''));
+        $title = $this->resolveDisplayTitle($titleRaw, $details);
+        $summary = $this->buildSummaryPreview($details);
         $aiImpactLevel = $this->normalizeAiImpactLevel($row['ai_impact_level'] ?? null);
         $aiUrgency = $this->normalizeAiUrgency($row['ai_urgency'] ?? null);
         $aiConfidence = $this->normalizeAiConfidence($row['ai_confidence'] ?? null);
@@ -88,7 +90,8 @@ final class CsUpdatesController
             'sourceLabel' => $this->resolveSourceLabel((string) ($row['source'] ?? 'steam_news_api')),
             'title' => $title !== '' ? $title : 'CS2 Update',
             'summary' => $summary !== '' ? $summary : 'Neue Aenderung in Counter-Strike 2 erkannt.',
-            'details' => $summary !== '' ? $summary : 'Keine weiteren Details verfuegbar.',
+            'details' => $details !== '' ? $details : 'Keine weiteren Details verfuegbar.',
+            'updateNotes' => $details !== '' ? $details : null,
             'url' => (string) ($row['url'] ?? ''),
             'publishedAt' => $publishedIso,
             'updatedAt' => $publishedIso,
@@ -143,7 +146,55 @@ final class CsUpdatesController
         $normalized = preg_replace('/\[(?:\/)?(?:p|h1|h2|h3|b|i|u|list|quote|code)\]/i', ' ', $normalized) ?? $normalized;
         $normalized = preg_replace('/\[(?:\/)?[a-z0-9_*]+(?:=[^\]]+)?\]/i', ' ', $normalized) ?? $normalized;
 
-        return trim(preg_replace('/\s+/', ' ', strip_tags($normalized)) ?? '');
+        $plain = strip_tags($normalized);
+        $plain = str_replace(["\r\n", "\r"], "\n", $plain);
+        $plain = preg_replace('/[ \t\f\v]+/', ' ', $plain) ?? $plain;
+        $plain = preg_replace('/\s*\n\s*/', "\n", $plain) ?? $plain;
+        $plain = preg_replace('/\n{3,}/', "\n\n", $plain) ?? $plain;
+        return trim($plain);
+    }
+
+    private function buildSummaryPreview(string $details): string
+    {
+        $normalized = trim(preg_replace('/\s+/', ' ', $details) ?? '');
+        if ($normalized === '') {
+            return '';
+        }
+
+        if (mb_strlen($normalized) <= 260) {
+            return $normalized;
+        }
+
+        return rtrim(mb_substr($normalized, 0, 260)) . '...';
+    }
+
+    private function resolveDisplayTitle(string $title, string $details): string
+    {
+        $normalizedTitle = strtolower(trim($title));
+        $isGenericTitle = $normalizedTitle === ''
+            || str_starts_with($normalizedTitle, 'counter-strike 2 update for')
+            || $normalizedTitle === 'counter-strike 2 update'
+            || $normalizedTitle === 'cs2 update';
+
+        if (!$isGenericTitle) {
+            return $title;
+        }
+
+        $detailLines = preg_split('/\n+/', trim($details)) ?: [];
+        foreach ($detailLines as $line) {
+            $candidate = trim((string) $line);
+            if ($candidate === '') {
+                continue;
+            }
+
+            if (mb_strlen($candidate) > 120) {
+                $candidate = rtrim(mb_substr($candidate, 0, 120)) . '...';
+            }
+
+            return $candidate;
+        }
+
+        return $title;
     }
 
     private function mapSeverityFromAiImpactLevel(?string $impactLevel): string

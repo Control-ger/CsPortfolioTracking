@@ -73,17 +73,38 @@ function normalizeComparableText(value) {
 function resolveDisplayTitle(item) {
   const rawTitle = String(item?.title || "").trim();
   const rawSummary = String(item?.summary || "").trim();
+  const rawDetails = String(item?.updateNotes || item?.details || "").trim();
+
+  const deriveShortTitle = (value) => {
+    const normalized = String(value || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.length <= 120) {
+      return normalized;
+    }
+    return `${normalized.slice(0, 120).trim()}...`;
+  };
 
   if (isGenericUpdateTitle(rawTitle) && rawSummary && normalizeComparableText(rawSummary) !== normalizeComparableText(rawTitle)) {
-    return rawSummary;
+    return deriveShortTitle(rawSummary);
   }
 
   if (rawTitle) {
     return rawTitle;
   }
 
+  if (rawDetails) {
+    const firstLine = rawDetails.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length > 0);
+    if (firstLine) {
+      return deriveShortTitle(firstLine);
+    }
+  }
+
   if (rawSummary) {
-    return rawSummary;
+    return deriveShortTitle(rawSummary);
   }
 
   return "CS2 Update";
@@ -337,7 +358,7 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
             <div className="p-1">
               <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" />
-                KI Analyse{aiModelLabel ? ` (${aiModelLabel})` : ""}
+                KI Zusammenfassung{aiModelLabel ? ` (${aiModelLabel})` : ""}
               </p>
               {item.aiRecommendedAction ? (
                 <p className="text-xs text-foreground">
@@ -355,7 +376,7 @@ function FeedItem({ item, isOpen, isFresh, compact }) {
           {impactBullets.length > 0 ? (
             <div className="p-1">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Auswirkungen
+                Markt-Auswirkungen
               </p>
               <ul className="space-y-1.5">
                 {impactBullets.map((impactLine) => (
