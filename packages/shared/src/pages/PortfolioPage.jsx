@@ -4018,7 +4018,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   }
                 />
               </div>
-              <Card className="flex h-full min-h-[340px] flex-col border-border/70 bg-card/70">
+              <Card className="flex min-h-[340px] flex-col border-border/70 bg-card/70 lg:h-[520px] lg:min-h-0">
                 <CardHeader className="space-y-2 pb-3">
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-base">Watchlist Mover</CardTitle>

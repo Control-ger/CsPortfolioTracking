@@ -107,22 +107,6 @@ function formatAxisAbsolute(value, decimals = 2) {
   })}€`;
 }
 
-function resolveAbsoluteAxisDecimals(range) {
-  if (!Number.isFinite(range) || range <= 0) {
-    return 2;
-  }
-  if (range < 0.5) {
-    return 3;
-  }
-  if (range < 10) {
-    return 2;
-  }
-  if (range < 100) {
-    return 1;
-  }
-  return 0;
-}
-
 function buildAbsoluteAxisConfig(chartData = []) {
   const values = chartData
     .map((entry) => Number(entry?.displayValue))
@@ -144,10 +128,9 @@ function buildAbsoluteAxisConfig(chartData = []) {
     pad = Math.max(range * 0.12, 0.01);
   }
 
-  const decimals = resolveAbsoluteAxisDecimals(range);
   return {
     domain: [minValue - pad, maxValue + pad],
-    tickFormatter: (value) => formatAxisAbsolute(value, decimals),
+    tickFormatter: (value) => formatAxisAbsolute(value, 2),
     tickCount: 6,
   };
 }

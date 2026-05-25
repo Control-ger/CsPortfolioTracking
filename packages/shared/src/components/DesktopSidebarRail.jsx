@@ -177,23 +177,6 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
                   <p className="p-2 text-xs text-muted-foreground">
                     Im Web werden System-Benachrichtigungen per Browser Push zugestellt.
                   </p>
-                  <DropdownMenuSeparator />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => navigate("/settings", { replace: true })}
-                  >
-                    Push-Einstellungen
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => navigate("/cs-updates", { replace: true })}
-                  >
-                    CS Updates oeffnen
-                  </Button>
                 </>
               )}
             </DropdownMenuContent>

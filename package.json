@@ -1,7 +1,7 @@
 {
   "name": "cs-portfolio-tracking-monorepo",
   "private": true,
-  "version": "0.1.54",
+  "version": "0.1.55",
   "main": "apps/desktop/main.js",
   "type": "module",
   "repository": {
