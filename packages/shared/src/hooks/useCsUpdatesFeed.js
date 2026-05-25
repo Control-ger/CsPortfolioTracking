@@ -230,10 +230,18 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
   const reconnectAttemptRef = useRef(0);
   const wsDisabledUntilRef = useRef(0);
   const manualRefreshRef = useRef(false);
+  const nextBeforeRef = useRef(nextBefore);
+  const windowDaysRef = useRef(windowDays);
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+  useEffect(() => {
+    nextBeforeRef.current = nextBefore;
+  }, [nextBefore]);
+  useEffect(() => {
+    windowDaysRef.current = windowDays;
+  }, [windowDays]);
 
   const load = useCallback(
     async (mode = "initial") => {
@@ -243,7 +251,8 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
       const hasSnapshot = Boolean(getValidCsUpdatesSnapshot()?.items?.length);
 
       if (isLoadOlder) {
-        if (!nextBefore) {
+        const currentBefore = nextBeforeRef.current;
+        if (!currentBefore) {
           setHasMore(false);
           return;
         }
@@ -262,11 +271,11 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
         const requestParams = isLoadOlder
           ? {
               limit: DEFAULT_PAGE_SIZE,
-              before: nextBefore,
+              before: nextBeforeRef.current,
             }
           : {
               limit: DEFAULT_PAGE_SIZE,
-              since: getFeedSinceIso(windowDays),
+              since: getFeedSinceIso(windowDaysRef.current),
             };
         const payload = await loader(requestParams);
         const normalized = normalizeFeedPayload(payload);
@@ -280,11 +289,14 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
         setMeta(normalized.meta);
         setNextBefore(normalized.meta.nextBefore);
         setHasMore(Boolean(normalized.meta.hasMore && normalized.meta.nextBefore));
-        setWindowDays(resolveFeedWindowDays(normalized.meta.defaultWindowDays));
+        const resolvedWindowDays = resolveFeedWindowDays(normalized.meta.defaultWindowDays);
+        setWindowDays(resolvedWindowDays);
+        nextBeforeRef.current = normalized.meta.nextBefore;
+        windowDaysRef.current = resolvedWindowDays;
         csUpdatesFeedSnapshot = {
           items: nextItems,
           meta: normalized.meta,
-          windowDays: resolveFeedWindowDays(normalized.meta.defaultWindowDays),
+          windowDays: resolvedWindowDays,
           updatedAt: Date.now(),
         };
       } catch (loadError) {
@@ -302,6 +314,10 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
           });
           setNextBefore(null);
           setHasMore(false);
+          nextBeforeRef.current = null;
+          const fallbackWindowDays = resolveFeedWindowDays(fallbackNormalized.meta.defaultWindowDays);
+          setWindowDays(fallbackWindowDays);
+          windowDaysRef.current = fallbackWindowDays;
           csUpdatesFeedSnapshot = {
             items: fallbackNormalized.items,
             meta: {
@@ -310,7 +326,7 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
               nextBefore: null,
               hasMore: false,
             },
-            windowDays: resolveFeedWindowDays(fallbackNormalized.meta.defaultWindowDays),
+            windowDays: fallbackWindowDays,
             updatedAt: Date.now(),
           };
         }
@@ -321,7 +337,7 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
         manualRefreshRef.current = false;
       }
     },
-    [loader, nextBefore, windowDays],
+    [loader],
   );
 
   const startFallbackPolling = useCallback(() => {
