@@ -66,6 +66,32 @@ export default function App() {
     </div>
   );
 
+  const routeViews = (
+    <Routes>
+      <Route path="/" element={<PortfolioPage initialTab="overview" useExternalDesktopSidebarShell />} />
+      <Route path="/inventory" element={<PortfolioPage initialTab="inventory" useExternalDesktopSidebarShell />} />
+      <Route path="/watchlist" element={<PortfolioPage initialTab="watchlist" useExternalDesktopSidebarShell />} />
+      <Route path="/search" element={<PortfolioPage initialTab="search" useExternalDesktopSidebarShell />} />
+      <Route
+        path="/cs-updates"
+        element={(
+          <Suspense fallback={routeFallback}>
+            <CsUpdatesPage useExternalDesktopSidebarShell />
+          </Suspense>
+        )}
+      />
+      <Route
+        path="/settings"
+        element={(
+          <Suspense fallback={routeFallback}>
+            <SettingsPage useExternalDesktopSidebarShell />
+          </Suspense>
+        )}
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+
   return (
     <CurrencyProvider>
       <div className={`flex flex-col ${isElectron ? "h-full overflow-hidden" : "min-h-screen"} bg-background text-foreground`}>
@@ -73,64 +99,14 @@ export default function App() {
         {/* Nur in Electron anzeigen! */}
         {isElectron && <Titlebar />}
 
-        {isElectron ? (
-          <div className="flex-1 min-h-0 lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6">
-            <aside className="hidden lg:flex lg:justify-center lg:pt-2">
-              <DesktopSidebarRail desktopRuntime={desktopRuntime} />
-            </aside>
-            <main className="w-full min-h-0 overflow-y-auto lg:px-6 xl:px-8">
-              <Routes>
-                <Route path="/" element={<PortfolioPage initialTab="overview" useExternalDesktopSidebarShell />} />
-                <Route path="/inventory" element={<PortfolioPage initialTab="inventory" useExternalDesktopSidebarShell />} />
-                <Route path="/watchlist" element={<PortfolioPage initialTab="watchlist" useExternalDesktopSidebarShell />} />
-                <Route path="/search" element={<PortfolioPage initialTab="search" useExternalDesktopSidebarShell />} />
-                <Route
-                  path="/cs-updates"
-                  element={(
-                    <Suspense fallback={routeFallback}>
-                      <CsUpdatesPage useExternalDesktopSidebarShell />
-                    </Suspense>
-                  )}
-                />
-                <Route
-                  path="/settings"
-                  element={(
-                    <Suspense fallback={routeFallback}>
-                      <SettingsPage useExternalDesktopSidebarShell />
-                    </Suspense>
-                  )}
-                />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </main>
-          </div>
-        ) : (
-          <main className="flex-1 w-full">
-            <Routes>
-              <Route path="/" element={<PortfolioPage initialTab="overview" />} />
-              <Route path="/inventory" element={<PortfolioPage initialTab="inventory" />} />
-              <Route path="/watchlist" element={<PortfolioPage initialTab="watchlist" />} />
-              <Route path="/search" element={<PortfolioPage initialTab="search" />} />
-              <Route
-                path="/cs-updates"
-                element={(
-                  <Suspense fallback={routeFallback}>
-                    <CsUpdatesPage />
-                  </Suspense>
-                )}
-              />
-              <Route
-                path="/settings"
-                element={(
-                  <Suspense fallback={routeFallback}>
-                    <SettingsPage />
-                  </Suspense>
-                )}
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+        <div className={`flex-1 min-h-0 lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 ${isElectron ? "" : "w-full"}`}>
+          <aside className="hidden lg:flex lg:justify-center lg:pt-2">
+            <DesktopSidebarRail desktopRuntime={desktopRuntime} />
+          </aside>
+          <main className={`w-full ${isElectron ? "min-h-0 overflow-y-auto" : "min-h-[calc(100vh-4rem)]"} lg:px-6 xl:px-8`}>
+            {routeViews}
           </main>
-        )}
+        </div>
 
         <BottomNavigation />
       </div>

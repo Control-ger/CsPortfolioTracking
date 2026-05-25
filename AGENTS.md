@@ -462,3 +462,10 @@ Change: App-weite Desktop-Sidebar-Shell vereinheitlicht
 - Desktop-Sidebar-Rail wurde als gemeinsame Komponente auf App-Ebene zentralisiert (`apps/web/src/App.jsx`, `packages/shared/src/components/DesktopSidebarRail.jsx`).
 - `PortfolioPage`, `SettingsPage` und `CsUpdatesPage` koennen ihre lokale Sidebar-Shell ueber `useExternalDesktopSidebarShell` deaktivieren.
 - Ergebnis: Beim Wechsel zwischen Dashboard/Watchlist/CS-Updates/Einstellungen bleibt die Sidebar stabil gemountet und wird nicht pro Route neu aufgebaut.
+
+---
+
+Updated: 2026-05-25
+Change: Sidebar-Shell fuer alle Runtime-Pfade vereinheitlicht
+- Die gemeinsame Rail-Shell in `apps/web/src/App.jsx` gilt jetzt einheitlich fuer Desktop und Web statt nur fuer den Electron-Zweig.
+- Dadurch sind Sidebar-Verhalten und Active-State zwischen Dashboard, Einstellungen und Updates in allen Runtimes konsistent.

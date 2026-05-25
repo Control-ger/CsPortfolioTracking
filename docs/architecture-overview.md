@@ -80,6 +80,7 @@ From `apps/web/src/App.jsx`:
 - `/cs-updates` -> `CsUpdatesPage`
 - `/settings` -> `SettingsPage`
 - Electron/Desktop uses a shared app-level rail shell (`DesktopSidebarRail`) so cross-route navigation does not remount page-local sidebars.
+- The same shared app-level rail shell is used consistently across runtime paths so sidebar active-state/layout does not diverge between Dashboard, Settings, and Updates.
 
 ## 6. Page Lifecycle and Cache Policy
 
