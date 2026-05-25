@@ -233,6 +233,14 @@
   background: #02050b;
 }
 
+.steam-startup-shell-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  min-height: 100dvh;
+  z-index: 120;
+}
+
 .steam-startup-shell::before {
   content: "";
   position: absolute;

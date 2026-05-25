@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Cog, Eye, FolderCog, LayoutGrid, Package } from "lucide-react";
+import { ArrowLeft, Bell, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package } from "lucide-react";
 
 import { CsUpdatesFeed } from "@shared/components/CsUpdatesFeed";
 import { ThemeToggle } from "@shared/components/ThemeToggle";
@@ -21,7 +21,7 @@ const DESKTOP_SIDEBAR_ITEMS = [
   { key: "watchlist", label: "Watchlist", icon: Eye, to: "/?tab=watchlist" },
   { key: "management", label: "Verwaltung", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
   { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
-  { key: "updates", label: "Updates", icon: Bell, to: "/cs-updates" },
+  { key: "updates", label: "Updates", icon: Newspaper, to: "/cs-updates" },
 ];
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
 

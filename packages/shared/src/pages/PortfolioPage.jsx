@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Package, Search } from "lucide-react";
+import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Newspaper, Package, Search } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
 import { InventoryTable } from "@shared/components";
@@ -242,7 +242,7 @@ const DESKTOP_SIDEBAR_TABS = [
   { key: "inventory", label: "Inventar", icon: Package },
   { key: "watchlist", label: "Watchlist", icon: Eye },
   { key: "management", label: "Verwaltung", icon: FolderCog, desktopOnly: true },
-  { key: "updates", label: "Updates", icon: Bell, route: "/cs-updates" },
+  { key: "updates", label: "Updates", icon: Newspaper, route: "/cs-updates" },
   { key: "settings", label: "Einstellungen", icon: Cog, route: "/settings" },
 ];
 const GLOBAL_SEARCH_CATEGORIES = [
@@ -663,6 +663,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [priceMissingOnly, setPriceMissingOnly] = useState(false);
   const [matchingSearchTerm, setMatchingSearchTerm] = useState("");
   const [matchingSortBy, setMatchingSortBy] = useState("score_desc");
+  const [showMatchedMatchingRows, setShowMatchedMatchingRows] = useState(false);
   const [priceDrafts, setPriceDrafts] = useState({});
   const [savingPriceItemId, setSavingPriceItemId] = useState(null);
   const [manualItemDraft, setManualItemDraft] = useState({
@@ -2016,6 +2017,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     return uniqueTypes;
   })();
   const pendingMatchingRows = matchingRows.filter((row) => row.status === "suggested");
+  const matchedMatchingRows = matchingRows.filter((row) => {
+    const status = String(row?.status || "").toLowerCase();
+    return status === "manual_confirmed" || status === "auto_linked";
+  });
   const confirmedOrAutoMatchByCsfloatId = new Map();
   matchingRows.forEach((row) => {
     const status = String(row?.status || "").toLowerCase();
@@ -2029,9 +2034,20 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     confirmedOrAutoMatchByCsfloatId.set(csfloatId, steamId);
   });
+  const confirmedOrAutoMatchedSteamKeys = new Set(
+    Array.from(confirmedOrAutoMatchByCsfloatId.values())
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
   const matchingSearchQuery = normalizeSearchText(matchingSearchTerm);
+  const matchingDisplayRows = showMatchedMatchingRows
+    ? matchingRows.filter((row) => {
+      const status = String(row?.status || "").toLowerCase();
+      return status === "suggested" || status === "manual_confirmed" || status === "auto_linked";
+    })
+    : pendingMatchingRows;
   const filteredMatchingRows = (() => {
-    let rows = [...pendingMatchingRows];
+    let rows = [...matchingDisplayRows];
     if (matchingSearchQuery) {
       rows = rows.filter((row) => {
         const steamItem = managementInvestmentById.get(String(row?.steamAssetId || ""));
@@ -2073,10 +2089,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     return bucket === inventoryScope;
   });
-  const rawSteamInventoryItems = managementInvestments.filter((item) => {
+  const steamInventoryItemsAll = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     return platform === "steam_inventory" || Boolean(item.steamAssetId);
   });
+  const rawSteamInventoryItems = steamInventoryItemsAll.filter((item) => {
+    const matchKeys = [
+      String(item?.id || "").trim(),
+      String(item?.steamAssetId || "").trim(),
+      String(item?.externalTradeId || "").trim(),
+    ].filter(Boolean);
+    return !matchKeys.some((key) => confirmedOrAutoMatchedSteamKeys.has(key));
+  });
+  const matchedSteamInventoryItemsCount = Math.max(0, steamInventoryItemsAll.length - rawSteamInventoryItems.length);
   const priceSearchQuery = normalizeSearchText(priceSearchTerm);
   const filteredPriceItems = (() => {
     let rows = [...rawSteamInventoryItems];
@@ -2964,7 +2989,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   // hook order after login and triggers React's minified error #310.
   if (isElectronRuntime && showStartupWelcome && !portfolioLoading) {
     return (
-      <div className="steam-startup-shell fixed inset-0 z-[120] flex items-center justify-center overflow-auto p-4">
+      <div className="steam-startup-shell steam-startup-shell-overlay flex items-center justify-center overflow-auto p-4">
         <SteamLoginPrompt
           onLoginSuccess={async () => {
             await refreshPortfolio();
@@ -3007,60 +3032,64 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               : "mx-auto flex max-w-7xl flex-col gap-6 px-3.5 pb-6 pt-3 sm:gap-8 sm:p-6 md:p-8"
         }
       >
-        {/* Mobile Header - nur auf Mobile sichtbar */}
-        <header className="flex items-center justify-between pt-[max(0.35rem,env(safe-area-inset-top))] sm:hidden">
-          <div className="flex items-end gap-3">
-            <h1 className="text-[1.9rem] font-extrabold leading-none tracking-tight text-foreground">Portfolio</h1>
-            <span className="pb-0.5 text-[1.9rem] font-extrabold leading-none tracking-tight text-muted-foreground/55">Cash</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="relative h-10 w-10 rounded-full border-border/80 bg-card/75 p-0">
-                  <Bell className="h-5 w-5" />
-                  {unreadNotificationCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-                      {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-                    </span>
-                  ) : null}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                {renderNotificationsDropdownContent()}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </header>
+        {!showSetupJourney ? (
+          <>
+            {/* Mobile Header - nur auf Mobile sichtbar */}
+            <header className="flex items-center justify-between pt-[max(0.35rem,env(safe-area-inset-top))] sm:hidden">
+              <div className="flex items-end gap-3">
+                <h1 className="text-[1.9rem] font-extrabold leading-none tracking-tight text-foreground">Portfolio</h1>
+                <span className="pb-0.5 text-[1.9rem] font-extrabold leading-none tracking-tight text-muted-foreground/55">Cash</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="relative h-10 w-10 rounded-full border-border/80 bg-card/75 p-0">
+                      <Bell className="h-5 w-5" />
+                      {unreadNotificationCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                        </span>
+                      ) : null}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-80">
+                    {renderNotificationsDropdownContent()}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </header>
 
-        {/* Header - nur auf Desktop sichtbar */}
-        <header className={`hidden sm:flex flex-col items-start justify-between gap-4 md:flex-row md:items-center ${
-          useDesktopSidebarShell ? "lg:hidden" : ""
-        }`}>
-          <div className="flex-1">
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">Portfolio</h1>
-            <p className="text-sm text-muted-foreground md:text-base">Investments, Inventar und Watchlist</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
-                  <Bell className="h-5 w-5" />
-                  {unreadNotificationCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-                      {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-                    </span>
-                  ) : null}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                {renderNotificationsDropdownContent()}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <UserMenu />
-          </div>
-        </header>
+            {/* Header - nur auf Desktop sichtbar */}
+            <header className={`hidden sm:flex flex-col items-start justify-between gap-4 md:flex-row md:items-center ${
+              useDesktopSidebarShell ? "lg:hidden" : ""
+            }`}>
+              <div className="flex-1">
+                <h1 className="text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">Portfolio</h1>
+                <p className="text-sm text-muted-foreground md:text-base">Investments, Inventar und Watchlist</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
+                      <Bell className="h-5 w-5" />
+                      {unreadNotificationCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                        </span>
+                      ) : null}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-80">
+                    {renderNotificationsDropdownContent()}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <UserMenu />
+              </div>
+            </header>
+          </>
+        ) : null}
 
         {showJourneyBannerLegacy ? (
           <Card className="border-primary/30 bg-primary/5">
@@ -4190,10 +4219,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     <CardHeader className="space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <CardTitle>Preise setzen</CardTitle>
-                        <Badge variant="secondary">{filteredPriceItems.length} sichtbar</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">{filteredPriceItems.length} sichtbar</Badge>
+                          {matchedSteamInventoryItemsCount > 0 ? (
+                            <Badge variant="outline">{matchedSteamInventoryItemsCount} gematcht ausgeblendet</Badge>
+                          ) : null}
+                        </div>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Nur Steam-Inventory-Items koennen hier einen Einkaufspreis erhalten.
+                        Nur nicht gematchte Steam-Inventory-Items koennen hier einen Einkaufspreis erhalten.
                       </p>
                       <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                         <label className="relative block">
@@ -4230,9 +4264,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     </CardHeader>
                     <CardContent className="space-y-2">
                       {rawSteamInventoryItems.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          Noch keine Steam-Inventory-Items vorhanden.
-                        </p>
+                        steamInventoryItemsAll.length > 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Alle Steam-Inventory-Items sind bereits gematcht. Keine manuellen Preise noetig.
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Noch keine Steam-Inventory-Items vorhanden.
+                          </p>
+                        )
                       ) : filteredPriceItems.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
                           Kein Item passt zu Suche/Filter.
@@ -4714,9 +4754,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   <CardHeader className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <CardTitle>Steam &lt;-&gt; CSFloat Matching Queue</CardTitle>
-                      <Badge variant="secondary">{filteredMatchingRows.length} offen</Badge>
+                      <div className="flex items-center gap-2">
+                        {showMatchedMatchingRows ? (
+                          <Badge variant="secondary">{filteredMatchingRows.length} sichtbar</Badge>
+                        ) : (
+                          <Badge variant="secondary">{filteredMatchingRows.length} offen</Badge>
+                        )}
+                        {showMatchedMatchingRows ? (
+                          <Badge variant="outline">Gematcht: {matchedMatchingRows.length}</Badge>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                       <label className="relative block">
                         <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
@@ -4734,8 +4783,17 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       >
                         <option value="score_desc">Sortierung: Score absteigend</option>
                         <option value="score_asc">Sortierung: Score aufsteigend</option>
-                        <option value="newest">Sortierung: Neueste zuerst</option>
-                      </select>
+                          <option value="newest">Sortierung: Neueste zuerst</option>
+                        </select>
+                      <label className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={showMatchedMatchingRows}
+                          onChange={(event) => setShowMatchedMatchingRows(event.target.checked)}
+                          className="h-4 w-4 accent-primary"
+                        />
+                        Gematchte anzeigen
+                      </label>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -4744,10 +4802,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         <Skeleton className="h-14 w-full" />
                         <Skeleton className="h-14 w-full" />
                       </div>
-                    ) : pendingMatchingRows.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Keine offenen Matching-Vorschlaege vorhanden.
-                      </p>
+                    ) : matchingDisplayRows.length === 0 ? (
+                      showMatchedMatchingRows ? (
+                        <p className="text-sm text-muted-foreground">
+                          Keine Matching-Eintraege vorhanden.
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Keine offenen Matching-Vorschlaege vorhanden.
+                        </p>
+                      )
                     ) : filteredMatchingRows.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         Kein Match passt zur Suche.
@@ -4819,20 +4883,28 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   ) : null}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => void handleMatchStatusUpdate(row.id, "manual_confirmed")}
-                                  >
-                                    Bestaetigen
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => void handleMatchStatusUpdate(row.id, "rejected")}
-                                  >
-                                    Ablehnen
-                                  </Button>
+                                  {String(row?.status || "").toLowerCase() === "suggested" ? (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => void handleMatchStatusUpdate(row.id, "manual_confirmed")}
+                                      >
+                                        Bestaetigen
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => void handleMatchStatusUpdate(row.id, "rejected")}
+                                      >
+                                        Ablehnen
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Badge variant="outline">
+                                      {String(row?.status || "").toLowerCase() === "auto_linked" ? "Auto gematcht" : "Gematcht"}
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -5138,12 +5210,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           onSynced={async () => {
             await refreshPortfolio();
             setCompositionRefreshToken((current) => current + 1);
+            const shouldAdvanceJourney =
+              Boolean(journeyState?.startedAt) &&
+              !journeyState?.skipped &&
+              !journeyState?.completedAt;
             const nextState = {
               ...journeyState,
-              skipped: false,
               csfloatImportCompletedAt: new Date().toISOString(),
               csfloatImportSkippedAt: null,
-              currentStepId: "matching",
+              currentStepId: shouldAdvanceJourney ? "matching" : journeyState?.currentStepId,
             };
             setJourneyState(nextState);
             await writeJourneyState(nextState);

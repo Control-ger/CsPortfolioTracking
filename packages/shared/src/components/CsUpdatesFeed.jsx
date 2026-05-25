@@ -515,8 +515,6 @@ export function CsUpdatesFeed({
       <div className="space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <h2 className={cn("font-semibold text-foreground", compact ? "text-lg" : "text-xl")}>CS Updates Feed</h2>
-            <p className="text-sm text-muted-foreground">Live Patchnotes mit KI-Einschaetzung.</p>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <Badge variant="outline" className="border-border text-muted-foreground">{meta.sourceMode || "backend"}</Badge>
               <Badge
