@@ -377,4 +377,80 @@ final class ItemRepository
 
         return $this->priceJoinAvailable;
     }
+
+    public function findIdsByMarketHashNames(array $marketHashNames): array
+    {
+        $normalized = array_values(array_unique(array_filter(array_map(
+            static fn(mixed $value): string => trim((string) $value),
+            $marketHashNames
+        ), static fn(string $value): bool => $value !== '')));
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($normalized), '?'));
+        $sql = "SELECT id, market_hash_name FROM items WHERE market_hash_name IN ({$placeholders})";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($normalized);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $map = [];
+            foreach ($rows as $row) {
+                $name = (string) ($row['market_hash_name'] ?? '');
+                $id = (int) ($row['id'] ?? 0);
+                if ($name !== '' && $id > 0) {
+                    $map[$name] = $id;
+                }
+            }
+            return $map;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['count' => count($normalized)]
+            );
+            throw $exception;
+        }
+    }
+
+    public function bulkInsertMarketHashNames(array $marketHashNames): int
+    {
+        $normalized = array_values(array_unique(array_filter(array_map(
+            static fn(mixed $value): string => trim((string) $value),
+            $marketHashNames
+        ), static fn(string $value): bool => $value !== '')));
+
+        if ($normalized === []) {
+            return 0;
+        }
+
+        $values = [];
+        $params = [];
+        foreach ($normalized as $name) {
+            $values[] = '(?, ?)';
+            $params[] = $name;
+            $params[] = $name;
+        }
+
+        $sql = 'INSERT IGNORE INTO items (name, market_hash_name) VALUES ' . implode(',', $values);
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->rowCount();
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['count' => count($normalized)]
+            );
+            throw $exception;
+        }
+    }
 }

@@ -115,7 +115,8 @@ final class ItemLiveCacheRepository
         int $exchangeRateId,
         string $priceSource,
         string $fetchedAt
-    ): void {
+    ): void
+    {
         $normalizedSource = strtolower(trim($priceSource));
         if ($normalizedSource === '') {
             $normalizedSource = self::PRICE_SOURCE_DEFAULT;
@@ -140,6 +141,61 @@ final class ItemLiveCacheRepository
                 $sql,
                 $exception,
                 ['itemId' => $itemId, 'priceSource' => $normalizedSource]
+            );
+            throw $exception;
+        }
+    }
+
+    public function bulkUpsert(array $rows): int
+    {
+        if ($rows === []) {
+            return 0;
+        }
+
+        $values = [];
+        $params = [];
+        foreach ($rows as $row) {
+            if (!is_array($row) || count($row) < 5) {
+                continue;
+            }
+            [$itemId, $priceSource, $priceUsd, $exchangeRateId, $fetchedAt] = $row;
+            $normalizedSource = strtolower(trim((string) $priceSource));
+            if ($normalizedSource === '') {
+                $normalizedSource = self::PRICE_SOURCE_DEFAULT;
+            }
+
+            $values[] = '(?, ?, ?, ?, ?)';
+            $params[] = (int) $itemId;
+            $params[] = $normalizedSource;
+            $params[] = (float) $priceUsd;
+            $params[] = (int) $exchangeRateId;
+            $params[] = (string) $fetchedAt;
+        }
+
+        if ($values === []) {
+            return 0;
+        }
+
+        $sql = 'INSERT INTO item_live_cache (
+                    item_id, price_source, price_usd, exchange_rate_id, fetched_at
+                ) VALUES ' . implode(',', $values) . '
+                ON DUPLICATE KEY UPDATE
+                    price_usd = VALUES(price_usd),
+                    exchange_rate_id = VALUES(exchange_rate_id),
+                    fetched_at = VALUES(fetched_at),
+                    updated_at = CURRENT_TIMESTAMP';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->rowCount();
+        } catch (Throwable $exception) {
+            RepositoryObservability::upsertFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['rows' => count($values)]
             );
             throw $exception;
         }

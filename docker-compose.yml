@@ -7,7 +7,7 @@ services:
         deploy:
             resources:
                 limits:
-                    memory: "12273582080"
+                    memory: "10737418240"
         environment:
             MYSQL_DATABASE: ${DB_NAME}
             MYSQL_PASSWORD: ${DB_PASSWORD}
@@ -31,7 +31,7 @@ services:
         deploy:
             resources:
                 limits:
-                    memory: "12273582080"
+                    memory: "10737418240"
         environment:
             PMA_HOST: db
         hostname: csportfolio-pma
@@ -54,7 +54,7 @@ services:
         deploy:
             resources:
                 limits:
-                    memory: "12273582080"
+                    memory: "10737418240"
         hostname: csportfolio-web
         labels:
             casaos.icon: http://${APP_HOST}:${APP_PORT}/icon.png

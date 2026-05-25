@@ -18,6 +18,7 @@ final class PricingService
 {
     private const LIVE_CACHE_TTL_SECONDS = 3600;
     private const CATALOG_CACHE_TTL_SECONDS = 86400;
+    private const MAX_INTERACTIVE_CSFLOAT_LOOKUPS = 8;
     private const PRICE_SOURCE_CSFLOAT = 'csfloat';
     private const PRICE_SOURCE_STEAM = 'steam';
     private const PRICE_MODE_AUTO = 'auto';
@@ -30,7 +31,7 @@ final class PricingService
         405 => 300,
         406 => 300,
         418 => 120,
-        429 => 120,
+        429 => 600,
         500 => 60,
         503 => 120,
     ];
@@ -40,6 +41,8 @@ final class PricingService
     private array $warnings = [];
     private ?array $csFloatCircuitBreakerWarning = null;
     private array $priceSourcePreferenceCache = [];
+    private bool $csFloatBackoffWarningRegistered = false;
+    private int $csFloatLookupCount = 0;
 
     public function __construct(
         private readonly CsFloatClient $csFloatClient,
@@ -110,7 +113,8 @@ final class PricingService
         string $itemName,
         ?array $steamHint = null,
         int $userId = 1,
-        ?array $instanceHint = null
+        ?array $instanceHint = null,
+        bool $allowLiveRefresh = true
     ): array
     {
         $this->ensureCacheTables();
@@ -166,7 +170,10 @@ final class PricingService
         $shouldFetchCsFloatPrice = $instancePricingEligible
             ? true
             : $this->shouldFetchCsFloatPrice($priceMode, $cachedBySource);
-        if ($shouldFetchCsFloatPrice && $this->csFloatCircuitBreakerWarning === null) {
+        $interactiveBudgetReached = $this->isInteractiveRuntime()
+            && $this->csFloatLookupCount >= self::MAX_INTERACTIVE_CSFLOAT_LOOKUPS;
+        if ($shouldFetchCsFloatPrice && $this->csFloatCircuitBreakerWarning === null && $allowLiveRefresh && !$interactiveBudgetReached) {
+            $this->csFloatLookupCount++;
             $listingResult = $instancePricingEligible
                 ? $this->csFloatClient->fetchComparableListingResult(
                     $itemName,
@@ -185,7 +192,10 @@ final class PricingService
 
             $listing = is_array($listingResult['snapshot'] ?? null) ? $listingResult['snapshot'] : null;
         } elseif ($this->csFloatCircuitBreakerWarning !== null) {
-            $this->registerWarning($this->csFloatCircuitBreakerWarning, $itemName);
+            if (!$this->csFloatBackoffWarningRegistered) {
+                $this->registerWarning($this->csFloatCircuitBreakerWarning, $itemName);
+                $this->csFloatBackoffWarningRegistered = true;
+            }
         }
 
         if ($listing !== null) {
@@ -780,9 +790,16 @@ final class PricingService
     private function activateCsFloatBackoff(array $warning): void
     {
         $statusCode = isset($warning['statusCode']) ? (int) $warning['statusCode'] : null;
-        $duration = $statusCode !== null
+        $baseDuration = $statusCode !== null
             ? (self::CSFLOAT_BACKOFF_SECONDS[$statusCode] ?? null)
             : null;
+        $retryAfterDuration = isset($warning['retryAfterSeconds']) && is_numeric($warning['retryAfterSeconds'])
+            ? max(1, (int) $warning['retryAfterSeconds'])
+            : null;
+        $duration = $baseDuration;
+        if ($retryAfterDuration !== null) {
+            $duration = max((int) ($duration ?? 0), $retryAfterDuration);
+        }
 
         if ($duration === null && !in_array(
             (string) ($warning['code'] ?? ''),
@@ -803,6 +820,11 @@ final class PricingService
     private function getCsFloatBackoffPath(): string
     {
         return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'csportfolio_csfloat_backoff.json';
+    }
+
+    private function isInteractiveRuntime(): bool
+    {
+        return PHP_SAPI !== 'cli';
     }
 
     private function resolveSteamPriceSnapshot(string $itemName, ?array $steamHint = null): ?array

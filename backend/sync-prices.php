@@ -10,7 +10,6 @@ declare(strict_types=1);
  * 
  * Usage: php sync-prices.php
  */
-
 set_time_limit(300); // 5 minutes max
 
 $backendRoot = dirname(__DIR__);
@@ -31,6 +30,7 @@ require_once $bootstrapPath;
 
 use App\Application\Service\PortfolioService;
 use App\Application\Service\FeeSettingsService;
+use App\Application\Service\PriceListBulkImportService;
 use App\Application\Service\PriceRefreshQueueService;
 use App\Application\Service\PricingService;
 use App\Application\Service\SyncService;
@@ -265,6 +265,31 @@ try {
         $pricingService,
         $priceHistoryRepository
     );
+
+    $priceListImportService = new PriceListBulkImportService(
+        $pdo,
+        $csFloatClient,
+        $exchangeRateClient,
+        $exchangeRateRepository,
+        $itemRepository,
+        $itemLiveCacheRepository,
+        $priceHistoryRepository
+    );
+    $bulkResult = $priceListImportService->importAll();
+    if ($bulkResult['error'] !== null) {
+        $errorCount++;
+        fwrite(STDERR, "  x Bulk price list import failed: {$bulkResult['error']}\n");
+    } else {
+        $truncatedLabel = $bulkResult['truncated'] ? ' (truncated)' : '';
+        fwrite(
+            STDOUT,
+            "[" . date('Y-m-d H:i:s') . "] Bulk price list: total={$bulkResult['total']}, processed={$bulkResult['processed']}, " .
+            "insertedItems={$bulkResult['insertedItems']}, cacheUpserts={$bulkResult['cacheUpserts']}, " .
+            "historyUpserts={$bulkResult['historyUpserts']}, skipped={$bulkResult['skipped']}, " .
+            "durationMs={$bulkResult['durationMs']}{$truncatedLabel}\n"
+        );
+    }
+
     $planStats = $queueService->planHourlyQueue();
     fwrite(
         STDOUT,
@@ -273,7 +298,10 @@ try {
     );
 
     $kickoffBatchRaw = getenv('PRICE_QUEUE_KICKOFF_BATCH');
-    $kickoffBatch = is_numeric($kickoffBatchRaw) ? (int) $kickoffBatchRaw : 8;
+    $kickoffBatch = is_numeric($kickoffBatchRaw)
+        ? (int) $kickoffBatchRaw
+        : max(0, (int) ($planStats['total'] ?? 0));
+    $kickoffBatch = max(0, min($kickoffBatch, 10000));
     if ($kickoffBatch > 0) {
         $kickoffResult = $queueService->processDueQueue($kickoffBatch);
         $syncedCount = (int) ($kickoffResult['success'] ?? 0);

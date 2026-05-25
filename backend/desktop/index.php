@@ -612,6 +612,73 @@ $router->register('GET', '/api/v1/portfolio/investments', static function (Reque
     ]);
 });
 
+$router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+    $baseUrl = $resolveUpstreamApiBase();
+    if ($baseUrl === '') {
+        JsonResponseFactory::success(
+            [
+                'scope' => strtolower(trim((string) ($request->body['scope'] ?? 'investments'))) === 'all' ? 'all' : 'investments',
+                'limit' => max(1, min((int) ($request->body['limit'] ?? 200), 2000)),
+                'staleItemsFound' => 0,
+                'requested' => 0,
+                'updated' => 0,
+            ],
+            ['source' => 'desktop-local-fallback']
+        );
+        return;
+    }
+
+    $scope = strtolower(trim((string) ($request->body['scope'] ?? 'investments'))) === 'all' ? 'all' : 'investments';
+    $limit = max(1, min((int) ($request->body['limit'] ?? 200), 2000));
+    $payload = json_encode(
+        [
+            'scope' => $scope,
+            'limit' => $limit,
+        ],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+    if (!is_string($payload)) {
+        JsonResponseFactory::error('PORTFOLIO_REFRESH_STALE_INVALID', 'Ungueltiger Payload.', [], 400);
+        return;
+    }
+
+    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/portfolio/prices/refresh-stale') as $candidate) {
+        $ch = curl_init($candidate);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || trim($response) === '') {
+            continue;
+        }
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            JsonResponseFactory::success(
+                isset($decoded['data']) ? $decoded['data'] : $decoded,
+                isset($decoded['meta']) && is_array($decoded['meta']) ? $decoded['meta'] : ['source' => 'upstream']
+            );
+            return;
+        }
+    }
+
+    JsonResponseFactory::error(
+        'PORTFOLIO_REFRESH_STALE_UPSTREAM_FAILED',
+        'Stale-Preis-Refresh konnte nicht an den Server gesendet werden.',
+        [],
+        502
+    );
+});
+
 $router->register('GET', '/api/v1/exchange-rate', static function () use ($proxyUpstreamGet): void {
     $proxied = $proxyUpstreamGet('/api/v1/exchange-rate');
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {

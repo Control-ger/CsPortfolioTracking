@@ -5,6 +5,7 @@ import {
   fetchPortfolioComposition as fetchApiPortfolioComposition,
   fetchPortfolioHistory as fetchApiPortfolioHistory,
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
+  refreshPortfolioStalePrices as refreshApiPortfolioStalePrices,
   fetchPortfolioSummary as fetchApiPortfolioSummary,
   fetchWatchlist as fetchApiWatchlist,
 } from "./apiClient.js";
@@ -840,6 +841,32 @@ export async function fetchPortfolioData(options = {}) {
   }
 
   return fetchApiPortfolioData({ ...options });
+}
+
+export async function refreshPortfolioStalePricesData(options = {}) {
+  const authenticated = await isAuthenticated();
+  if (!authenticated) {
+    return {
+      data: {
+        scope: String(options.scope || "investments"),
+        limit: Number(options.limit || 200),
+        staleItemsFound: 0,
+        requested: 0,
+        updated: 0,
+      },
+      meta: {
+        source: "auth-required",
+        requiresLogin: true,
+      },
+      requiresAuth: true,
+    };
+  }
+
+  return refreshApiPortfolioStalePrices({
+    signal: options.signal,
+    scope: options.scope,
+    limit: options.limit,
+  });
 }
 
 export async function fetchPortfolioCompositionData(options = {}) {

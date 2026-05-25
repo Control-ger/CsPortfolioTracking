@@ -721,6 +721,7 @@ try {
     $router->register('GET', '/api/v1/portfolio/summary', [$portfolioController, 'summary']);
     $router->register('GET', '/api/v1/portfolio/history', [$portfolioController, 'history']);
     $router->register('GET', '/api/v1/portfolio/composition', [$portfolioController, 'composition']);
+    $router->register('POST', '/api/v1/portfolio/prices/refresh-stale', [$portfolioController, 'refreshStalePrices']);
     $router->register('PUT', '/api/v1/portfolio/daily-value', [$portfolioController, 'saveDailyValue']);
     $router->register('POST', '/api/v1/portfolio/sync/csfloat/preview', [$csFloatSyncController, 'preview']);
     $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatSyncController, 'execute']);

@@ -415,3 +415,28 @@ Change: Review-Findings eingearbeitet (Security + Konsistenz)
 - Electron Main fuegt Sidecar-Header fuer lokale Requests hinzu und nutzt ihn auch beim Health-Check.
 - Sidecar-Proxy fuer `GET /api/v1/cs-updates` reicht `since` jetzt korrekt durch.
 - Architekturdoku auf Live-Tracking-Modell praezisiert: Investments bleiben server-synchronisiert fuer Web-Tracking, Import-Trigger bleiben desktop-initiiert.
+
+---
+
+Updated: 2026-05-24
+Change: CSFloat 429-Entlastung im Portfolio-Read-Path
+- `PortfolioController::summary` nutzt `PortfolioService::getEnrichedInvestments(..., allowLiveRefresh=false)` und triggert damit keine zusaetzlichen Live-CSFloat-Requests.
+- `PricingService` nutzt fuer HTTP 429 ein deutlich laengeres Backoff (Basis 10min) und respektiert zusaetzlich `Retry-After` falls geliefert.
+- `PricingService` begrenzt interaktive CSFloat-Lookups pro Request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`) und laesst CLI-Worker unbegrenzt.
+- Aktive Circuit-Breaker-Warnungen werden pro Request nur einmal gezaehlt statt pro Item erneut hochgezaehlt.
+
+---
+
+Updated: 2026-05-24
+Change: CSFloat Bulk-Preisquelle ueber `price-list` aktiviert
+- `CsFloatClient::fetchLowestListingResult` nutzt primaer `GET /api/v1/listings/price-list`.
+- Antwort wird 90 Sekunden in-memory gecached (pro Runtime-Request/Worker-Durchlauf), um wiederholte Netzwerkanfragen zu vermeiden.
+- Fallback auf den bisherigen per-item `listings` Lookup bleibt aktiv, falls ein Item nicht in der Price-List vorhanden ist.
+
+---
+
+Updated: 2026-05-24
+Change: Bulk-Import der CSFloat price-list + partitionierte price_history_hourly
+- Neuer Service `PriceListBulkImportService` und hourly Bulk-Import in `backend/sync-prices.php`
+- `PriceHistoryRepository` nutzt `price_history_hourly` mit monatlicher Partitionierung
+- Bulk-Upserts fuer `items` und `item_live_cache` hinzugefuegt

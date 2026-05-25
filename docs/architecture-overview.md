@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-05-23
+Last updated: 2026-05-24
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -89,6 +89,18 @@ From `apps/web/src/App.jsx`:
 - `Watchlist` uses in-memory snapshots with TTL `120s`.
 - `WatchlistOverview` uses in-memory snapshots with TTL `120s`.
 - `useCsUpdatesFeed` uses in-memory snapshots with TTL `120s`.
+- `GET /api/v1/portfolio/summary` uses enriched rows without live refresh (`allowLiveRefresh=false`) to avoid duplicate CSFloat load in the same page cycle.
+- Interactive pricing requests apply a capped CSFloat lookup budget per request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`), while CLI workers remain uncapped.
+- `CsFloatClient::fetchLowestListingResult()` uses `GET /api/v1/listings/price-list` as primary bulk source (90s in-memory cache), with per-item listing lookup as fallback.
+- Frontend stale handling calls `POST /api/v1/portfolio/prices/refresh-stale` (cooldown 120s) to refresh stale portfolio prices in background.
+- CSFloat rate-limit handling uses a circuit-breaker file backoff and respects upstream `Retry-After` when present.
+
+### 6.4 Hourly price write policy
+
+- `backend/sync-prices.php` plans the hourly queue and processes the full planned kickoff batch by default (`PRICE_QUEUE_KICKOFF_BATCH` can override).
+- `backend/sync-prices.php` runs a bulk CSFloat price-list import to upsert all items into `items`, `item_live_cache`, and `price_history_hourly`.
+- `price_history_hourly` stores hourly USD snapshots and is partitioned by month for long-term retention.
+- With `price-list` as bulk source, hourly runs can update all tracked queue items without per-item external lookups in the common case.
 
 ### 6.2 CS updates feed behavior
 

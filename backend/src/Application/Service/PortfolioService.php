@@ -29,7 +29,12 @@ final class PortfolioService
     ) {
     }
 
-    public function getEnrichedInvestments(int $userId = 1, bool $aggregateByName = false, string $scope = 'investments'): array
+    public function getEnrichedInvestments(
+        int $userId = 1,
+        bool $aggregateByName = false,
+        string $scope = 'investments',
+        bool $allowLiveRefresh = true
+    ): array
     {
         $this->ensurePriceHistoryTable();
 
@@ -85,7 +90,8 @@ final class PortfolioService
                     $name,
                     null,
                     $userId,
-                    $instanceHint
+                    $instanceHint,
+                    $allowLiveRefresh
                 );
             }
             $presentation = $presentationCache[$presentationCacheKey];
@@ -356,6 +362,58 @@ final class PortfolioService
         return $this->pricingService->consumeWarnings();
     }
 
+    public function refreshStalePrices(
+        int $userId = 1,
+        string $scope = 'investments',
+        int $limit = 200
+    ): array {
+        $resolvedScope = $this->normalizeScope($scope);
+        $resolvedLimit = max(1, min($limit, 2000));
+        $rows = $this->getEnrichedInvestments($userId, false, $resolvedScope, false);
+
+        $staleNames = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+
+            if (strtolower((string) ($row['freshnessStatus'] ?? '')) !== 'stale') {
+                continue;
+            }
+
+            if (isset($staleNames[$name])) {
+                continue;
+            }
+
+            $staleNames[$name] = true;
+            if (count($staleNames) >= $resolvedLimit) {
+                break;
+            }
+        }
+
+        $requested = count($staleNames);
+        $updated = 0;
+        foreach (array_keys($staleNames) as $name) {
+            $snapshot = $this->pricingService->getLivePriceSnapshot($name, $userId);
+            if ($snapshot !== null) {
+                $updated++;
+            }
+        }
+
+        return [
+            'scope' => $resolvedScope,
+            'limit' => $resolvedLimit,
+            'staleItemsFound' => $requested,
+            'requested' => $requested,
+            'updated' => $updated,
+        ];
+    }
+
     public function saveDailyValue(int $userId = 1, ?float $value = null): array
     {
         $this->portfolioHistoryRepository->ensureTable();
@@ -465,7 +523,7 @@ final class PortfolioService
             return;
         }
 
-        // price_history references exchange_rates via FK; ensure parent table first.
+        // price_history_hourly references exchange_rates via FK; ensure parent table first.
         $this->exchangeRateRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
         $this->priceHistoryReady = true;
@@ -478,7 +536,7 @@ final class PortfolioService
         ?string $priceSource
     ): void {
         if (strtolower(trim((string) ($presentation['priceScope'] ?? 'item'))) !== 'item') {
-            // price_history remains item-level; instance-only valuations would corrupt shared baselines.
+            // price_history_hourly remains item-level; instance-only valuations would corrupt shared baselines.
             return;
         }
 

@@ -152,9 +152,9 @@ final class CacheMaintenanceRepository
 
             $priceStats = $this->pdo->query(
                 'SELECT COUNT(*) as count,
-                        MIN(date) as oldest,
-                        MAX(date) as newest
-                 FROM price_history'
+                        MIN(bucket_start) as oldest,
+                        MAX(bucket_start) as newest
+                 FROM price_history_hourly'
             )?->fetch(\PDO::FETCH_ASSOC) ?: [];
 
             return [

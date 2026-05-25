@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchPortfolioData } from "@shared/lib/dataSource.js";
+import { fetchPortfolioData, refreshPortfolioStalePricesData } from "@shared/lib/dataSource.js";
 
 const portfolioViewCache = new Map();
 const PORTFOLIO_CACHE_TTL_MS = 2 * 60 * 1000;
+const PORTFOLIO_STALE_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
 
 function resolveCacheKey(options = {}) {
   const scope = String(options.scope || "default");
@@ -61,6 +62,8 @@ function mergeWarnings(...warningGroups) {
 
 export function usePortfolio(options = {}) {
   const abortControllerRef = useRef(null);
+  const staleRefreshInFlightRef = useRef(false);
+  const staleRefreshCooldownUntilRef = useRef(0);
   const cacheKey = resolveCacheKey(options);
   const cachedSnapshot = getValidPortfolioSnapshot(cacheKey);
 
@@ -181,6 +184,45 @@ export function usePortfolio(options = {}) {
   useEffect(() => {
     void Promise.resolve().then(() => loadData({ showLoading: !cachedSnapshot }));
   }, [cachedSnapshot, loadData]);
+
+  useEffect(() => {
+    if (authRequired) {
+      return;
+    }
+
+    const staleItems = Number(stats?.staleLiveItemsCount || 0);
+    if (!Number.isFinite(staleItems) || staleItems <= 0) {
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      staleRefreshInFlightRef.current ||
+      now < staleRefreshCooldownUntilRef.current
+    ) {
+      return;
+    }
+
+    staleRefreshInFlightRef.current = true;
+    staleRefreshCooldownUntilRef.current = now + PORTFOLIO_STALE_REFRESH_COOLDOWN_MS;
+
+    void (async () => {
+      try {
+        const response = await refreshPortfolioStalePricesData({
+          scope: options.scope,
+          limit: 500,
+        });
+        const updated = Number(response?.data?.updated || 0);
+        if (Number.isFinite(updated) && updated > 0) {
+          await loadData({ showLoading: false });
+        }
+      } catch (refreshError) {
+        console.warn("[portfolio-stale-refresh] failed", refreshError);
+      } finally {
+        staleRefreshInFlightRef.current = false;
+      }
+    })();
+  }, [authRequired, loadData, options.scope, stats?.staleLiveItemsCount]);
 
   return {
     enrichedInvestments: investments,

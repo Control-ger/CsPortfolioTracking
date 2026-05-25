@@ -21,6 +21,12 @@ final class CsFloatClient
         503 => ['code' => 'CSFLOAT_SERVICE_UNAVAILABLE', 'label' => 'Service Unavailable'],
     ];
     private const BASE_LISTINGS_URL = 'https://csfloat.com/api/v1/listings';
+    private const PRICE_LIST_URL = 'https://csfloat.com/api/v1/listings/price-list';
+    private const PRICE_LIST_CACHE_TTL_SECONDS = 90;
+
+    /** @var array<string, array{priceUsd: float, quantity: int}>|null */
+    private ?array $priceListIndexCache = null;
+    private ?int $priceListIndexFetchedAt = null;
 
     public function fetchLowestPriceUsd(string $marketHashName): ?float
     {
@@ -36,6 +42,27 @@ final class CsFloatClient
 
     public function fetchLowestListingResult(string $marketHashName): array
     {
+        $priceListEntry = $this->findPriceListEntry($marketHashName);
+        if ($priceListEntry !== null) {
+            return [
+                'snapshot' => [
+                    'priceUsd' => round((float) $priceListEntry['priceUsd'], 2),
+                    'marketHashName' => $marketHashName,
+                    'itemType' => null,
+                    'itemTypeLabel' => null,
+                    'wearName' => null,
+                    'iconUrl' => null,
+                    'floatValue' => null,
+                    'paintSeed' => null,
+                    'inspectLink' => null,
+                    'strategy' => 'market_price_list',
+                    'confidence' => 'medium',
+                    'sampleSize' => max(1, (int) ($priceListEntry['quantity'] ?? 1)),
+                ],
+                'error' => null,
+            ];
+        }
+
         $result = $this->fetchListingsResult(
             $marketHashName,
             [
@@ -71,6 +98,159 @@ final class CsFloatClient
             'snapshot' => $snapshot,
             'error' => null,
         ];
+    }
+
+    private function findPriceListEntry(string $marketHashName): ?array
+    {
+        $index = $this->getPriceListIndex();
+        if (!is_array($index) || $index === []) {
+            return null;
+        }
+
+        return $index[$marketHashName] ?? null;
+    }
+
+    /**
+     * @return array<string, array{priceUsd: float, quantity: int}>|null
+     */
+    private function getPriceListIndex(): ?array
+    {
+        if (
+            is_array($this->priceListIndexCache) &&
+            $this->priceListIndexFetchedAt !== null &&
+            (time() - $this->priceListIndexFetchedAt) < self::PRICE_LIST_CACHE_TTL_SECONDS
+        ) {
+            return $this->priceListIndexCache;
+        }
+
+        $index = $this->fetchPriceListIndex();
+        if (is_array($index) && $index !== []) {
+            $this->priceListIndexCache = $index;
+            $this->priceListIndexFetchedAt = time();
+            return $this->priceListIndexCache;
+        }
+
+        if (
+            is_array($this->priceListIndexCache) &&
+            $this->priceListIndexFetchedAt !== null
+        ) {
+            return $this->priceListIndexCache;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, array{priceUsd: float, quantity: int}>|null
+     */
+    public function fetchPriceListIndexSnapshot(): ?array
+    {
+        return $this->getPriceListIndex();
+    }
+
+    /**
+     * @return array<string, array{priceUsd: float, quantity: int}>|null
+     */
+    private function fetchPriceListIndex(): ?array
+    {
+        $start = microtime(true);
+        Logger::event(
+            'info',
+            'external',
+            'external.csfloat.price_list.request',
+            'CSFloat price list request started',
+            [
+                'provider' => 'csfloat',
+                'url' => self::PRICE_LIST_URL,
+            ]
+        );
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, self::PRICE_LIST_URL);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'CsPortfolioTracking/1.0');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+        $durationMs = (int) round((microtime(true) - $start) * 1000);
+
+        if ($response === false || $httpCode !== 200 || $response === '') {
+            Logger::event(
+                'warning',
+                'external',
+                'external.csfloat.price_list.response',
+                'CSFloat price list request failed',
+                [
+                    'provider' => 'csfloat',
+                    'httpCode' => $httpCode > 0 ? $httpCode : null,
+                    'durationMs' => $durationMs,
+                    'curlError' => $curlError !== '' ? $curlError : null,
+                ]
+            );
+            return null;
+        }
+
+        $json = json_decode($response, true);
+        if (!is_array($json)) {
+            Logger::event(
+                'warning',
+                'external',
+                'external.csfloat.price_list.response',
+                'CSFloat price list returned invalid JSON',
+                [
+                    'provider' => 'csfloat',
+                    'httpCode' => 200,
+                    'durationMs' => $durationMs,
+                ]
+            );
+            return null;
+        }
+
+        $index = [];
+        foreach ($json as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $name = trim((string) ($row['market_hash_name'] ?? ''));
+            $minPrice = $row['min_price'] ?? null;
+            if ($name === '' || !is_numeric($minPrice)) {
+                continue;
+            }
+
+            $minPriceCents = (int) $minPrice;
+            if ($minPriceCents <= 0) {
+                continue;
+            }
+
+            $quantity = is_numeric($row['quantity'] ?? null)
+                ? max(0, (int) $row['quantity'])
+                : 0;
+
+            $index[$name] = [
+                'priceUsd' => round($minPriceCents / 100.0, 2),
+                'quantity' => $quantity,
+            ];
+        }
+
+        Logger::event(
+            'info',
+            'external',
+            'external.csfloat.price_list.response',
+            'CSFloat price list loaded',
+            [
+                'provider' => 'csfloat',
+                'httpCode' => 200,
+                'durationMs' => $durationMs,
+                'itemCount' => count($index),
+            ]
+        );
+
+        return $index !== [] ? $index : null;
     }
 
     public function fetchComparableListingResult(
@@ -178,6 +358,28 @@ final class CsFloatClient
         ];
     }
 
+    private function extractRetryAfterSeconds(array $responseHeaders): ?int
+    {
+        $value = $responseHeaders['retry-after'] ?? null;
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if (ctype_digit($trimmed)) {
+            $seconds = (int) $trimmed;
+            return $seconds > 0 ? $seconds : null;
+        }
+
+        $timestamp = strtotime($trimmed);
+        if ($timestamp === false) {
+            return null;
+        }
+
+        $seconds = $timestamp - time();
+        return $seconds > 0 ? $seconds : null;
+    }
+
     private function fetchListingsResult(
         string $marketHashName,
         array $queryParams,
@@ -187,6 +389,7 @@ final class CsFloatClient
         $url = $this->buildListingsUrl($marketHashName, $queryParams);
         $apiKey = getenv('CSFLOAT_API_KEY') ?: $_ENV['CSFLOAT_API_KEY'] ?? null;
         $start = microtime(true);
+        $responseHeaders = [];
 
         Logger::event(
             'info',
@@ -206,6 +409,20 @@ final class CsFloatClient
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_USERAGENT, 'CsPortfolioTracking/1.0');
+        curl_setopt(
+            $ch,
+            CURLOPT_HEADERFUNCTION,
+            static function ($curl, string $headerLine) use (&$responseHeaders): int {
+                $line = trim($headerLine);
+                if ($line === '' || !str_contains($line, ':')) {
+                    return strlen($headerLine);
+                }
+
+                [$name, $value] = explode(':', $line, 2);
+                $responseHeaders[strtolower(trim($name))] = trim($value);
+                return strlen($headerLine);
+            }
+        );
 
         $headers = ['Accept: application/json'];
         if ($apiKey !== null && $apiKey !== '') {
@@ -264,6 +481,10 @@ final class CsFloatClient
 
         if ($httpCode !== 200) {
             $httpError = $this->buildHttpError($httpCode);
+            $retryAfterSeconds = $this->extractRetryAfterSeconds($responseHeaders);
+            if ($retryAfterSeconds !== null) {
+                $httpError['retryAfterSeconds'] = $retryAfterSeconds;
+            }
             Logger::event(
                 'warning',
                 'external',
@@ -276,6 +497,7 @@ final class CsFloatClient
                     'durationMs' => $durationMs,
                     'success' => false,
                     'errorCode' => $httpError['code'] ?? 'CSFLOAT_HTTP_ERROR',
+                    'retryAfterSeconds' => $retryAfterSeconds,
                     'reason' => $reason,
                 ], $context)
             );

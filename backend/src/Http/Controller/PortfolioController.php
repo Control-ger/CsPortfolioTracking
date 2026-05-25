@@ -81,7 +81,12 @@ final class PortfolioController
                 ];
                 $meta['readPath'] = 'scaling_primary';
             } else {
-                $rows = $this->portfolioService->getEnrichedInvestments($userId, false, $scope);
+                $rows = $this->portfolioService->getEnrichedInvestments(
+                    $userId,
+                    false,
+                    $scope,
+                    false
+                );
                 $summary = $this->portfolioService->getSummary($rows)->toArray();
                 $meta = ['warnings' => $this->portfolioService->consumePricingWarnings()];
                 $meta['readPath'] = 'legacy';
@@ -222,6 +227,31 @@ final class PortfolioController
                 ['statusCode' => 500, 'exception' => $exception]
             );
             JsonResponseFactory::error('PORTFOLIO_COMPOSITION_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function refreshStalePrices(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $scope = $this->resolveScope($request);
+            $limitInput = $request->body['limit'] ?? $request->query['limit'] ?? null;
+            $limit = is_numeric($limitInput) ? (int) $limitInput : 200;
+
+            JsonResponseFactory::success(
+                $this->portfolioService->refreshStalePrices($userId, $scope, $limit),
+                ['warnings' => $this->portfolioService->consumePricingWarnings()],
+                200
+            );
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Portfolio stale price refresh request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('PORTFOLIO_REFRESH_STALE_FAILED', $exception->getMessage(), [], 500);
         }
     }
 
@@ -426,7 +456,8 @@ final class PortfolioController
 
     private function resolveScope(Request $request): string
     {
-        $scope = strtolower(trim((string) ($request->query['scope'] ?? 'investments')));
+        $scopeInput = $request->query['scope'] ?? $request->body['scope'] ?? 'investments';
+        $scope = strtolower(trim((string) $scopeInput));
         return $scope === 'all' ? 'all' : 'investments';
     }
 
