@@ -189,6 +189,8 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
                     type="linear"
                     dataKey="wert"
                     stroke="#3b82f6"
+                    strokeLinecap="square"
+                    strokeLinejoin="miter"
                     fill="#3b82f6"
                     fillOpacity={0.1}
                   />

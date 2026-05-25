@@ -243,6 +243,8 @@ export const ItemDetailPanel = ({
                               type="linear"
                               dataKey={item.type === "case" ? "opened" : "applied"}
                               stroke="hsl(var(--chart-1))"
+                              strokeLinecap="square"
+                              strokeLinejoin="miter"
                               fill="hsl(var(--chart-1))"
                               fillOpacity={0.2}
                           />
@@ -251,6 +253,8 @@ export const ItemDetailPanel = ({
                                   type="linear"
                                   dataKey="dropped"
                                   stroke="hsl(var(--chart-2))"
+                                  strokeLinecap="square"
+                                  strokeLinejoin="miter"
                                   fill="hsl(var(--chart-2))"
                                   fillOpacity={0.2}
                               />

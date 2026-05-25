@@ -404,6 +404,8 @@ export const PortfolioChart = ({
                 type="linear"
                 stroke="var(--color-growthPercent)"
                 strokeWidth={2.7}
+                strokeLinecap="square"
+                strokeLinejoin="miter"
                 dot={false}
                 activeDot={{
                   r: 5,
