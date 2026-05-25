@@ -84,7 +84,7 @@ const DESKTOP_SIDEBAR_ITEMS = [
   { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
 ];
 
-export function SettingsPage() {
+export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [source, setSource] = useState("defaults");
   const [loading, setLoading] = useState(true);
@@ -130,6 +130,7 @@ export function SettingsPage() {
     "serviceWorker" in navigator &&
     "PushManager" in window;
   const useDesktopSidebarShell = true;
+  const renderLocalDesktopSidebar = useDesktopSidebarShell && !useExternalDesktopSidebarShell;
   const location = useLocation();
   const navigate = useNavigate();
   const activePortfolioTab = new URLSearchParams(location.search).get("tab") || "overview";
@@ -1110,10 +1111,10 @@ export function SettingsPage() {
   return (
     <div
       className={`${desktopRuntime ? "min-h-full" : "min-h-screen"} ${
-        useDesktopSidebarShell ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
+        renderLocalDesktopSidebar ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
       } bg-background px-3.5 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-[max(0.35rem,env(safe-area-inset-top))] font-sans text-foreground sm:p-8 md:pb-0 lg:p-0`}
     >
-      {useDesktopSidebarShell ? (
+      {renderLocalDesktopSidebar ? (
         <div className="w-full lg:grid lg:min-h-0 lg:h-full lg:grid-cols-[92px_minmax(0,1fr)]">
           <aside className="hidden lg:flex lg:justify-center lg:pt-2">
             <div className="tr-desktop-rail h-[98vh] w-[92px] overflow-hidden rounded-2xl">

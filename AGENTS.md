@@ -454,3 +454,11 @@ Updated: 2026-05-25
 Change: Portfolio-Request-Loop im Frontend gestoppt
 - `usePortfolio` triggert den Initial-Load jetzt pro `cacheKey` statt indirekt ueber Snapshot-Objektwechsel.
 - `fetchApiPortfolioData` reduziert Requests auf `investments` + `history`; Summary wird aus Rows clientseitig berechnet.
+
+---
+
+Updated: 2026-05-25
+Change: App-weite Desktop-Sidebar-Shell vereinheitlicht
+- Desktop-Sidebar-Rail wurde als gemeinsame Komponente auf App-Ebene zentralisiert (`apps/web/src/App.jsx`, `packages/shared/src/components/DesktopSidebarRail.jsx`).
+- `PortfolioPage`, `SettingsPage` und `CsUpdatesPage` koennen ihre lokale Sidebar-Shell ueber `useExternalDesktopSidebarShell` deaktivieren.
+- Ergebnis: Beim Wechsel zwischen Dashboard/Watchlist/CS-Updates/Einstellungen bleibt die Sidebar stabil gemountet und wird nicht pro Route neu aufgebaut.

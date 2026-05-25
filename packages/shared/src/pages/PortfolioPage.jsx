@@ -15,7 +15,6 @@ import { SteamLoginPrompt } from "@shared/components";
 import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
 import { Watchlist } from "@shared/components";
-import { WatchlistOverview } from "@shared/components";
 import { ItemSearch } from "@shared/components";
 import { Badge } from "@shared/components";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components";
@@ -566,7 +565,7 @@ function mapWarningsToNotifications(warnings, { sourceKey, sourceLabel }) {
   });
 }
 
-export function PortfolioPage({ initialTab = "overview" }) {
+export function PortfolioPage({ initialTab = "overview", useExternalDesktopSidebarShell = false }) {
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const isDesktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
   const runtimeTabs = useMemo(
@@ -1316,18 +1315,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
       navigate(targetPath, { replace: true });
     }
   }, [activeTab, location.pathname, location.search, navigate, runtimeTabs]);
-
-  const handleOpenWatchlistItem = (item) => {
-    if (!item?.id) {
-      return;
-    }
-
-    setWatchlistFocusTarget({
-      id: item.id,
-      requestedAt: Date.now(),
-    });
-    handleTabSelect("watchlist");
-  };
 
   const loadGlobalSearchWatchlistItems = useCallback(async () => {
     try {
@@ -2473,9 +2460,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
   const handleWatchlistWarningsChange = useCallback((nextWarnings = []) => {
     handleUiWarningsChange("watchlist-live", "Watchlist", nextWarnings);
   }, [handleUiWarningsChange]);
-  const handleWatchlistOverviewWarningsChange = useCallback((nextWarnings = []) => {
-    handleUiWarningsChange("watchlist-overview", "Watchlist Uebersicht", nextWarnings);
-  }, [handleUiWarningsChange]);
   const portfolioWarningNotifications = useMemo(
     () => mapWarningsToNotifications(warnings, { sourceKey: "portfolio", sourceLabel: "Portfolio" }),
     [warnings],
@@ -2992,11 +2976,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
   }
 
   const useDesktopSidebarShell = !showSetupJourney;
+  const renderLocalDesktopSidebar = useDesktopSidebarShell && !useExternalDesktopSidebarShell;
 
   return (
     <div
       className={`${isElectronRuntime ? "h-full box-border" : "min-h-screen"} ${
-        useDesktopSidebarShell ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
+        renderLocalDesktopSidebar ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
       } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
@@ -3610,12 +3595,12 @@ export function PortfolioPage({ initialTab = "overview" }) {
         {!showSetupJourney ? (
         <div
           className={
-            useDesktopSidebarShell
+            renderLocalDesktopSidebar
               ? "w-full lg:grid lg:min-h-0 lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 lg:px-0 xl:px-0"
               : "w-full"
           }
         >
-          {useDesktopSidebarShell ? (
+          {renderLocalDesktopSidebar ? (
             <aside className="hidden lg:flex lg:justify-center lg:pt-2">
               <div className="tr-desktop-rail h-[98vh] w-[92px] overflow-hidden rounded-2xl">
                 <div className="flex h-full flex-col items-center py-4">
@@ -3688,7 +3673,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
           <Tabs
             value={activeTab}
             onValueChange={handleTabSelect}
-            className={`w-full min-w-0 ${useDesktopSidebarShell ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
+            className={`w-full min-w-0 ${renderLocalDesktopSidebar ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
           >
             {useDesktopSidebarShell ? (
               <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:justify-between lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
@@ -3916,7 +3901,7 @@ export function PortfolioPage({ initialTab = "overview" }) {
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:gap-5">
               <PortfolioChart
                 history={portfolioHistory}
                 isLoading={portfolioLoading}
@@ -3927,23 +3912,6 @@ export function PortfolioPage({ initialTab = "overview" }) {
                     ? (nextScope) => void handleMetricsScopeChange(nextScope)
                     : null
                 }
-              />
-              <div className="hidden md:block">
-                <WatchlistOverview
-                  maxItems={useDesktopSidebarShell ? 4 : 5}
-                  allowExpand={!useDesktopSidebarShell}
-                  onOpenItem={handleOpenWatchlistItem}
-                  onWarningsChange={handleWatchlistOverviewWarningsChange}
-                />
-              </div>
-            </div>
-
-            {/* Mobile: Watchlist full-width */}
-            <div className="sm:hidden pt-1">
-              <WatchlistOverview
-                maxItems={5}
-                onOpenItem={handleOpenWatchlistItem}
-                onWarningsChange={handleWatchlistOverviewWarningsChange}
               />
             </div>
 

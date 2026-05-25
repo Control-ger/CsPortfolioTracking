@@ -9,6 +9,7 @@ export { CsFloatTradeSyncModal } from './CsFloatTradeSyncModal.jsx';
 export { CsUpdatesFeed } from './CsUpdatesFeed.jsx';
 export { DebugPanel } from './DebugPanel.jsx';
 export { DeleteConfirmModal } from './DeleteConfirmModal.jsx';
+export { DesktopSidebarRail } from './DesktopSidebarRail.jsx';
 export { ExcludeInvestmentDialog } from './ExcludeInvestmentDialog.jsx';
 export { InventoryTable } from './InventoryTable.jsx';
 export { ItemDetailPanel } from './ItemDetailPanel.jsx';

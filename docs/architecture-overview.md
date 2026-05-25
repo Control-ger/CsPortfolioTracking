@@ -79,12 +79,14 @@ From `apps/web/src/App.jsx`:
 - `/search` -> `PortfolioPage` (`initialTab=search`)
 - `/cs-updates` -> `CsUpdatesPage`
 - `/settings` -> `SettingsPage`
+- Electron/Desktop uses a shared app-level rail shell (`DesktopSidebarRail`) so cross-route navigation does not remount page-local sidebars.
 
 ## 6. Page Lifecycle and Cache Policy
 
 ### 6.1 Verified current behavior
 
 - `PortfolioPage` keeps visited tabs mounted (`visitedTabs` + `forceMount`).
+- In Electron, the desktop rail sidebar is mounted once in `App.jsx`; pages can opt out of local sidebar shells via `useExternalDesktopSidebarShell`.
 - `usePortfolio` uses in-memory snapshots with TTL `120s`.
 - `usePortfolio` initial API load is keyed by `cacheKey` (not by snapshot object identity) to prevent self-triggered fetch loops.
 - `Watchlist` uses in-memory snapshots with TTL `120s`.
