@@ -179,7 +179,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
           </div>
 
           {history && history.length > 0 ? (
-            <div className="rounded-2xl border border-border/70 bg-card/65 p-3 sm:p-4 lg:col-span-2">
+            <div className="p-0 lg:col-span-2">
               <h3 className="mb-3 sm:mb-4 text-sm font-semibold">Preishistorie</h3>
               <ResponsiveContainer width="100%" height={isSmallScreen ? 200 : 280}>
                 <AreaChart data={history}>
@@ -198,7 +198,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/60 p-3 sm:p-4 text-sm text-muted-foreground lg:col-span-2">
+            <div className="flex items-center justify-center p-3 sm:p-4 text-sm text-muted-foreground lg:col-span-2">
               Keine Positionshistorie verfuegbar.
             </div>
           )}

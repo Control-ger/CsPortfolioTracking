@@ -745,6 +745,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchCatalogLoading, _setGlobalSearchCatalogLoading] = useState(false);
   const [globalSearchCatalogError, setGlobalSearchCatalogError] = useState("");
   const [globalSearchWatchlistItems, setGlobalSearchWatchlistItems] = useState([]);
+  const [dashboardWatchlistItems, setDashboardWatchlistItems] = useState([]);
   const [globalSearchAddingItem, setGlobalSearchAddingItem] = useState("");
   const [globalSearchRecentTerms, setGlobalSearchRecentTerms] = useState([]);
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
@@ -1339,9 +1340,28 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
   }, []);
 
+  const loadDashboardWatchlistItems = useCallback(async () => {
+    try {
+      const response = await fetchWatchlistData({ syncLive: true });
+      setDashboardWatchlistItems(Array.isArray(response?.data) ? response.data : []);
+    } catch (watchlistError) {
+      console.warn("Failed to load dashboard watchlist movers", watchlistError);
+      try {
+        const fallbackResponse = await fetchWatchlistData({ syncLive: false });
+        setDashboardWatchlistItems(Array.isArray(fallbackResponse?.data) ? fallbackResponse.data : []);
+      } catch {
+        setDashboardWatchlistItems([]);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     void loadGlobalSearchWatchlistItems();
   }, [compositionRefreshToken, loadGlobalSearchWatchlistItems]);
+
+  useEffect(() => {
+    void loadDashboardWatchlistItems();
+  }, [compositionRefreshToken, loadDashboardWatchlistItems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2101,7 +2121,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     return bucket === inventoryScope;
   });
   const watchlistTopMovers = useMemo(() => {
-    const rows = (Array.isArray(globalSearchWatchlistItems) ? globalSearchWatchlistItems : [])
+    const rows = (Array.isArray(dashboardWatchlistItems) ? dashboardWatchlistItems : [])
       .map((item) => ({
         ...item,
         moverId: String(item?.id || "").trim(),
@@ -2109,21 +2129,31 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }))
       .filter((item) => item.moverId !== "" && Number.isFinite(item.changePercentValue));
 
-    const gainers = rows
+    const allGainers = rows
       .filter((item) => item.changePercentValue > 0)
       .sort((left, right) => right.changePercentValue - left.changePercentValue)
-      .slice(0, 2);
-    const losers = rows
+      ;
+    const allLosers = rows
       .filter((item) => item.changePercentValue < 0)
       .sort((left, right) => left.changePercentValue - right.changePercentValue)
-      .slice(0, 2);
+      ;
+    const gainers = allGainers.slice(0, 2);
+    const losers = allLosers.slice(0, 2);
+    const usedIds = new Set([...gainers, ...losers].map((item) => item.moverId));
+    const remainingSlots = Math.max(0, 8 - (gainers.length + losers.length));
+    const extras = rows
+      .filter((item) => !usedIds.has(item.moverId))
+      .sort((left, right) => Math.abs(right.changePercentValue) - Math.abs(left.changePercentValue))
+      .slice(0, remainingSlots);
 
     return {
       gainers,
       losers,
-      hasAny: gainers.length > 0 || losers.length > 0,
+      extras,
+      sourceCount: rows.length,
+      hasAny: rows.length > 0,
     };
-  }, [globalSearchWatchlistItems]);
+  }, [dashboardWatchlistItems]);
   const steamInventoryItemsAll = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     return platform === "steam_inventory" || Boolean(item.steamAssetId);
@@ -3974,7 +4004,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
               <div className="min-w-0">
                 <PortfolioChart
                   history={portfolioHistory}
@@ -3988,7 +4018,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   }
                 />
               </div>
-              <Card className="border-border/70 bg-card/70 lg:sticky lg:top-20 lg:self-start">
+              <Card className="flex h-full min-h-[340px] flex-col border-border/70 bg-card/70">
                 <CardHeader className="space-y-2 pb-3">
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-base">Watchlist Mover</CardTitle>
@@ -4000,11 +4030,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       Zur Watchlist
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Top 2 Gewinner und Top 2 Verlierer (7 Tage)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Basis: Watchlist 7-Tage-Verlauf. Bei wenigen Gewinnern/Verlierern werden weitere Mover gezeigt.
+                  </p>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   {watchlistTopMovers.hasAny ? (
-                    <>
+                    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
                       {watchlistTopMovers.gainers.length > 0 ? (
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
@@ -4054,7 +4086,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             })}
                           </div>
                         </div>
-                      ) : null}
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Keine Gewinner im 7-Tage-Vergleich gefunden.</p>
+                      )}
 
                       {watchlistTopMovers.losers.length > 0 ? (
                         <div className="space-y-2">
@@ -4106,7 +4140,66 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           </div>
                         </div>
                       ) : null}
-                    </>
+
+                      {watchlistTopMovers.extras.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Weitere Mover
+                          </div>
+                          <div className="space-y-2">
+                            {watchlistTopMovers.extras.map((item) => {
+                              const currentPrice = Number(item?.currentPrice);
+                              const currentPriceUsd = Number(item?.currentPriceUsd);
+                              const hasUsdPrice = Number.isFinite(currentPriceUsd);
+                              const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
+                              const priceLabel = hasUsdPrice
+                                ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
+                                : hasCurrentPrice
+                                  ? formatPrice(currentPrice)
+                                  : null;
+                              const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
+                              const isPositive = item.changePercentValue >= 0;
+                              return (
+                                <button
+                                  key={`extra-${item.moverId}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setWatchlistFocusTarget({ id: item.id });
+                                    handleTabSelect("watchlist");
+                                  }}
+                                  className={`flex w-full items-center justify-between gap-2 rounded-md border bg-transparent p-2 text-left transition-colors ${
+                                    isPositive
+                                      ? "border-emerald-400/25 hover:bg-emerald-500/8"
+                                      : "border-red-400/25 hover:bg-red-500/8"
+                                  }`}
+                                >
+                                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                                    <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
+                                      {imageUrl ? (
+                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-semibold">{item.name}</p>
+                                      {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
+                                    </div>
+                                  </div>
+                                  <span className={`text-xs font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+                                    {item.changePercentValue >= 0 ? "+" : ""}{item.changePercentValue.toFixed(2)}%
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <p className="pt-1 text-[11px] text-muted-foreground">
+                        Datensaetze mit 7-Tage-Move: {watchlistTopMovers.sourceCount}
+                      </p>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       Keine eindeutigen Gewinner/Verlierer verfuegbar.

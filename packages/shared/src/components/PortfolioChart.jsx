@@ -96,12 +96,60 @@ function formatAxisPercent(value) {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function formatAxisAbsolute(value) {
+function formatAxisAbsolute(value, decimals = 2) {
   if (!Number.isFinite(value)) {
     return "-";
   }
 
-  return `${value.toFixed(0)}€`;
+  return `${value.toLocaleString("de-DE", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })}€`;
+}
+
+function resolveAbsoluteAxisDecimals(range) {
+  if (!Number.isFinite(range) || range <= 0) {
+    return 2;
+  }
+  if (range < 0.5) {
+    return 3;
+  }
+  if (range < 10) {
+    return 2;
+  }
+  if (range < 100) {
+    return 1;
+  }
+  return 0;
+}
+
+function buildAbsoluteAxisConfig(chartData = []) {
+  const values = chartData
+    .map((entry) => Number(entry?.displayValue))
+    .filter((value) => Number.isFinite(value));
+  if (values.length === 0) {
+    return null;
+  }
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  let range = maxValue - minValue;
+  let pad;
+
+  if (range <= Number.EPSILON) {
+    const scalePad = Math.max(Math.abs(maxValue) * 0.02, 0.01);
+    pad = scalePad;
+    range = scalePad * 2;
+  } else {
+    pad = Math.max(range * 0.12, 0.01);
+  }
+
+  const decimals = resolveAbsoluteAxisDecimals(range);
+  return {
+    domain: [minValue - pad, maxValue + pad],
+    tickFormatter: (value) => formatAxisAbsolute(value, decimals),
+    tickCount: 6,
+  };
 }
 
 function getRangeDays(rangeKey) {
@@ -194,6 +242,7 @@ export const PortfolioChart = ({
   showAbsolute = false,
   metricsScope = null,
   onMetricsScopeChange = null,
+  flat = false,
 }) => {
   const [rangeKey, setRangeKey] = useState("1M");
   const hoverAnimationFrameRef = useRef(null);
@@ -234,6 +283,10 @@ export const PortfolioChart = ({
       };
     });
   }, [visibleHistory, showAbsolute]);
+  const absoluteAxisConfig = useMemo(
+    () => (showAbsolute ? buildAbsoluteAxisConfig(chartData) : null),
+    [chartData, showAbsolute],
+  );
 
   const trendStats = useMemo(() => {
     if (chartData.length === 0) {
@@ -337,9 +390,18 @@ export const PortfolioChart = ({
     [],
   );
 
+  const cardClassName = flat
+    ? "overflow-hidden border-0 bg-transparent shadow-none"
+    : "overflow-hidden";
+  const headerClassName = flat ? "px-0 pb-2 sm:pb-3" : "pb-2 sm:pb-4";
+  const contentClassName = flat ? "px-0 pb-2 sm:pb-3" : "px-2 pb-2 sm:px-6 sm:pb-6";
+  const footerClassName = flat
+    ? "px-0 flex-col items-start gap-2 text-xs sm:text-sm"
+    : "flex-col items-start gap-2 text-xs sm:text-sm";
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-2 sm:pb-4">
+    <Card className={cardClassName}>
+      <CardHeader className={headerClassName}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -393,7 +455,7 @@ export const PortfolioChart = ({
         </div>
       </CardHeader>
 
-      <CardContent className="px-2 pb-2 sm:px-6 sm:pb-6">
+      <CardContent className={contentClassName}>
         {isLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-[300px] w-full sm:h-[340px]" />
@@ -422,7 +484,9 @@ export const PortfolioChart = ({
               onMouseLeave={handleChartMouseLeave}
             >
               <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.45} />
-              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.8} strokeDasharray="3 3" />
+              {!showAbsolute ? (
+                <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.8} strokeDasharray="3 3" />
+              ) : null}
               <XAxis
                 dataKey="timestamp"
                 type="number"
@@ -436,11 +500,18 @@ export const PortfolioChart = ({
               <YAxis
                 dataKey="displayValue"
                 orientation="right"
+                domain={showAbsolute && absoluteAxisConfig ? absoluteAxisConfig.domain : ["auto", "auto"]}
+                allowDataOverflow={Boolean(showAbsolute && absoluteAxisConfig)}
+                tickCount={showAbsolute && absoluteAxisConfig ? absoluteAxisConfig.tickCount : undefined}
                 tickLine={false}
                 axisLine={false}
                 width={70}
                 tickMargin={4}
-                tickFormatter={showAbsolute ? formatAxisAbsolute : formatAxisPercent}
+                tickFormatter={
+                  showAbsolute && absoluteAxisConfig
+                    ? absoluteAxisConfig.tickFormatter
+                    : formatAxisPercent
+                }
               />
               <ChartTooltip
                 content={
@@ -472,7 +543,7 @@ export const PortfolioChart = ({
         )}
       </CardContent>
 
-      <CardFooter className="flex-col items-start gap-2 text-xs sm:text-sm">
+      <CardFooter className={footerClassName}>
         {isLoading ? (
           <>
             <Skeleton className="h-4 w-64" />

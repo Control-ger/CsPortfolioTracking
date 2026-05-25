@@ -126,53 +126,78 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
         </nav>
         <div className="mt-auto flex w-full flex-col items-center gap-2 px-2 pb-2">
           <ThemeToggle />
-          {desktopRuntime ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
-                  <Bell className="h-5 w-5" />
-                  {unreadNotificationCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-                      {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-                    </span>
-                  ) : null}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="end" className="w-80">
-                <DropdownMenuLabel>System-Benachrichtigungen</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <div className="max-h-72 space-y-1 overflow-y-auto">
-                  {syncNotifications.length > 0 ? (
-                    syncNotifications.slice(0, 8).map((entry) => (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        onClick={() => void handleNotificationClick(entry)}
-                        className="w-full rounded-md p-2 text-left text-xs transition-colors hover:bg-accent"
-                      >
-                        <p className="font-semibold text-foreground">{entry.title || "Hinweis"}</p>
-                        <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {entry.createdAt ? new Date(entry.createdAt).toLocaleString("de-DE") : ""}
-                        </p>
-                      </button>
-                    ))
-                  ) : (
-                    <p className="p-2 text-xs text-muted-foreground">Keine Benachrichtigungen.</p>
-                  )}
-                </div>
-                <DropdownMenuSeparator />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start"
-                  onClick={() => navigate("/?tab=management", { replace: true })}
-                >
-                  Zur Verwaltung
-                </Button>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
+                <Bell className="h-5 w-5" />
+                {desktopRuntime && unreadNotificationCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                  </span>
+                ) : null}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" className="w-80">
+              <DropdownMenuLabel>System-Benachrichtigungen</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {desktopRuntime ? (
+                <>
+                  <div className="max-h-72 space-y-1 overflow-y-auto">
+                    {syncNotifications.length > 0 ? (
+                      syncNotifications.slice(0, 8).map((entry) => (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          onClick={() => void handleNotificationClick(entry)}
+                          className="w-full rounded-md p-2 text-left text-xs transition-colors hover:bg-accent"
+                        >
+                          <p className="font-semibold text-foreground">{entry.title || "Hinweis"}</p>
+                          <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {entry.createdAt ? new Date(entry.createdAt).toLocaleString("de-DE") : ""}
+                          </p>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="p-2 text-xs text-muted-foreground">Keine Benachrichtigungen.</p>
+                    )}
+                  </div>
+                  <DropdownMenuSeparator />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => navigate("/?tab=management", { replace: true })}
+                  >
+                    Zur Verwaltung
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="p-2 text-xs text-muted-foreground">
+                    Im Web werden System-Benachrichtigungen per Browser Push zugestellt.
+                  </p>
+                  <DropdownMenuSeparator />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => navigate("/settings", { replace: true })}
+                  >
+                    Push-Einstellungen
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => navigate("/cs-updates", { replace: true })}
+                  >
+                    CS Updates oeffnen
+                  </Button>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <UserMenu menuSide="right" menuAlign="end" menuSideOffset={8} />
         </div>
       </div>

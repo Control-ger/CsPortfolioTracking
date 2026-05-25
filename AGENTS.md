@@ -175,6 +175,13 @@ Pflichtablauf:
 
 Ohne neuen Tag gibt es keinen neuen Electron/GitHub-Release.
 
+## Commit-Message-Regel (verbindlich)
+
+- Commit-Messages muessen immer den inhaltlichen Aenderungsgrund enthalten.
+- Reine Platzhalter wie `release: vX.Y.Z` ohne Kontext sind nicht erlaubt.
+- Release-Commits sollen neben der Version kurz die wichtigsten Aenderungen nennen.
+  - Beispiel: `release: v0.1.54 (dashboard watchlist movers + pie chart sonstige <1%)`
+
 ## Bekannte offene Punkte
 
 - `toggleExcludeInvestment` in `backend/src/Application/Service/PortfolioService.php` ist aktuell defensiv/placeholder.
@@ -478,3 +485,10 @@ Change: Electron-Update-Flow auf manuelles Download-Opt-in umgestellt
 - Bei `update-available` wird eine native Electron-Notification angezeigt; Klick oeffnet Dialog mit `Jetzt updaten` / `Spaeter`.
 - Download startet nur nach expliziter User-Bestaetigung (`app-updater-download`), danach bleibt Installation weiterhin manuell ueber `app-updater-install`.
 - `apps/desktop/preload.js` erweitert um `updater.download()`, UI-Hinweistext in `PortfolioPage` entsprechend angepasst.
+
+---
+
+Updated: 2026-05-25
+Change: Verbindliche Commit-Message-Regel ergaenzt
+- Commit-Messages muessen die inhaltlichen Aenderungen nennen (auch bei Releases).
+- Reine Versions-Release-Titel ohne Aenderungskontext sind nicht mehr erlaubt.

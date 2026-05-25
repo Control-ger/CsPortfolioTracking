@@ -268,7 +268,7 @@ export const ItemDetailPanel = ({
 
             {/* Price History Chart */}
             {Array.isArray(history) && history.length > 0 && (
-              <div className="rounded-2xl border border-border/70 bg-card/65 p-3 sm:p-4">
+              <div className="p-0">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold">Preisentwicklung</h3>
                   <button
@@ -295,6 +295,7 @@ export const ItemDetailPanel = ({
                   emptyLabel="Noch keine Preishistorie verfügbar"
                   isLoading={historyLoading}
                   showAbsolute={showAbsolute}
+                  flat
                 />
               </div>
             )}
