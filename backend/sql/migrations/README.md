@@ -7,6 +7,7 @@ Execution order:
 3. `2026_05_06_003_prepare_deprecation.sql`
 4. `2026_05_06_004_retention_controls.sql`
 5. `2026_05_07_001_price_queue_hourly_history.sql`
+6. `2026_05_25_001_backfill_legacy_price_history_hourly.sql`
 
 Notes:
 
