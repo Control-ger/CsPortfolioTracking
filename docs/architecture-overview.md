@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -99,7 +99,7 @@ From `apps/web/src/App.jsx`:
 
 - `backend/sync-prices.php` plans the hourly queue and processes the full planned kickoff batch by default (`PRICE_QUEUE_KICKOFF_BATCH` can override).
 - `backend/sync-prices.php` runs a bulk CSFloat price-list import to upsert all items into `items`, `item_live_cache`, and `price_history_hourly`.
-- `price_history_hourly` stores hourly USD snapshots and is partitioned by month for long-term retention.
+- `price_history_hourly` stores hourly USD snapshots as a regular InnoDB table (no partitioning) to stay compatible with MariaDB foreign-key limitations.
 - With `price-list` as bulk source, hourly runs can update all tracked queue items without per-item external lookups in the common case.
 
 ### 6.2 CS updates feed behavior

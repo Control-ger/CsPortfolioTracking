@@ -17,7 +17,6 @@ final class PriceHistoryRepository
 
     public function ensureTable(): void
     {
-        $partitionSql = $this->buildPartitionSql();
         $sql = "CREATE TABLE IF NOT EXISTS " . self::TABLE_NAME . " (
             item_id          INT            NOT NULL,
             bucket_start     DATETIME       NOT NULL,
@@ -30,12 +29,10 @@ final class PriceHistoryRepository
             INDEX idx_item_bucket (item_id, bucket_start),
             FOREIGN KEY (item_id)          REFERENCES items(id)          ON DELETE CASCADE,
             FOREIGN KEY (exchange_rate_id) REFERENCES exchange_rates(id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        {$partitionSql}";
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
             $this->pdo->exec($sql);
-            $this->ensureMonthlyPartitions();
             RepositoryObservability::schemaEnsured(self::class, self::TABLE_NAME);
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -285,91 +282,5 @@ final class PriceHistoryRepository
     {
         $normalized = strtolower(trim((string) $priceSource));
         return $normalized !== '' ? $normalized : self::PRICE_SOURCE_DEFAULT;
-    }
-
-    private function buildPartitionSql(): string
-    {
-        $partitions = $this->buildPartitionDefinitions(12);
-        if ($partitions === []) {
-            return '';
-        }
-
-        return 'PARTITION BY RANGE COLUMNS(bucket_start) (' . implode(',', $partitions) . ')';
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function buildPartitionDefinitions(int $monthsAhead): array
-    {
-        $start = new \DateTimeImmutable('first day of this month 00:00:00');
-        $parts = [];
-        for ($i = 0; $i <= $monthsAhead; $i++) {
-            $current = $start->modify("+{$i} months");
-            $next = $current->modify('+1 month');
-            $parts[] = sprintf(
-                "PARTITION p%s VALUES LESS THAN ('%s')",
-                $current->format('Y_m'),
-                $next->format('Y-m-01')
-            );
-        }
-        $parts[] = 'PARTITION pmax VALUES LESS THAN (MAXVALUE)';
-
-        return $parts;
-    }
-
-    private function ensureMonthlyPartitions(): void
-    {
-        $partitionNames = $this->loadPartitionNames();
-        if ($partitionNames === []) {
-            return;
-        }
-
-        $start = new \DateTimeImmutable('first day of this month 00:00:00');
-        $monthsAhead = 3;
-        for ($i = 0; $i <= $monthsAhead; $i++) {
-            $current = $start->modify("+{$i} months");
-            $partitionName = 'p' . $current->format('Y_m');
-            if (in_array($partitionName, $partitionNames, true)) {
-                continue;
-            }
-
-            $next = $current->modify('+1 month');
-            $boundary = $next->format('Y-m-01');
-            if (in_array('pmax', $partitionNames, true)) {
-                $sql = "ALTER TABLE " . self::TABLE_NAME . " REORGANIZE PARTITION pmax INTO (
-                    PARTITION {$partitionName} VALUES LESS THAN ('{$boundary}'),
-                    PARTITION pmax VALUES LESS THAN (MAXVALUE)
-                )";
-            } else {
-                $sql = "ALTER TABLE " . self::TABLE_NAME . " ADD PARTITION (
-                    PARTITION {$partitionName} VALUES LESS THAN ('{$boundary}')
-                )";
-            }
-            $this->pdo->exec($sql);
-            $partitionNames[] = $partitionName;
-        }
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function loadPartitionNames(): array
-    {
-        $sql = "SELECT PARTITION_NAME
-                FROM information_schema.PARTITIONS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = ?
-                  AND PARTITION_NAME IS NOT NULL";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([self::TABLE_NAME]);
-        $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        if (!is_array($rows)) {
-            return [];
-        }
-        return array_values(array_filter(array_map(
-            static fn(mixed $value): string => (string) $value,
-            $rows
-        ), static fn(string $value): bool => $value !== ''));
     }
 }

@@ -440,3 +440,10 @@ Change: Bulk-Import der CSFloat price-list + partitionierte price_history_hourly
 - Neuer Service `PriceListBulkImportService` und hourly Bulk-Import in `backend/sync-prices.php`
 - `PriceHistoryRepository` nutzt `price_history_hourly` mit monatlicher Partitionierung
 - Bulk-Upserts fuer `items` und `item_live_cache` hinzugefuegt
+
+---
+
+Updated: 2026-05-25
+Change: MariaDB-Kompatibilitaet fuer `price_history_hourly` korrigiert
+- Partitionierung in `PriceHistoryRepository` entfernt, da MariaDB partitionierte Tabellen mit Foreign Keys nicht unterstuetzt (Error 1506).
+- `price_history_hourly` bleibt als normale InnoDB-Tabelle mit Foreign Keys auf `items` und `exchange_rates`.
