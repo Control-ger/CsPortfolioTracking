@@ -52,7 +52,7 @@ import {
   toggleExcludeInvestment,
   updatePortfolioPreferences,
 } from "@shared/lib";
-import { BREAKPOINTS, UI } from "@shared/lib";
+import { BREAKPOINTS } from "@shared/lib";
 import { useKeyboard } from "@shared/hooks";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { runDesktopSyncNowIfDue } from "@shared/lib/desktopSync.js";
@@ -238,7 +238,6 @@ function getCsUpdateBannerTone(level) {
   };
 }
 
-const SWIPE_THRESHOLD = UI.SWIPE_THRESHOLD;
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
@@ -732,10 +731,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const autoSyncStartedRef = useRef(false);
   const manualSteamSyncInfoTimeoutRef = useRef(null);
   const startupAutoSyncHintTimeoutRef = useRef(null);
-  const touchStartX = useRef(null);
-  const touchStartY = useRef(null);
-  const touchEndX = useRef(null);
-  const touchEndY = useRef(null);
   const globalSearchInputRef = useRef(null);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [globalSearchTerm, setGlobalSearchTerm] = useState("");
@@ -1858,60 +1853,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [globalSearchOpen]);
-
-  const handleSwipeNavigation = (direction) => {
-    const currentIndex = runtimeTabs.indexOf(activeTab);
-    if (currentIndex === -1) return;
-
-    let nextIndex;
-    if (direction === "left") {
-      nextIndex = Math.min(currentIndex + 1, runtimeTabs.length - 1);
-    } else {
-      nextIndex = Math.max(currentIndex - 1, 0);
-    }
-
-    if (nextIndex !== currentIndex) {
-      const nextTab = runtimeTabs[nextIndex];
-      handleTabSelect(nextTab);
-    }
-  };
-
-  const onTouchStart = (e) => {
-    touchStartX.current = e.changedTouches[0].screenX;
-    touchStartY.current = e.changedTouches[0].screenY;
-    touchEndX.current = null;
-    touchEndY.current = null;
-  };
-
-  const onTouchMove = (e) => {
-    touchEndX.current = e.changedTouches[0].screenX;
-    touchEndY.current = e.changedTouches[0].screenY;
-  };
-
-  const onTouchEnd = () => {
-    if (touchStartX.current === null || touchEndX.current === null) return;
-    if (touchStartY.current === null || touchEndY.current === null) return;
-
-    const distanceX = touchEndX.current - touchStartX.current;
-    const distanceY = touchEndY.current - touchStartY.current;
-    const isMobileView = window.innerWidth < BREAKPOINTS.MOBILE;
-
-    // Only trigger if horizontal movement is greater than vertical
-    const isHorizontalSwipe = Math.abs(distanceX) > Math.abs(distanceY);
-
-    if (isMobileView && isHorizontalSwipe && Math.abs(distanceX) > SWIPE_THRESHOLD) {
-      if (distanceX < 0) {
-        handleSwipeNavigation("left");
-      } else {
-        handleSwipeNavigation("right");
-      }
-    }
-
-    touchStartX.current = null;
-    touchStartY.current = null;
-    touchEndX.current = null;
-    touchEndY.current = null;
-  };
 
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
@@ -3084,9 +3025,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
     >
       <div
         className={
@@ -3103,7 +3041,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             <header className="flex items-center justify-between pt-[max(0.35rem,env(safe-area-inset-top))] sm:hidden">
               <div className="flex items-end gap-3">
                 <h1 className="text-[1.9rem] font-extrabold leading-none tracking-tight text-foreground">Portfolio</h1>
-                <span className="pb-0.5 text-[1.9rem] font-extrabold leading-none tracking-tight text-muted-foreground/55">Cash</span>
               </div>
               <div className="flex items-center gap-2">
                 <ThemeToggle />

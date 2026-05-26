@@ -94,7 +94,7 @@ export default function App() {
 
   return (
     <CurrencyProvider>
-      <div className={`flex flex-col ${isElectron ? "h-full overflow-hidden" : "min-h-screen"} bg-background text-foreground`}>
+      <div className={`flex flex-col ${isElectron ? "h-full overflow-hidden" : "h-[100dvh] overflow-hidden"} bg-background text-foreground`}>
 
         {/* Nur in Electron anzeigen! */}
         {isElectron && <Titlebar />}
@@ -103,7 +103,7 @@ export default function App() {
           <aside className="hidden lg:flex lg:justify-center lg:pt-2">
             <DesktopSidebarRail desktopRuntime={desktopRuntime} />
           </aside>
-          <main className={`w-full ${isElectron ? "min-h-0 overflow-y-auto" : "min-h-[calc(100vh-4rem)]"} lg:px-6 xl:px-8`}>
+          <main className="w-full min-h-0 overflow-y-auto lg:px-6 xl:px-8">
             {routeViews}
           </main>
         </div>

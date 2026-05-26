@@ -10,6 +10,11 @@
     RewriteCond %{REQUEST_URI} ^/api/ [NC]
     RewriteRule ^ - [L]
 
+    # Asset-Requests niemals auf index.html umbiegen.
+    # Wenn ein Asset fehlt, soll sauber 404 kommen (statt text/html).
+    RewriteRule ^assets/ - [L,NC]
+    RewriteRule ^.+\.(?:js|mjs|css|map|json|png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|eot)$ - [L,NC]
+
     # Existierende Dateien/Verzeichnisse normal ausliefern
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
@@ -17,4 +22,22 @@
 
     # SPA-Fallback fuer React Router (z.B. /auth/callback)
     RewriteRule ^ /index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "^index\.html$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </FilesMatch>
+
+    <Files "sw.js">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </Files>
+
+    <FilesMatch "\.(?:js|mjs|css|map|png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
 </IfModule>
