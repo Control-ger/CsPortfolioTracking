@@ -249,17 +249,31 @@ final class PricingService
     ): array {
         $this->ensureCacheTables();
 
+        $searchStartedAt = microtime(true);
         $normalizedQuery = trim($query);
-        $resolvedLimit = max(1, min($limit, 12));
+        $resolvedLimit = max(1, min($limit, 20));
         $normalizedSortBy = $this->normalizeSortBy($sortBy);
         $browseMode = $normalizedQuery === '' && $this->canBrowseByFilter($itemTypeFilter);
         $resolvedQuery = $normalizedQuery !== ''
             ? $normalizedQuery
             : $this->resolveBrowseQuery($itemTypeFilter);
         $resolvedQuery = $this->normalizeSearchQuery($resolvedQuery);
+        $searchContextBase = [
+            'rawQuery' => $this->truncateForSearchLog($normalizedQuery),
+            'resolvedQuery' => $this->truncateForSearchLog($resolvedQuery),
+            'queryHash' => $this->buildSearchQueryHash($resolvedQuery !== '' ? $resolvedQuery : $normalizedQuery),
+            'tokenCount' => $this->countSearchTokens($resolvedQuery !== '' ? $resolvedQuery : $normalizedQuery),
+            'itemTypeFilter' => trim((string) $itemTypeFilter) !== '' ? trim((string) $itemTypeFilter) : null,
+            'wearFilter' => trim((string) $wearFilter) !== '' ? trim((string) $wearFilter) : null,
+            'sortBy' => $normalizedSortBy,
+            'page' => max(1, $page),
+            'limit' => $resolvedLimit,
+            'browseMode' => $browseMode,
+            'userId' => $userId,
+        ];
 
-        if ($resolvedQuery === '' || ($normalizedQuery === '' && !$browseMode)) {
-            return [
+        if ($normalizedQuery === '' && !$browseMode) {
+            $result = [
                 'items' => [],
                 'page' => 1,
                 'limit' => $resolvedLimit,
@@ -268,18 +282,108 @@ final class PricingService
                 'sortBy' => $normalizedSortBy,
                 'browseMode' => $browseMode,
             ];
+            $this->logWatchlistSearchMetrics(
+                $searchStartedAt,
+                array_merge($searchContextBase, [
+                    'source' => 'empty_query',
+                    'resultItems' => 0,
+                    'resultTotalItems' => 0,
+                ])
+            );
+            return $result;
         }
 
+        // Browse mode for categories like "other" can intentionally run without a keyword query.
+        if ($resolvedQuery === '' && $browseMode) {
+            $catalogMetrics = null;
+            $result = $this->searchWatchlistCandidatesFromCatalog(
+                '',
+                $resolvedLimit,
+                $itemTypeFilter,
+                $wearFilter,
+                $page,
+                $normalizedSortBy,
+                $userId,
+                $priceSourceOverride,
+                $browseMode,
+                $catalogMetrics
+            );
+            $this->logWatchlistSearchMetrics(
+                $searchStartedAt,
+                array_merge($searchContextBase, [
+                    'source' => 'catalog_browse',
+                    'resultItems' => count($result['items'] ?? []),
+                    'resultTotalItems' => (int) ($result['totalItems'] ?? 0),
+                    'catalogMetrics' => $catalogMetrics,
+                ])
+            );
+            return $result;
+        }
+
+        if ($resolvedQuery === '') {
+            $result = [
+                'items' => [],
+                'page' => 1,
+                'limit' => $resolvedLimit,
+                'totalItems' => 0,
+                'totalPages' => 0,
+                'sortBy' => $normalizedSortBy,
+                'browseMode' => $browseMode,
+            ];
+            $this->logWatchlistSearchMetrics(
+                $searchStartedAt,
+                array_merge($searchContextBase, [
+                    'source' => 'resolved_query_empty',
+                    'resultItems' => 0,
+                    'resultTotalItems' => 0,
+                ])
+            );
+            return $result;
+        }
+
+        // DB-first search: local catalog is now the primary index after bulk price-list imports.
+        // Steam search stays as fallback when local search yields no results.
+        $catalogMetrics = null;
+        $catalogResult = $this->searchWatchlistCandidatesFromCatalog(
+            $resolvedQuery,
+            $resolvedLimit,
+            $itemTypeFilter,
+            $wearFilter,
+            $page,
+            $normalizedSortBy,
+            $userId,
+            $priceSourceOverride,
+            $browseMode,
+            $catalogMetrics
+        );
+        if ((int) ($catalogResult['totalItems'] ?? 0) > 0) {
+            $this->logWatchlistSearchMetrics(
+                $searchStartedAt,
+                array_merge($searchContextBase, [
+                    'source' => 'catalog_primary',
+                    'resultItems' => count($catalogResult['items'] ?? []),
+                    'resultTotalItems' => (int) ($catalogResult['totalItems'] ?? 0),
+                    'catalogMetrics' => $catalogMetrics,
+                ])
+            );
+            return $catalogResult;
+        }
+
+        $steamStartedAt = microtime(true);
         $externalStart = 0;
         $externalBatchSize = max($resolvedLimit * 4, 32);
         $matchedItems = [];
         $totalCount = null;
         $seenMarketHashNames = [];
+        $steamPagesFetched = 0;
+        $steamRowsScanned = 0;
 
         while (true) {
             $steamResults = $this->steamMarketClient->searchItems($resolvedQuery, $externalBatchSize, $externalStart);
             $rawItems = $steamResults['items'] ?? [];
             $totalCount = (int) ($steamResults['totalCount'] ?? 0);
+            $steamPagesFetched++;
+            $steamRowsScanned += count($rawItems);
 
             if ($rawItems === []) {
                 break;
@@ -334,6 +438,28 @@ final class PricingService
             }
         }
 
+        // Local fallback: if Steam still has no usable matches, return the earlier catalog result.
+        if ($matchedItems === []) {
+            $this->logWatchlistSearchMetrics(
+                $searchStartedAt,
+                array_merge($searchContextBase, [
+                    'source' => 'catalog_after_steam_empty',
+                    'resultItems' => count($catalogResult['items'] ?? []),
+                    'resultTotalItems' => (int) ($catalogResult['totalItems'] ?? 0),
+                    'catalogMetrics' => $catalogMetrics,
+                    'steamMetrics' => [
+                        'durationMs' => (int) round((microtime(true) - $steamStartedAt) * 1000),
+                        'pagesFetched' => $steamPagesFetched,
+                        'rowsScanned' => $steamRowsScanned,
+                        'totalCountHint' => $totalCount,
+                        'matchedBeforePricing' => 0,
+                    ],
+                ]),
+                true
+            );
+            return $catalogResult;
+        }
+
         $matchedItems = $this->prepareSearchMatches($matchedItems, $userId, $priceSourceOverride);
         $this->sortSearchMatches($matchedItems, $normalizedSortBy);
 
@@ -343,8 +469,153 @@ final class PricingService
         $pageOffset = ($resolvedPage - 1) * $resolvedLimit;
         $pageMatches = array_slice($matchedItems, $pageOffset, $resolvedLimit);
 
+        $result = [
+            'items' => $this->buildWatchlistSearchCandidates($pageMatches),
+            'page' => $resolvedPage,
+            'limit' => $resolvedLimit,
+            'totalItems' => $totalItems,
+            'totalPages' => $totalPages,
+            'sortBy' => $normalizedSortBy,
+            'browseMode' => $browseMode,
+        ];
+        $this->logWatchlistSearchMetrics(
+            $searchStartedAt,
+            array_merge($searchContextBase, [
+                'source' => 'steam_fallback',
+                'resultItems' => count($result['items'] ?? []),
+                'resultTotalItems' => (int) ($result['totalItems'] ?? 0),
+                'catalogMetrics' => $catalogMetrics,
+                'steamMetrics' => [
+                    'durationMs' => (int) round((microtime(true) - $steamStartedAt) * 1000),
+                    'pagesFetched' => $steamPagesFetched,
+                    'rowsScanned' => $steamRowsScanned,
+                    'totalCountHint' => $totalCount,
+                    'matchedBeforePricing' => count($matchedItems),
+                ],
+            ]),
+            true
+        );
+        return $result;
+    }
+
+    private function searchWatchlistCandidatesFromCatalog(
+        string $query,
+        int $limit,
+        ?string $itemTypeFilter,
+        ?string $wearFilter,
+        int $page,
+        string $sortBy,
+        int $userId,
+        ?string $priceSourceOverride,
+        bool $browseMode,
+        ?array &$metrics = null
+    ): array {
+        $catalogStartedAt = microtime(true);
+        $catalogSortBy = $sortBy;
+        $totalItems = $this->itemRepository->countCatalog($query, $itemTypeFilter, $wearFilter);
+        $totalPages = $totalItems > 0 ? (int) ceil($totalItems / $limit) : 0;
+        $resolvedPage = $totalPages > 0 ? min(max(1, $page), $totalPages) : 1;
+        $offset = $totalPages > 0 ? ($resolvedPage - 1) * $limit : 0;
+
+        $rows = $this->itemRepository->searchCatalog(
+            $query,
+            $itemTypeFilter,
+            $wearFilter,
+            $catalogSortBy,
+            $limit,
+            $offset
+        );
+
+        $matchedItems = [];
+        foreach ($rows as $row) {
+            $marketHashName = trim((string) ($row['market_hash_name'] ?? $row['name'] ?? ''));
+            if ($marketHashName === '') {
+                continue;
+            }
+
+            $classification = $this->marketItemClassifier->classify(
+                $marketHashName,
+                isset($row['market_type_label']) ? (string) $row['market_type_label'] : null,
+                isset($row['item_type']) ? (string) $row['item_type'] : null,
+                isset($row['item_type_label']) ? (string) $row['item_type_label'] : null
+            );
+            $wear = $this->marketItemClassifier->normalizeWear(
+                isset($row['wear_label']) ? (string) $row['wear_label'] : null,
+                $marketHashName
+            );
+
+            $itemType = trim((string) ($row['item_type'] ?? $row['type'] ?? ''));
+            if ($itemType === '') {
+                $itemType = trim((string) $itemTypeFilter) === 'other'
+                    ? 'other'
+                    : (string) ($classification['key'] ?? 'other');
+            }
+            $itemTypeLabel = trim((string) ($row['item_type_label'] ?? ''));
+            if ($itemTypeLabel === '') {
+                $itemTypeLabel = trim((string) $itemTypeFilter) === 'other'
+                    ? 'Other'
+                    : (string) ($classification['label'] ?? 'Other');
+            }
+            $marketTypeLabel = trim((string) ($row['market_type_label'] ?? ''));
+            if ($marketTypeLabel === '') {
+                $marketTypeLabel = $itemTypeLabel !== '' ? $itemTypeLabel : 'CS2 Item';
+            }
+
+            $wearKey = trim((string) ($row['wear_key'] ?? ''));
+            $wearLabel = trim((string) ($row['wear_label'] ?? ''));
+            if ($wear !== null) {
+                if ($wearKey === '') {
+                    $wearKey = (string) ($wear['key'] ?? '');
+                }
+                if ($wearLabel === '') {
+                    $wearLabel = (string) ($wear['label'] ?? '');
+                }
+            }
+
+            $matchedItems[] = [
+                'marketHashName' => $marketHashName,
+                'displayName' => (string) ($row['name'] ?? $marketHashName),
+                'itemType' => $itemType !== '' ? $itemType : 'other',
+                'itemTypeLabel' => $itemTypeLabel !== '' ? $itemTypeLabel : 'Other',
+                'marketTypeLabel' => $marketTypeLabel,
+                'wear' => $wearKey !== '' ? $wearKey : null,
+                'wearLabel' => $wearLabel !== '' ? $wearLabel : null,
+                'iconUrl' => isset($row['image_url']) ? (string) $row['image_url'] : null,
+                'steamHint' => null,
+            ];
+        }
+
+        $matchedItems = $this->prepareSearchMatches($matchedItems, $userId, $priceSourceOverride);
+        if ($sortBy !== 'relevance') {
+            $this->sortSearchMatches($matchedItems, $sortBy);
+        }
+
+        $result = [
+            'items' => $this->buildWatchlistSearchCandidates($matchedItems),
+            'page' => $resolvedPage,
+            'limit' => $limit,
+            'totalItems' => $totalItems,
+            'totalPages' => $totalPages,
+            'sortBy' => $sortBy,
+            'browseMode' => $browseMode,
+        ];
+        $metrics = [
+            'durationMs' => (int) round((microtime(true) - $catalogStartedAt) * 1000),
+            'query' => $this->truncateForSearchLog($query),
+            'sortBy' => $catalogSortBy,
+            'rowsFetched' => count($rows),
+            'matchedItemsAfterPricing' => count($result['items']),
+            'totalItems' => $totalItems,
+            'page' => $resolvedPage,
+            'limit' => $limit,
+        ];
+        return $result;
+    }
+
+    private function buildWatchlistSearchCandidates(array $matches): array
+    {
         $candidates = [];
-        foreach ($pageMatches as $match) {
+        foreach ($matches as $match) {
             $marketHashName = (string) ($match['marketHashName'] ?? '');
             if ($marketHashName === '') {
                 continue;
@@ -371,15 +642,115 @@ final class PricingService
             $candidates[] = $dto->toArray();
         }
 
-        return [
-            'items' => $candidates,
-            'page' => $resolvedPage,
-            'limit' => $resolvedLimit,
-            'totalItems' => $totalItems,
-            'totalPages' => $totalPages,
-            'sortBy' => $normalizedSortBy,
-            'browseMode' => $browseMode,
-        ];
+        return $candidates;
+    }
+
+    private function logWatchlistSearchMetrics(float $startedAt, array $context, bool $force = false): void
+    {
+        $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+        $slowThresholdMs = $this->resolveWatchlistSearchSlowThresholdMs();
+        $isSlow = $durationMs >= $slowThresholdMs;
+        $metricsEnabled = $this->isWatchlistSearchMetricsEnabled();
+
+        if (!$force && !$isSlow && !$metricsEnabled) {
+            return;
+        }
+
+        Logger::event(
+            $isSlow ? 'warning' : 'info',
+            'domain',
+            $isSlow ? 'domain.watchlist.search.slow' : 'domain.watchlist.search.metrics',
+            $isSlow ? 'Watchlist search exceeded slow-query threshold' : 'Watchlist search executed',
+            array_merge(
+                $context,
+                [
+                    'durationMs' => $durationMs,
+                    'slowThresholdMs' => $slowThresholdMs,
+                    'isSlow' => $isSlow,
+                    'metricsForced' => $force,
+                ]
+            )
+        );
+    }
+
+    private function isWatchlistSearchMetricsEnabled(): bool
+    {
+        $value = getenv('WATCHLIST_SEARCH_METRICS_ENABLED');
+        if ($value === false || $value === null || trim((string) $value) === '') {
+            return true;
+        }
+
+        return in_array(
+            strtolower(trim((string) $value)),
+            ['1', 'true', 'yes', 'on'],
+            true
+        );
+    }
+
+    private function resolveWatchlistSearchSlowThresholdMs(): int
+    {
+        $value = getenv('WATCHLIST_SEARCH_SLOW_MS');
+        if (!is_numeric($value)) {
+            return 500;
+        }
+
+        return max(50, min(20000, (int) $value));
+    }
+
+    private function truncateForSearchLog(string $value, int $maxLength = 120): string
+    {
+        $normalized = trim(preg_replace('/\s+/', ' ', $value) ?? '');
+        if ($normalized === '') {
+            return '';
+        }
+
+        if (function_exists('mb_substr')) {
+            return mb_substr($normalized, 0, $maxLength, 'UTF-8');
+        }
+
+        return substr($normalized, 0, $maxLength);
+    }
+
+    private function buildSearchQueryHash(string $query): string
+    {
+        $normalized = trim(preg_replace('/\s+/', ' ', $query) ?? '');
+        if ($normalized === '') {
+            return 'empty';
+        }
+
+        if (function_exists('mb_strtolower')) {
+            $normalized = mb_strtolower($normalized, 'UTF-8');
+        } else {
+            $normalized = strtolower($normalized);
+        }
+
+        return hash('sha256', $normalized);
+    }
+
+    private function countSearchTokens(string $query): int
+    {
+        $normalized = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $query) ?? '';
+        $parts = preg_split('/\s+/u', trim($normalized)) ?: [];
+        $tokens = [];
+        foreach ($parts as $part) {
+            $candidate = trim((string) $part);
+            if ($candidate === '') {
+                continue;
+            }
+
+            $token = function_exists('mb_strtolower')
+                ? mb_strtolower($candidate, 'UTF-8')
+                : strtolower($candidate);
+            $length = function_exists('mb_strlen')
+                ? mb_strlen($token, 'UTF-8')
+                : strlen($token);
+            if ($length < 2) {
+                continue;
+            }
+            $tokens[$token] = true;
+        }
+
+        return count($tokens);
     }
 
     private function ensureCacheTables(): void
@@ -862,7 +1233,26 @@ final class PricingService
 
     private function canBrowseByFilter(?string $itemTypeFilter): bool
     {
-        return $this->resolveBrowseQuery($itemTypeFilter) !== '';
+        return in_array(
+            trim((string) $itemTypeFilter),
+            [
+                'skin',
+                'case',
+                'souvenir_package',
+                'sticker_capsule',
+                'sticker',
+                'patch',
+                'music_kit',
+                'agent',
+                'key',
+                'terminal',
+                'charm',
+                'graffiti',
+                'tool',
+                'other',
+            ],
+            true
+        );
     }
 
     private function resolveBrowseQuery(?string $itemTypeFilter): string
@@ -880,6 +1270,7 @@ final class PricingService
             'charm' => 'charm',
             'graffiti' => 'graffiti',
             'tool' => 'tool',
+            'other' => '',
             'container' => '',
             'skin' => 'ak-47',
             default => '',

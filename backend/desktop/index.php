@@ -1025,6 +1025,57 @@ $router->register('GET', '/api/v1/debug/csfloat', static function (): void {
     ]);
 });
 
+$router->register('GET', '/api/v1/debug/watchlist-search-stats', static function (Request $request) use ($proxyUpstreamGet): void {
+    $hours = max(1, min((int) ($request->query['hours'] ?? 24), 24 * 14));
+    $limit = max(50, min((int) ($request->query['limit'] ?? 3000), 10000));
+    $top = max(1, min((int) ($request->query['top'] ?? 10), 50));
+
+    $query = [
+        'hours' => $hours,
+        'limit' => $limit,
+        'top' => $top,
+    ];
+    $proxied = $proxyUpstreamGet('/api/v1/debug/watchlist-search-stats', $query);
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($proxied['data'] ?? null) ? $proxied['data'] : [],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success(
+        [
+            'source' => 'desktop-local-fallback',
+            'generatedAt' => gmdate(DATE_ATOM),
+            'hours' => $hours,
+            'limit' => $limit,
+            'top' => $top,
+            'totalFetchedEvents' => 0,
+            'searchEvents' => 0,
+            'summary' => [
+                'totalSearches' => 0,
+                'slowSearches' => 0,
+                'slowRatePercent' => 0.0,
+                'steamFallbackSearches' => 0,
+                'steamFallbackRatePercent' => 0.0,
+                'avgDurationMs' => null,
+                'p50DurationMs' => null,
+                'p95DurationMs' => null,
+                'p99DurationMs' => null,
+                'avgResultTotalItems' => null,
+                'sourceBreakdown' => [],
+            ],
+            'topQueries' => [],
+            'slowSamples' => [],
+        ],
+        [
+            'source' => 'desktop-local-fallback',
+            'proxyAttempts' => $proxied['attempts'] ?? [],
+        ]
+    );
+});
+
 $router->register('POST', '/api/v1/observability/frontend-events', static function (): void {
     http_response_code(204);
 });

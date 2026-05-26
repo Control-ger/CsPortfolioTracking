@@ -203,6 +203,7 @@ final class WatchlistService
                 'charm',
                 'graffiti',
                 'tool',
+                'other',
             ],
             true
         );

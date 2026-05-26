@@ -12,9 +12,12 @@ import { ScrollArea } from "@shared/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@shared/components/ui/select";
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@shared/components/ui/table";
-import { fetchDebugLogs } from "@shared/lib/apiClient";
+import { fetchDebugLogs, fetchWatchlistSearchStats } from "@shared/lib/apiClient";
 
 const DEBUG_LOG_LIMIT = 500;
+const SEARCH_STATS_HOURS = 24;
+const SEARCH_STATS_LIMIT = 3000;
+const SEARCH_STATS_TOP = 10;
 const ALL_FILTER_VALUE = "all";
 const LOG_LINE_PATTERN =
   /^\[([^\]]+)]\s+([A-Z]+)\s+([a-zA-Z0-9_.-]+):\s*(.*?)(?:\s+\|\s+requestId=([^|]+))?(?:\s+\|\s+status=([^|]+))?(?:\s+\|\s+durationMs=([^|]+))?(?:\s+\|\s+context=(.*))?$/;
@@ -175,6 +178,14 @@ async function fetchDebugRowsFromApi() {
   };
 }
 
+async function fetchWatchlistSearchStatsFromApi() {
+  return fetchWatchlistSearchStats({
+    hours: SEARCH_STATS_HOURS,
+    limit: SEARCH_STATS_LIMIT,
+    top: SEARCH_STATS_TOP,
+  });
+}
+
 function levelBadgeClass(level) {
   switch (level) {
     case "INFO":
@@ -205,11 +216,37 @@ function formatTimestamp(timestamp) {
   return parsedDate.toLocaleString("de-DE", { hour12: false });
 }
 
+function formatDurationMs(value) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `${Math.round(Number(value))} ms`;
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `${Number(value).toFixed(2)}%`;
+}
+
+function formatNumber(value) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+
+  return new Intl.NumberFormat("de-DE").format(Number(value));
+}
+
 export function DebugDashboardPage() {
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const [rows, setRows] = useState([]);
+  const [searchStats, setSearchStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [searchStatsError, setSearchStatsError] = useState("");
   const [source, setSource] = useState("unknown");
   const [fetchedAt, setFetchedAt] = useState(null);
   const [eventFilter, setEventFilter] = useState(ALL_FILTER_VALUE);
@@ -223,20 +260,36 @@ export function DebugDashboardPage() {
   const refreshLogs = async () => {
     setLoading(true);
     setError("");
+    setSearchStatsError("");
 
-    try {
-      const result = await fetchDebugRowsFromApi();
-      setRows(result.rows);
-      setSource(result.source);
-      setFetchedAt(new Date());
-    } catch (logsError) {
+    const [logsResult, statsResult] = await Promise.allSettled([
+      fetchDebugRowsFromApi(),
+      fetchWatchlistSearchStatsFromApi(),
+    ]);
+
+    if (logsResult.status === "fulfilled") {
+      setRows(logsResult.value.rows);
+      setSource(logsResult.value.source);
+    } else {
+      const logsError = logsResult.reason;
       console.error("Fehler beim Laden der Debug-Logs:", logsError);
       setRows([]);
       setError(logsError?.message || "Debug-Logs konnten nicht geladen werden.");
-      setFetchedAt(new Date());
-    } finally {
-      setLoading(false);
     }
+
+    if (statsResult.status === "fulfilled") {
+      setSearchStats(statsResult.value);
+    } else {
+      const statsError = statsResult.reason;
+      console.error("Fehler beim Laden der Watchlist-Suchstatistiken:", statsError);
+      setSearchStats(null);
+      setSearchStatsError(
+        statsError?.message || "Watchlist-Suchstatistiken konnten nicht geladen werden.",
+      );
+    }
+
+    setFetchedAt(new Date());
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -245,30 +298,40 @@ export function DebugDashboardPage() {
     const loadInitialRows = async () => {
       setLoading(true);
       setError("");
+      setSearchStatsError("");
 
-      try {
-        const result = await fetchDebugRowsFromApi();
-        if (cancelled) {
-          return;
-        }
+      const [logsResult, statsResult] = await Promise.allSettled([
+        fetchDebugRowsFromApi(),
+        fetchWatchlistSearchStatsFromApi(),
+      ]);
 
-        setRows(result.rows);
-        setSource(result.source);
-        setFetchedAt(new Date());
-      } catch (logsError) {
-        if (cancelled) {
-          return;
-        }
+      if (cancelled) {
+        return;
+      }
 
+      if (logsResult.status === "fulfilled") {
+        setRows(logsResult.value.rows);
+        setSource(logsResult.value.source);
+      } else {
+        const logsError = logsResult.reason;
         console.error("Fehler beim Laden der Debug-Logs:", logsError);
         setRows([]);
         setError(logsError?.message || "Debug-Logs konnten nicht geladen werden.");
-        setFetchedAt(new Date());
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
       }
+
+      if (statsResult.status === "fulfilled") {
+        setSearchStats(statsResult.value);
+      } else {
+        const statsError = statsResult.reason;
+        console.error("Fehler beim Laden der Watchlist-Suchstatistiken:", statsError);
+        setSearchStats(null);
+        setSearchStatsError(
+          statsError?.message || "Watchlist-Suchstatistiken konnten nicht geladen werden.",
+        );
+      }
+
+      setFetchedAt(new Date());
+      setLoading(false);
     };
 
     void loadInitialRows();
@@ -277,6 +340,37 @@ export function DebugDashboardPage() {
       cancelled = true;
     };
   }, []);
+
+  const searchSummary = useMemo(() => {
+    return searchStats && typeof searchStats.summary === "object" ? searchStats.summary : null;
+  }, [searchStats]);
+
+  const topQueries = useMemo(() => {
+    if (!Array.isArray(searchStats?.topQueries)) {
+      return [];
+    }
+
+    return searchStats.topQueries;
+  }, [searchStats]);
+
+  const slowSamples = useMemo(() => {
+    if (!Array.isArray(searchStats?.slowSamples)) {
+      return [];
+    }
+
+    return searchStats.slowSamples;
+  }, [searchStats]);
+
+  const searchSourceBreakdown = useMemo(() => {
+    if (!Array.isArray(searchSummary?.sourceBreakdown)) {
+      return [];
+    }
+
+    return searchSummary.sourceBreakdown;
+  }, [searchSummary]);
+
+  const fallbackRate = Number(searchSummary?.steamFallbackRatePercent || 0);
+  const slowRate = Number(searchSummary?.slowRatePercent || 0);
 
   const eventOptions = useMemo(() => {
     return Array.from(new Set(rows.map((row) => row.eventName).filter(Boolean))).sort((a, b) =>
@@ -463,6 +557,133 @@ export function DebugDashboardPage() {
             </div>
 
             {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-border/70 bg-card/70">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Watchlist Search KPIs ({searchStats?.hours || SEARCH_STATS_HOURS}h)</CardTitle>
+            <CardDescription>
+              Aggregierte Suchmetriken aus `domain.watchlist.search.*` Events.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {searchStatsError ? (
+              <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{searchStatsError}</div>
+            ) : null}
+
+            {!searchSummary ? (
+              loading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Noch keine Suchmetriken verfuegbar.</div>
+              )
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                    <p className="text-xs text-muted-foreground">Total Searches</p>
+                    <p className="text-lg font-semibold">{formatNumber(searchSummary.totalSearches)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                    <p className="text-xs text-muted-foreground">Avg / P95</p>
+                    <p className="text-lg font-semibold">
+                      {formatDurationMs(searchSummary.avgDurationMs)} / {formatDurationMs(searchSummary.p95DurationMs)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                    <p className="text-xs text-muted-foreground">Slow Rate</p>
+                    <p className={`text-lg font-semibold ${slowRate >= 20 ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                      {formatPercent(searchSummary.slowRatePercent)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                    <p className="text-xs text-muted-foreground">Steam Fallback Rate</p>
+                    <p className={`text-lg font-semibold ${fallbackRate >= 10 ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                      {formatPercent(searchSummary.steamFallbackRatePercent)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {searchSourceBreakdown.map((entry) => (
+                    <Badge key={entry.source} variant="outline">
+                      {entry.source}: {formatNumber(entry.count)} ({formatPercent(entry.ratePercent)})
+                    </Badge>
+                  ))}
+                </div>
+
+                <div className="overflow-x-auto rounded-md border border-border/70">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[320px]">Top Query</TableHead>
+                        <TableHead className="w-[90px]">Count</TableHead>
+                        <TableHead className="w-[120px]">Avg</TableHead>
+                        <TableHead className="w-[120px]">P95</TableHead>
+                        <TableHead className="w-[120px]">Slow %</TableHead>
+                        <TableHead className="w-[140px]">Fallback %</TableHead>
+                        <TableHead className="w-[120px]">Avg Results</TableHead>
+                        <TableHead>Sources</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {topQueries.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-sm text-muted-foreground">
+                            Keine Query-Aggregate im gewaehlten Zeitraum.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        topQueries.map((queryEntry) => (
+                          <TableRow key={queryEntry.queryHash}>
+                            <TableCell className="font-mono text-xs">
+                              <div>{queryEntry.sampleQuery || "(leer)"}</div>
+                              <div className="text-[10px] text-muted-foreground">{queryEntry.queryHash}</div>
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">{formatNumber(queryEntry.count)}</TableCell>
+                            <TableCell className="font-mono text-xs">{formatDurationMs(queryEntry.avgDurationMs)}</TableCell>
+                            <TableCell className="font-mono text-xs">{formatDurationMs(queryEntry.p95DurationMs)}</TableCell>
+                            <TableCell className="font-mono text-xs">{formatPercent(queryEntry.slowRatePercent)}</TableCell>
+                            <TableCell className="font-mono text-xs">{formatPercent(queryEntry.steamFallbackRatePercent)}</TableCell>
+                            <TableCell className="font-mono text-xs">{formatNumber(queryEntry.avgResultTotalItems)}</TableCell>
+                            <TableCell className="font-mono text-[11px]">
+                              {Array.isArray(queryEntry.sourceBreakdown) && queryEntry.sourceBreakdown.length > 0
+                                ? queryEntry.sourceBreakdown
+                                    .map((part) => `${part.source}:${part.count}`)
+                                    .join(" | ")
+                                : "-"}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {slowSamples.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Slow Samples</p>
+                    <div className="space-y-1 rounded-md border border-border/70 p-3">
+                      {slowSamples.map((sample, index) => (
+                        <div key={`${sample.queryHash}-${sample.timestamp}-${index}`} className="text-xs text-muted-foreground">
+                          <span className="font-mono">{formatTimestamp(sample.timestamp)}</span>
+                          {" | "}
+                          <span className="font-mono">{sample.source}</span>
+                          {" | "}
+                          <span className="font-mono">{formatDurationMs(sample.durationMs)}</span>
+                          {" | "}
+                          <span>{sample.sampleQuery}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
           </CardContent>
         </Card>
 

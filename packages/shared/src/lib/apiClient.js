@@ -675,6 +675,16 @@ export async function fetchDebugLogs(options = {}) {
   );
 }
 
+export async function fetchWatchlistSearchStats(options = {}) {
+  return request(
+    buildPath("/api/v1/debug/watchlist-search-stats", {
+      hours: Number.isFinite(options.hours) ? options.hours : 24,
+      limit: Number.isFinite(options.limit) ? options.limit : 3000,
+      top: Number.isFinite(options.top) ? options.top : 10,
+    }),
+  );
+}
+
 export async function fetchFeeSettings() {
   return requestWithMeta("/api/v1/settings/fees");
 }

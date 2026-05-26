@@ -106,12 +106,356 @@ final class DebugController
         }
     }
 
+    public function watchlistSearchStats(Request $request): void
+    {
+        try {
+            $hours = $this->resolveHours($request, 24);
+            $limit = $this->resolveStatsLimit($request, 3000);
+            $top = $this->resolveTop($request, 10);
+
+            if ($this->observabilityRepository === null) {
+                JsonResponseFactory::success([
+                    'source' => 'observability_unavailable',
+                    'generatedAt' => gmdate(DATE_ATOM),
+                    'hours' => $hours,
+                    'limit' => $limit,
+                    'top' => $top,
+                    'totalFetchedEvents' => 0,
+                    'searchEvents' => 0,
+                    'summary' => [
+                        'totalSearches' => 0,
+                        'slowSearches' => 0,
+                        'slowRatePercent' => 0.0,
+                        'steamFallbackSearches' => 0,
+                        'steamFallbackRatePercent' => 0.0,
+                        'avgDurationMs' => null,
+                        'p50DurationMs' => null,
+                        'p95DurationMs' => null,
+                        'p99DurationMs' => null,
+                        'avgResultTotalItems' => null,
+                        'sourceBreakdown' => [],
+                    ],
+                    'topQueries' => [],
+                    'slowSamples' => [],
+                ]);
+                return;
+            }
+
+            $from = gmdate('c', time() - ($hours * 3600));
+            $events = $this->observabilityRepository->findEvents(
+                [
+                    'category' => 'domain',
+                    'from' => $from,
+                ],
+                $limit
+            );
+
+            $searchEvents = array_values(
+                array_filter(
+                    $events,
+                    static function (array $event): bool {
+                        $eventName = (string) ($event['event'] ?? '');
+                        return in_array(
+                            $eventName,
+                            ['domain.watchlist.search.metrics', 'domain.watchlist.search.slow'],
+                            true
+                        );
+                    }
+                )
+            );
+
+            $aggregated = $this->aggregateWatchlistSearchStats($searchEvents, $top);
+
+            JsonResponseFactory::success([
+                'source' => 'observability_events',
+                'generatedAt' => gmdate(DATE_ATOM),
+                'hours' => $hours,
+                'limit' => $limit,
+                'top' => $top,
+                'totalFetchedEvents' => count($events),
+                'searchEvents' => count($searchEvents),
+                'summary' => $aggregated['summary'],
+                'topQueries' => $aggregated['topQueries'],
+                'slowSamples' => $aggregated['slowSamples'],
+            ]);
+        } catch (Throwable $exception) {
+            JsonResponseFactory::error('DEBUG_WATCHLIST_SEARCH_STATS_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
     private function resolveLimit(Request $request, int $default): int
     {
         $raw = $request->query['limit'] ?? $request->query['lines'] ?? $default;
         $value = (int) $raw;
 
         return max(1, min($value, 1000));
+    }
+
+    private function resolveStatsLimit(Request $request, int $default): int
+    {
+        $raw = $request->query['limit'] ?? $default;
+        $value = (int) $raw;
+
+        return max(50, min($value, 10000));
+    }
+
+    private function resolveHours(Request $request, int $default): int
+    {
+        $raw = $request->query['hours'] ?? $default;
+        $value = (int) $raw;
+
+        return max(1, min($value, 24 * 14));
+    }
+
+    private function resolveTop(Request $request, int $default): int
+    {
+        $raw = $request->query['top'] ?? $default;
+        $value = (int) $raw;
+
+        return max(1, min($value, 50));
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $events
+     * @return array{summary: array<string, mixed>, topQueries: array<int, array<string, mixed>>, slowSamples: array<int, array<string, mixed>>}
+     */
+    private function aggregateWatchlistSearchStats(array $events, int $top): array
+    {
+        $durations = [];
+        $sourceCounts = [];
+        $queryGroups = [];
+        $slowSamples = [];
+        $totalSearches = count($events);
+        $slowSearches = 0;
+        $steamFallbackSearches = 0;
+        $resultTotalItemsSum = 0.0;
+        $resultTotalItemsCount = 0;
+
+        foreach ($events as $event) {
+            $context = is_array($event['context'] ?? null) ? $event['context'] : [];
+            $eventName = (string) ($event['event'] ?? '');
+            $source = trim((string) ($context['source'] ?? 'unknown'));
+            if ($source === '') {
+                $source = 'unknown';
+            }
+            $sourceKey = strtolower($source);
+
+            $isSlow = $eventName === 'domain.watchlist.search.slow'
+                || filter_var($context['isSlow'] ?? false, FILTER_VALIDATE_BOOL);
+            if ($isSlow) {
+                $slowSearches++;
+            }
+
+            $isSteamFallback = in_array($sourceKey, ['steam_fallback', 'catalog_after_steam_empty'], true);
+            if ($isSteamFallback) {
+                $steamFallbackSearches++;
+            }
+
+            $durationMs = $this->extractDurationMs($event, $context);
+            if ($durationMs !== null) {
+                $durations[] = $durationMs;
+            }
+
+            $resultTotalItems = isset($context['resultTotalItems']) && is_numeric($context['resultTotalItems'])
+                ? (float) $context['resultTotalItems']
+                : null;
+            if ($resultTotalItems !== null) {
+                $resultTotalItemsSum += $resultTotalItems;
+                $resultTotalItemsCount++;
+            }
+
+            $sourceCounts[$sourceKey] = ($sourceCounts[$sourceKey] ?? 0) + 1;
+
+            $queryHash = trim((string) ($context['queryHash'] ?? ''));
+            if ($queryHash === '') {
+                $queryHash = 'unknown';
+            }
+            $sampleQuery = trim((string) ($context['resolvedQuery'] ?? $context['rawQuery'] ?? ''));
+            if ($sampleQuery === '') {
+                $sampleQuery = '(browse)';
+            }
+            $sampleQuery = $this->truncate($sampleQuery, 120);
+
+            if (!isset($queryGroups[$queryHash])) {
+                $queryGroups[$queryHash] = [
+                    'queryHash' => $queryHash,
+                    'sampleQuery' => $sampleQuery,
+                    'count' => 0,
+                    'slowCount' => 0,
+                    'steamFallbackCount' => 0,
+                    'durationSamples' => [],
+                    'resultTotalItemsSum' => 0.0,
+                    'resultTotalItemsCount' => 0,
+                    'sources' => [],
+                ];
+            }
+
+            $queryGroups[$queryHash]['count']++;
+            if ($isSlow) {
+                $queryGroups[$queryHash]['slowCount']++;
+            }
+            if ($isSteamFallback) {
+                $queryGroups[$queryHash]['steamFallbackCount']++;
+            }
+            if ($durationMs !== null) {
+                $queryGroups[$queryHash]['durationSamples'][] = $durationMs;
+            }
+            if ($resultTotalItems !== null) {
+                $queryGroups[$queryHash]['resultTotalItemsSum'] += $resultTotalItems;
+                $queryGroups[$queryHash]['resultTotalItemsCount']++;
+            }
+            $queryGroups[$queryHash]['sources'][$sourceKey] = ($queryGroups[$queryHash]['sources'][$sourceKey] ?? 0) + 1;
+
+            if ($isSlow) {
+                $slowSamples[] = [
+                    'timestamp' => (string) ($event['timestamp'] ?? ''),
+                    'durationMs' => $durationMs,
+                    'source' => $sourceKey,
+                    'sampleQuery' => $sampleQuery,
+                    'queryHash' => $queryHash,
+                    'resultTotalItems' => $resultTotalItems !== null ? (int) round($resultTotalItems) : null,
+                ];
+            }
+        }
+
+        sort($durations);
+        $sourceBreakdown = [];
+        foreach ($sourceCounts as $sourceKey => $count) {
+            $sourceBreakdown[] = [
+                'source' => $sourceKey,
+                'count' => $count,
+                'ratePercent' => $totalSearches > 0 ? round(($count / $totalSearches) * 100, 2) : 0.0,
+            ];
+        }
+        usort(
+            $sourceBreakdown,
+            static fn(array $left, array $right): int => ((int) $right['count']) <=> ((int) $left['count'])
+        );
+
+        $topQueries = [];
+        foreach ($queryGroups as $group) {
+            $samples = $group['durationSamples'];
+            sort($samples);
+            $sourceParts = [];
+            foreach ($group['sources'] as $sourceKey => $count) {
+                $sourceParts[] = [
+                    'source' => $sourceKey,
+                    'count' => $count,
+                    'ratePercent' => $group['count'] > 0 ? round(($count / $group['count']) * 100, 2) : 0.0,
+                ];
+            }
+            usort(
+                $sourceParts,
+                static fn(array $left, array $right): int => ((int) $right['count']) <=> ((int) $left['count'])
+            );
+
+            $topQueries[] = [
+                'queryHash' => $group['queryHash'],
+                'sampleQuery' => $group['sampleQuery'],
+                'count' => $group['count'],
+                'avgDurationMs' => $this->averageInt($samples),
+                'p95DurationMs' => $this->percentile($samples, 95),
+                'slowRatePercent' => $group['count'] > 0
+                    ? round(($group['slowCount'] / $group['count']) * 100, 2)
+                    : 0.0,
+                'steamFallbackRatePercent' => $group['count'] > 0
+                    ? round(($group['steamFallbackCount'] / $group['count']) * 100, 2)
+                    : 0.0,
+                'avgResultTotalItems' => $group['resultTotalItemsCount'] > 0
+                    ? round($group['resultTotalItemsSum'] / $group['resultTotalItemsCount'], 2)
+                    : null,
+                'sourceBreakdown' => $sourceParts,
+            ];
+        }
+        usort(
+            $topQueries,
+            static function (array $left, array $right): int {
+                $countDiff = ((int) $right['count']) <=> ((int) $left['count']);
+                if ($countDiff !== 0) {
+                    return $countDiff;
+                }
+
+                return ((int) ($right['avgDurationMs'] ?? 0)) <=> ((int) ($left['avgDurationMs'] ?? 0));
+            }
+        );
+        $topQueries = array_slice($topQueries, 0, $top);
+
+        usort(
+            $slowSamples,
+            static function (array $left, array $right): int {
+                $leftDuration = (int) ($left['durationMs'] ?? 0);
+                $rightDuration = (int) ($right['durationMs'] ?? 0);
+                $durationDiff = $rightDuration <=> $leftDuration;
+                if ($durationDiff !== 0) {
+                    return $durationDiff;
+                }
+
+                return strcmp((string) ($right['timestamp'] ?? ''), (string) ($left['timestamp'] ?? ''));
+            }
+        );
+        $slowSamples = array_slice($slowSamples, 0, min($top, 10));
+
+        return [
+            'summary' => [
+                'totalSearches' => $totalSearches,
+                'slowSearches' => $slowSearches,
+                'slowRatePercent' => $totalSearches > 0 ? round(($slowSearches / $totalSearches) * 100, 2) : 0.0,
+                'steamFallbackSearches' => $steamFallbackSearches,
+                'steamFallbackRatePercent' => $totalSearches > 0
+                    ? round(($steamFallbackSearches / $totalSearches) * 100, 2)
+                    : 0.0,
+                'avgDurationMs' => $this->averageInt($durations),
+                'p50DurationMs' => $this->percentile($durations, 50),
+                'p95DurationMs' => $this->percentile($durations, 95),
+                'p99DurationMs' => $this->percentile($durations, 99),
+                'avgResultTotalItems' => $resultTotalItemsCount > 0
+                    ? round($resultTotalItemsSum / $resultTotalItemsCount, 2)
+                    : null,
+                'sourceBreakdown' => $sourceBreakdown,
+            ],
+            'topQueries' => $topQueries,
+            'slowSamples' => $slowSamples,
+        ];
+    }
+
+    private function extractDurationMs(array $event, array $context): ?int
+    {
+        $duration = $event['durationMs'] ?? $context['durationMs'] ?? null;
+        if (!is_numeric($duration)) {
+            return null;
+        }
+
+        $value = (int) $duration;
+        return $value >= 0 ? $value : null;
+    }
+
+    /**
+     * @param array<int, int> $values
+     */
+    private function averageInt(array $values): ?int
+    {
+        if ($values === []) {
+            return null;
+        }
+
+        return (int) round(array_sum($values) / count($values));
+    }
+
+    /**
+     * @param array<int, int> $sortedValues
+     */
+    private function percentile(array $sortedValues, int $percentile): ?int
+    {
+        if ($sortedValues === []) {
+            return null;
+        }
+
+        $resolvedPercentile = max(1, min($percentile, 100));
+        $count = count($sortedValues);
+        $index = (int) ceil(($resolvedPercentile / 100) * $count) - 1;
+        $index = max(0, min($index, $count - 1));
+
+        return (int) $sortedValues[$index];
     }
 
     private function queryObservabilityEvents(Request $request, int $limit, string $logType): array

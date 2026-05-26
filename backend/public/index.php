@@ -752,6 +752,7 @@ try {
     if (obs_debug_endpoints_enabled()) {
         $router->register('GET', '/api/v1/debug/logs', [$debugController, 'logs']);
         $router->register('GET', '/api/v1/debug/csfloat', [$debugController, 'csfloatDebug']);
+        $router->register('GET', '/api/v1/debug/watchlist-search-stats', [$debugController, 'watchlistSearchStats']);
         $router->register('GET', '/api/v1/debug/cache/stats', function () use ($pdo) {
             $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
             JsonResponseFactory::success([

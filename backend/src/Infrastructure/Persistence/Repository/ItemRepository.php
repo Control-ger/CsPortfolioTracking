@@ -247,9 +247,19 @@ final class ItemRepository
 
         $normalizedItemType = trim((string) $itemType);
         if ($normalizedItemType !== '' && strtolower($normalizedItemType) !== 'all') {
-            $conditions[] = '(i.item_type = ? OR i.type = ?)';
-            $params[] = $normalizedItemType;
-            $params[] = $normalizedItemType;
+            if (strtolower($normalizedItemType) === 'other') {
+                $conditions[] = '(
+                    i.item_type = ? OR i.type = ?
+                    OR i.item_type IS NULL OR TRIM(i.item_type) = \'\'
+                    OR i.type IS NULL OR TRIM(i.type) = \'\'
+                )';
+                $params[] = $normalizedItemType;
+                $params[] = $normalizedItemType;
+            } else {
+                $conditions[] = '(i.item_type = ? OR i.type = ?)';
+                $params[] = $normalizedItemType;
+                $params[] = $normalizedItemType;
+            }
         }
 
         $normalizedWear = trim((string) $wearKey);
@@ -259,13 +269,77 @@ final class ItemRepository
         }
 
         $whereSql = $conditions === [] ? '' : ('WHERE ' . implode(' AND ', $conditions));
-        $orderSql = match (trim((string) $sortBy)) {
+        $normalizedSortBy = trim((string) $sortBy);
+        $orderSql = match ($normalizedSortBy) {
             'name_desc' => 'ORDER BY i.market_hash_name DESC',
             'price_asc' => 'ORDER BY price_eur ASC, i.market_hash_name ASC',
             'price_desc' => 'ORDER BY price_eur DESC, i.market_hash_name ASC',
             default => 'ORDER BY i.market_hash_name ASC',
         };
         $selectSql = 'i.id, i.name, i.market_hash_name, i.image_url, i.type, i.item_type, i.item_type_label, i.market_type_label, i.wear_key, i.wear_label';
+        $relevanceSelectSql = '';
+        $relevanceParams = [];
+        if ($normalizedSortBy === 'relevance' && $normalizedQuery !== '') {
+            $queryTokens = $this->extractSearchTokens($normalizedQuery);
+            $exactNeedle = $normalizedQuery;
+            $prefixNeedle = $normalizedQuery . '%';
+            $containsNeedle = '%' . $normalizedQuery . '%';
+            $tokenScoreParts = [];
+            $allTokenPresenceConditions = [];
+            $tokenScoreParams = [];
+            $allTokenPresenceParams = [];
+            foreach ($queryTokens as $token) {
+                $tokenPrefixNeedle = $token . '%';
+                $tokenContainsNeedle = '%' . $token . '%';
+                $tokenScoreParts[] = '
+                            (
+                                CASE
+                                    WHEN i.market_hash_name LIKE ? THEN 120
+                                    WHEN i.name LIKE ? THEN 110
+                                    WHEN i.market_hash_name LIKE ? THEN 80
+                                    WHEN i.name LIKE ? THEN 70
+                                    ELSE 0
+                                END
+                            )';
+                $tokenScoreParams[] = $tokenPrefixNeedle;
+                $tokenScoreParams[] = $tokenPrefixNeedle;
+                $tokenScoreParams[] = $tokenContainsNeedle;
+                $tokenScoreParams[] = $tokenContainsNeedle;
+
+                $allTokenPresenceConditions[] = '(i.market_hash_name LIKE ? OR i.name LIKE ?)';
+                $allTokenPresenceParams[] = $tokenContainsNeedle;
+                $allTokenPresenceParams[] = $tokenContainsNeedle;
+            }
+            $tokenScoreSql = $tokenScoreParts !== [] ? implode(' + ', $tokenScoreParts) : '0';
+            $allTokensBonusSql = $allTokenPresenceConditions !== []
+                ? '(CASE WHEN ' . implode(' AND ', $allTokenPresenceConditions) . ' THEN 240 ELSE 0 END)'
+                : '0';
+            $relevanceSelectSql = ',
+                    (
+                        CASE
+                            WHEN i.market_hash_name = ? THEN 1000
+                            WHEN i.name = ? THEN 980
+                            WHEN i.market_hash_name LIKE ? THEN 900
+                            WHEN i.name LIKE ? THEN 860
+                            WHEN i.market_hash_name LIKE ? THEN 700
+                            WHEN i.name LIKE ? THEN 660
+                            ELSE 0
+                        END
+                        + (' . $tokenScoreSql . ')
+                        + ' . $allTokensBonusSql . '
+                    ) AS relevance_score';
+            $relevanceParams = [
+                $exactNeedle,
+                $exactNeedle,
+                $prefixNeedle,
+                $prefixNeedle,
+                $containsNeedle,
+                $containsNeedle,
+                ...$tokenScoreParams,
+                ...$allTokenPresenceParams,
+            ];
+            $orderSql = 'ORDER BY relevance_score DESC, CHAR_LENGTH(i.market_hash_name) ASC, i.market_hash_name ASC';
+        }
         $joinSql = '';
         if ($this->supportsPriceJoin()) {
             $selectSql .= ',
@@ -288,6 +362,7 @@ final class ItemRepository
                     NULL AS usd_to_eur,
                     NULL AS price_eur';
         }
+        $selectSql .= $relevanceSelectSql;
 
         $sql = "SELECT {$selectSql}
                 FROM items i
@@ -298,7 +373,7 @@ final class ItemRepository
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
+            $stmt->execute(array_merge($relevanceParams, $params));
             return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -330,9 +405,19 @@ final class ItemRepository
 
         $normalizedItemType = trim((string) $itemType);
         if ($normalizedItemType !== '' && strtolower($normalizedItemType) !== 'all') {
-            $conditions[] = '(item_type = ? OR type = ?)';
-            $params[] = $normalizedItemType;
-            $params[] = $normalizedItemType;
+            if (strtolower($normalizedItemType) === 'other') {
+                $conditions[] = '(
+                    item_type = ? OR type = ?
+                    OR item_type IS NULL OR TRIM(item_type) = \'\'
+                    OR type IS NULL OR TRIM(type) = \'\'
+                )';
+                $params[] = $normalizedItemType;
+                $params[] = $normalizedItemType;
+            } else {
+                $conditions[] = '(item_type = ? OR type = ?)';
+                $params[] = $normalizedItemType;
+                $params[] = $normalizedItemType;
+            }
         }
 
         $normalizedWear = trim((string) $wearKey);
@@ -359,6 +444,46 @@ final class ItemRepository
             );
             throw $exception;
         }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function extractSearchTokens(string $query, int $maxTokens = 6): array
+    {
+        $normalized = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $query) ?? '';
+        $parts = preg_split('/\s+/u', trim($normalized)) ?: [];
+
+        $tokens = [];
+        $seen = [];
+        foreach ($parts as $part) {
+            $candidate = trim((string) $part);
+            if ($candidate === '') {
+                continue;
+            }
+
+            $token = function_exists('mb_strtolower')
+                ? mb_strtolower($candidate, 'UTF-8')
+                : strtolower($candidate);
+            $length = function_exists('mb_strlen')
+                ? mb_strlen($token, 'UTF-8')
+                : strlen($token);
+            if ($length < 2) {
+                continue;
+            }
+
+            if (isset($seen[$token])) {
+                continue;
+            }
+
+            $seen[$token] = true;
+            $tokens[] = $token;
+            if (count($tokens) >= $maxTokens) {
+                break;
+            }
+        }
+
+        return $tokens;
     }
 
     private function supportsPriceJoin(): bool

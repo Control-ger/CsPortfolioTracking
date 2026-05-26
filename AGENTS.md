@@ -518,3 +518,20 @@ Updated: 2026-05-26
 Change: Electron Update-Benachrichtigungen gehaertet
 - Native System-Toast fuer `update-available` bleibt aktiv; Fehler beim Anzeigen werden explizit geloggt.
 - Zusaetzliche persistente Desktop-System-Notifications (`category=app_update`) fuer `update-available` und `update-downloaded` im lokalen Notification-Store, damit Updates auch ohne OS-Toast im Bell-Menue sichtbar bleiben.
+
+---
+
+Updated: 2026-05-26
+Change: Mobile Web UX gehaertet (Scroll + Swipe + Header)
+- `apps/web/src/App.jsx`: Web-App-Shell nutzt jetzt eine feste Viewport-Hoehe (`100dvh`) mit explizitem Scroll-Container in `<main>`, damit Mobile-Scroll stabil bleibt.
+- `packages/shared/src/pages/PortfolioPage.jsx`: Horizontaler Swipe-Tabwechsel auf Mobile entfernt, um Fehl-Trigger bei normalen Scroll-Gesten zu vermeiden.
+- `packages/shared/src/pages/PortfolioPage.jsx`: Mobile Header zeigt kein irrefuehrendes "Cash"-Label mehr.
+
+---
+
+Updated: 2026-05-26
+Change: Watchlist-Suche auf lokalen Katalog priorisiert + Suchmetriken
+- `PricingService::searchWatchlistCandidates()` nutzt DB-first Suche (lokaler `items`-Katalog) und faellt nur bei 0 lokalen Treffern auf Steam-Suche zurueck.
+- `ItemRepository` und `WatchlistService` behandeln Filter/Browse fuer `other` jetzt inkl. Legacy-Datensaetzen mit leerem `item_type/type`.
+- Neuer Debug-Endpunkt `GET /api/v1/debug/watchlist-search-stats` ist serverseitig registriert und im Desktop-Sidecar als Upstream-Proxy verfuegbar.
+- Relevance-Sortierung in `ItemRepository::searchCatalog()` nutzt token-basiertes Scoring mit korrekter SQL-Placeholder-Reihenfolge.
