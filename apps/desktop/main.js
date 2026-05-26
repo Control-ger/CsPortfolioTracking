@@ -167,20 +167,55 @@ async function promptForUpdateDownload(info = latestAvailableUpdateInfo) {
 
 function showUpdateAvailableNotification(info) {
   if (!Notification.isSupported()) {
-    return;
+    return false;
   }
 
   const versionLabel = normalizeUpdateVersionLabel(info);
-  const notification = new Notification({
-    title: "Update verfuegbar",
-    body: `${versionLabel} ist verfuegbar. Klick fuer "Jetzt updaten" oder "Spaeter".`,
-    silent: false,
-  });
+  try {
+    const notification = new Notification({
+      title: "Update verfuegbar",
+      body: `${versionLabel} ist verfuegbar. Klick fuer "Jetzt updaten" oder "Spaeter".`,
+      silent: false,
+    });
 
-  notification.on("click", () => {
-    void promptForUpdateDownload(info);
-  });
-  notification.show();
+    notification.on("click", () => {
+      void promptForUpdateDownload(info);
+    });
+    notification.on("failed", (_event, error) => {
+      console.warn("[updater] native notification failed:", error);
+    });
+    notification.show();
+    return true;
+  } catch (error) {
+    console.warn("[updater] unable to show native notification:", error?.message || error);
+    return false;
+  }
+}
+
+function createSystemNotificationEntry({
+  category = "app_update",
+  title = "App Update",
+  message = "",
+  payload = {},
+  dedupeWindowHours = 24,
+} = {}) {
+  try {
+    const store = getLocalStore();
+    if (!store || typeof store.createNotification !== "function") {
+      return;
+    }
+
+    store.createNotification({
+      userId: 1,
+      category,
+      title,
+      message,
+      payload,
+      dedupeWindowHours,
+    });
+  } catch (error) {
+    console.warn("[updater] failed to persist system notification entry:", error?.message || error);
+  }
 }
 
 function setupAutoUpdater() {
@@ -202,11 +237,24 @@ function setupAutoUpdater() {
     latestAvailableUpdateInfo = info || null;
     updateDownloadInProgress = false;
     emitUpdaterStatus({ state: "available", version: info?.version || null, info });
+    createSystemNotificationEntry({
+      category: "app_update",
+      title: "Update verfuegbar",
+      message: `${normalizeUpdateVersionLabel(info)} kann jetzt heruntergeladen werden.`,
+      payload: {
+        state: "available",
+        version: info?.version || null,
+      },
+    });
 
     const versionKey = String(info?.version || "unknown");
     if (!notifiedUpdateVersions.has(versionKey)) {
       notifiedUpdateVersions.add(versionKey);
-      showUpdateAvailableNotification(info);
+      const shown = showUpdateAvailableNotification(info);
+      if (!shown) {
+        // Fallback when the native toast cannot be displayed.
+        bringMainWindowToFront();
+      }
     }
   });
 
@@ -239,6 +287,15 @@ function setupAutoUpdater() {
     latestAvailableUpdateInfo = info || latestAvailableUpdateInfo;
     updateDownloadInProgress = false;
     emitUpdaterStatus({ state: "downloaded", version: info?.version || null, info });
+    createSystemNotificationEntry({
+      category: "app_update",
+      title: "Update bereit",
+      message: `${normalizeUpdateVersionLabel(info)} wurde heruntergeladen und kann installiert werden.`,
+      payload: {
+        state: "downloaded",
+        version: info?.version || null,
+      },
+    });
   });
 
   const checkForUpdates = async () => {

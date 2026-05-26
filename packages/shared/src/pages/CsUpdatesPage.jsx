@@ -208,15 +208,6 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
                           <p className="p-2 text-xs text-muted-foreground">Keine Benachrichtigungen.</p>
                         )}
                       </div>
-                      <DropdownMenuSeparator />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-start"
-                        onClick={() => navigate("/?tab=management", { replace: true })}
-                      >
-                        Zur Verwaltung
-                      </Button>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <UserMenu menuSide="right" menuAlign="end" menuSideOffset={8} />

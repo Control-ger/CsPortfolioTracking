@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
@@ -6,6 +6,7 @@ import { PortfolioChart } from "./PortfolioChart";
 import { ItemListRow } from "./ItemListRow";
 import { X, Trash2 } from "lucide-react";
 import {
+  fetchCsFloatBuyOrdersData,
   deleteWatchlistItemData,
   fetchWatchlistData,
 } from "@shared/lib/dataSource.js";
@@ -13,10 +14,12 @@ import { BREAKPOINTS } from "@shared/lib/constants";
 import { Button } from "@shared/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { WatchlistItemModal } from "./WatchlistItemModal";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 let watchlistViewSnapshot = {
   loaded: false,
   items: [],
+  buyOrderSummary: [],
   warnings: [],
   updatedAt: 0,
 };
@@ -31,12 +34,44 @@ function getValidWatchlistSnapshot() {
     watchlistViewSnapshot = {
       loaded: false,
       items: [],
+      buyOrderSummary: [],
       warnings: [],
       updatedAt: 0,
     };
     return null;
   }
   return watchlistViewSnapshot;
+}
+
+function normalizeNameKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function applyBuyOrdersToWatchlistItems(items = [], summaryRows = []) {
+  const summaryByName = new Map();
+  (Array.isArray(summaryRows) ? summaryRows : []).forEach((row) => {
+    const key = normalizeNameKey(row?.marketHashName);
+    if (!key) {
+      return;
+    }
+    summaryByName.set(key, row);
+  });
+
+  return (Array.isArray(items) ? items : []).map((item) => {
+    const key = normalizeNameKey(item?.marketHashName || item?.name);
+    const summary = key ? summaryByName.get(key) : null;
+    const buyOrderCount = Number(summary?.orders || 0);
+    const buyOrderQuantity = Number(summary?.quantity || 0);
+    const buyOrderBestPriceUsd = Number(summary?.bestPriceUsd || 0);
+
+    return {
+      ...item,
+      hasBuyOrder: buyOrderCount > 0 && buyOrderBestPriceUsd > 0,
+      buyOrderCount: buyOrderCount > 0 ? buyOrderCount : 0,
+      buyOrderQuantity: buyOrderQuantity > 0 ? buyOrderQuantity : 0,
+      buyOrderBestPriceUsd: buyOrderBestPriceUsd > 0 ? buyOrderBestPriceUsd : null,
+    };
+  });
 }
 
 function WatchlistItemsLoadingSkeleton() {
@@ -74,8 +109,10 @@ function WatchlistItemsLoadingSkeleton() {
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const navigate = useNavigate();
+  const { formatPrice } = useCurrency();
   const validSnapshot = getValidWatchlistSnapshot();
   const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
+  const [buyOrderSummary, setBuyOrderSummary] = useState(() => validSnapshot?.buyOrderSummary || []);
   const [loading, setLoading] = useState(() => !validSnapshot);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,10 +122,21 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const itemRefs = useRef(new Map());
+  const isDesktopRuntime = typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
   const hasFiniteNumber = (value) => Number.isFinite(Number(value));
   const combinedWarnings = useMemo(() => [...warnings], [warnings]);
+  const buyOrderStats = useMemo(() => {
+    const summaryRows = Array.isArray(buyOrderSummary) ? buyOrderSummary : [];
+    const orders = summaryRows.reduce((sum, row) => sum + Number(row?.orders || 0), 0);
+    const quantity = summaryRows.reduce((sum, row) => sum + Number(row?.quantity || 0), 0);
+    return {
+      items: summaryRows.length,
+      orders,
+      quantity,
+    };
+  }, [buyOrderSummary]);
 
-  const loadWatchlistData = async ({ showLoading = true } = {}) => {
+  const loadWatchlistData = useCallback(async ({ showLoading = true } = {}) => {
     try {
       if (showLoading) {
         setLoading(true);
@@ -96,14 +144,30 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       setError("");
 
       const response = await fetchWatchlistData({ syncLive: true });
-      const nextItems = response?.data || [];
+      const nextItemsRaw = response?.data || [];
       const nextWarnings = response?.meta?.warnings || [];
+      let nextBuyOrderSummary = [];
+
+      if (isDesktopRuntime) {
+        try {
+          const buyOrderResponse = await fetchCsFloatBuyOrdersData();
+          nextBuyOrderSummary = Array.isArray(buyOrderResponse?.data?.summaryByMarketHashName)
+            ? buyOrderResponse.data.summaryByMarketHashName
+            : [];
+        } catch (buyOrderError) {
+          console.warn("[watchlist] CSFloat buyorders unavailable", buyOrderError);
+        }
+      }
+
+      const nextItems = applyBuyOrdersToWatchlistItems(nextItemsRaw, nextBuyOrderSummary);
 
       setWatchlistItems(nextItems);
+      setBuyOrderSummary(nextBuyOrderSummary);
       setWarnings(nextWarnings);
       watchlistViewSnapshot = {
         loaded: true,
         items: nextItems,
+        buyOrderSummary: nextBuyOrderSummary,
         warnings: nextWarnings,
         updatedAt: Date.now(),
       };
@@ -122,12 +186,14 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       if (isNetworkError) {
         try {
           const fallbackResponse = await fetchWatchlistData({ syncLive: false });
-          const fallbackItems = fallbackResponse?.data || [];
+          const fallbackItems = applyBuyOrdersToWatchlistItems(fallbackResponse?.data || [], []);
 
           setWatchlistItems(fallbackItems);
+          setBuyOrderSummary([]);
           watchlistViewSnapshot = {
             loaded: true,
             items: fallbackItems,
+            buyOrderSummary: [],
             warnings: [
               {
                 code: "WATCHLIST_SYNC_FALLBACK",
@@ -153,15 +219,16 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       }
 
       setError(requestError.message || "Fehler beim Laden der Watchlist.");
+      setBuyOrderSummary([]);
       setWarnings([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [isDesktopRuntime]);
 
   useEffect(() => {
     void loadWatchlistData({ showLoading: !getValidWatchlistSnapshot() });
-  }, []);
+  }, [loadWatchlistData]);
 
   useEffect(() => {
     onWarningsChange?.(combinedWarnings);
@@ -253,6 +320,50 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         </div>
       )}
 
+      {isDesktopRuntime && !loading && (
+        <Card>
+          <CardHeader className="pb-2 sm:pb-4">
+            <CardTitle className="text-base sm:text-lg">
+              CSFloat Buyorders ({buyOrderStats.orders})
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {buyOrderStats.items} Items, {buyOrderStats.quantity} Gesamtmenge
+            </p>
+          </CardHeader>
+          <CardContent>
+            {buyOrderSummary.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Keine aktiven Buyorders gefunden.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {buyOrderSummary.slice(0, 8).map((entry, index) => (
+                  <div
+                    key={`${String(entry?.marketHashName || "buyorder")}-${index}`}
+                    className="flex items-center justify-between rounded-md border border-border/70 bg-transparent p-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{entry.marketHashName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {Number(entry?.orders || 0)} Orders, Menge {Number(entry?.quantity || 0)}
+                      </p>
+                    </div>
+                    <p className="text-xs font-semibold text-sky-300">
+                      {Number(entry?.bestPriceUsd || 0) > 0
+                        ? formatPrice(Number(entry.bestPriceUsd), {
+                            useUsd: true,
+                            buyPriceUsd: Number(entry.bestPriceUsd),
+                          })
+                        : "-"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {loading ? (
         <WatchlistItemsLoadingSkeleton />
       ) : watchlistItems.length === 0 ? (
@@ -339,6 +450,17 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                             <p>
                               Aktuell: {Number(selectedItem.currentPrice).toFixed(2)} EUR
                             </p>
+                            {selectedItem?.hasBuyOrder && Number(selectedItem?.buyOrderBestPriceUsd || 0) > 0 ? (
+                              <p>
+                                Buyorder: {formatPrice(Number(selectedItem.buyOrderBestPriceUsd), {
+                                  useUsd: true,
+                                  buyPriceUsd: Number(selectedItem.buyOrderBestPriceUsd),
+                                })}
+                                {Number(selectedItem?.buyOrderCount || 0) > 1
+                                  ? ` (${Number(selectedItem.buyOrderCount)} Orders)`
+                                  : ""}
+                              </p>
+                            ) : null}
                           </div>
                         )}
                       </div>

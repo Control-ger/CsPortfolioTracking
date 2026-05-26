@@ -224,6 +224,7 @@ $router->register('GET', '/api/v1/auth/steam/inventory', static function () use 
 
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/preview', [$csFloatController, 'preview']);
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatController, 'execute']);
+$router->register('GET', '/api/v1/csfloat/buy-orders', [$csFloatController, 'buyOrders']);
 
 // Proxy selected read-only routes to upstream server when configured.
 $resolveUpstreamApiBase = static function (): string {

@@ -110,6 +110,159 @@ final class DesktopCsFloatController
         );
     }
 
+    public function buyOrders(Request $request): void
+    {
+        $limit = $this->readInt($request, 'limit', 200, 1, 500);
+        $maxPages = $this->readInt($request, 'maxPages', 8, 1, 20);
+
+        $orders = [];
+        $pageStats = [];
+        $errors = [];
+        $source = 'buy-orders';
+
+        for ($page = 0; $page < $maxPages; $page++) {
+            $response = $this->tradeClient->fetchBuyOrdersPage($limit, $page);
+            if (!empty($response['error'])) {
+                $errors[] = $response['error'];
+                break;
+            }
+
+            $pageOrders = is_array($response['orders'] ?? null) ? $response['orders'] : [];
+            $pageStats[] = [
+                'page' => $page,
+                'count' => count($pageOrders),
+            ];
+            $orders = array_merge($orders, $pageOrders);
+
+            if (count($pageOrders) < $limit) {
+                break;
+            }
+        }
+
+        if ($orders === [] && $this->shouldFallbackToTrades($errors)) {
+            $source = 'trades-fallback';
+            $errors = [];
+            $pageStats = [];
+            for ($page = 0; $page < $maxPages; $page++) {
+                $response = $this->tradeClient->fetchTradesPage($limit, $page, 'buy');
+                if (!empty($response['error'])) {
+                    $errors[] = $response['error'];
+                    break;
+                }
+
+                $pageTrades = is_array($response['trades'] ?? null) ? $response['trades'] : [];
+                $pageStats[] = [
+                    'page' => $page,
+                    'count' => count($pageTrades),
+                ];
+                $orders = array_merge($orders, $pageTrades);
+
+                if (count($pageTrades) < $limit) {
+                    break;
+                }
+            }
+        }
+
+        $normalized = [];
+        foreach ($orders as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $row = $this->mapBuyOrderRow($entry);
+            if ($row === null) {
+                continue;
+            }
+
+            $normalized[] = $row;
+        }
+
+        // When we use trade fallback, try to keep open/pending rows only.
+        if ($source === 'trades-fallback') {
+            $filtered = array_values(array_filter(
+                $normalized,
+                fn (array $row): bool => !in_array(strtolower((string) ($row['state'] ?? '')), ['verified', 'completed', 'done', 'finished', 'sold', '2', '1124'], true)
+            ));
+            if ($filtered !== []) {
+                $normalized = $filtered;
+            }
+        }
+
+        usort(
+            $normalized,
+            static function (array $left, array $right): int {
+                $leftTs = strtotime((string) ($left['createdAt'] ?? ''));
+                $rightTs = strtotime((string) ($right['createdAt'] ?? ''));
+                if ($leftTs === $rightTs) {
+                    return 0;
+                }
+                if ($leftTs === false) {
+                    return 1;
+                }
+                if ($rightTs === false) {
+                    return -1;
+                }
+                return $rightTs <=> $leftTs;
+            }
+        );
+
+        $byMarketHashName = [];
+        foreach ($normalized as $row) {
+            $name = trim((string) ($row['marketHashName'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $key = strtolower($name);
+            if (!isset($byMarketHashName[$key])) {
+                $byMarketHashName[$key] = [
+                    'marketHashName' => $name,
+                    'orders' => 0,
+                    'quantity' => 0,
+                    'bestPriceUsd' => null,
+                    'createdAtLatest' => null,
+                ];
+            }
+
+            $byMarketHashName[$key]['orders'] += 1;
+            $byMarketHashName[$key]['quantity'] += max(1, (int) ($row['quantity'] ?? 1));
+
+            $priceUsd = isset($row['priceUsd']) && is_numeric($row['priceUsd'])
+                ? (float) $row['priceUsd']
+                : null;
+            if ($priceUsd !== null && $priceUsd > 0) {
+                $currentBest = $byMarketHashName[$key]['bestPriceUsd'];
+                if (!is_numeric($currentBest) || $priceUsd > (float) $currentBest) {
+                    $byMarketHashName[$key]['bestPriceUsd'] = round($priceUsd, 4);
+                }
+            }
+
+            $createdAt = trim((string) ($row['createdAt'] ?? ''));
+            if ($createdAt !== '') {
+                $existing = trim((string) ($byMarketHashName[$key]['createdAtLatest'] ?? ''));
+                if ($existing === '' || (strtotime($createdAt) ?: 0) > (strtotime($existing) ?: 0)) {
+                    $byMarketHashName[$key]['createdAtLatest'] = $createdAt;
+                }
+            }
+        }
+
+        JsonResponseFactory::success(
+            [
+                'orders' => $normalized,
+                'summaryByMarketHashName' => array_values($byMarketHashName),
+            ],
+            [
+                'source' => $source,
+                'requested' => [
+                    'limit' => $limit,
+                    'maxPages' => $maxPages,
+                ],
+                'pagesFetched' => count($pageStats),
+                'pageStats' => $pageStats,
+                'errors' => $errors,
+            ]
+        );
+    }
+
     private function readInt(Request $request, string $key, int $default, int $min, int $max): int
     {
         $value = $request->body[$key] ?? $request->query[$key] ?? $default;
@@ -175,6 +328,114 @@ final class DesktopCsFloatController
             'imageUrl' => $this->readImageUrl($trade),
             'rawCurrency' => $this->readString($trade, ['currency']) ?? 'USD',
         ];
+    }
+
+    private function shouldFallbackToTrades(array $errors): bool
+    {
+        if ($errors === []) {
+            return true;
+        }
+
+        $first = is_array($errors[0] ?? null) ? $errors[0] : [];
+        $code = strtoupper(trim((string) ($first['code'] ?? '')));
+        return in_array($code, ['CSFLOAT_NOT_FOUND', 'CSFLOAT_METHOD_NOT_ALLOWED'], true);
+    }
+
+    private function mapBuyOrderRow(array $payload): ?array
+    {
+        $marketHashName = $this->readString($payload, ['item', 'market_hash_name'])
+            ?? $this->readString($payload, ['item', 'marketHashName'])
+            ?? $this->readString($payload, ['item', 'name'])
+            ?? $this->readString($payload, ['market_hash_name'])
+            ?? $this->readString($payload, ['marketHashName'])
+            ?? $this->readString($payload, ['name'])
+            ?? $this->findFirstStringByKey($payload, ['market_hash_name', 'marketHashName', 'item_name', 'name']);
+        if ($marketHashName === null || $marketHashName === '') {
+            return null;
+        }
+
+        $priceUsd = $this->readPriceUsd($payload);
+        if ($priceUsd <= 0) {
+            $priceUsd = $this->readPriceFromAlternateOrderFields($payload);
+        }
+        if ($priceUsd <= 0) {
+            return null;
+        }
+
+        $quantity = $this->readQuantity($payload);
+        $state = $this->readString($payload, ['state'])
+            ?? $this->readString($payload, ['status'])
+            ?? $this->readString($payload, ['order', 'status'])
+            ?? $this->readString($payload, ['trade', 'status'])
+            ?? 'active';
+
+        return [
+            'id' => $this->readTradeId($payload),
+            'marketHashName' => $marketHashName,
+            'name' => $marketHashName,
+            'priceUsd' => round($priceUsd, 4),
+            'quantity' => $quantity,
+            'state' => $state,
+            'createdAt' => $this->readString($payload, ['created_at'])
+                ?? $this->readString($payload, ['createdAt'])
+                ?? $this->readString($payload, ['updated_at'])
+                ?? $this->readString($payload, ['updatedAt'])
+                ?? null,
+            'updatedAt' => $this->readString($payload, ['updated_at'])
+                ?? $this->readString($payload, ['updatedAt'])
+                ?? null,
+            'rawCurrency' => strtoupper($this->readString($payload, ['currency']) ?? 'USD'),
+            'raw' => $payload,
+        ];
+    }
+
+    private function readPriceFromAlternateOrderFields(array $payload): float
+    {
+        foreach (
+            [
+                ['buy_price'],
+                ['buyPrice'],
+                ['offer_price'],
+                ['offerPrice'],
+                ['max_price'],
+                ['maxPrice'],
+                ['order', 'price'],
+                ['order', 'max_price'],
+                ['order', 'maxPrice'],
+                ['order', 'offer_price'],
+            ] as $path
+        ) {
+            $value = $this->readPath($payload, $path);
+            if (is_numeric($value)) {
+                return $this->normalizeCsFloatUsdAmount((float) $value);
+            }
+        }
+
+        return 0.0;
+    }
+
+    private function readQuantity(array $payload): int
+    {
+        foreach (
+            [
+                ['quantity'],
+                ['remaining_quantity'],
+                ['remainingQuantity'],
+                ['amount'],
+                ['size'],
+                ['count'],
+                ['order', 'quantity'],
+                ['order', 'remaining_quantity'],
+                ['order', 'remainingQuantity'],
+            ] as $path
+        ) {
+            $value = $this->readPath($payload, $path);
+            if (is_numeric($value) && (int) $value > 0) {
+                return (int) $value;
+            }
+        }
+
+        return 1;
     }
 
     private function readTradeId(array $trade): string

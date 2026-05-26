@@ -9,6 +9,7 @@ import {
   executeCsFloatTradeSync,
   fetchCsFloatTradeSyncPreview,
 } from "@shared/lib/apiClient";
+import { fetchCsFloatBuyOrdersData } from "@shared/lib/dataSource.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 function formatDate(value) {
@@ -98,6 +99,15 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         maxPages: preview?.requested?.maxPages || 10,
         backupConfirmed: previewConfirmed,
       });
+      try {
+        await fetchCsFloatBuyOrdersData({
+          syncNow: true,
+          limit: 200,
+          maxPages: 8,
+        });
+      } catch (buyOrderSyncError) {
+        console.warn("[csfloat-sync] buyorders refresh failed", buyOrderSyncError);
+      }
       const payload = response?.data || null;
       await onSynced?.(payload);
       onClose();

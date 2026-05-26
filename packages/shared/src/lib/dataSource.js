@@ -2,6 +2,7 @@ import {
   createWatchlistItem as createApiWatchlistItem,
   createWatchlistItemsBatch as createApiWatchlistItemsBatch,
   deleteWatchlistItem as deleteApiWatchlistItem,
+  fetchCsFloatBuyOrders as fetchApiCsFloatBuyOrders,
   fetchPortfolioComposition as fetchApiPortfolioComposition,
   fetchPortfolioHistory as fetchApiPortfolioHistory,
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
@@ -11,8 +12,11 @@ import {
 
 import { getCurrentUser, isAuthenticated } from "./auth.js";
 import { runDesktopSyncNowIfDue } from "./desktopSync.js";
+import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { resolveDesktopLocalUserId as resolveDesktopUserId } from "./userIdentity.js";
+
+const CSFLOAT_BUYORDERS_CACHE_KEY = "cache:csfloat:buyorders";
 
 const DEFAULT_STATS = {
   totalValue: 0,
@@ -973,6 +977,101 @@ export async function fetchWatchlistData(options = {}) {
     data: items,
     meta,
   };
+}
+
+export async function fetchCsFloatBuyOrdersData(options = {}) {
+  const syncNow = options.syncNow === true;
+  const authenticated = await isAuthenticated();
+  if (!authenticated) {
+    return {
+      data: {
+        orders: [],
+        summaryByMarketHashName: [],
+      },
+      meta: { source: "auth-required", requiresLogin: true },
+      requiresAuth: true,
+    };
+  }
+
+  if (!syncNow) {
+    const cached = await localCache.get(CSFLOAT_BUYORDERS_CACHE_KEY);
+    const cachedOrders = Array.isArray(cached?.orders) ? cached.orders : [];
+    const cachedSummary = Array.isArray(cached?.summaryByMarketHashName)
+      ? cached.summaryByMarketHashName
+      : [];
+
+    return {
+      data: {
+        orders: cachedOrders,
+        summaryByMarketHashName: cachedSummary,
+      },
+      meta: {
+        source: "desktop-cache",
+        fromCache: true,
+        hasCachedSnapshot: cachedOrders.length > 0 || cachedSummary.length > 0,
+        cachedAt: cached?.cachedAt || null,
+      },
+    };
+  }
+
+  const localStore = getDesktopLocalStore();
+  if (!localStore) {
+    return {
+      data: {
+        orders: [],
+        summaryByMarketHashName: [],
+      },
+      meta: {
+        source: "web-runtime",
+        unavailable: true,
+      },
+    };
+  }
+
+  try {
+    const response = await fetchApiCsFloatBuyOrders(options);
+    const snapshot = {
+      orders: Array.isArray(response?.data?.orders) ? response.data.orders : [],
+      summaryByMarketHashName: Array.isArray(response?.data?.summaryByMarketHashName)
+        ? response.data.summaryByMarketHashName
+        : [],
+      cachedAt: new Date().toISOString(),
+    };
+
+    await localCache.set(CSFLOAT_BUYORDERS_CACHE_KEY, snapshot);
+
+    return {
+      data: {
+        orders: snapshot.orders,
+        summaryByMarketHashName: snapshot.summaryByMarketHashName,
+      },
+      meta: {
+        ...(response?.meta || {}),
+        source: "desktop-sync",
+        fromCache: false,
+        cachedAt: snapshot.cachedAt,
+      },
+    };
+  } catch (error) {
+    const cached = await localCache.get(CSFLOAT_BUYORDERS_CACHE_KEY);
+    if (cached) {
+      return {
+        data: {
+          orders: Array.isArray(cached?.orders) ? cached.orders : [],
+          summaryByMarketHashName: Array.isArray(cached?.summaryByMarketHashName)
+            ? cached.summaryByMarketHashName
+            : [],
+        },
+        meta: {
+          source: "desktop-cache-fallback",
+          fromCache: true,
+          cachedAt: cached?.cachedAt || null,
+          syncError: String(error?.message || "unknown"),
+        },
+      };
+    }
+    throw error;
+  }
 }
 
 /**

@@ -503,3 +503,18 @@ Updated: 2026-05-26
 Change: Release-Ablauf auf "logische Commits zuerst, separater Versions-Release danach" umgestellt
 - Vor einem Release muessen fachliche Aenderungen bereits in eigenen, inhaltlich benannten Commits vorliegen.
 - Der eigentliche Release-Commit darf als dedizierter Version-Bump nur die Versionsangabe tragen (z. B. `release: v0.1.55`).
+
+---
+
+Updated: 2026-05-26
+Change: CSFloat Buyorders fuer Watchlist + Desktop-Sidecar Endpoint erweitert
+- Neuer Desktop-Sidecar Read-Endpoint `GET /api/v1/csfloat/buy-orders` in `backend/desktop/index.php` (lokaler CSFloat-Key bleibt im Desktop-Runtime-Kontext).
+- `DesktopCsFloatController` erweitert um Buyorder-Aggregation (Best-Preis + Anzahl je `marketHashName`) mit Fallback auf Trades, falls Buyorder-Endpoint upstream nicht verfuegbar ist.
+- Watchlist zeigt Buyorder-Badges und eine Buyorder-Uebersicht; der Refresh passiert nur im CSFloat-Sync-Flow, nicht bei jedem Watchlist-Load.
+
+---
+
+Updated: 2026-05-26
+Change: Electron Update-Benachrichtigungen gehaertet
+- Native System-Toast fuer `update-available` bleibt aktiv; Fehler beim Anzeigen werden explizit geloggt.
+- Zusaetzliche persistente Desktop-System-Notifications (`category=app_update`) fuer `update-available` und `update-downloaded` im lokalen Notification-Store, damit Updates auch ohne OS-Toast im Bell-Menue sichtbar bleiben.

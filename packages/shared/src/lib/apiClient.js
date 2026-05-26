@@ -609,6 +609,22 @@ export async function fetchWatchlist(options = {}) {
   );
 }
 
+export async function fetchCsFloatBuyOrders(options = {}) {
+  const limit = Number.isFinite(Number(options.limit))
+    ? Math.max(1, Math.min(Math.trunc(Number(options.limit)), 500))
+    : 200;
+  const maxPages = Number.isFinite(Number(options.maxPages))
+    ? Math.max(1, Math.min(Math.trunc(Number(options.maxPages)), 20))
+    : 8;
+
+  return requestWithMeta(
+    buildPath("/api/v1/csfloat/buy-orders", {
+      limit,
+      maxPages,
+    }),
+  );
+}
+
 export async function createWatchlistItem(name, type = "skin") {
   return request("/api/v1/watchlist", {
     method: "POST",

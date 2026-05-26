@@ -34,20 +34,61 @@ final class CsFloatTradeClient
         ], static fn ($value) => $value !== null && $value !== ''));
 
         $url = 'https://csfloat.com/api/v1/me/trades' . ($query !== '' ? '?' . $query : '');
+        $result = $this->requestCollectionEndpoint(
+            $url,
+            'trades',
+            [
+                'provider' => 'csfloat',
+                'limit' => $limit,
+                'page' => $page,
+                'type' => $normalizedType,
+            ]
+        );
+
+        return [
+            'trades' => $result['rows'],
+            'error' => $result['error'],
+        ];
+    }
+
+    public function fetchBuyOrdersPage(int $limit = 200, int $page = 0): array
+    {
+        $limit = max(1, min($limit, 500));
+        $page = max(0, $page);
+        $query = http_build_query([
+            'limit' => $limit,
+            'page' => $page,
+        ]);
+        $url = 'https://csfloat.com/api/v1/me/buy-orders' . ($query !== '' ? '?' . $query : '');
+        $result = $this->requestCollectionEndpoint(
+            $url,
+            'buy_orders',
+            [
+                'provider' => 'csfloat',
+                'limit' => $limit,
+                'page' => $page,
+            ]
+        );
+
+        return [
+            'orders' => $result['rows'],
+            'error' => $result['error'],
+        ];
+    }
+
+    private function requestCollectionEndpoint(string $url, string $eventSuffix, array $context = []): array
+    {
         $apiKey = getenv('CSFLOAT_API_KEY') ?: ($_ENV['CSFLOAT_API_KEY'] ?? null);
         $start = microtime(true);
 
         Logger::event(
             'info',
             'external',
-            'external.csfloat.trades.request',
-            'CSFloat trade request started',
+            sprintf('external.csfloat.%s.request', $eventSuffix),
+            'CSFloat request started',
             [
-                'provider' => 'csfloat',
                 'url' => $url,
-                'limit' => $limit,
-                'page' => $page,
-                'type' => $normalizedType,
+                ...$context,
             ]
         );
 
@@ -78,21 +119,18 @@ final class CsFloatTradeClient
                 'error',
                 'error',
                 'error.curl',
-                'CSFloat trade curl error',
+                'CSFloat curl error',
                 [
-                    'provider' => 'csfloat',
-                    'limit' => $limit,
-                    'page' => $page,
-                    'type' => $normalizedType,
                     'statusCode' => $httpCode > 0 ? $httpCode : null,
                     'durationMs' => $durationMs,
                     'errorCode' => 'CSFLOAT_REQUEST_FAILED',
                     'curlError' => $curlError,
+                    ...$context,
                 ]
             );
 
             return [
-                'trades' => [],
+                'rows' => [],
                 'error' => [
                     'source' => 'csfloat',
                     'statusCode' => $httpCode > 0 ? $httpCode : null,
@@ -108,29 +146,26 @@ final class CsFloatTradeClient
             Logger::event(
                 'warning',
                 'external',
-                'external.csfloat.trades.response',
-                'CSFloat trade HTTP error response',
+                sprintf('external.csfloat.%s.response', $eventSuffix),
+                'CSFloat HTTP error response',
                 [
-                    'provider' => 'csfloat',
-                    'limit' => $limit,
-                    'page' => $page,
-                    'type' => $normalizedType,
                     'httpCode' => $httpCode,
                     'durationMs' => $durationMs,
                     'success' => false,
                     'errorCode' => $httpError['code'] ?? 'CSFLOAT_HTTP_ERROR',
+                    ...$context,
                 ]
             );
 
             return [
-                'trades' => [],
+                'rows' => [],
                 'error' => $httpError,
             ];
         }
 
         if ($response === '') {
             return [
-                'trades' => [],
+                'rows' => [],
                 'error' => [
                     'source' => 'csfloat',
                     'statusCode' => 200,
@@ -146,22 +181,19 @@ final class CsFloatTradeClient
             Logger::event(
                 'error',
                 'external',
-                'external.csfloat.trades.response',
-                'CSFloat trade invalid JSON response',
+                sprintf('external.csfloat.%s.response', $eventSuffix),
+                'CSFloat invalid JSON response',
                 [
-                    'provider' => 'csfloat',
-                    'limit' => $limit,
-                    'page' => $page,
-                    'type' => $normalizedType,
                     'httpCode' => 200,
                     'durationMs' => $durationMs,
                     'success' => false,
                     'errorCode' => 'CSFLOAT_INVALID_RESPONSE',
+                    ...$context,
                 ]
             );
 
             return [
-                'trades' => [],
+                'rows' => [],
                 'error' => [
                     'source' => 'csfloat',
                     'statusCode' => 200,
@@ -172,26 +204,23 @@ final class CsFloatTradeClient
             ];
         }
 
-        $trades = $this->extractRows($json);
+        $rows = $this->extractRows($json);
         Logger::event(
             'info',
             'external',
-            'external.csfloat.trades.response',
-            'CSFloat trade response received',
+            sprintf('external.csfloat.%s.response', $eventSuffix),
+            'CSFloat response received',
             [
-                'provider' => 'csfloat',
-                'limit' => $limit,
-                'page' => $page,
-                'type' => $normalizedType,
                 'httpCode' => 200,
                 'durationMs' => $durationMs,
                 'success' => true,
-                'tradeCount' => count($trades),
+                'rowCount' => count($rows),
+                ...$context,
             ]
         );
 
         return [
-            'trades' => $trades,
+            'rows' => $rows,
             'error' => null,
         ];
     }
@@ -222,6 +251,14 @@ final class CsFloatTradeClient
 
         if (isset($json['results']) && is_array($json['results'])) {
             return array_values($json['results']);
+        }
+
+        if (isset($json['orders']) && is_array($json['orders'])) {
+            return array_values($json['orders']);
+        }
+
+        if (isset($json['buy_orders']) && is_array($json['buy_orders'])) {
+            return array_values($json['buy_orders']);
         }
 
         $isList = array_keys($json) === range(0, count($json) - 1);

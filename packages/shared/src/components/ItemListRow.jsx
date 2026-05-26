@@ -1,5 +1,6 @@
 import { TrendingDown, TrendingUp, ArrowRight } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { Badge } from "@shared/components/ui/badge";
 
 /**
  * ItemListRow - Minimale Listenansicht fuer Items
@@ -28,6 +29,10 @@ export const ItemListRow = ({
       : "text-muted-foreground";
   const changeLabel =
     item.changeLabel || (Number.isFinite(derivedPercent) ? `${derivedPercent >= 0 ? "+" : ""}${derivedPercent.toFixed(1)}%` : "-");
+  const hasBuyOrder = Number(item?.buyOrderCount || 0) > 0 && Number(item?.buyOrderBestPriceUsd || 0) > 0;
+  const buyOrderLabel = hasBuyOrder
+    ? `Buyorder ${formatPrice(item.buyOrderBestPriceUsd, { useUsd: true, buyPriceUsd: item.buyOrderBestPriceUsd })}${item.buyOrderCount > 1 ? ` x${item.buyOrderCount}` : ""}`
+    : "";
 
   return (
     <button
@@ -64,6 +69,11 @@ export const ItemListRow = ({
                 : formatPrice(item.currentPrice)}
             </p>
           )}
+          {hasBuyOrder ? (
+            <Badge variant="outline" className="mt-1 border-sky-400/35 bg-sky-500/12 text-[10px] text-sky-300">
+              {buyOrderLabel}
+            </Badge>
+          ) : null}
         </div>
       </div>
 
