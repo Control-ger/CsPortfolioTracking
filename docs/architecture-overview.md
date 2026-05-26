@@ -97,7 +97,7 @@ From `apps/web/src/App.jsx`:
 - Watchlist Buyorder enrichment is cache-backed and only refreshed during explicit CSFloat sync execution (not on every watchlist view load).
 - `WatchlistOverview` uses in-memory snapshots with TTL `120s`.
 - `useCsUpdatesFeed` uses in-memory snapshots with TTL `120s`.
-- Web runtime app shell uses a fixed viewport container (`h-[100dvh]`) and keeps vertical scrolling in `<main>` to avoid mobile scroll-lock regressions.
+- Web runtime app shell uses a fixed viewport container (`h-[100dvh]`) and a flex-constrained `<main>` scroll area (`flex-1 min-h-0 overflow-y-auto`) to avoid mobile scroll-lock regressions.
 - `PortfolioPage` no longer uses horizontal swipe tab switching on mobile; tab changes are explicit to avoid accidental gesture-triggered navigation.
 - Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.
 - Update notifications are dual-path in desktop runtime: native OS toast (when supported) plus persisted in-app system notifications (`category=app_update`) for reliable visibility.

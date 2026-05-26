@@ -99,11 +99,15 @@ export default function App() {
         {/* Nur in Electron anzeigen! */}
         {isElectron && <Titlebar />}
 
-        <div className={`flex-1 min-h-0 lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 ${isElectron ? "" : "w-full"}`}>
+        <div
+          className={`flex flex-1 min-h-0 flex-col lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 ${
+            isElectron ? "" : "w-full"
+          }`}
+        >
           <aside className="hidden lg:flex lg:justify-center lg:pt-2">
             <DesktopSidebarRail desktopRuntime={desktopRuntime} />
           </aside>
-          <main className="w-full min-h-0 overflow-y-auto lg:px-6 xl:px-8">
+          <main className="w-full flex-1 min-h-0 overflow-y-auto lg:px-6 xl:px-8">
             {routeViews}
           </main>
         </div>

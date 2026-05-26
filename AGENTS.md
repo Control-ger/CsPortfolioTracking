@@ -523,7 +523,7 @@ Change: Electron Update-Benachrichtigungen gehaertet
 
 Updated: 2026-05-26
 Change: Mobile Web UX gehaertet (Scroll + Swipe + Header)
-- `apps/web/src/App.jsx`: Web-App-Shell nutzt jetzt eine feste Viewport-Hoehe (`100dvh`) mit explizitem Scroll-Container in `<main>`, damit Mobile-Scroll stabil bleibt.
+- `apps/web/src/App.jsx`: Web-App-Shell nutzt jetzt eine feste Viewport-Hoehe (`100dvh`) plus explizite `flex`-Layout-Constraint um den `<main>`-Scroller, damit Mobile-Scroll stabil bleibt.
 - `packages/shared/src/pages/PortfolioPage.jsx`: Horizontaler Swipe-Tabwechsel auf Mobile entfernt, um Fehl-Trigger bei normalen Scroll-Gesten zu vermeiden.
 - `packages/shared/src/pages/PortfolioPage.jsx`: Mobile Header zeigt kein irrefuehrendes "Cash"-Label mehr.
 
