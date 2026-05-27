@@ -1008,7 +1008,7 @@ export async function fetchCsFloatBuyOrdersData(options = {}) {
       meta: {
         source: "desktop-cache",
         fromCache: true,
-        hasCachedSnapshot: cachedOrders.length > 0 || cachedSummary.length > 0,
+        hasCachedSnapshot: Boolean(cached),
         cachedAt: cached?.cachedAt || null,
       },
     };

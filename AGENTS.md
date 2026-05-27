@@ -535,3 +535,11 @@ Change: Watchlist-Suche auf lokalen Katalog priorisiert + Suchmetriken
 - `ItemRepository` und `WatchlistService` behandeln Filter/Browse fuer `other` jetzt inkl. Legacy-Datensaetzen mit leerem `item_type/type`.
 - Neuer Debug-Endpunkt `GET /api/v1/debug/watchlist-search-stats` ist serverseitig registriert und im Desktop-Sidecar als Upstream-Proxy verfuegbar.
 - Relevance-Sortierung in `ItemRepository::searchCatalog()` nutzt token-basiertes Scoring mit korrekter SQL-Placeholder-Reihenfolge.
+
+---
+
+Updated: 2026-05-27
+Change: Watchlist-Buyorder-Fallback + Web-Watchlist-Add + mobile Search-Touch-Targets
+- `packages/shared/src/lib/dataSource.js`: Desktop-Watchlist triggert bei fehlendem Buyorder-Cache-Snapshot einmalig einen Live-Fetch und cached danach wieder cache-first.
+- `packages/shared/src/pages/PortfolioPage.jsx`: Search-Tab nutzt fuer "bereits in Watchlist" nur echte Watchlist-Items, damit Web-User Items auch dann zur Watchlist hinzufuegen koennen, wenn sie bereits im Inventar/Portfolio sind.
+- `packages/shared/src/components/ItemSearch.jsx`: mobile Pagination/Actions/Filter mit groesseren Touch-Zielen fuer bessere Bedienbarkeit auf dem Handy.

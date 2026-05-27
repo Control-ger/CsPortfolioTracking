@@ -154,6 +154,18 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           nextBuyOrderSummary = Array.isArray(buyOrderResponse?.data?.summaryByMarketHashName)
             ? buyOrderResponse.data.summaryByMarketHashName
             : [];
+
+          const hasSnapshot = Boolean(buyOrderResponse?.meta?.hasCachedSnapshot);
+          if (!hasSnapshot && nextBuyOrderSummary.length === 0) {
+            const liveBuyOrderResponse = await fetchCsFloatBuyOrdersData({
+              syncNow: true,
+              limit: 200,
+              maxPages: 8,
+            });
+            nextBuyOrderSummary = Array.isArray(liveBuyOrderResponse?.data?.summaryByMarketHashName)
+              ? liveBuyOrderResponse.data.summaryByMarketHashName
+              : [];
+          }
         } catch (buyOrderError) {
           console.warn("[watchlist] CSFloat buyorders unavailable", buyOrderError);
         }

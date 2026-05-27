@@ -4266,7 +4266,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           <TabsContent value="search" forceMount={visitedTabs.has("search")} className="space-y-4 sm:space-y-6">
             <ItemSearch
               onAddToWatchlist={loadGlobalSearchWatchlistItems}
-              existingItems={globalSearchKnownItems.map((entry) => ({ name: entry.name }))}
+              existingItems={globalSearchWatchlistItems.map((entry) => ({ name: entry?.name || entry?.marketHashName || "" }))}
               onWarningsChange={(nextWarnings = []) => {
                 handleUiWarningsChange("search-browser", "Produktsuche", nextWarnings);
               }}

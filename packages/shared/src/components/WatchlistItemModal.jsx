@@ -5,11 +5,13 @@ import { Badge } from "@shared/components/ui/badge";
 import { Button } from "@shared/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { Trash2 } from "lucide-react";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const formatPrice = (value) =>
   typeof value === "number" && !Number.isNaN(value) ? `${value.toFixed(2)} EUR` : "-";
 
 export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
+  const { formatPrice: formatCurrencyPrice } = useCurrency();
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
@@ -40,6 +42,10 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
   const handleCancelDelete = () => {
     setShowConfirm(false);
   };
+
+  const hasBuyOrder =
+    Number(item?.buyOrderCount || 0) > 0 &&
+    Number(item?.buyOrderBestPriceUsd || 0) > 0;
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="md" className="md:hidden">
@@ -72,6 +78,16 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
               <Badge variant="outline" className="text-[10px] uppercase">
                 {item.changeLabel || "-"}
               </Badge>
+              {hasBuyOrder ? (
+                <Badge variant="outline" className="border-sky-400/35 bg-sky-500/12 text-[10px] text-sky-300">
+                  CSFloat Buyorder{" "}
+                  {formatCurrencyPrice(Number(item.buyOrderBestPriceUsd), {
+                    useUsd: true,
+                    buyPriceUsd: Number(item.buyOrderBestPriceUsd),
+                  })}
+                  {Number(item.buyOrderCount) > 1 ? ` x${Number(item.buyOrderCount)}` : ""}
+                </Badge>
+              ) : null}
             </div>
           </div>
         </div>

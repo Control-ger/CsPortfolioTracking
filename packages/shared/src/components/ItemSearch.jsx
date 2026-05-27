@@ -373,7 +373,7 @@ export const ItemSearch = ({
                   type="button"
                   onClick={() => void handleAddItem(candidate)}
                   disabled={alreadyAdded || isSubmitting || submittingItem !== ""}
-                  className="inline-flex h-8 items-center gap-1 rounded-md border border-border/75 px-2.5 text-xs font-semibold transition-colors hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 items-center gap-1 rounded-md border border-border/75 px-3 text-sm font-semibold transition-colors hover:bg-accent/60 touch-manipulation sm:h-8 sm:px-2.5 sm:text-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -401,12 +401,12 @@ export const ItemSearch = ({
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Suche nach Item-Namen (Enter startet Suche)"
-              className="h-10 w-full rounded-md border border-border/70 bg-transparent pl-10 pr-28 text-sm text-foreground outline-none transition-colors focus:border-border"
+              className="h-11 w-full rounded-md border border-border/70 bg-transparent pl-10 pr-32 text-sm text-foreground outline-none transition-colors focus:border-border sm:h-10 sm:pr-28"
               disabled={submittingItem !== ""}
             />
             <button
               type="submit"
-              className="absolute right-1.5 top-1.5 inline-flex h-7 items-center rounded-md border border-border/70 px-2.5 text-xs font-semibold hover:bg-accent/60"
+              className="absolute right-1.5 top-1.5 inline-flex h-8 items-center rounded-md border border-border/70 px-3 text-sm font-semibold hover:bg-accent/60 touch-manipulation sm:h-7 sm:px-2.5 sm:text-xs"
             >
               Suchen
             </button>
@@ -431,7 +431,7 @@ export const ItemSearch = ({
                 }
                 setPage(1);
               }}
-              className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+              className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors touch-manipulation sm:px-2.5 sm:py-1 sm:text-xs ${
                 itemType === chip.type
                   ? "border-primary/60 bg-primary text-primary-foreground"
                   : "border-border/70 text-foreground hover:bg-accent/60"
@@ -455,7 +455,7 @@ export const ItemSearch = ({
                 }
                 setPage(1);
               }}
-              className="h-9 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground"
+              className="h-11 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground sm:h-9"
             >
               {ITEM_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -474,7 +474,7 @@ export const ItemSearch = ({
                 setPage(1);
               }}
               disabled={!wearEnabled}
-              className="h-9 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-11 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground sm:h-9 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {WEAR_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -492,7 +492,7 @@ export const ItemSearch = ({
                 setSortBy(event.target.value);
                 setPage(1);
               }}
-              className="h-9 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground"
+              className="h-11 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground sm:h-9"
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -527,48 +527,48 @@ export const ItemSearch = ({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-2 text-xs text-muted-foreground">
-        <span>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-2 text-sm text-muted-foreground sm:text-xs">
+        <span className="w-full sm:w-auto">
           {results.length} / {totalItems} Treffer | Seite {page} von {Math.max(totalPages, 1)}
           {browseMode ? " | Browse-Modus" : ""}
         </span>
 
-        <div className="flex items-center gap-1">
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-1">
           <button
             type="button"
             onClick={() => setPage(1)}
             disabled={page <= 1 || isSearching}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Erste Seite"
           >
-            <ChevronsLeft className="h-3.5 w-3.5" />
+            <ChevronsLeft className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setPage((current) => Math.max(1, current - 1))}
             disabled={page <= 1 || isSearching}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Vorherige Seite"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setPage((current) => Math.min(Math.max(totalPages, 1), current + 1))}
             disabled={page >= totalPages || totalPages === 0 || isSearching}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Naechste Seite"
           >
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setPage(Math.max(totalPages, 1))}
             disabled={page >= totalPages || totalPages === 0 || isSearching}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Letzte Seite"
           >
-            <ChevronsRight className="h-3.5 w-3.5" />
+            <ChevronsRight className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
           </button>
         </div>
       </div>
