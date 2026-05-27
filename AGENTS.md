@@ -543,3 +543,10 @@ Change: Watchlist-Buyorder-Fallback + Web-Watchlist-Add + mobile Search-Touch-Ta
 - `packages/shared/src/lib/dataSource.js`: Desktop-Watchlist triggert bei fehlendem Buyorder-Cache-Snapshot einmalig einen Live-Fetch und cached danach wieder cache-first.
 - `packages/shared/src/pages/PortfolioPage.jsx`: Search-Tab nutzt fuer "bereits in Watchlist" nur echte Watchlist-Items, damit Web-User Items auch dann zur Watchlist hinzufuegen koennen, wenn sie bereits im Inventar/Portfolio sind.
 - `packages/shared/src/components/ItemSearch.jsx`: mobile Pagination/Actions/Filter mit groesseren Touch-Zielen fuer bessere Bedienbarkeit auf dem Handy.
+
+---
+
+Updated: 2026-05-27
+Change: Updater-Flow gehaertet + Watchlist-Metrik-Fallback stabilisiert
+- `apps/desktop/main.js`: IPC `app-updater-download` fuehrt bei fehlendem `latestAvailableUpdateInfo` jetzt zuerst `checkForUpdates()` aus und liefert strukturierte Fehlergruende (`no-update-info`, `not-packaged`, `error`) statt still zu scheitern.
+- `packages/shared/src/lib/dataSource.js`: Desktop-Watchlist erkennt Sidecar-Proxy-Fallbacks bei `syncLive=true` und faellt fuer Read-Metriken einmalig auf `syncLive=false` zurueck, damit bestehende Preishistorie/Preisveraenderungen sichtbar bleiben.

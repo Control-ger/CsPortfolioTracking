@@ -96,6 +96,7 @@ From `apps/web/src/App.jsx`:
 - Item-type filter `other` includes rows with missing/empty `item_type`/`type`, so legacy catalog entries are not silently dropped.
 - Watchlist Buyorder enrichment is cache-backed and only refreshed during explicit CSFloat sync execution (not on every watchlist view load).
 - If no local CSFloat buyorder cache snapshot exists, desktop watchlist triggers one live fetch and persists the snapshot; subsequent reads stay cache-first.
+- If desktop sidecar proxy returns a `syncLive` fallback payload without upstream metrics/history, desktop watchlist performs one follow-up upstream read with `syncLive=false` to preserve visible price history/change metrics.
 - `WatchlistOverview` uses in-memory snapshots with TTL `120s`.
 - `useCsUpdatesFeed` uses in-memory snapshots with TTL `120s`.
 - Web runtime app shell uses a fixed viewport container (`h-[100dvh]`) and a flex-constrained `<main>` scroll area (`flex-1 min-h-0 overflow-y-auto`) to avoid mobile scroll-lock regressions.
@@ -103,6 +104,7 @@ From `apps/web/src/App.jsx`:
 - Search-to-watchlist add checks in `PortfolioPage`/`ItemSearch` use watchlist entries only (not inventory/investment presence), so web runtime can add watchlist items independently.
 - `ItemSearch` mobile controls use larger touch targets (>=44px) for pagination/actions to improve finger usability.
 - Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.
+- Electron updater download requests self-heal missing in-memory update metadata by running `checkForUpdates()` before prompting download, and return structured failure reasons to renderer/UI when download cannot start.
 - Update notifications are dual-path in desktop runtime: native OS toast (when supported) plus persisted in-app system notifications (`category=app_update`) for reliable visibility.
 - `GET /api/v1/portfolio/summary` uses enriched rows without live refresh (`allowLiveRefresh=false`) to avoid duplicate CSFloat load in the same page cycle.
 - Interactive pricing requests apply a capped CSFloat lookup budget per request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`), while CLI workers remain uncapped.
