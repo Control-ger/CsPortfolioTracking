@@ -282,18 +282,32 @@ export const PortfolioChart = ({
     }
 
     const firstValue = chartData[0].wert;
-    const lastValue = chartData[chartData.length - 1].wert;
-    const deltaValue = lastValue - firstValue;
-    const deltaPercent = firstValue > 0 ? (deltaValue / firstValue) * 100 : 0;
-    const isPositive = deltaValue >= 0;
+    const lastEntry = chartData[chartData.length - 1];
+    const lastValue = lastEntry.wert;
+    const periodDeltaValue = lastValue - firstValue;
+    const periodDeltaPercent = firstValue > 0 ? (periodDeltaValue / firstValue) * 100 : 0;
+    const lastGrowthPercent = Number(lastEntry?.growthPercent);
+    const lastProfitEuro = Number(lastEntry?.profitEuro);
+
+    if (!showAbsolute && Number.isFinite(lastGrowthPercent)) {
+      const isPositive = lastGrowthPercent >= 0;
+      return {
+        lineColor: isPositive ? "#22c55e" : "#ef4444",
+        deltaValue: Number.isFinite(lastProfitEuro) ? lastProfitEuro : periodDeltaValue,
+        deltaPercent: lastGrowthPercent,
+        isPositive,
+      };
+    }
+
+    const isPositive = periodDeltaValue >= 0;
 
     return {
       lineColor: isPositive ? "#22c55e" : "#ef4444",
-      deltaValue,
-      deltaPercent,
+      deltaValue: periodDeltaValue,
+      deltaPercent: periodDeltaPercent,
       isPositive,
     };
-  }, [chartData]);
+  }, [chartData, showAbsolute]);
 
   const chartConfig = useMemo(
     () => ({

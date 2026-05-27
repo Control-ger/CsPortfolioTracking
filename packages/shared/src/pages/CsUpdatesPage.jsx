@@ -87,14 +87,66 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
   }, []);
 
   const handleNotificationClick = async (entry) => {
+    const wasUnread = Boolean(entry?.unread);
     if (window.electronAPI?.localStore?.markNotificationRead && entry?.id) {
       await window.electronAPI.localStore.markNotificationRead(entry.id);
     }
     setSyncNotifications((current) =>
       current.map((item) => (item.id === entry.id ? { ...item, unread: false } : item)),
     );
-    setUnreadNotificationCount((current) => Math.max(0, current - 1));
-    navigate("/?tab=management", { replace: true });
+    if (wasUnread) {
+      setUnreadNotificationCount((current) => Math.max(0, current - 1));
+    }
+
+    const category = String(entry?.category || "").trim().toLowerCase();
+    if (category === "app_update") {
+      const payload = entry?.payload && typeof entry.payload === "object" ? entry.payload : {};
+      const state = String(payload?.state || "").trim().toLowerCase();
+      const version = String(payload?.version || "").trim();
+      const versionLabel = version ? `v${version}` : "Das Update";
+
+      if (state === "downloaded") {
+        const shouldInstallNow = window.confirm(
+          `${versionLabel} wurde heruntergeladen. Jetzt neu starten und installieren?`,
+        );
+        if (shouldInstallNow && window.electronAPI?.updater?.install) {
+          await window.electronAPI.updater.install();
+        }
+        return;
+      }
+
+      if (state === "available") {
+        if (window.electronAPI?.updater?.download) {
+          await window.electronAPI.updater.download();
+        } else {
+          window.alert(`${versionLabel} ist verfuegbar.`);
+        }
+        return;
+      }
+
+      if (state === "downloading") {
+        if (window.electronAPI?.updater?.download) {
+          await window.electronAPI.updater.download();
+        } else {
+          window.alert(`${versionLabel}: Download laeuft. Nach Abschluss kannst du installieren.`);
+        }
+        return;
+      }
+
+      if (state === "error") {
+        window.alert(String(entry?.message || "Update-Status konnte nicht geladen werden."));
+      }
+      return;
+    }
+
+    if (category === "steam_sync") {
+      navigate("/?tab=management", { replace: true });
+      return;
+    }
+
+    if (category === "cs_update" || category === "cs_updates") {
+      navigate("/cs-updates", { replace: true });
+    }
   };
 
   const updatesContent = (
