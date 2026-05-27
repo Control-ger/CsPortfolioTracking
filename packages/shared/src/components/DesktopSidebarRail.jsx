@@ -23,6 +23,46 @@ const DESKTOP_SIDEBAR_ITEMS = [
   { key: "updates", label: "Updates", icon: Newspaper, to: "/cs-updates" },
 ];
 
+function normalizeVersion(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^v/i, "");
+}
+
+function compareSemver(left, right) {
+  const leftParts = normalizeVersion(left).split(".").map((part) => Number(part || 0));
+  const rightParts = normalizeVersion(right).split(".").map((part) => Number(part || 0));
+  const maxLength = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftPart = Number.isFinite(leftParts[index]) ? leftParts[index] : 0;
+    const rightPart = Number.isFinite(rightParts[index]) ? rightParts[index] : 0;
+    if (leftPart > rightPart) {
+      return 1;
+    }
+    if (leftPart < rightPart) {
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+function isStaleAppUpdateEntry(entry, installedVersion) {
+  const category = String(entry?.category || "").trim().toLowerCase();
+  if (category !== "app_update") {
+    return false;
+  }
+
+  const payloadVersion = normalizeVersion(entry?.payload?.version);
+  const currentVersion = normalizeVersion(installedVersion);
+  if (!payloadVersion || !currentVersion) {
+    return false;
+  }
+
+  return compareSemver(payloadVersion, currentVersion) <= 0;
+}
+
 export function DesktopSidebarRail({ desktopRuntime = false }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -62,13 +102,26 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
       try {
         const user = await getCurrentUser();
         const userId = resolveDesktopLocalUserId(user, 1);
+        const installedVersion = window.electronAPI?.updater?.getVersion
+          ? await window.electronAPI.updater.getVersion()
+          : "";
         const notifications = await window.electronAPI.localStore.listNotifications(userId, { limit: 20 });
         if (cancelled) {
           return;
         }
         const rows = Array.isArray(notifications) ? notifications : [];
-        setSyncNotifications(rows);
-        setUnreadNotificationCount(rows.filter((entry) => entry?.unread).length);
+        const staleAppUpdates = rows.filter((entry) => isStaleAppUpdateEntry(entry, installedVersion));
+        if (staleAppUpdates.length > 0 && window.electronAPI?.localStore?.markNotificationRead) {
+          await Promise.allSettled(
+            staleAppUpdates
+              .filter((entry) => entry?.unread && entry?.id)
+              .map((entry) => window.electronAPI.localStore.markNotificationRead(entry.id)),
+          );
+        }
+
+        const visibleRows = rows.filter((entry) => !isStaleAppUpdateEntry(entry, installedVersion));
+        setSyncNotifications(visibleRows);
+        setUnreadNotificationCount(visibleRows.filter((entry) => entry?.unread).length);
       } catch (error) {
         if (!cancelled) {
           console.warn("Failed to load rail notifications", error);

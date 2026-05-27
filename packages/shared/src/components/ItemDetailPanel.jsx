@@ -15,6 +15,31 @@ import { AlertCircle } from "lucide-react";
 import { PortfolioChart } from "./PortfolioChart";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
+function deriveBuyInReferenceValue(item, history = []) {
+  const unitCostBasis = Number(item?.costBasisUnit);
+  if (Number.isFinite(unitCostBasis) && unitCostBasis > 0) {
+    return unitCostBasis;
+  }
+
+  const buyPriceEur = Number(item?.buyPrice);
+  if (Number.isFinite(buyPriceEur) && buyPriceEur > 0) {
+    return buyPriceEur;
+  }
+
+  const buyPriceUsd = Number(item?.buyPriceUsd);
+  if (!Number.isFinite(buyPriceUsd) || buyPriceUsd <= 0 || !Array.isArray(history)) {
+    return null;
+  }
+
+  const exchangeRateEntry = history.find((entry) => Number.isFinite(Number(entry?.exchangeRate)));
+  const usdToEurRate = Number(exchangeRateEntry?.exchangeRate);
+  if (!Number.isFinite(usdToEurRate) || usdToEurRate <= 0) {
+    return null;
+  }
+
+  return buyPriceUsd * usdToEurRate;
+}
+
 export const ItemDetailPanel = ({
   item,
   history,
@@ -77,6 +102,7 @@ export const ItemDetailPanel = ({
 
   const stats6m = item.details?.stats6m;
   const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
+  const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
   const formatUsdPrice = (value) =>
     formatPrice(value, {
       useUsd: true,
@@ -295,6 +321,8 @@ export const ItemDetailPanel = ({
                   emptyLabel="Noch keine Preishistorie verfügbar"
                   isLoading={historyLoading}
                   showAbsolute={showAbsolute}
+                  referenceLineValue={buyInReferenceValue}
+                  referenceLineLabel="Buy-In"
                   flat
                 />
               </div>

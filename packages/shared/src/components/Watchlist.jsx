@@ -47,19 +47,54 @@ function normalizeNameKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeNameKeyForBuyOrderMatch(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\bstattrak(?:™)?\b/gi, "")
+    .replace(/\bsouvenir\b/gi, "")
+    .replace(/[★]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function applyBuyOrdersToWatchlistItems(items = [], summaryRows = []) {
   const summaryByName = new Map();
   (Array.isArray(summaryRows) ? summaryRows : []).forEach((row) => {
-    const key = normalizeNameKey(row?.marketHashName);
-    if (!key) {
+    const exactKey = normalizeNameKey(row?.marketHashName);
+    const fuzzyKey = normalizeNameKeyForBuyOrderMatch(row?.marketHashName);
+    if (!exactKey && !fuzzyKey) {
       return;
     }
-    summaryByName.set(key, row);
+    if (exactKey) {
+      summaryByName.set(exactKey, row);
+    }
+    if (fuzzyKey) {
+      summaryByName.set(fuzzyKey, row);
+    }
   });
 
   return (Array.isArray(items) ? items : []).map((item) => {
-    const key = normalizeNameKey(item?.marketHashName || item?.name);
-    const summary = key ? summaryByName.get(key) : null;
+    const rawName = item?.marketHashName || item?.name;
+    const key = normalizeNameKey(rawName);
+    const fuzzyKey = normalizeNameKeyForBuyOrderMatch(rawName);
+    let summary = key ? summaryByName.get(key) : null;
+
+    if (!summary && fuzzyKey) {
+      summary = summaryByName.get(fuzzyKey) || null;
+    }
+
+    if (!summary && fuzzyKey) {
+      summary =
+        (Array.isArray(summaryRows) ? summaryRows : []).find((row) => {
+          const rowKey = normalizeNameKeyForBuyOrderMatch(row?.marketHashName);
+          return (
+            rowKey &&
+            (rowKey.includes(fuzzyKey) || fuzzyKey.includes(rowKey))
+          );
+        }) || null;
+    }
+
     const buyOrderCount = Number(summary?.orders || 0);
     const buyOrderQuantity = Number(summary?.quantity || 0);
     const buyOrderBestPriceUsd = Number(summary?.bestPriceUsd || 0);
@@ -156,7 +191,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
             : [];
 
           const hasSnapshot = Boolean(buyOrderResponse?.meta?.hasCachedSnapshot);
-          if (!hasSnapshot && nextBuyOrderSummary.length === 0) {
+          const cachedAtIso = String(buyOrderResponse?.meta?.cachedAt || "").trim();
+          const cachedAtMs = cachedAtIso ? Date.parse(cachedAtIso) : NaN;
+          const isStaleCache =
+            Number.isFinite(cachedAtMs) &&
+            Date.now() - cachedAtMs > 10 * 60 * 1000;
+
+          if (nextBuyOrderSummary.length === 0 && (!hasSnapshot || isStaleCache)) {
             const liveBuyOrderResponse = await fetchCsFloatBuyOrdersData({
               syncNow: true,
               limit: 200,
@@ -517,6 +558,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                         valueLabel="Preis"
                         title="Preisentwicklung"
                         showAbsolute={showAbsolute}
+                        disableDarkGlass
                       />
                     </div>
                   ) : (

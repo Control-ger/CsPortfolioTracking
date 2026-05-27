@@ -163,6 +163,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
               valueLabel="Preis"
               emptyLabel="Noch keine Preishistorie verfuegbar"
               showAbsolute={showAbsolute}
+              disableDarkGlass
             />
           </div>
         ) : null}

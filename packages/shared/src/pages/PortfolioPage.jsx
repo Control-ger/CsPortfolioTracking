@@ -656,6 +656,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
   const [hoveredChartData, setHoveredChartData] = useState(null);
+  const [chartTrendData, setChartTrendData] = useState({
+    rangeLabel: "90T",
+    deltaValue: 0,
+    deltaPercent: 0,
+    isPositive: true,
+  });
   const [managementInvestments, setManagementInvestments] = useState([]);
   const [managementLoading, setManagementLoading] = useState(false);
   const [managementError, setManagementError] = useState("");
@@ -744,6 +750,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchAddingItem, setGlobalSearchAddingItem] = useState("");
   const [globalSearchRecentTerms, setGlobalSearchRecentTerms] = useState([]);
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
+  const portfolioChartContainerRef = useRef(null);
+  const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
 
   // Keyboard shortcuts for tab navigation and search
   useKeyboard({
@@ -1854,17 +1862,78 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
   }, [globalSearchOpen]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const target = portfolioChartContainerRef.current;
+    if (!target) {
+      return undefined;
+    }
+
+    const desktopMediaQuery = window.matchMedia("(min-width: 1024px)");
+    const updateMeasuredHeight = () => {
+      if (!desktopMediaQuery.matches) {
+        setWatchlistMoverCardHeight(null);
+        return;
+      }
+
+      const nextHeight = Math.round(target.getBoundingClientRect().height);
+      if (!Number.isFinite(nextHeight) || nextHeight <= 0) {
+        return;
+      }
+
+      setWatchlistMoverCardHeight((current) => (current === nextHeight ? current : nextHeight));
+    };
+
+    updateMeasuredHeight();
+
+    let resizeObserver;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        updateMeasuredHeight();
+      });
+      resizeObserver.observe(target);
+    }
+
+    if (desktopMediaQuery.addEventListener) {
+      desktopMediaQuery.addEventListener("change", updateMeasuredHeight);
+    } else {
+      desktopMediaQuery.addListener(updateMeasuredHeight);
+    }
+    window.addEventListener("resize", updateMeasuredHeight);
+
+    return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      if (desktopMediaQuery.removeEventListener) {
+        desktopMediaQuery.removeEventListener("change", updateMeasuredHeight);
+      } else {
+        desktopMediaQuery.removeListener(updateMeasuredHeight);
+      }
+      window.removeEventListener("resize", updateMeasuredHeight);
+    };
+  }, [activeTab, portfolioHistory.length, portfolioLoading]);
+
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
   const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
+  const fallbackRangeDeltaPercent = Number(chartTrendData?.deltaPercent);
+  const fallbackRangeDeltaValue = Number(chartTrendData?.deltaValue);
   const headerPortfolioValue = hoveredChartData?.wert ?? (stats.totalValue || 0);
-  const headerPortfolioPercent = hoveredChartData?.growthPercent ?? (stats.totalRoiPercent || 0);
+  const headerPortfolioPercent = hoveredChartData?.growthPercent ?? (
+    Number.isFinite(fallbackRangeDeltaPercent) ? fallbackRangeDeltaPercent : (stats.totalRoiPercent || 0)
+  );
   const hoveredProfitEuro = Number(hoveredChartData?.profitEuro);
   const headerProfitEuro = hoveredChartData
     ? Number.isFinite(hoveredProfitEuro)
       ? hoveredProfitEuro
       : (headerPortfolioValue || 0) - Number(stats.totalInvested || 0)
-    : Number(stats.totalProfitEuro || 0);
+    : Number.isFinite(fallbackRangeDeltaValue)
+      ? fallbackRangeDeltaValue
+      : Number(stats.totalProfitEuro || 0);
   const headerPortfolioPositive = hoveredChartData ? headerProfitEuro >= 0 : Boolean(stats.isPositive);
   const csUpdateBannerVisibleHoursRaw = Number(csUpdatesMeta?.bannerVisibleHours);
   const csUpdateBannerVisibleHours = Number.isFinite(csUpdateBannerVisibleHoursRaw)
@@ -1919,7 +1988,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   });
   const headerProfitPercent = hoveredChartData
     ? Number(headerPortfolioPercent || 0)
-    : Number(stats.totalRoiPercent || 0);
+    : Number.isFinite(fallbackRangeDeltaPercent)
+      ? fallbackRangeDeltaPercent
+      : Number(stats.totalRoiPercent || 0);
   const managementClusters = buildManagementClusters(managementInvestments);
   const managementInvestmentById = new Map(
     managementInvestments.map((item) => [String(item.id), item]),
@@ -2251,18 +2322,35 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!Number.isFinite(nextPrice) || nextPrice < 0) {
       return;
     }
+    const normalizedPrice = Number(nextPrice.toFixed(2));
 
     setSavingPriceItemId(item.id);
     try {
       await window.electronAPI.localStore.upsertInvestment({
         ...item,
         id: item.id,
-        buyPriceUsd: nextPrice,
-        buyPrice: nextPrice,
+        buyPriceUsd: normalizedPrice,
+        buyPrice: normalizedPrice,
         priceSetMode: "user_confirmed",
         platform: "steam_inventory",
         source: "steam_inventory",
       });
+      setManagementInvestments((current) =>
+        current.map((entry) =>
+          String(entry?.id || "") === String(item?.id || "")
+            ? {
+                ...entry,
+                buyPriceUsd: normalizedPrice,
+                buyPrice: normalizedPrice,
+                priceSetMode: "user_confirmed",
+              }
+            : entry,
+        ),
+      );
+      setPriceDrafts((current) => ({
+        ...current,
+        [item.id]: normalizedPrice > 0 ? normalizedPrice.toFixed(2) : "",
+      }));
       await refreshPortfolio();
       setCompositionRefreshToken((current) => current + 1);
     } catch (saveError) {
@@ -3914,7 +4002,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                 title="Gesamt Zuwachs"
                 value={`${headerProfitEuro >= 0 ? "+" : "-"}${formatPrice(Math.abs(headerProfitEuro))}`}
                 subValue={`${headerProfitPercent >= 0 ? "+" : ""}${headerProfitPercent.toFixed(2)}%${
-                  hoveredChartData?.date ? ` | ${formatDateSafe(hoveredChartData.date)}` : ""
+                  hoveredChartData?.date
+                    ? ` | ${formatDateSafe(hoveredChartData.date)}`
+                    : ` | ROI ${String(chartTrendData?.rangeLabel || "90T")}`
                 }`}
                 isPositive={headerPortfolioPositive}
               />
@@ -3942,11 +4032,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
-              <div className="min-w-0">
+              <div ref={portfolioChartContainerRef} className="min-w-0">
                 <PortfolioChart
                   history={portfolioHistory}
                   isLoading={portfolioLoading}
                   onHoverChange={setHoveredChartData}
+                  onTrendChange={setChartTrendData}
                   metricsScope={metricsScope}
                   onMetricsScopeChange={
                     portfolioPreferences.metricsDisplayMode === "toggle_mode"
@@ -3955,7 +4046,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   }
                 />
               </div>
-              <Card className="flex min-h-[340px] flex-col border-border/70 bg-card/70 lg:h-full lg:min-h-0">
+              <Card
+                className="flex min-h-[340px] flex-col border-border/70 bg-card/70 lg:min-h-0 lg:overflow-hidden"
+                style={watchlistMoverCardHeight ? { height: `${watchlistMoverCardHeight}px` } : undefined}
+              >
                 <CardHeader className="space-y-2 pb-3">
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-base">Watchlist Mover</CardTitle>

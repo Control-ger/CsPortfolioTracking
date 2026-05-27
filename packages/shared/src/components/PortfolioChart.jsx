@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { Skeleton } from "./ui/skeleton";
 
 const RANGE_OPTIONS = [
-  { key: "1T", label: "1T", days: 1 },
-  { key: "1W", label: "1W", days: 7 },
-  { key: "1M", label: "1M", days: 30 },
+  { key: "7T", label: "7T", days: 7 },
+  { key: "20T", label: "20T", days: 20 },
+  { key: "90T", label: "90T", days: 90 },
+  { key: "180T", label: "180T", days: 180 },
   { key: "1J", label: "1J", days: 365 },
   { key: "MAX", label: "MAX", days: null },
 ];
@@ -40,11 +41,7 @@ function formatTickDate(timestamp, rangeKey) {
     return "";
   }
 
-  if (rangeKey === "1T") {
-    return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  if (rangeKey === "1J" || rangeKey === "MAX") {
+  if (rangeKey === "90T" || rangeKey === "180T" || rangeKey === "1J" || rangeKey === "MAX") {
     return date.toLocaleDateString("de-DE", { month: "short", year: "2-digit" });
   }
 
@@ -222,12 +219,16 @@ export const PortfolioChart = ({
   valueLabel = "Wert",
   isLoading = false,
   onHoverChange = null,
+  onTrendChange = null,
   showAbsolute = false,
+  referenceLineValue = null,
+  referenceLineLabel = "Buy-In",
+  disableDarkGlass = false,
   metricsScope = null,
   onMetricsScopeChange = null,
   flat = false,
 }) => {
-  const [rangeKey, setRangeKey] = useState("1M");
+  const [rangeKey, setRangeKey] = useState("90T");
   const hoverAnimationFrameRef = useRef(null);
   const lastHoveredIndexRef = useRef(null);
   const lastHoverSignatureRef = useRef("");
@@ -270,6 +271,9 @@ export const PortfolioChart = ({
     () => (showAbsolute ? buildAbsoluteAxisConfig(chartData) : null),
     [chartData, showAbsolute],
   );
+  const normalizedReferenceLineValue = Number(referenceLineValue);
+  const showReferenceLine = showAbsolute && Number.isFinite(normalizedReferenceLineValue);
+  const referenceDotX = chartData.length > 0 ? chartData[chartData.length - 1]?.timestamp : null;
 
   const trendStats = useMemo(() => {
     if (chartData.length === 0) {
@@ -387,9 +391,32 @@ export const PortfolioChart = ({
     [],
   );
 
+  useEffect(() => {
+    if (typeof onTrendChange !== "function") {
+      return;
+    }
+    const activeRange = RANGE_OPTIONS.find((option) => option.key === rangeKey) || null;
+    onTrendChange({
+      rangeKey,
+      rangeLabel: activeRange?.label || rangeKey,
+      rangeDays: activeRange?.days ?? null,
+      deltaValue: trendStats.deltaValue,
+      deltaPercent: trendStats.deltaPercent,
+      isPositive: trendStats.isPositive,
+    });
+  }, [
+    onTrendChange,
+    rangeKey,
+    trendStats.deltaPercent,
+    trendStats.deltaValue,
+    trendStats.isPositive,
+  ]);
+
   const cardClassName = flat
-    ? "overflow-hidden border-0 bg-transparent shadow-none"
-    : "overflow-hidden";
+    ? "overflow-hidden border-0 bg-transparent shadow-none dark:bg-transparent dark:shadow-none dark:backdrop-blur-0"
+    : disableDarkGlass
+      ? "overflow-hidden dark:bg-transparent dark:shadow-none dark:backdrop-blur-0"
+      : "overflow-hidden";
   const headerClassName = flat ? "px-0 pb-2 sm:pb-3" : "pb-2 sm:pb-4";
   const contentClassName = flat ? "px-0 pb-2 sm:pb-3" : "px-2 pb-2 sm:px-6 sm:pb-6";
   const footerClassName = flat
@@ -484,6 +511,33 @@ export const PortfolioChart = ({
               {!showAbsolute ? (
                 <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.8} strokeDasharray="3 3" />
               ) : null}
+              {showReferenceLine ? (
+                <ReferenceLine
+                  y={normalizedReferenceLineValue}
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeOpacity={0.65}
+                  strokeDasharray="4 4"
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: referenceLineLabel,
+                    position: "insideTopLeft",
+                    fill: "hsl(var(--muted-foreground))",
+                    fontSize: 10,
+                  }}
+                />
+              ) : null}
+              {showReferenceLine && Number.isFinite(Number(referenceDotX)) ? (
+                <ReferenceDot
+                  x={referenceDotX}
+                  y={normalizedReferenceLineValue}
+                  r={4}
+                  ifOverflow="extendDomain"
+                  fill="hsl(var(--muted-foreground))"
+                  stroke="hsl(var(--background))"
+                  strokeWidth={1.25}
+                  isFront
+                />
+              ) : null}
               <XAxis
                 dataKey="timestamp"
                 type="number"
@@ -491,7 +545,7 @@ export const PortfolioChart = ({
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                minTickGap={rangeKey === "1T" ? 18 : 28}
+                minTickGap={rangeKey === "7T" || rangeKey === "20T" ? 18 : 28}
                 tickFormatter={(value) => formatTickDate(value, rangeKey)}
               />
               <YAxis
