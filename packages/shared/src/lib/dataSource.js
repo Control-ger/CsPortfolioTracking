@@ -946,9 +946,48 @@ export async function fetchWatchlistData(options = {}) {
 
   try {
     const upstreamResponse = await fetchApiWatchlist(options);
-    const upstreamItems = Array.isArray(upstreamResponse?.data)
+    let upstreamItems = Array.isArray(upstreamResponse?.data)
       ? upstreamResponse.data
       : [];
+    const upstreamMeta = upstreamResponse?.meta || {};
+    const upstreamSource = String(upstreamMeta?.source || "").trim().toLowerCase();
+    const upstreamLooksLikeProxyFallback =
+      upstreamSource === "desktop-local-fallback" ||
+      (Array.isArray(upstreamMeta?.proxyAttempts) && upstreamMeta.proxyAttempts.length > 0);
+
+    // If syncLive times out in the desktop sidecar proxy, the endpoint can return a
+    // successful fallback payload without metrics/history. In that case, retry once
+    // without syncLive to get the persisted watchlist metrics/history from upstream.
+    if (
+      upstreamItems.length === 0 &&
+      upstreamLooksLikeProxyFallback &&
+      options?.syncLive === true
+    ) {
+      try {
+        const upstreamReadResponse = await fetchApiWatchlist({
+          ...options,
+          syncLive: false,
+        });
+        const upstreamReadItems = Array.isArray(upstreamReadResponse?.data)
+          ? upstreamReadResponse.data
+          : [];
+        if (upstreamReadItems.length > 0) {
+          upstreamItems = upstreamReadItems;
+          meta.warnings = [
+            ...(Array.isArray(upstreamMeta?.warnings) ? upstreamMeta.warnings : []),
+            {
+              code: "WATCHLIST_SYNC_LIVE_TIMEOUT_FALLBACK",
+              message: "Live-Sync war langsam. Es wurden gespeicherte Watchlist-Preisdaten geladen.",
+            },
+          ];
+        }
+      } catch (readFallbackError) {
+        if (!isAbortLikeError(readFallbackError)) {
+          console.warn("[desktop-watchlist] upstream read fallback failed", readFallbackError);
+        }
+      }
+    }
+
     if (upstreamItems.length > 0) {
       items = enrichDesktopWatchlistWithUpstreamMetrics(items, upstreamItems);
       meta = {
@@ -957,8 +996,10 @@ export async function fetchWatchlistData(options = {}) {
       };
     }
 
-    if (Array.isArray(upstreamResponse?.meta?.warnings)) {
-      meta.warnings = upstreamResponse.meta.warnings;
+    if (Array.isArray(upstreamMeta?.warnings)) {
+      meta.warnings = meta.warnings.length > 0
+        ? meta.warnings
+        : upstreamMeta.warnings;
     }
   } catch (error) {
     if (!isAbortLikeError(error)) {

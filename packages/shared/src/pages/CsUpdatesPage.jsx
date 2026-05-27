@@ -157,6 +157,27 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
       const state = String(payload?.state || "").trim().toLowerCase();
       const version = String(payload?.version || "").trim();
       const versionLabel = version ? `v${version}` : "Das Update";
+      const runUpdateDownload = async () => {
+        if (!window.electronAPI?.updater?.download) {
+          window.alert(`${versionLabel} ist verfuegbar.`);
+          return;
+        }
+        const result = await window.electronAPI.updater.download();
+        if (!result || result.ok !== false) {
+          return;
+        }
+        if (result.reason === "no-update-info") {
+          window.alert(
+            `${versionLabel}: Updater-Metadaten sind noch nicht bereit. Bitte in ein paar Sekunden erneut versuchen.`,
+          );
+          return;
+        }
+        if (result.reason === "not-packaged") {
+          window.alert("Updates sind nur in der installierten Desktop-App verfuegbar.");
+          return;
+        }
+        window.alert(String(result.error || "Update-Download konnte nicht gestartet werden."));
+      };
 
       if (state === "downloaded") {
         const shouldInstallNow = window.confirm(
@@ -169,20 +190,12 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
       }
 
       if (state === "available") {
-        if (window.electronAPI?.updater?.download) {
-          await window.electronAPI.updater.download();
-        } else {
-          window.alert(`${versionLabel} ist verfuegbar.`);
-        }
+        await runUpdateDownload();
         return;
       }
 
       if (state === "downloading") {
-        if (window.electronAPI?.updater?.download) {
-          await window.electronAPI.updater.download();
-        } else {
-          window.alert(`${versionLabel}: Download laeuft. Nach Abschluss kannst du installieren.`);
-        }
+        await runUpdateDownload();
         return;
       }
 

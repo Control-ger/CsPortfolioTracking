@@ -2662,6 +2662,28 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     await window.electronAPI.updater.install();
   };
+  const runAppUpdateDownload = async () => {
+    if (!window.electronAPI?.updater?.download) {
+      window.alert(`${appUpdateVersionLabel} ist verfuegbar.`);
+      return;
+    }
+
+    const result = await window.electronAPI.updater.download();
+    if (!result || result.ok !== false) {
+      return;
+    }
+    if (result.reason === "no-update-info") {
+      window.alert(
+        `${appUpdateVersionLabel}: Updater-Metadaten sind noch nicht bereit. Bitte in ein paar Sekunden erneut versuchen.`,
+      );
+      return;
+    }
+    if (result.reason === "not-packaged") {
+      window.alert("Updates sind nur in der installierten Desktop-App verfuegbar.");
+      return;
+    }
+    window.alert(String(result.error || "Update-Download konnte nicht gestartet werden."));
+  };
   const handleAppUpdateNotificationClick = async () => {
     if (appUpdateState === "downloaded") {
       const shouldInstallNow = window.confirm(
@@ -2676,13 +2698,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
 
     if (appUpdateState === "available" || appUpdateState === "downloading") {
-      if (appUpdateState === "available" && window.electronAPI?.updater?.download) {
-        await window.electronAPI.updater.download();
-      } else {
-        window.alert(
-          `${appUpdateVersionLabel}: Download laeuft. Nach Abschluss kannst du direkt installieren.`,
-        );
-      }
+      await runAppUpdateDownload();
       setAppUpdateUnread(false);
       return;
     }

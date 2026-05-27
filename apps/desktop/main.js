@@ -1556,7 +1556,27 @@ ipcMain.handle("app-updater-download", async () => {
   if (!app.isPackaged) {
     return { ok: false, reason: "not-packaged" };
   }
-  return await promptForUpdateDownload(latestAvailableUpdateInfo);
+  if (updateDownloadInProgress) {
+    return { ok: true, alreadyDownloading: true };
+  }
+
+  let info = latestAvailableUpdateInfo;
+  if (!info) {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      info = result?.updateInfo || latestAvailableUpdateInfo;
+    } catch (error) {
+      const message = error?.message || String(error);
+      console.warn("[updater] download requested but check failed:", message);
+      return { ok: false, error: message };
+    }
+  }
+
+  if (!info) {
+    return { ok: false, reason: "no-update-info" };
+  }
+
+  return await promptForUpdateDownload(info);
 });
 ipcMain.handle("app-updater-install", async () => {
   if (!app.isPackaged) {

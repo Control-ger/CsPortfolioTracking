@@ -8,7 +8,7 @@ import { Skeleton } from "./ui/skeleton";
 
 const RANGE_OPTIONS = [
   { key: "7T", label: "7T", days: 7 },
-  { key: "20T", label: "20T", days: 20 },
+  { key: "30T", label: "30T", days: 30 },
   { key: "90T", label: "90T", days: 90 },
   { key: "180T", label: "180T", days: 180 },
   { key: "1J", label: "1J", days: 365 },
@@ -223,6 +223,7 @@ export const PortfolioChart = ({
   showAbsolute = false,
   referenceLineValue = null,
   referenceLineLabel = "Buy-In",
+  referenceLineTimestamp = null,
   disableDarkGlass = false,
   metricsScope = null,
   onMetricsScopeChange = null,
@@ -272,7 +273,21 @@ export const PortfolioChart = ({
     [chartData, showAbsolute],
   );
   const normalizedReferenceLineValue = Number(referenceLineValue);
-  const showReferenceLine = showAbsolute && Number.isFinite(normalizedReferenceLineValue);
+  const normalizedReferenceLineTimestamp = Number(referenceLineTimestamp);
+  const visibleMinTimestamp = visibleHistory[0]?.timestamp ?? null;
+  const visibleMaxTimestamp = visibleHistory[visibleHistory.length - 1]?.timestamp ?? null;
+  const referenceTimestampInVisibleRange =
+    !Number.isFinite(normalizedReferenceLineTimestamp) ||
+    (
+      Number.isFinite(Number(visibleMinTimestamp)) &&
+      Number.isFinite(Number(visibleMaxTimestamp)) &&
+      normalizedReferenceLineTimestamp >= Number(visibleMinTimestamp) &&
+      normalizedReferenceLineTimestamp <= Number(visibleMaxTimestamp)
+    );
+  const showReferenceLine =
+    showAbsolute &&
+    Number.isFinite(normalizedReferenceLineValue) &&
+    referenceTimestampInVisibleRange;
   const referenceDotX = chartData.length > 0 ? chartData[chartData.length - 1]?.timestamp : null;
 
   const trendStats = useMemo(() => {
@@ -545,7 +560,7 @@ export const PortfolioChart = ({
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                minTickGap={rangeKey === "7T" || rangeKey === "20T" ? 18 : 28}
+                minTickGap={rangeKey === "7T" || rangeKey === "30T" ? 18 : 28}
                 tickFormatter={(value) => formatTickDate(value, rangeKey)}
               />
               <YAxis

@@ -40,6 +40,24 @@ function deriveBuyInReferenceValue(item, history = []) {
   return buyPriceUsd * usdToEurRate;
 }
 
+function deriveBuyInReferenceTimestamp(item) {
+  const candidates = [
+    item?.purchasedAt,
+    item?.purchaseDate,
+    item?.createdAt,
+    item?.updatedAt,
+  ];
+
+  for (const candidate of candidates) {
+    const timestamp = Date.parse(String(candidate || ""));
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      return timestamp;
+    }
+  }
+
+  return null;
+}
+
 export const ItemDetailPanel = ({
   item,
   history,
@@ -103,6 +121,7 @@ export const ItemDetailPanel = ({
   const stats6m = item.details?.stats6m;
   const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
   const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
+  const buyInReferenceTimestamp = deriveBuyInReferenceTimestamp(item);
   const formatUsdPrice = (value) =>
     formatPrice(value, {
       useUsd: true,
@@ -323,6 +342,7 @@ export const ItemDetailPanel = ({
                   showAbsolute={showAbsolute}
                   referenceLineValue={buyInReferenceValue}
                   referenceLineLabel="Buy-In"
+                  referenceLineTimestamp={buyInReferenceTimestamp}
                   flat
                 />
               </div>

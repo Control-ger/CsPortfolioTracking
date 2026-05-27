@@ -193,11 +193,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           const hasSnapshot = Boolean(buyOrderResponse?.meta?.hasCachedSnapshot);
           const cachedAtIso = String(buyOrderResponse?.meta?.cachedAt || "").trim();
           const cachedAtMs = cachedAtIso ? Date.parse(cachedAtIso) : NaN;
+          const hasValidCachedAt = Number.isFinite(cachedAtMs);
           const isStaleCache =
-            Number.isFinite(cachedAtMs) &&
+            hasValidCachedAt &&
             Date.now() - cachedAtMs > 10 * 60 * 1000;
+          const isUnknownCacheAge = !hasValidCachedAt;
 
-          if (nextBuyOrderSummary.length === 0 && (!hasSnapshot || isStaleCache)) {
+          if (nextBuyOrderSummary.length === 0 && (!hasSnapshot || isStaleCache || isUnknownCacheAge)) {
             const liveBuyOrderResponse = await fetchCsFloatBuyOrdersData({
               syncNow: true,
               limit: 200,

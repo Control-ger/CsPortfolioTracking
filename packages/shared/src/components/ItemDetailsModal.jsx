@@ -72,6 +72,24 @@ function deriveBuyInReferenceValue(item, history = []) {
   return buyPriceUsd * usdToEurRate;
 }
 
+function deriveBuyInReferenceTimestamp(item) {
+  const candidates = [
+    item?.purchasedAt,
+    item?.purchaseDate,
+    item?.createdAt,
+    item?.updatedAt,
+  ];
+
+  for (const candidate of candidates) {
+    const timestamp = Date.parse(String(candidate || ""));
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      return timestamp;
+    }
+  }
+
+  return null;
+}
+
 export function ItemDetailsModal({
   isOpen,
   onClose,
@@ -113,6 +131,7 @@ export function ItemDetailsModal({
     setShowAbsolute(!showAbsolute);
   };
   const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
+  const buyInReferenceTimestamp = deriveBuyInReferenceTimestamp(item);
   const formatUsdPrice = (value) =>
     formatPrice(value, {
       useUsd: true,
@@ -276,6 +295,7 @@ export function ItemDetailsModal({
               showAbsolute={showAbsolute}
               referenceLineValue={buyInReferenceValue}
               referenceLineLabel="Buy-In"
+              referenceLineTimestamp={buyInReferenceTimestamp}
               disableDarkGlass
             />
           </div>

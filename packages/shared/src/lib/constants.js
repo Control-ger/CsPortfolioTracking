@@ -81,7 +81,7 @@ export const ABBREVIATIONS = {
 // Time ranges for charts
 export const TIME_RANGES = {
   '7T': { label: '7T', days: 7 },
-  '20T': { label: '20T', days: 20 },
+  '30T': { label: '30T', days: 30 },
   '90T': { label: '90T', days: 90 },
   '180T': { label: '180T', days: 180 },
   '1J': { label: '1J', days: 365 },
