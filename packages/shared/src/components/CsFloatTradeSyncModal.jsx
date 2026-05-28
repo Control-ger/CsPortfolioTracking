@@ -85,6 +85,15 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
 
     return rows.filter((trade) => String(trade?.status || "") === "duplicate").length;
   }, [preview]);
+  const updatedCount = useMemo(() => {
+    const rows = Array.isArray(preview?.importTrades)
+      ? preview.importTrades
+      : Array.isArray(preview?.sampleTrades)
+        ? preview.sampleTrades
+        : [];
+
+    return rows.filter((trade) => String(trade?.status || "") === "updated").length;
+  }, [preview]);
   const skipReasons = useMemo(() => preview?.skipReasons || {}, [preview]);
   const skipReasonEntries = useMemo(() => Object.entries(skipReasons).sort((a, b) => b[1] - a[1]), [skipReasons]);
   const hasPreview = Boolean(preview);
@@ -135,6 +144,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
           <Stat label="Rohdaten" value={preview ? preview.totalFetched : "-"} />
           <Stat label="Normalisiert" value={preview ? preview.normalizedCount : "-"} />
           <Stat label="Importierbar" value={preview ? preview.insertable : "-"} tone="positive" />
+          <Stat label="Aktualisiert" value={preview ? (preview.updated ?? updatedCount) : "-"} tone="positive" />
           <Stat label="Duplikate" value={preview ? preview.duplicates : "-"} tone="negative" />
           <Stat label="Seiten" value={preview ? preview.pagesFetched : "-"} />
           <Stat label="Übersprungen" value={preview ? preview.skipped ?? 0 : "-"} />
@@ -198,7 +208,12 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                       <div className="truncate font-medium">{trade.name}</div>
                       <div className="truncate text-[10px] text-muted-foreground">{trade.marketHashName}</div>
                     </div>
-                    <div className="text-xs text-muted-foreground md:text-right">{trade.quantity}x</div>
+                    <div className="text-xs text-muted-foreground md:text-right">
+                      {trade.quantity}x
+                      {Number.isFinite(Number(trade?.quantityDelta)) && Number(trade.quantityDelta) !== 0
+                        ? ` (${Number(trade.quantityDelta) > 0 ? "+" : ""}${Number(trade.quantityDelta)})`
+                        : ""}
+                    </div>
                     <div className="text-xs md:text-right">
                       {formatPrice(trade.buyPriceUsd ?? trade.buyPrice, {
                         useUsd: true,

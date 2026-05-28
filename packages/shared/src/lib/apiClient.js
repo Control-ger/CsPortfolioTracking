@@ -330,6 +330,67 @@ function stableHash(value) {
   return hash.toString(16);
 }
 
+function toFiniteNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function isSameIsoDate(left, right) {
+  const leftValue = String(left || "").trim();
+  const rightValue = String(right || "").trim();
+  if (!leftValue && !rightValue) {
+    return true;
+  }
+  if (!leftValue || !rightValue) {
+    return false;
+  }
+  const leftTimestamp = Date.parse(leftValue);
+  const rightTimestamp = Date.parse(rightValue);
+  if (!Number.isFinite(leftTimestamp) || !Number.isFinite(rightTimestamp)) {
+    return leftValue === rightValue;
+  }
+  return leftTimestamp === rightTimestamp;
+}
+
+function determineDesktopPreviewTradeStatus(trade, mappedTrade, existingInvestment) {
+  if (!existingInvestment) {
+    return {
+      status: "new",
+      quantityDelta: Number(mappedTrade?.quantity || 0),
+    };
+  }
+
+  const incomingQuantity = Math.max(0, Number(mappedTrade?.quantity || 0));
+  const existingQuantity = Math.max(0, Number(existingInvestment?.quantity || 0));
+  const quantityDelta = incomingQuantity - existingQuantity;
+  const incomingPrice = toFiniteNumber(mappedTrade?.buyPriceUsd ?? mappedTrade?.buyPrice);
+  const existingPrice = toFiniteNumber(existingInvestment?.buyPriceUsd ?? existingInvestment?.buyPrice);
+  const incomingFundingMode = String(mappedTrade?.fundingMode || "").trim();
+  const existingFundingMode = String(existingInvestment?.fundingMode || "").trim();
+  const incomingPurchasedAt = mappedTrade?.purchasedAt || null;
+  const existingPurchasedAt = existingInvestment?.purchasedAt || null;
+
+  const quantityChanged = incomingQuantity !== existingQuantity;
+  const priceChanged = incomingPrice !== null && existingPrice !== null
+    ? Math.abs(incomingPrice - existingPrice) > 0.00001
+    : incomingPrice !== existingPrice;
+  const fundingModeChanged = incomingFundingMode !== existingFundingMode;
+  const purchasedAtChanged = !isSameIsoDate(incomingPurchasedAt, existingPurchasedAt);
+  const hasClusterDelta = Boolean(trade?.isClustered) && (quantityChanged || priceChanged || purchasedAtChanged);
+
+  if (hasClusterDelta || quantityChanged || priceChanged || fundingModeChanged || purchasedAtChanged) {
+    return {
+      status: "updated",
+      quantityDelta,
+    };
+  }
+
+  return {
+    status: "duplicate",
+    quantityDelta: 0,
+  };
+}
+
 function mapCsFloatPreviewTradeToInvestment(trade) {
   const name = trade?.marketHashName || trade?.name || "Unknown Item";
   const buyPriceUsd = Number(trade?.buyPriceUsd ?? trade?.buyPrice ?? 0);
@@ -387,11 +448,13 @@ async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
       await localStore.listInvestments(userId),
       "local-store-list-investments",
     );
-    const existingInvestmentIds = new Set(
-      (Array.isArray(investments) ? investments : []).map((entry) =>
-        String(entry?.id || "").trim(),
-      ),
-    );
+    const existingInvestmentsById = new Map();
+    (Array.isArray(investments) ? investments : []).forEach((entry) => {
+      const investmentId = String(entry?.id || "").trim();
+      if (investmentId) {
+        existingInvestmentsById.set(investmentId, entry);
+      }
+    });
 
     const enrichedImportTrades = importTrades.map((trade) => {
       const mapped = mapCsFloatPreviewTradeToInvestment(trade);
@@ -401,19 +464,27 @@ async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
         candidateIds.push(`csfloat-${legacyExternalTradeId}`);
       }
 
-      const isDuplicate = candidateIds.some(
-        (candidateId) => candidateId !== "" && existingInvestmentIds.has(candidateId),
-      );
+      const existingMatch = candidateIds
+        .map((candidateId) => existingInvestmentsById.get(candidateId))
+        .find(Boolean);
+      const { status, quantityDelta } = determineDesktopPreviewTradeStatus(trade, mapped, existingMatch || null);
+
       return {
         ...trade,
-        status: isDuplicate ? "duplicate" : "new",
+        status,
+        quantityDelta,
       };
     });
 
     const localDuplicates = enrichedImportTrades.filter(
       (trade) => String(trade?.status || "") === "duplicate",
     ).length;
-    const localInsertable = Math.max(0, enrichedImportTrades.length - localDuplicates);
+    const localInsertable = enrichedImportTrades.filter((trade) =>
+      String(trade?.status || "") !== "duplicate",
+    ).length;
+    const localUpdated = enrichedImportTrades.filter(
+      (trade) => String(trade?.status || "") === "updated",
+    ).length;
 
     return {
       ...previewResponse,
@@ -421,6 +492,7 @@ async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
         ...previewData,
         insertable: localInsertable,
         duplicates: localDuplicates,
+        updated: localUpdated,
         sampleTrades: enrichedImportTrades.slice(0, 20),
         importTrades: enrichedImportTrades,
       },
