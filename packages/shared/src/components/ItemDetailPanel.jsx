@@ -58,6 +58,28 @@ function deriveBuyInReferenceTimestamp(item) {
   return null;
 }
 
+function resolvePurchaseUnitDisplay(item, formatPrice) {
+  const costBasisUnit = Number(item?.costBasisUnit);
+  if (Number.isFinite(costBasisUnit) && costBasisUnit > 0) {
+    return formatPrice(costBasisUnit);
+  }
+
+  const buyPriceEur = Number(item?.buyPrice);
+  if (Number.isFinite(buyPriceEur) && buyPriceEur > 0) {
+    return formatPrice(buyPriceEur);
+  }
+
+  const buyPriceUsd = Number(item?.buyPriceUsd);
+  if (Number.isFinite(buyPriceUsd) && buyPriceUsd > 0) {
+    return formatPrice(buyPriceUsd, {
+      useUsd: true,
+      buyPriceUsd,
+    });
+  }
+
+  return formatPrice(0);
+}
+
 export const ItemDetailPanel = ({
   item,
   history,
@@ -122,11 +144,7 @@ export const ItemDetailPanel = ({
   const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
   const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
   const buyInReferenceTimestamp = deriveBuyInReferenceTimestamp(item);
-  const formatUsdPrice = (value) =>
-    formatPrice(value, {
-      useUsd: true,
-      buyPriceUsd: value,
-    });
+  const purchaseUnitDisplay = resolvePurchaseUnitDisplay(item, formatPrice);
 
   return (
       <>
@@ -202,8 +220,8 @@ export const ItemDetailPanel = ({
             <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
               <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
                 <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
-                <p className="mt-2 text-xs sm:text-sm font-bold">{formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
-                <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {formatUsdPrice(item.buyPriceUsd ?? item.buyPrice)}</p>
+                <p className="mt-2 text-xs sm:text-sm font-bold">{purchaseUnitDisplay}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {purchaseUnitDisplay}</p>
               </div>
 
               <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
