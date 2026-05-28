@@ -632,8 +632,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     warnings,
     refreshPortfolio,
     removeInvestmentFromView,
-  } =
-    usePortfolio({ scope: metricsScope, rowScope: "all" });
+  } = usePortfolio({ scope: metricsScope, rowScope: "all" });
   const {
     latestItem: latestCsUpdate,
     latestItemAgeHours: latestCsUpdateAgeHours,
@@ -750,7 +749,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchAddingItem, setGlobalSearchAddingItem] = useState("");
   const [globalSearchRecentTerms, setGlobalSearchRecentTerms] = useState([]);
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
-  const portfolioChartContainerRef = useRef(null);
+  const portfolioChartCardRef = useRef(null);
   const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
 
   // Keyboard shortcuts for tab navigation and search
@@ -1843,7 +1842,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!globalSearchOpen || typeof document === "undefined") {
       return;
     }
-
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusTimer = window.setTimeout(() => globalSearchInputRef.current?.focus(), 50);
@@ -1867,7 +1865,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       return undefined;
     }
 
-    const target = portfolioChartContainerRef.current;
+    const target = portfolioChartCardRef.current;
     if (!target) {
       return undefined;
     }
@@ -3125,7 +3123,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   return (
     <div
       className={`${isElectronRuntime ? "h-full box-border" : "min-h-screen"} ${
-        renderLocalDesktopSidebar ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
+        renderLocalDesktopSidebar
+          ? "lg:h-full lg:min-h-0 lg:overflow-hidden"
+          : ""
       } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
@@ -3196,7 +3196,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </header>
           </>
         ) : null}
-
         {showJourneyBannerLegacy ? (
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader className="pb-2">
@@ -4048,8 +4047,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
-              <div ref={portfolioChartContainerRef} className="min-w-0">
+              <div className="min-w-0">
                 <PortfolioChart
+                  cardRef={portfolioChartCardRef}
                   history={portfolioHistory}
                   isLoading={portfolioLoading}
                   onHoverChange={setHoveredChartData}
@@ -4115,7 +4115,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   <div className="flex min-w-0 flex-1 items-center gap-2">
                                     <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
                                       {imageUrl ? (
-                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                        <img
+                                          src={imageUrl}
+                                          alt={item.name}
+                                          className="h-full w-full object-contain"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
                                       ) : (
                                         <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
                                       )}
@@ -4168,7 +4174,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   <div className="flex min-w-0 flex-1 items-center gap-2">
                                     <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
                                       {imageUrl ? (
-                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                        <img
+                                          src={imageUrl}
+                                          alt={item.name}
+                                          className="h-full w-full object-contain"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
                                       ) : (
                                         <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
                                       )}
@@ -4223,13 +4235,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   <div className="flex min-w-0 flex-1 items-center gap-2">
                                     <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
                                       {imageUrl ? (
-                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                        <img
+                                          src={imageUrl}
+                                          alt={item.name}
+                                          className="h-full w-full object-cover"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
                                       ) : (
                                         <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
                                       )}
                                     </div>
                                     <div className="min-w-0">
-                                      <p className="truncate text-xs font-semibold">{item.name}</p>
+                                      <p className="truncate text-sm font-semibold">{item.name}</p>
                                       {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
                                     </div>
                                   </div>
@@ -4717,12 +4735,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   onClick={() => handleManualSuggestionPick(candidate)}
                                   className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left hover:border-border hover:bg-accent/40"
                                 >
-                                  <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
+                                  <div className="h-10 w-10 overflow-hidden rounded-md border border-border/70 bg-muted/25">
                                     {candidateImageUrl ? (
                                       <img
                                         src={candidateImageUrl}
                                         alt={candidateName}
-                                        className="h-full w-full object-contain"
+                                        className="h-full w-full object-cover"
                                         loading="lazy"
                                         decoding="async"
                                       />

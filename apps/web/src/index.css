@@ -183,9 +183,15 @@
 .tr-desktop-rail {
   border-right: 1px solid color-mix(in oklab, var(--color-border) 82%, transparent);
   background:
-    radial-gradient(420px 180px at 50% -40px, rgba(72, 115, 212, 0.18), rgba(18, 20, 28, 0) 70%),
+    radial-gradient(462px 198px at 50% -40px, rgba(72, 115, 212, 0.189), rgba(18, 20, 28, 0) 70%),
     color-mix(in oklab, var(--color-card) 90%, black 10%);
   backdrop-filter: blur(14px);
+}
+
+.dark .tr-desktop-rail {
+  background:
+    radial-gradient(462px 198px at 50% -40px, rgba(72, 115, 212, 0.18), rgba(18, 20, 28, 0) 70%),
+    color-mix(in oklab, var(--color-card) 90%, black 10%);
 }
 
 .tr-bottom-dock {

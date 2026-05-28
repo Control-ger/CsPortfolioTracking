@@ -228,6 +228,7 @@ export const PortfolioChart = ({
   metricsScope = null,
   onMetricsScopeChange = null,
   flat = false,
+  cardRef = null,
 }) => {
   const [rangeKey, setRangeKey] = useState("90T");
   const hoverAnimationFrameRef = useRef(null);
@@ -277,13 +278,11 @@ export const PortfolioChart = ({
   const visibleMinTimestamp = visibleHistory[0]?.timestamp ?? null;
   const visibleMaxTimestamp = visibleHistory[visibleHistory.length - 1]?.timestamp ?? null;
   const referenceTimestampInVisibleRange =
-    !Number.isFinite(normalizedReferenceLineTimestamp) ||
-    (
-      Number.isFinite(Number(visibleMinTimestamp)) &&
-      Number.isFinite(Number(visibleMaxTimestamp)) &&
-      normalizedReferenceLineTimestamp >= Number(visibleMinTimestamp) &&
-      normalizedReferenceLineTimestamp <= Number(visibleMaxTimestamp)
-    );
+    Number.isFinite(normalizedReferenceLineTimestamp) &&
+    Number.isFinite(Number(visibleMinTimestamp)) &&
+    Number.isFinite(Number(visibleMaxTimestamp)) &&
+    normalizedReferenceLineTimestamp >= Number(visibleMinTimestamp) &&
+    normalizedReferenceLineTimestamp <= Number(visibleMaxTimestamp);
   const showReferenceLine =
     showAbsolute &&
     Number.isFinite(normalizedReferenceLineValue) &&
@@ -439,7 +438,7 @@ export const PortfolioChart = ({
     : "flex-col items-start gap-2 text-xs sm:text-sm";
 
   return (
-    <Card className={cardClassName}>
+    <Card ref={cardRef} className={cardClassName}>
       <CardHeader className={headerClassName}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>
