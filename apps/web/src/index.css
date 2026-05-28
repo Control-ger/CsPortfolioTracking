@@ -124,8 +124,8 @@
     font-family: var(--font-display);
     font-feature-settings: "cv01" 1, "cv02" 1, "ss01" 1;
     background:
-      radial-gradient(980px 420px at 48% -220px, rgba(56, 104, 196, 0.24), rgba(6, 8, 12, 0) 62%),
-      radial-gradient(860px 420px at 100% 0, rgba(21, 118, 82, 0.14), rgba(6, 8, 12, 0) 56%),
+      radial-gradient(980px 420px at 48% -220px, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.24)), rgba(6, 8, 12, 0) 62%),
+      radial-gradient(860px 420px at 100% 0, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.14)), rgba(6, 8, 12, 0) 56%),
       var(--background);
   }
   /* Prevent body scroll; scroll in container instead */
@@ -183,21 +183,26 @@
 .tr-desktop-rail {
   border-right: 1px solid color-mix(in oklab, var(--color-border) 82%, transparent);
   background:
-    radial-gradient(462px 198px at 50% -40px, rgba(72, 115, 212, 0.189), rgba(18, 20, 28, 0) 70%),
+    radial-gradient(circle at 18% 24%, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.24)), transparent 58%),
+    radial-gradient(circle at 78% 72%, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.18)), transparent 60%),
+    radial-gradient(circle at 58% 18%, var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.14)), transparent 56%),
+    radial-gradient(circle at 82% 30%, var(--steam-shell-color-d, hsla(32, 42%, 46%, 0.14)), transparent 58%),
     color-mix(in oklab, var(--color-card) 90%, black 10%);
-  backdrop-filter: blur(14px);
-}
-
-.dark .tr-desktop-rail {
-  background:
-    radial-gradient(462px 198px at 50% -40px, rgba(72, 115, 212, 0.18), rgba(18, 20, 28, 0) 70%),
-    color-mix(in oklab, var(--color-card) 90%, black 10%);
+  backdrop-filter: blur(14px) saturate(1.02);
 }
 
 .tr-bottom-dock {
   background: color-mix(in oklab, var(--color-card) 90%, black 10%);
   border: 1px solid color-mix(in oklab, var(--color-border) 85%, transparent);
   box-shadow: 0 20px 44px rgba(0, 0, 0, 0.48);
+}
+
+.steam-avatar-gradient-banner {
+  background:
+    radial-gradient(circle at 14% 36%, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.2)), transparent 56%),
+    radial-gradient(circle at 80% 22%, var(--steam-shell-color-d, hsla(32, 42%, 46%, 0.16)), transparent 58%),
+    radial-gradient(circle at 62% 78%, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.14)), transparent 62%),
+    color-mix(in oklab, var(--color-card) 84%, black 16%);
 }
 
 @keyframes steamBackdropDrift {

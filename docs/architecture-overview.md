@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -89,6 +89,7 @@ From `apps/web/src/App.jsx`:
 
 - `PortfolioPage` keeps visited tabs mounted (`visitedTabs` + `forceMount`).
 - In Electron, the desktop rail sidebar is mounted once in `App.jsx`; pages can opt out of local sidebar shells via `useExternalDesktopSidebarShell`.
+- Frontend color gradients must use the shared avatar-derived Steam palette variables (`--steam-shell-color-a` ... `--steam-shell-color-d`), with static values allowed only as fallback when avatar data is unavailable.
 - `usePortfolio` uses in-memory snapshots with TTL `120s`.
 - `usePortfolio` initial API load is keyed by `cacheKey` (not by snapshot object identity) to prevent self-triggered fetch loops.
 - `Watchlist` uses in-memory snapshots with TTL `120s`.

@@ -83,6 +83,13 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 - `src/localStore/` — SQLite local-first Persistenz (nur Main Process)
 - Desktop-spezifische IPC-handler
 
+## Frontend Visual-Regel (verbindlich)
+
+- Alle produktiven Color-Gradients (Shells, Sidebar, Hero/Welcome, Panels mit Brand-Farbverlauf) muessen auf der avatarbasierten Steam-Palette beruhen.
+- Quelle der Palette ist die bestehende Welcome-Logik in `packages/shared/src/components/SteamLoginPrompt.jsx` (`deriveSteamPaletteFromUser`, inkl. Komplementaerfarbe aus `complementaryHsl`).
+- Rendering erfolgt ausschliesslich ueber die CSS-Variablen `--steam-shell-color-a`, `--steam-shell-color-b`, `--steam-shell-color-c`, `--steam-shell-color-d`.
+- Harte, statische Ersatz-Gradients sind nur als Fallback erlaubt, wenn keine Avatardaten verfuegbar sind.
+
 ## Backend Leitlinien
 
 - Multi-User Scope: Service- und Repository-Methoden sollen `userId` sauber propagieren.
@@ -550,3 +557,10 @@ Updated: 2026-05-27
 Change: Updater-Flow gehaertet + Watchlist-Metrik-Fallback stabilisiert
 - `apps/desktop/main.js`: IPC `app-updater-download` fuehrt bei fehlendem `latestAvailableUpdateInfo` jetzt zuerst `checkForUpdates()` aus und liefert strukturierte Fehlergruende (`no-update-info`, `not-packaged`, `error`) statt still zu scheitern.
 - `packages/shared/src/lib/dataSource.js`: Desktop-Watchlist erkennt Sidecar-Proxy-Fallbacks bei `syncLive=true` und faellt fuer Read-Metriken einmalig auf `syncLive=false` zurueck, damit bestehende Preishistorie/Preisveraenderungen sichtbar bleiben.
+
+---
+
+Updated: 2026-05-28
+Change: Verbindliche Avatar-Palette-Regel fuer alle Color-Gradients
+- Produktive Frontend-Gradients muessen die avatarbasierte Steam-Palette (`--steam-shell-color-a` bis `--steam-shell-color-d`) verwenden.
+- Die Palette bleibt zentral ueber `deriveSteamPaletteFromUser` in `packages/shared/src/components/SteamLoginPrompt.jsx` definiert (inkl. Komplementaerfarbe).

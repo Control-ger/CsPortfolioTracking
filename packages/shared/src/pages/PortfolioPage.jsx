@@ -206,7 +206,7 @@ function getCsUpdateBannerTone(level) {
   if (level === "high") {
     return {
       wrapper:
-        "border-red-500/35 bg-gradient-to-r from-red-950/80 via-background to-amber-950/60 shadow-[0_16px_38px_rgba(127,29,29,0.35)]",
+        "steam-avatar-gradient-banner border-red-500/35 shadow-[0_16px_38px_rgba(127,29,29,0.35)]",
       eyebrow: "text-red-300",
       panel: "border-red-500/35 bg-red-950/35",
     };
@@ -215,7 +215,7 @@ function getCsUpdateBannerTone(level) {
   if (level === "medium") {
     return {
       wrapper:
-        "border-amber-500/35 bg-gradient-to-r from-amber-950/65 via-background to-card shadow-[0_14px_30px_rgba(146,64,14,0.22)]",
+        "steam-avatar-gradient-banner border-amber-500/35 shadow-[0_14px_30px_rgba(146,64,14,0.22)]",
       eyebrow: "text-amber-300",
       panel: "border-amber-500/35 bg-amber-950/30",
     };
@@ -224,7 +224,7 @@ function getCsUpdateBannerTone(level) {
   if (level === "pending") {
     return {
       wrapper:
-        "border-cyan-400/30 bg-gradient-to-r from-cyan-950/60 via-background to-card shadow-[0_12px_26px_rgba(8,47,73,0.25)]",
+        "steam-avatar-gradient-banner border-cyan-400/30 shadow-[0_12px_26px_rgba(8,47,73,0.25)]",
       eyebrow: "text-cyan-300",
       panel: "border-cyan-400/30 bg-cyan-950/30",
     };
@@ -232,7 +232,7 @@ function getCsUpdateBannerTone(level) {
 
   return {
     wrapper:
-      "border-cyan-400/25 bg-gradient-to-r from-cyan-500/12 via-background to-amber-500/12 shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
+      "steam-avatar-gradient-banner border-cyan-400/25 shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
     eyebrow: "text-cyan-300",
     panel: "border-border/70 bg-card/70",
   };
