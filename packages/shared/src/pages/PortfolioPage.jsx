@@ -17,7 +17,6 @@ import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
 import { Watchlist } from "@shared/components";
 import { ItemSearch } from "@shared/components";
-import { PortfolioGroupsPanel } from "@shared/components/PortfolioGroupsPanel.jsx";
 import { Badge } from "@shared/components";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components";
 import { Button } from "@shared/components";
@@ -713,7 +712,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [activeTab, setActiveTab] = useState(initialVisitedTab);
   const [visitedTabs, setVisitedTabs] = useState(() => new Set([initialVisitedTab]));
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
-  const [inventoryGroupFocusId, setInventoryGroupFocusId] = useState("");
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
   const [isSkinBaronSyncOpen, setIsSkinBaronSyncOpen] = useState(false);
   const [hoveredChartData, setHoveredChartData] = useState(null);
@@ -1453,15 +1451,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     return normalizedGroups;
   }, []);
 
-  const handleManageGroupsOpen = useCallback(() => {
-    if (isDesktopRuntime) {
-      setManagementSection("groups");
-      handleTabSelect("management");
-      return;
-    }
-    handleTabSelect("overview");
-  }, [handleTabSelect, isDesktopRuntime]);
-
   const resetPortfolioGroupEditor = useCallback(() => {
     setPortfolioGroupEditorId("");
     setPortfolioGroupDraft(createPortfolioGroupDraft());
@@ -1658,18 +1647,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       [clusterKey]: !current[clusterKey],
     }));
   }, []);
-
-  const handleOpenPortfolioGroupInInventory = useCallback((groupId) => {
-    const normalizedGroupId = String(groupId || "").trim();
-    if (!normalizedGroupId) {
-      return;
-    }
-
-    setInventoryScope("all");
-    setInventoryGroupFocusId(normalizedGroupId);
-    setGlobalSearchOpen(false);
-    handleTabSelect("inventory");
-  }, [handleTabSelect]);
 
   const handleOpenPortfolioGroupInManagement = useCallback((groupId) => {
     const normalizedGroupId = String(groupId || "").trim();
@@ -4797,18 +4774,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </div>
             </div>
 
-            <div className="md:col-span-2">
-              <PortfolioGroupsPanel
-                groups={portfolioGroupSummaries}
-                isLoading={portfolioGroupsLoading && portfolioGroups.length === 0}
-                formatUsdPrice={formatUsdPrice}
-                onManageGroups={handleManageGroupsOpen}
-                title="Gruppenansicht"
-                description="Deine manuellen Investment-Gruppen direkt im Inventar-Tab, inklusive gewichteter Kennzahlen und Drilldown."
-                focusGroupId={inventoryGroupFocusId}
-              />
-            </div>
-
             <div className="overflow-x-auto md:col-span-1 sm:rounded-2xl sm:border sm:border-border/70 sm:bg-card/65">
               <InventoryTable
                 investments={inventoryTabItems}
@@ -6249,7 +6214,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         {globalSearchGroupSuggestions.map((group) => {
                           const summary = group.summary || null;
                           const topVisual = Array.isArray(summary?.topVisuals) ? summary.topVisuals[0] : null;
-                          const canOpenInventory = Boolean(summary);
                           return (
                             <div
                               key={`group-search-${group.id}`}
@@ -6275,15 +6239,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={!canOpenInventory}
-                                  onClick={() => handleOpenPortfolioGroupInInventory(group.id)}
-                                >
-                                  Im Inventar
-                                </Button>
+                                {summary ? (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {summary.clusterCount} Cluster
+                                  </Badge>
+                                ) : null}
                                 <Button
                                   type="button"
                                   size="sm"
