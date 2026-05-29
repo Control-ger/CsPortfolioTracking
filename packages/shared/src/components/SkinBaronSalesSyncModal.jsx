@@ -16,7 +16,12 @@ function formatDate(value) {
     return "-";
   }
 
-  return value;
+  const parsed = Date.parse(String(value));
+  if (!Number.isFinite(parsed)) {
+    return String(value);
+  }
+
+  return new Date(parsed).toLocaleString("de-DE");
 }
 
 function Stat({ label, value, tone = "muted" }) {
@@ -73,7 +78,10 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
         ? preview.sampleTrades
         : [];
 
-    return rows.filter((trade) => String(trade?.status || "new") !== "duplicate");
+    return rows.filter((trade) => {
+      const status = String(trade?.status || "new").toLowerCase();
+      return status !== "duplicate" && status !== "excluded";
+    });
   }, [preview]);
   const hiddenDuplicateCount = useMemo(() => {
     const rows = Array.isArray(preview?.importTrades)
@@ -92,6 +100,15 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
         : [];
 
     return rows.filter((trade) => String(trade?.status || "") === "updated").length;
+  }, [preview]);
+  const hiddenExcludedCount = useMemo(() => {
+    const rows = Array.isArray(preview?.importTrades)
+      ? preview.importTrades
+      : Array.isArray(preview?.sampleTrades)
+        ? preview.sampleTrades
+        : [];
+
+    return rows.filter((trade) => String(trade?.status || "").toLowerCase() === "excluded").length;
   }, [preview]);
   const hasPreview = Boolean(preview);
 
@@ -118,7 +135,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title="SkinBaron Sales Sync"
+      title="SkinBaron Purchases Sync"
       size="full"
       className="p-0"
     >
@@ -181,7 +198,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
                     </div>
                     <div className="text-xs md:text-right">
                       {formatPrice(trade.buyPriceUsd ?? trade.buyPrice, {
-                        useUsd: true,
+                        useUsd: String(trade?.rawCurrency || "").toUpperCase() !== "EUR",
                         buyPriceUsd: trade.buyPriceUsd ?? trade.buyPrice,
                       })}
                     </div>
@@ -199,6 +216,11 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
             {hiddenDuplicateCount > 0 ? (
               <p className="text-xs text-muted-foreground">
                 {hiddenDuplicateCount} Duplikate in der Preview ausgeblendet.
+              </p>
+            ) : null}
+            {hiddenExcludedCount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {hiddenExcludedCount} ausgeschlossene Eintraege in der Preview ausgeblendet.
               </p>
             ) : null}
           </CardContent>
@@ -228,4 +250,3 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
     </BaseModal>
   );
 }
-

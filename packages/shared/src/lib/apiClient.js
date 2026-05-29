@@ -360,6 +360,16 @@ function determineDesktopPreviewTradeStatus(trade, mappedTrade, existingInvestme
     };
   }
 
+  const existingExcluded = Boolean(
+    existingInvestment?.excluded ?? existingInvestment?.isExcluded ?? false,
+  );
+  if (existingExcluded) {
+    return {
+      status: "excluded",
+      quantityDelta: 0,
+    };
+  }
+
   const incomingQuantity = Math.max(0, Number(mappedTrade?.quantity || 0));
   const existingQuantity = Math.max(0, Number(existingInvestment?.quantity || 0));
   const quantityDelta = incomingQuantity - existingQuantity;
@@ -530,6 +540,42 @@ function resolveExistingCsFloatInvestmentMatch(lookup, mappedTrade, previewTrade
   return null;
 }
 
+function resolveExistingSkinBaronInvestmentMatch(lookup, mappedTrade, previewTrade) {
+  const candidateIds = [String(mappedTrade?.id || "").trim()];
+  const legacyExternalTradeId = String(previewTrade?.legacyExternalTradeId || "").trim();
+  if (legacyExternalTradeId) {
+    candidateIds.push(`skinbaron-${legacyExternalTradeId}`);
+  }
+
+  for (const candidateId of candidateIds) {
+    if (!candidateId) {
+      continue;
+    }
+    const existingById = lookup?.byId?.get(candidateId);
+    if (existingById) {
+      return existingById;
+    }
+  }
+
+  const candidateExternalTradeIds = [
+    mappedTrade?.externalTradeId,
+    previewTrade?.externalTradeId,
+    previewTrade?.legacyExternalTradeId,
+  ];
+  for (const candidateExternalTradeId of candidateExternalTradeIds) {
+    const normalizedExternalTradeId = normalizeImportIdentifier(candidateExternalTradeId);
+    if (!normalizedExternalTradeId) {
+      continue;
+    }
+    const existingByTradeId = lookup?.byExternalTradeId?.get(normalizedExternalTradeId);
+    if (existingByTradeId) {
+      return existingByTradeId;
+    }
+  }
+
+  return null;
+}
+
 async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
   const localStore = getDesktopLocalStore();
   if (!localStore) {
@@ -621,25 +667,11 @@ async function applyDesktopSkinBaronPreviewDeduplication(previewResponse) {
       await localStore.listInvestments(userId),
       "local-store-list-investments",
     );
-    const existingInvestmentsById = new Map();
-    (Array.isArray(investments) ? investments : []).forEach((entry) => {
-      const investmentId = String(entry?.id || "").trim();
-      if (investmentId) {
-        existingInvestmentsById.set(investmentId, entry);
-      }
-    });
+    const existingLookup = buildExistingInvestmentLookup(investments, "skinbaron");
 
     const enrichedImportTrades = importTrades.map((trade) => {
       const mapped = mapSkinBaronPreviewSaleToInvestment(trade);
-      const candidateIds = [String(mapped.id || "").trim()];
-      const legacyExternalTradeId = String(trade?.legacyExternalTradeId || "").trim();
-      if (legacyExternalTradeId) {
-        candidateIds.push(`skinbaron-${legacyExternalTradeId}`);
-      }
-
-      const existingMatch = candidateIds
-        .map((candidateId) => existingInvestmentsById.get(candidateId))
-        .find(Boolean);
+      const existingMatch = resolveExistingSkinBaronInvestmentMatch(existingLookup, mapped, trade);
       const { status, quantityDelta } = determineDesktopPreviewTradeStatus(trade, mapped, existingMatch || null);
 
       return {
@@ -787,6 +819,10 @@ export async function executeCsFloatTradeSync(payload = {}) {
     let duplicates = 0;
 
     for (const trade of trades) {
+      if (String(trade?.status || "").toLowerCase() === "excluded") {
+        continue;
+      }
+
       const row = {
         ...mapCsFloatPreviewTradeToInvestment(trade),
         bucket: targetBucket,
@@ -925,21 +961,24 @@ export async function executeSkinBaronTradeSync(payload = {}) {
       : Array.isArray(preview?.data?.sampleTrades)
         ? preview.data.sampleTrades
         : [];
-    const rows = trades.map((trade) => ({
-      ...mapSkinBaronPreviewSaleToInvestment(trade),
-      bucket: targetBucket,
-    }));
+    const investments = unwrapLocalStoreResult(
+      await localStore.listInvestments(userId),
+      "local-store-list-investments",
+    );
+    const existingLookup = buildExistingInvestmentLookup(investments, "skinbaron");
     let inserted = 0;
     let duplicates = 0;
 
-    for (const row of rows) {
-      const investmentId = String(row?.id || "");
-      const existing = investmentId
-        ? unwrapLocalStoreResult(
-            await localStore.getInvestment(investmentId),
-            "local-store-get-investment",
-          )
-        : null;
+    for (const trade of trades) {
+      if (String(trade?.status || "").toLowerCase() === "excluded") {
+        continue;
+      }
+
+      const row = {
+        ...mapSkinBaronPreviewSaleToInvestment(trade),
+        bucket: targetBucket,
+      };
+      const existing = resolveExistingSkinBaronInvestmentMatch(existingLookup, row, trade);
 
       unwrapLocalStoreResult(
         await localStore.upsertInvestment({
@@ -955,6 +994,15 @@ export async function executeSkinBaronTradeSync(payload = {}) {
         duplicates += 1;
       } else {
         inserted += 1;
+      }
+
+      const rowId = String(row?.id || "").trim();
+      if (rowId) {
+        existingLookup.byId.set(rowId, row);
+      }
+      const externalTradeId = normalizeImportIdentifier(row?.externalTradeId);
+      if (externalTradeId) {
+        existingLookup.byExternalTradeId.set(externalTradeId, row);
       }
     }
 
@@ -1172,6 +1220,22 @@ export async function updateSkinBaronApiKey(apiKeyOrEncryptedKey) {
   }
 
   throw new Error("SkinBaron API Key updates are only supported in the Desktop app.");
+}
+
+export async function updateSkinBaronSessionCookie(sessionCookie) {
+  const desktopSecrets = getDesktopSecrets();
+  if (desktopSecrets?.setSkinBaronSessionCookie) {
+    const result = await desktopSecrets.setSkinBaronSessionCookie(sessionCookie);
+
+    return {
+      data: result?.status || result,
+      meta: {
+        source: "desktop-safe-storage",
+      },
+    };
+  }
+
+  throw new Error("SkinBaron Session-Cookie updates are only supported in the Desktop app.");
 }
 
 export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds = []) {

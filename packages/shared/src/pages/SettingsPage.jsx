@@ -19,6 +19,7 @@ import {
   updateCsFloatApiKey,
   fetchSkinBaronApiKeyStatus,
   updateSkinBaronApiKey,
+  updateSkinBaronSessionCookie,
   fetchPriceSourcePreference,
   updatePriceSourcePreference,
   fetchWebPushPublicKey,
@@ -114,10 +115,19 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     lastFour: null,
     capabilities: {},
     checkedAt: null,
+    sessionCookieConfigured: false,
+    sessionCookieHasAuthId: false,
+    sessionCookieLastFour: null,
+    sessionCookieCheckedAt: null,
+    sessionCookieAccess: { allowed: false, statusCode: null, message: null },
+    importReady: false,
   });
   const [showSkinBaronApiKey, setShowSkinBaronApiKey] = useState(false);
   const [skinBaronApiKeyError, setSkinBaronApiKeyError] = useState("");
   const [skinBaronApiKeySuccess, setSkinBaronApiKeySuccess] = useState("");
+  const [skinBaronSessionCookie, setSkinBaronSessionCookie] = useState("");
+  const [showSkinBaronSessionCookie, setShowSkinBaronSessionCookie] = useState(false);
+  const [skinBaronSessionSaving, setSkinBaronSessionSaving] = useState(false);
   const [encryptionReady, setEncryptionReady] = useState(false);
   const [priceSourceMode, setPriceSourceMode] = useState("auto");
   const [priceSourceSaving, setPriceSourceSaving] = useState(false);
@@ -200,6 +210,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           lastFour: null,
           capabilities: {},
           checkedAt: null,
+          sessionCookieConfigured: false,
+          sessionCookieHasAuthId: false,
+          sessionCookieLastFour: null,
+          sessionCookieCheckedAt: null,
+          sessionCookieAccess: { allowed: false, statusCode: null, message: null },
+          importReady: false,
         };
         setSkinBaronApiKeyStatus({
           configured: Boolean(skinBaronStatus?.configured || skinBaronStatus?.hasKey),
@@ -209,6 +225,15 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               ? skinBaronStatus.capabilities
               : {},
           checkedAt: skinBaronStatus?.checkedAt || null,
+          sessionCookieConfigured: Boolean(skinBaronStatus?.sessionCookieConfigured),
+          sessionCookieHasAuthId: Boolean(skinBaronStatus?.sessionCookieHasAuthId),
+          sessionCookieLastFour: skinBaronStatus?.sessionCookieLastFour || null,
+          sessionCookieCheckedAt: skinBaronStatus?.sessionCookieCheckedAt || null,
+          sessionCookieAccess:
+            skinBaronStatus?.sessionCookieAccess && typeof skinBaronStatus.sessionCookieAccess === "object"
+              ? skinBaronStatus.sessionCookieAccess
+              : { allowed: false, statusCode: null, message: null },
+          importReady: Boolean(skinBaronStatus?.importReady),
         });
         const priceSourceData = priceSourceResponse?.data || {};
         setPriceSourceMode(normalizePriceSourceMode(priceSourceData.mode));
@@ -294,6 +319,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
   const handleSkinBaronApiKeyChange = (event) => {
     setSkinBaronApiKey(event.target.value);
+    setSkinBaronApiKeyError("");
+    setSkinBaronApiKeySuccess("");
+  };
+
+  const handleSkinBaronSessionCookieChange = (event) => {
+    setSkinBaronSessionCookie(event.target.value);
     setSkinBaronApiKeyError("");
     setSkinBaronApiKeySuccess("");
   };
@@ -392,6 +423,50 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setSkinBaronApiKeyError(err.message || "Fehler beim Aktualisieren des API Keys.");
     } finally {
       setSkinBaronApiKeySaving(false);
+    }
+  };
+
+  const handleUpdateSkinBaronSessionCookie = async () => {
+    try {
+      setSkinBaronSessionSaving(true);
+      setSkinBaronApiKeyError("");
+      setSkinBaronApiKeySuccess("");
+
+      if (!desktopRuntime) {
+        setSkinBaronApiKeyError("SkinBaron Session-Cookie kann nur in der Desktop-App gesetzt werden.");
+        return;
+      }
+
+      const trimmedCookie = skinBaronSessionCookie.trim();
+      await updateSkinBaronSessionCookie(trimmedCookie);
+
+      setSkinBaronApiKeySuccess("Session-Cookie wurde gespeichert und der Purchases-Zugriff wurde erfolgreich geprueft.");
+      setSkinBaronSessionCookie("");
+
+      const statusResponse = await fetchSkinBaronApiKeyStatus();
+      const nextStatus = statusResponse?.data || statusResponse || {};
+      setSkinBaronApiKeyStatus({
+        configured: Boolean(nextStatus?.configured || nextStatus?.hasKey),
+        lastFour: nextStatus?.lastFour || null,
+        capabilities:
+          nextStatus?.capabilities && typeof nextStatus.capabilities === "object"
+            ? nextStatus.capabilities
+            : {},
+        checkedAt: nextStatus?.checkedAt || null,
+        sessionCookieConfigured: Boolean(nextStatus?.sessionCookieConfigured),
+        sessionCookieHasAuthId: Boolean(nextStatus?.sessionCookieHasAuthId),
+        sessionCookieLastFour: nextStatus?.sessionCookieLastFour || null,
+        sessionCookieCheckedAt: nextStatus?.sessionCookieCheckedAt || null,
+        sessionCookieAccess:
+          nextStatus?.sessionCookieAccess && typeof nextStatus.sessionCookieAccess === "object"
+            ? nextStatus.sessionCookieAccess
+            : { allowed: false, statusCode: null, message: null },
+        importReady: Boolean(nextStatus?.importReady),
+      });
+    } catch (err) {
+      setSkinBaronApiKeyError(err.message || "Fehler beim Speichern des Session-Cookies.");
+    } finally {
+      setSkinBaronSessionSaving(false);
     }
   };
 
@@ -1164,15 +1239,16 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     ];
 
     const capabilities = skinBaronApiKeyStatus?.capabilities || {};
-    const getSalesAllowed = capabilities?.getSales?.allowed === true;
-    const readOnlyImportReady = Boolean(skinBaronApiKeyStatus.configured) && getSalesAllowed;
+    const sessionCookieAccess = skinBaronApiKeyStatus?.sessionCookieAccess || {};
+    const readOnlyImportReady = skinBaronApiKeyStatus?.importReady === true
+      || sessionCookieAccess?.allowed === true;
 
     return (
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <Key className="h-5 w-5" />
-            <CardTitle>SkinBaron API Key</CardTitle>
+            <CardTitle>SkinBaron Zugriff</CardTitle>
             {skinBaronApiKeyStatus.configured && (
               <Badge variant="outline" className="ml-auto border-emerald-400/35 text-emerald-300">
                 Konfiguriert
@@ -1180,7 +1256,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             )}
           </div>
           <CardDescription>
-            Key wird lokal verschluesselt gespeichert. Beim Speichern pruefen wir automatisch die API-Rechte.
+            SkinBaron-Zugangsdaten werden lokal verschluesselt gespeichert. Fuer den Import nutzen wir Purchases ueber Session-Cookie.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1195,11 +1271,65 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               {readOnlyImportReady ? "Read-only Preset: Import bereit" : "Read-only Preset: Import noch nicht bereit"}
             </p>
             <p className="mt-1 text-xs text-current/90">
-              Voraussetzung ist mindestens <span className="font-semibold">GetSales</span>.{" "}
+              Voraussetzung ist ein gueltiger <span className="font-semibold">SkinBaron Session-Cookie (AUTHID)</span>.{" "}
               {readOnlyImportReady
                 ? "Der SkinBaron-Import kann jetzt genutzt werden."
-                : "Bitte API-Rechte pruefen oder erweitern."}
+                : "Bitte Session-Cookie pruefen oder neu setzen."}
             </p>
+          </div>
+
+          <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">Session-Cookie fuer Purchases</p>
+              <Badge
+                variant="outline"
+                className={readOnlyImportReady ? "border-emerald-400/35 text-emerald-300" : "border-amber-400/35 text-amber-300"}
+              >
+                {readOnlyImportReady ? "Import Ready" : "Nicht bereit"}
+              </Badge>
+            </div>
+
+            {skinBaronApiKeyStatus?.sessionCookieConfigured ? (
+              <div className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-2 text-xs text-muted-foreground">
+                AUTHID ...{skinBaronApiKeyStatus.sessionCookieLastFour || "----"}
+                {skinBaronApiKeyStatus?.sessionCookieCheckedAt
+                  ? ` | letzter Purchases-Check: ${new Date(skinBaronApiKeyStatus.sessionCookieCheckedAt).toLocaleString("de-DE")}`
+                  : ""}
+                {sessionCookieAccess?.message ? ` | ${sessionCookieAccess.message}` : ""}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Noch kein Session-Cookie gespeichert. Bitte `AUTHID=...` aus einer aktiven SkinBaron-Websession hinterlegen.
+              </p>
+            )}
+
+            <div className="relative">
+              <Input
+                type={showSkinBaronSessionCookie ? "text" : "password"}
+                value={skinBaronSessionCookie}
+                onChange={handleSkinBaronSessionCookieChange}
+                placeholder="AUTHID=..."
+                disabled={skinBaronSessionSaving || !encryptionReady}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSkinBaronSessionCookie(!showSkinBaronSessionCookie)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                disabled={skinBaronSessionSaving}
+              >
+                {showSkinBaronSessionCookie ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                onClick={handleUpdateSkinBaronSessionCookie}
+                disabled={skinBaronSessionSaving || !encryptionReady || !skinBaronSessionCookie.trim()}
+              >
+                {skinBaronSessionSaving ? "Prueft + speichert..." : "Session-Cookie Speichern"}
+              </Button>
+            </div>
           </div>
 
           {skinBaronApiKeyError && (
@@ -1232,7 +1362,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
           <div className="space-y-3">
             <label className="text-sm font-medium">
-              {skinBaronApiKeyStatus.configured ? "Neuen Key eingeben" : "API Key eingeben"}
+              {skinBaronApiKeyStatus.configured ? "Neuen API-Key eingeben (optional)" : "API-Key eingeben (optional)"}
             </label>
             <div className="relative">
               <Input
@@ -1257,14 +1387,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Import benoetigt mindestens die Capability <span className="font-medium">GetSales</span>.
+              Hinweis: Der API-Key ist optional (z. B. fuer Balance/Legacy-Checks). Der eigentliche Import nutzt den Session-Cookie.
             </p>
           </div>
 
           <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
             <p className="text-xs font-semibold uppercase text-muted-foreground">Rechte-Check</p>
             <p className="text-[11px] text-muted-foreground">
-              Hinweis: SkinBaron API ist auf 10 Requests/Sekunde limitiert. Import nutzt deshalb gedrosselte Seitenabrufe.
+              Hinweis: API-Checks sind weiterhin verfuegbar, beeinflussen aber nicht mehr die Purchases-Import-Quelle.
             </p>
             {capabilityRows.map((row) => {
               const capability = capabilities?.[row.id] || null;

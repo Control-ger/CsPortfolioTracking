@@ -74,16 +74,22 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         ? preview.sampleTrades
         : [];
 
-    return rows.filter((trade) => String(trade?.status || "new") !== "duplicate");
+    return rows.filter((trade) => {
+      const status = String(trade?.status || "new").toLowerCase();
+      return status !== "duplicate" && status !== "excluded";
+    });
   }, [preview]);
-  const hiddenDuplicateCount = useMemo(() => {
+  const hiddenIgnoredCount = useMemo(() => {
     const rows = Array.isArray(preview?.importTrades)
       ? preview.importTrades
       : Array.isArray(preview?.sampleTrades)
         ? preview.sampleTrades
         : [];
 
-    return rows.filter((trade) => String(trade?.status || "") === "duplicate").length;
+    return rows.filter((trade) => {
+      const status = String(trade?.status || "").toLowerCase();
+      return status === "duplicate" || status === "excluded";
+    }).length;
   }, [preview]);
   const updatedCount = useMemo(() => {
     const rows = Array.isArray(preview?.importTrades)
@@ -231,9 +237,9 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 ))}
               </div>
             )}
-            {hiddenDuplicateCount > 0 ? (
+            {hiddenIgnoredCount > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {hiddenDuplicateCount} Duplikate in der Preview ausgeblendet.
+                {hiddenIgnoredCount} Duplikate/Excluded in der Preview ausgeblendet.
               </p>
             ) : null}
           </CardContent>

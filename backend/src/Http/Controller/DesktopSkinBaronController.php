@@ -10,7 +10,6 @@ use App\Shared\Http\Request;
 final class DesktopSkinBaronController
 {
     private const MIN_REQUEST_INTERVAL_US = 120000; // ~8.3 req/s (below 10 req/s limit)
-    private const SALES_TYPES = [1, 2, 3, 4, 5, 6, 7];
 
     public function __construct(private readonly SkinBaronClient $client)
     {
@@ -18,113 +17,130 @@ final class DesktopSkinBaronController
 
     public function preview(Request $request): void
     {
-        $limit = $this->readInt($request, 'limit', 100, 1, 200);
-        $maxPages = $this->readInt($request, 'maxPages', 10, 1, 25);
+        $maxItems = $this->readInt($request, 'limit', 100, 1, 1000);
+        $maxPages = $this->readInt($request, 'maxPages', 10, 1, 50);
+        $searchString = trim((string) ($request->body['searchString'] ?? $request->query['searchString'] ?? ''));
 
-        $salesById = [];
-        $salesWithoutId = [];
+        $groupsByTransferId = [];
+        $groupsWithoutTransferId = [];
         $pageStats = [];
         $errors = [];
         $requestCount = 0;
 
-        foreach (self::SALES_TYPES as $saleType) {
-            $cursor = null;
-            for ($page = 0; $page < $maxPages; $page++) {
-                if ($requestCount > 0) {
-                    usleep(self::MIN_REQUEST_INTERVAL_US);
-                }
-                $requestCount += 1;
+        for ($page = 1; $page <= $maxPages; $page++) {
+            if ($requestCount > 0) {
+                usleep(self::MIN_REQUEST_INTERVAL_US);
+            }
+            $requestCount += 1;
 
-                $result = $this->client->fetchSalesPage($limit, $cursor, $saleType);
-                if (!empty($result['error'])) {
-                    $errors[] = [
-                        ...$result['error'],
-                        'saleType' => $saleType,
-                        'page' => $page,
-                    ];
-                    break;
-                }
-
-                $pageSales = is_array($result['sales'] ?? null) ? $result['sales'] : [];
-                $pageStats[] = [
-                    'type' => $saleType,
+            $result = $this->client->fetchPurchasesPage($page, $searchString);
+            if (!empty($result['error'])) {
+                $errors[] = [
+                    ...$result['error'],
                     'page' => $page,
-                    'count' => count($pageSales),
                 ];
+                break;
+            }
 
-                foreach ($pageSales as $sale) {
-                    if (!is_array($sale)) {
-                        $salesWithoutId[] = $sale;
-                        continue;
-                    }
+            $pageGroups = is_array($result['purchaseGroups'] ?? null) ? $result['purchaseGroups'] : [];
+            $pagination = is_array($result['pagination'] ?? null) ? $result['pagination'] : null;
+            $pageStats[] = [
+                'page' => $page,
+                'count' => count($pageGroups),
+                'numPages' => (int) ($pagination['numPages'] ?? 0),
+                'total' => (int) ($pagination['total'] ?? 0),
+            ];
 
-                    $saleId = $this->readString($sale, ['id']);
-                    if ($saleId === null) {
-                        $salesWithoutId[] = $sale;
-                        continue;
-                    }
-
-                    if (
-                        !isset($salesById[$saleId]) ||
-                        $this->shouldReplaceSaleRecord($salesById[$saleId], $sale)
-                    ) {
-                        $salesById[$saleId] = $sale;
-                    }
+            foreach ($pageGroups as $group) {
+                if (!is_array($group)) {
+                    $groupsWithoutTransferId[] = $group;
+                    continue;
                 }
 
-                if (count($pageSales) < $limit) {
-                    break;
+                $transferId = $this->readString($group, ['transferId']);
+                if ($transferId === null) {
+                    $groupsWithoutTransferId[] = $group;
+                    continue;
                 }
 
-                $lastId = $this->readString($pageSales[count($pageSales) - 1] ?? [], ['id']);
-                if ($lastId === null) {
-                    break;
+                if (!isset($groupsByTransferId[$transferId])) {
+                    $groupsByTransferId[$transferId] = $group;
                 }
-                $cursor = $lastId;
+            }
+
+            if (count($pageGroups) === 0) {
+                break;
+            }
+
+            $numPages = (int) ($pagination['numPages'] ?? 0);
+            if ($numPages > 0 && $page >= $numPages) {
+                break;
             }
         }
 
-        $sales = array_merge(array_values($salesById), $salesWithoutId);
+        $purchaseGroups = array_merge(array_values($groupsByTransferId), $groupsWithoutTransferId);
         $importTrades = [];
         $skipped = 0;
-        foreach ($sales as $sale) {
-            if (!is_array($sale)) {
+        $skipReasons = [];
+        $groupIndex = 0;
+        foreach ($purchaseGroups as $group) {
+            if (count($importTrades) >= $maxItems) {
+                break;
+            }
+
+            if (!is_array($group)) {
                 $skipped += 1;
+                $this->addSkipReason($skipReasons, 'invalid_group_payload');
                 continue;
             }
-            $mapped = $this->mapSalePreviewRow($sale);
-            if ($mapped === null) {
+
+            $state = strtoupper((string) ($this->readString($group, ['state']) ?? ''));
+            if ($state !== 'SUCCEEDED') {
                 $skipped += 1;
+                $this->addSkipReason($skipReasons, 'group_state_not_succeeded');
                 continue;
             }
-            $importTrades[] = $mapped;
+
+            $rows = $this->mapPurchaseGroupPreviewRows($group, $groupIndex);
+            $groupIndex += 1;
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    $skipped += 1;
+                    $this->addSkipReason($skipReasons, 'invalid_item_payload');
+                    continue;
+                }
+                if (count($importTrades) >= $maxItems) {
+                    break;
+                }
+                $importTrades[] = $row;
+            }
         }
 
         JsonResponseFactory::success([
             'mode' => 'preview',
             'desktopLocal' => true,
             'requested' => [
-                'limit' => $limit,
+                'limit' => $maxItems,
                 'maxPages' => $maxPages,
-                'type' => 'sales',
-                'salesTypes' => self::SALES_TYPES,
+                'searchString' => $searchString,
+                'type' => 'purchases',
             ],
             'pagesFetched' => count($pageStats),
             'pageStats' => $pageStats,
-            'totalFetched' => count($sales),
+            'totalFetched' => count($purchaseGroups),
             'normalizedCount' => count($importTrades),
             'insertable' => count($importTrades),
             'duplicates' => 0,
             'updated' => 0,
             'skipped' => $skipped,
-            'skipReasons' => $skipped > 0 ? ['invalid_sale_payload' => $skipped] : [],
+            'skipReasons' => $skipReasons,
             'sampleTrades' => array_slice($importTrades, 0, 20),
             'importTrades' => $importTrades,
-            'rawCount' => count($sales),
-            'rawDistinctBySaleId' => count($salesById),
-            'rawWithoutSaleId' => count($salesWithoutId),
+            'rawCount' => count($purchaseGroups),
+            'rawDistinctByTransferId' => count($groupsByTransferId),
+            'rawWithoutTransferId' => count($groupsWithoutTransferId),
             'errors' => $errors,
-            'rawTrades' => $sales,
+            'rawTrades' => $purchaseGroups,
         ]);
     }
 
@@ -138,37 +154,77 @@ final class DesktopSkinBaronController
         );
     }
 
-    private function mapSalePreviewRow(array $sale): ?array
+    private function mapPurchaseGroupPreviewRows(array $group, int $groupIndex): array
     {
-        $saleId = $this->readString($sale, ['id']);
-        $name = $this->readString($sale, ['name'])
-            ?? $this->readString($sale, ['market_name'])
-            ?? $this->readString($sale, ['marketHashName']);
-        if ($saleId === null || $name === null) {
-            return null;
+        $items = $this->readPath($group, ['purchaseItems']);
+        if (!is_array($items) || $items === []) {
+            return [];
         }
 
-        $listTimeUnix = $this->readNumeric($sale, ['list_time']);
-        $lastUpdatedUnix = $this->readNumeric($sale, ['last_updated']);
+        $transferId = $this->readString($group, ['transferId']) ?? sprintf('group-%d', $groupIndex + 1);
+        $formattedDate = $this->readString($group, ['formattedDate']);
+        $purchasedAt = $this->parseGermanDateToIso($formattedDate);
+        $paymentOption = $this->readString($group, ['paymentOption']);
+        $state = strtoupper((string) ($this->readString($group, ['state']) ?? 'SUCCEEDED'));
+        $rows = [];
 
-        return [
-            'externalTradeId' => $saleId,
-            'status' => 'new',
-            'name' => $name,
-            'marketHashName' => $name,
-            'type' => 'skin',
-            'typeLabel' => 'SkinBaron Sale',
-            'quantity' => 1,
-            'buyPrice' => $this->readNumeric($sale, ['price']) ?? 0.0,
-            'buyPriceTotal' => $this->readNumeric($sale, ['price']) ?? 0.0,
-            'buyPriceUsd' => $this->readNumeric($sale, ['price']) ?? 0.0,
-            'purchasedAt' => $this->unixToIso($listTimeUnix) ?? $this->unixToIso($lastUpdatedUnix),
-            'fundingMode' => 'wallet_funded',
-            'imageUrl' => null,
-            'rawCurrency' => 'USD',
-            'skinBaronSaleId' => $saleId,
-            'skinBaronState' => (int) ($this->readNumeric($sale, ['state']) ?? 0),
-        ];
+        foreach ($items as $itemIndex => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            if (($item['reverted'] ?? false) === true) {
+                continue;
+            }
+
+            $name = $this->readString($item, ['localizedName'])
+                ?? $this->readString($item, ['marketHashName'])
+                ?? $this->readString($item, ['name']);
+            if ($name === null) {
+                continue;
+            }
+
+            $amount = (int) round($this->readNumeric($item, ['amount']) ?? 1.0);
+            if ($amount <= 0) {
+                $amount = 1;
+            }
+
+            $unitPrice = $this->readNumeric($item, ['price']) ?? 0.0;
+            $totalPrice = $unitPrice * $amount;
+            $offerLink = $this->readString($item, ['offerLink']) ?? '';
+            $externalTradeId = $this->buildPurchaseItemExternalTradeId(
+                $transferId,
+                $offerLink,
+                $name,
+                $unitPrice,
+                $amount,
+                $groupIndex,
+                (int) $itemIndex
+            );
+
+            $rows[] = [
+                'externalTradeId' => $externalTradeId,
+                'status' => 'new',
+                'name' => $name,
+                'marketHashName' => $name,
+                'type' => $this->inferTypeFromName($name),
+                'typeLabel' => 'SkinBaron Purchase',
+                'quantity' => $amount,
+                'buyPrice' => $unitPrice,
+                'buyPriceTotal' => $totalPrice,
+                'buyPriceUsd' => $unitPrice,
+                'purchasedAt' => $purchasedAt,
+                'fundingMode' => $paymentOption !== null ? strtolower($paymentOption) : 'wallet_funded',
+                'imageUrl' => $this->readString($item, ['imageUrl']),
+                'rawCurrency' => 'EUR',
+                'skinBaronSaleId' => $transferId,
+                'skinBaronTransferId' => $transferId,
+                'skinBaronState' => $state,
+                'skinBaronOfferLink' => $offerLink !== '' ? $offerLink : null,
+            ];
+        }
+
+        return $rows;
     }
 
     private function readInt(Request $request, string $key, int $default, int $min, int $max): int
@@ -210,28 +266,63 @@ final class DesktopSkinBaronController
         return (float) $value;
     }
 
-    private function unixToIso(?float $value): ?string
+    private function parseGermanDateToIso(?string $value): ?string
     {
-        if ($value === null || $value <= 0) {
+        if ($value === null || trim($value) === '') {
             return null;
         }
-        return gmdate('c', (int) round($value));
+
+        $normalized = trim($value);
+        $formats = ['d.m.Y H:i', 'd.m.Y H:i:s'];
+        foreach ($formats as $format) {
+            $date = \DateTimeImmutable::createFromFormat($format, $normalized, new \DateTimeZone('Europe/Berlin'));
+            if ($date !== false) {
+                return $date->setTimezone(new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM);
+            }
+        }
+
+        return null;
     }
 
-    private function shouldReplaceSaleRecord(array $existing, array $incoming): bool
+    private function buildPurchaseItemExternalTradeId(
+        string $transferId,
+        string $offerLink,
+        string $name,
+        float $unitPrice,
+        int $amount,
+        int $groupIndex,
+        int $itemIndex
+    ): string {
+        $signature = implode('|', [
+            $transferId,
+            $offerLink,
+            $name,
+            number_format($unitPrice, 8, '.', ''),
+            $amount,
+            $groupIndex,
+            $itemIndex,
+        ]);
+        return sprintf('%s-%s', $transferId, substr(sha1($signature), 0, 16));
+    }
+
+    private function addSkipReason(array &$skipReasons, string $reason): void
     {
-        $existingUpdated = $this->readNumeric($existing, ['last_updated']) ?? 0.0;
-        $incomingUpdated = $this->readNumeric($incoming, ['last_updated']) ?? 0.0;
-        if ($incomingUpdated !== $existingUpdated) {
-            return $incomingUpdated > $existingUpdated;
+        $skipReasons[$reason] = (int) ($skipReasons[$reason] ?? 0) + 1;
+    }
+
+    private function inferTypeFromName(string $name): string
+    {
+        $normalized = strtolower(trim($name));
+        if (str_starts_with($normalized, 'sticker |')) {
+            return 'sticker';
+        }
+        if (str_starts_with($normalized, 'music kit |')) {
+            return 'music_kit';
+        }
+        if (str_starts_with($normalized, 'case')) {
+            return 'case';
         }
 
-        $existingListed = $this->readNumeric($existing, ['list_time']) ?? 0.0;
-        $incomingListed = $this->readNumeric($incoming, ['list_time']) ?? 0.0;
-        if ($incomingListed !== $existingListed) {
-            return $incomingListed > $existingListed;
-        }
-
-        return false;
+        return 'skin';
     }
 }

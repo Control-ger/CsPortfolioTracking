@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getSkinBaronApiKeyStatus: () => ipcRenderer.invoke("secret-skinbaron-status"),
     setSkinBaronApiKey: (apiKey) => ipcRenderer.invoke("secret-skinbaron-set", apiKey),
     clearSkinBaronApiKey: () => ipcRenderer.invoke("secret-skinbaron-clear"),
+    getSkinBaronSessionStatus: () => ipcRenderer.invoke("secret-skinbaron-session-status"),
+    setSkinBaronSessionCookie: (sessionCookie) => ipcRenderer.invoke("secret-skinbaron-session-set", sessionCookie),
+    clearSkinBaronSessionCookie: () => ipcRenderer.invoke("secret-skinbaron-session-clear"),
   },
   
   // IPC event bridge

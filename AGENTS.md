@@ -589,3 +589,12 @@ Updated: 2026-05-29
 Change: SkinBaron Preview-Abdeckung fuer GetSales-States erweitert
 - `DesktopSkinBaronController` laedt fuer die Preview jetzt `GetSales` ueber alle dokumentierten `type`-States (`1..7`) statt implizit nur Teilmengen.
 - Responses werden pro `saleId` dedupliziert (bevorzugt neuere `last_updated`/`list_time` Datensaetze), damit die Preview keine state-uebergreifenden Doppelzeilen zeigt.
+
+---
+
+Updated: 2026-05-29
+Change: SkinBaron Import auf Purchases + Session-Cookie umgestellt
+- Electron Main speichert zusaetzlich einen SkinBaron Session-Cookie (AUTHID) lokal verschluesselt via `safeStorage` und prueft beim Speichern den Zugriff auf `https://skinbaron.de/api/v2/Purchases`.
+- Desktop-Sidecar/Backend nutzen fuer den SkinBaron-Preview jetzt den Purchases-Endpoint (statt `GetSales`) und flatten `purchaseGroups[*].purchaseItems[*]` zu importierbaren Einzelzeilen.
+- Preview filtert auf `state=SUCCEEDED`, erzeugt stabile `externalTradeId`s pro Purchase-Item und liefert damit die erwartete Vollstaendigkeit fuer Kauf-Historie.
+- Desktop-Settings zeigen Import-Readiness ueber Session-Cookie separat vom optionalen SkinBaron API-Key an.

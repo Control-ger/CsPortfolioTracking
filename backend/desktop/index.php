@@ -138,14 +138,20 @@ $router->register('POST', '/api/v1/settings/csfloat-api-key', static function ()
 
 $router->register('GET', '/api/v1/settings/skinbaron-api-key', static function (): void {
     $apiKey = getenv('SKINBARON_API_KEY') ?: ($_ENV['SKINBARON_API_KEY'] ?? '');
+    $sessionCookie = getenv('SKINBARON_SESSION_COOKIE') ?: ($_ENV['SKINBARON_SESSION_COOKIE'] ?? '');
     $hasConfiguredKey = is_string($apiKey)
         && trim($apiKey) !== ''
         && !in_array(strtolower(trim($apiKey)), ['expired', 'replace-with-skinbaron-api-key'], true);
+    $hasSessionCookie = is_string($sessionCookie) && trim($sessionCookie) !== '';
+    $sessionHasAuthId = $hasSessionCookie && preg_match('/authid\s*=/i', (string) $sessionCookie) === 1;
 
     JsonResponseFactory::success([
         'hasKey' => $hasConfiguredKey,
         'source' => $hasConfiguredKey ? 'electron-safe-storage' : 'missing',
         'desktopLocal' => true,
+        'sessionCookieConfigured' => $hasSessionCookie,
+        'sessionCookieHasAuthId' => $sessionHasAuthId,
+        'importReady' => $hasSessionCookie && $sessionHasAuthId,
     ]);
 });
 
