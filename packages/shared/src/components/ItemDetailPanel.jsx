@@ -88,7 +88,7 @@ export const ItemDetailPanel = ({
   onBucketChange,
   canToggleExclude = true,
 }) => {
-  const { formatPrice } = useCurrency();
+  const { currency, formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
@@ -340,12 +340,12 @@ export const ItemDetailPanel = ({
                   >
                     {showAbsolute ? (
                       <>
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">EUR</span>
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">{currency}</span>
                         <span className="text-muted-foreground/50">%</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-muted-foreground/50">EUR</span>
+                        <span className="text-muted-foreground/50">{currency}</span>
                         <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">%</span>
                       </>
                     )}

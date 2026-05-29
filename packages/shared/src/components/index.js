@@ -24,6 +24,7 @@ export { PortfolioHeaderCard } from './PortfolioHeaderCard.jsx';
 export { PriceSourceBadge } from './PriceSourceBadge.jsx';
 export { StatCard } from './StatsCards.jsx';
 export { SteamLoginPrompt } from './SteamLoginPrompt.jsx';
+export { SkinBaronSalesSyncModal } from './SkinBaronSalesSyncModal.jsx';
 export { ThemeToggle } from './ThemeToggle.jsx';
 export { Titlebar } from './Titlebar.jsx';
 export { UserMenu } from './UserMenu.jsx';

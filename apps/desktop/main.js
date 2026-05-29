@@ -70,6 +70,8 @@ const sessionFileName = "session.json";
 const serverConfigFileName = "server-config.json";
 const secretsDirName = "secrets";
 const csFloatApiKeyFileName = "csfloat-api-key.bin";
+const skinBaronApiKeyFileName = "skinbaron-api-key.bin";
+const skinBaronCapabilitiesFileName = "skinbaron-capabilities.json";
 const encryptionKeyFileName = "encryption-key.bin";
 let createLocalStore = null;
 let localStore = null;
@@ -365,6 +367,14 @@ function getCsFloatApiKeyFilePath() {
   return path.join(getSecretsDirPath(), csFloatApiKeyFileName);
 }
 
+function getSkinBaronApiKeyFilePath() {
+  return path.join(getSecretsDirPath(), skinBaronApiKeyFileName);
+}
+
+function getSkinBaronCapabilitiesFilePath() {
+  return path.join(getSecretsDirPath(), skinBaronCapabilitiesFileName);
+}
+
 function getEncryptionKeyFilePath() {
   return path.join(getSecretsDirPath(), encryptionKeyFileName);
 }
@@ -462,6 +472,7 @@ function buildSidecarEnv(extraEnv = {}) {
     ...process.env,
   };
   const localCsFloatApiKey = getStoredCsFloatApiKey();
+  const localSkinBaronApiKey = getStoredSkinBaronApiKey();
   const encryptionKey = getOrCreateEncryptionKey();
 
   merged.APP_ENV = merged.APP_ENV || "desktop";
@@ -470,6 +481,9 @@ function buildSidecarEnv(extraEnv = {}) {
   merged.DESKTOP_STATE_DIR = app.getPath("userData");
   if (localCsFloatApiKey) {
     merged.CSFLOAT_API_KEY = localCsFloatApiKey;
+  }
+  if (localSkinBaronApiKey) {
+    merged.SKINBARON_API_KEY = localSkinBaronApiKey;
   }
   if (encryptionKey) {
     merged.ENCRYPTION_KEY = encryptionKey;
@@ -967,6 +981,279 @@ async function clearCsFloatApiKey() {
 
   await restartPhpSidecar();
   return getCsFloatApiKeyStatus();
+}
+
+function getStoredSkinBaronApiKey() {
+  const filePath = getSkinBaronApiKeyFilePath();
+
+  if (!fsSync.existsSync(filePath)) {
+    return null;
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn("[desktop-secrets] safeStorage is not available; SkinBaron key cannot be decrypted.");
+    return null;
+  }
+
+  try {
+    const encrypted = fsSync.readFileSync(filePath);
+    return safeStorage.decryptString(encrypted);
+  } catch (error) {
+    console.warn("[desktop-secrets] failed to decrypt SkinBaron API key", error);
+    return null;
+  }
+}
+
+function readSkinBaronCapabilitiesSnapshot() {
+  const filePath = getSkinBaronCapabilitiesFilePath();
+  if (!fsSync.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const raw = fsSync.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    const capabilities = parsed.capabilities && typeof parsed.capabilities === "object"
+      ? parsed.capabilities
+      : {};
+    return {
+      capabilities,
+      checkedAt: typeof parsed.checkedAt === "string" ? parsed.checkedAt : null,
+    };
+  } catch (error) {
+    console.warn("[desktop-secrets] failed to read SkinBaron capability snapshot", error);
+    return null;
+  }
+}
+
+async function writeSkinBaronCapabilitiesSnapshot(snapshot = {}) {
+  const filePath = getSkinBaronCapabilitiesFilePath();
+  await fs.mkdir(getSecretsDirPath(), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(snapshot, null, 2), "utf8");
+}
+
+async function clearSkinBaronCapabilitiesSnapshot() {
+  try {
+    await fs.unlink(getSkinBaronCapabilitiesFilePath());
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+const SKINBARON_CAPABILITY_PROBES = [
+  {
+    id: "getBalance",
+    label: "Guthaben abfragen",
+    endpoint: "/GetBalance",
+    body: () => ({}),
+  },
+  {
+    id: "getSales",
+    label: "Verkaeufe auflisten",
+    endpoint: "/GetSales",
+    body: () => ({
+      appid: 730,
+      items_per_page: 1,
+      sort_order: 0,
+    }),
+  },
+  {
+    id: "search",
+    label: "Angebote durchsuchen",
+    endpoint: "/Search",
+    body: () => ({
+      appid: 730,
+      items_per_page: 1,
+    }),
+  },
+  {
+    id: "getActiveTradeOffers",
+    label: "Aktive Handelsanfragen",
+    endpoint: "/GetActiveTradeOffers",
+    body: () => ({}),
+  },
+  {
+    id: "getPriceList",
+    label: "Preisliste abrufen",
+    endpoint: "/GetPriceList",
+    body: () => ({
+      appId: 730,
+    }),
+  },
+];
+
+function extractSkinBaronProbeMessage(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const candidates = [payload.error, payload.message, payload.msg, payload.reason];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  if (Array.isArray(payload.errors)) {
+    const first = payload.errors.find((entry) => typeof entry === "string" && entry.trim());
+    if (first) {
+      return first.trim();
+    }
+  }
+
+  return "";
+}
+
+function normalizeSkinBaronProbeResult({ httpCode, payload, networkError }) {
+  if (networkError) {
+    return {
+      allowed: false,
+      statusCode: null,
+      message: networkError,
+    };
+  }
+
+  const statusCode = Number.isFinite(Number(httpCode)) ? Number(httpCode) : null;
+  const message = extractSkinBaronProbeMessage(payload);
+  const hasPayloadError = Boolean(message) || Boolean(payload?.error) || payload?.success === false;
+
+  if (statusCode !== null && statusCode >= 200 && statusCode < 300 && !hasPayloadError) {
+    return {
+      allowed: true,
+      statusCode,
+      message: "ok",
+    };
+  }
+
+  return {
+    allowed: false,
+    statusCode,
+    message:
+      message ||
+      (statusCode ? `HTTP ${statusCode}` : "Anfrage fehlgeschlagen"),
+  };
+}
+
+async function probeSkinBaronCapabilities(apiKey) {
+  const trimmedApiKey = String(apiKey || "").trim();
+  if (!trimmedApiKey) {
+    return { capabilities: {}, checkedAt: new Date().toISOString() };
+  }
+
+  const capabilities = {};
+
+  for (const probe of SKINBARON_CAPABILITY_PROBES) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const response = await fetch(`https://api.skinbaron.de${probe.endpoint}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "x-requested-with": "XMLHttpRequest",
+        },
+        body: JSON.stringify({
+          apikey: trimmedApiKey,
+          ...(typeof probe.body === "function" ? probe.body() : {}),
+        }),
+        signal: controller.signal,
+      });
+
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      capabilities[probe.id] = {
+        label: probe.label,
+        ...normalizeSkinBaronProbeResult({
+          httpCode: response.status,
+          payload,
+          networkError: null,
+        }),
+      };
+    } catch (error) {
+      const message =
+        error?.name === "AbortError"
+          ? "Timeout"
+          : (error?.message || "Netzwerkfehler");
+      capabilities[probe.id] = {
+        label: probe.label,
+        allowed: false,
+        statusCode: null,
+        message,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  return {
+    capabilities,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+function getSkinBaronApiKeyStatus() {
+  const storedKey = getStoredSkinBaronApiKey();
+  const snapshot = readSkinBaronCapabilitiesSnapshot();
+
+  return {
+    configured: Boolean(storedKey),
+    hasKey: Boolean(storedKey),
+    lastFour: storedKey ? storedKey.slice(-4) : null,
+    source: "electron-safe-storage",
+    desktopLocal: true,
+    encryptionAvailable: safeStorage.isEncryptionAvailable(),
+    capabilities: snapshot?.capabilities || {},
+    checkedAt: snapshot?.checkedAt || null,
+  };
+}
+
+async function writeSkinBaronApiKey(apiKey) {
+  const trimmedKey = String(apiKey || "").trim();
+
+  if (!trimmedKey) {
+    throw new Error("SkinBaron API Key darf nicht leer sein.");
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("OS-Verschluesselung ist auf diesem System nicht verfuegbar.");
+  }
+
+  const capabilitySnapshot = await probeSkinBaronCapabilities(trimmedKey);
+
+  const encrypted = safeStorage.encryptString(trimmedKey);
+  await fs.mkdir(getSecretsDirPath(), { recursive: true });
+  await fs.writeFile(getSkinBaronApiKeyFilePath(), encrypted);
+  await writeSkinBaronCapabilitiesSnapshot(capabilitySnapshot);
+
+  await restartPhpSidecar();
+  return getSkinBaronApiKeyStatus();
+}
+
+async function clearSkinBaronApiKey() {
+  try {
+    await fs.unlink(getSkinBaronApiKeyFilePath());
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  await clearSkinBaronCapabilitiesSnapshot();
+  await restartPhpSidecar();
+  return getSkinBaronApiKeyStatus();
 }
 
 function findFreePort() {
@@ -1604,6 +1891,21 @@ ipcMain.handle("secret-csfloat-set", async (event, apiKey) => {
 });
 ipcMain.handle("secret-csfloat-clear", async () => {
   const status = await clearCsFloatApiKey();
+  return {
+    status,
+    backendBaseUrl,
+  };
+});
+ipcMain.handle("secret-skinbaron-status", () => getSkinBaronApiKeyStatus());
+ipcMain.handle("secret-skinbaron-set", async (event, apiKey) => {
+  const status = await writeSkinBaronApiKey(apiKey);
+  return {
+    status,
+    backendBaseUrl,
+  };
+});
+ipcMain.handle("secret-skinbaron-clear", async () => {
+  const status = await clearSkinBaronApiKey();
   return {
     status,
     backendBaseUrl,

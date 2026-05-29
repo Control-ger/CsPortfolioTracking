@@ -423,6 +423,37 @@ function mapCsFloatPreviewTradeToInvestment(trade) {
   };
 }
 
+function mapSkinBaronPreviewSaleToInvestment(sale) {
+  const name = sale?.marketHashName || sale?.name || "Unknown Item";
+  const buyPriceUsd = Number(sale?.buyPriceUsd ?? sale?.buyPrice ?? sale?.price ?? 0);
+  const fallbackKey = `fallback-${stableHash(
+    `${name}|${sale?.purchasedAt || ""}|${buyPriceUsd}|${Number(sale?.quantity || 1)}`,
+  )}`;
+  const stableSaleKey = String(
+    sale?.externalTradeId ||
+      sale?.skinBaronSaleId ||
+      sale?.id ||
+      fallbackKey,
+  );
+
+  return {
+    id: `skinbaron-${stableSaleKey}`,
+    name,
+    marketHashName: name,
+    type: sale?.type || "skin",
+    quantity: Number(sale?.quantity || 1),
+    buyPrice: buyPriceUsd,
+    buyPriceUsd,
+    fundingMode: sale?.fundingMode || "wallet_funded",
+    imageUrl: sale?.imageUrl || null,
+    platform: "skinbaron",
+    source: "skinbaron",
+    externalTradeId: stableSaleKey,
+    purchasedAt: sale?.purchasedAt || null,
+    notes: `Imported from SkinBaron sale ${stableSaleKey}`.trim(),
+  };
+}
+
 async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
   const localStore = getDesktopLocalStore();
   if (!localStore) {
@@ -499,6 +530,86 @@ async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
     };
   } catch (error) {
     console.warn("[csfloat-preview] local deduplication failed", error);
+    return previewResponse;
+  }
+}
+
+async function applyDesktopSkinBaronPreviewDeduplication(previewResponse) {
+  const localStore = getDesktopLocalStore();
+  if (!localStore) {
+    return previewResponse;
+  }
+
+  const previewData = previewResponse?.data;
+  if (!previewData || typeof previewData !== "object") {
+    return previewResponse;
+  }
+
+  const importTrades = Array.isArray(previewData.importTrades)
+    ? previewData.importTrades
+    : [];
+  if (importTrades.length === 0) {
+    return previewResponse;
+  }
+
+  try {
+    const currentUser = await getCurrentUser();
+    const userId = resolveDesktopLocalUserId(currentUser);
+    const investments = unwrapLocalStoreResult(
+      await localStore.listInvestments(userId),
+      "local-store-list-investments",
+    );
+    const existingInvestmentsById = new Map();
+    (Array.isArray(investments) ? investments : []).forEach((entry) => {
+      const investmentId = String(entry?.id || "").trim();
+      if (investmentId) {
+        existingInvestmentsById.set(investmentId, entry);
+      }
+    });
+
+    const enrichedImportTrades = importTrades.map((trade) => {
+      const mapped = mapSkinBaronPreviewSaleToInvestment(trade);
+      const candidateIds = [String(mapped.id || "").trim()];
+      const legacyExternalTradeId = String(trade?.legacyExternalTradeId || "").trim();
+      if (legacyExternalTradeId) {
+        candidateIds.push(`skinbaron-${legacyExternalTradeId}`);
+      }
+
+      const existingMatch = candidateIds
+        .map((candidateId) => existingInvestmentsById.get(candidateId))
+        .find(Boolean);
+      const { status, quantityDelta } = determineDesktopPreviewTradeStatus(trade, mapped, existingMatch || null);
+
+      return {
+        ...trade,
+        status,
+        quantityDelta,
+      };
+    });
+
+    const localDuplicates = enrichedImportTrades.filter(
+      (trade) => String(trade?.status || "") === "duplicate",
+    ).length;
+    const localInsertable = enrichedImportTrades.filter((trade) =>
+      String(trade?.status || "") !== "duplicate",
+    ).length;
+    const localUpdated = enrichedImportTrades.filter(
+      (trade) => String(trade?.status || "") === "updated",
+    ).length;
+
+    return {
+      ...previewResponse,
+      data: {
+        ...previewData,
+        insertable: localInsertable,
+        duplicates: localDuplicates,
+        updated: localUpdated,
+        sampleTrades: enrichedImportTrades.slice(0, 20),
+        importTrades: enrichedImportTrades,
+      },
+    };
+  } catch (error) {
+    console.warn("[skinbaron-preview] local deduplication failed", error);
     return previewResponse;
   }
 }
@@ -673,6 +784,146 @@ export async function executeCsFloatTradeSync(payload = {}) {
   });
 }
 
+async function triggerDesktopSteamMatchingRefresh(localStore, userId) {
+  try {
+    const rows = unwrapLocalStoreResult(
+      await localStore.listInvestments(userId),
+      "local-store-list-investments",
+    );
+    const activeSteamRows = (Array.isArray(rows) ? rows : []).filter((row) => {
+      const platform = String(row?.platform || row?.source || "").toLowerCase();
+      if (platform !== "steam_inventory") {
+        return false;
+      }
+      if (row?.inSteamInventory === false) {
+        return false;
+      }
+      return String(row?.inventoryStatus || "").toLowerCase() !== "missing";
+    });
+
+    if (activeSteamRows.length === 0) {
+      return;
+    }
+
+    const snapshotItems = activeSteamRows.map((row) => ({
+      id: row?.steamAssetId || row?.id,
+      assetId: row?.steamAssetId || row?.id,
+      marketHashName: row?.marketHashName || row?.name || "Unknown Item",
+      name: row?.name || row?.marketHashName || "Unknown Item",
+      type: row?.type || "skin",
+      imageUrl: row?.imageUrl || null,
+      classId: row?.classId || null,
+      instanceId: row?.instanceId || null,
+      inspectLink: row?.inspectLink || null,
+      floatValue: row?.floatValue ?? row?.float ?? row?.wearFloat ?? null,
+      paintSeed: row?.paintSeed ?? row?.patternSeed ?? null,
+      tradable: row?.tradable !== false,
+      marketable: row?.marketable !== false,
+    }));
+
+    unwrapLocalStoreResult(
+      await localStore.syncSteamInventory(snapshotItems, userId),
+      "local-store-sync-steam-inventory",
+    );
+  } catch (error) {
+    console.warn("[desktop-sync] external matching refresh failed", error);
+  }
+}
+
+export async function fetchSkinBaronTradeSyncPreview(payload = {}) {
+  const previewResponse = await requestWithMeta("/api/v1/portfolio/sync/skinbaron/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      limit: payload.limit || 100,
+      maxPages: payload.maxPages || 10,
+    }),
+  });
+  return applyDesktopSkinBaronPreviewDeduplication(previewResponse);
+}
+
+export async function executeSkinBaronTradeSync(payload = {}) {
+  const localStore = getDesktopLocalStore();
+  if (localStore) {
+    const preview = await fetchSkinBaronTradeSyncPreview(payload);
+    const preferences = await getPortfolioPreferences();
+    const targetBucket = preferences.csfloatImportBucket === "inventory" ? "inventory" : "investment";
+    const currentUser = await getCurrentUser();
+    const userId = resolveDesktopLocalUserId(currentUser);
+    const trades = Array.isArray(preview?.data?.importTrades)
+      ? preview.data.importTrades
+      : Array.isArray(preview?.data?.sampleTrades)
+        ? preview.data.sampleTrades
+        : [];
+    const rows = trades.map((trade) => ({
+      ...mapSkinBaronPreviewSaleToInvestment(trade),
+      bucket: targetBucket,
+    }));
+    let inserted = 0;
+    let duplicates = 0;
+
+    for (const row of rows) {
+      const investmentId = String(row?.id || "");
+      const existing = investmentId
+        ? unwrapLocalStoreResult(
+            await localStore.getInvestment(investmentId),
+            "local-store-get-investment",
+          )
+        : null;
+
+      unwrapLocalStoreResult(
+        await localStore.upsertInvestment({
+          ...(existing || {}),
+          ...row,
+          userId,
+          excluded: Boolean(existing?.excluded),
+        }),
+        "local-store-upsert-investment",
+      );
+
+      if (existing) {
+        duplicates += 1;
+      } else {
+        inserted += 1;
+      }
+    }
+
+    await triggerDesktopSteamMatchingRefresh(localStore, userId);
+
+    try {
+      await runDesktopSyncNowIfDue({ force: true });
+    } catch (syncError) {
+      console.warn("[desktop-sync] skinbaron execute sync failed", syncError);
+    }
+
+    return {
+      data: {
+        ...(preview?.data || {}),
+        mode: "execute",
+        status: "success",
+        inserted,
+        duplicates,
+        skippedDuringInsert: 0,
+        errors: [],
+        desktopLocal: true,
+      },
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
+  return requestWithMeta("/api/v1/portfolio/sync/skinbaron/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      limit: payload.limit || 100,
+      maxPages: payload.maxPages || 10,
+      backupConfirmed: Boolean(payload.backupConfirmed),
+    }),
+  });
+}
+
 export async function fetchWatchlist(options = {}) {
   return requestWithMeta(
     buildPath("/api/v1/watchlist", {
@@ -809,6 +1060,36 @@ export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
   }
 
   throw new Error("CSFloat API Key updates are only supported in the Desktop app.");
+}
+
+export async function fetchSkinBaronApiKeyStatus() {
+  const desktopSecrets = getDesktopSecrets();
+  if (desktopSecrets?.getSkinBaronApiKeyStatus) {
+    return {
+      data: await desktopSecrets.getSkinBaronApiKeyStatus(),
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
+  return requestWithMeta("/api/v1/settings/skinbaron-api-key");
+}
+
+export async function updateSkinBaronApiKey(apiKeyOrEncryptedKey) {
+  const desktopSecrets = getDesktopSecrets();
+  if (desktopSecrets?.setSkinBaronApiKey) {
+    const result = await desktopSecrets.setSkinBaronApiKey(apiKeyOrEncryptedKey);
+
+    return {
+      data: result?.status || result,
+      meta: {
+        source: "desktop-safe-storage",
+      },
+    };
+  }
+
+  throw new Error("SkinBaron API Key updates are only supported in the Desktop app.");
 }
 
 export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds = []) {

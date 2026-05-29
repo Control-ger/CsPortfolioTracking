@@ -17,6 +17,8 @@ import {
   updateFeeSettings,
   fetchCsFloatApiKeyStatus,
   updateCsFloatApiKey,
+  fetchSkinBaronApiKeyStatus,
+  updateSkinBaronApiKey,
   fetchPriceSourcePreference,
   updatePriceSourcePreference,
   fetchWebPushPublicKey,
@@ -102,6 +104,20 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState("");
   const [apiKeySuccess, setApiKeySuccess] = useState("");
+
+  // SkinBaron API Key State
+  const [skinBaronApiKey, setSkinBaronApiKey] = useState("");
+  const [skinBaronApiKeyLoading, setSkinBaronApiKeyLoading] = useState(true);
+  const [skinBaronApiKeySaving, setSkinBaronApiKeySaving] = useState(false);
+  const [skinBaronApiKeyStatus, setSkinBaronApiKeyStatus] = useState({
+    configured: false,
+    lastFour: null,
+    capabilities: {},
+    checkedAt: null,
+  });
+  const [showSkinBaronApiKey, setShowSkinBaronApiKey] = useState(false);
+  const [skinBaronApiKeyError, setSkinBaronApiKeyError] = useState("");
+  const [skinBaronApiKeySuccess, setSkinBaronApiKeySuccess] = useState("");
   const [encryptionReady, setEncryptionReady] = useState(false);
   const [priceSourceMode, setPriceSourceMode] = useState("auto");
   const [priceSourceSaving, setPriceSourceSaving] = useState(false);
@@ -151,10 +167,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       try {
         setLoading(true);
         setApiKeyLoading(true);
+        setSkinBaronApiKeyLoading(true);
 
-        const [feeResponse, keyStatusResponse, priceSourceResponse] = await Promise.all([
+        const [feeResponse, keyStatusResponse, skinBaronStatusResponse, priceSourceResponse] = await Promise.all([
           fetchFeeSettings(),
           fetchCsFloatApiKeyStatus(),
+          fetchSkinBaronApiKeyStatus(),
           fetchPriceSourcePreference(),
         ]);
 
@@ -176,6 +194,21 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
         const keyStatus = keyStatusResponse?.data || { configured: false, lastFour: null };
         setApiKeyStatus(keyStatus);
+        const skinBaronStatus = skinBaronStatusResponse?.data || {
+          configured: false,
+          lastFour: null,
+          capabilities: {},
+          checkedAt: null,
+        };
+        setSkinBaronApiKeyStatus({
+          configured: Boolean(skinBaronStatus?.configured || skinBaronStatus?.hasKey),
+          lastFour: skinBaronStatus?.lastFour || null,
+          capabilities:
+            skinBaronStatus?.capabilities && typeof skinBaronStatus.capabilities === "object"
+              ? skinBaronStatus.capabilities
+              : {},
+          checkedAt: skinBaronStatus?.checkedAt || null,
+        });
         const priceSourceData = priceSourceResponse?.data || {};
         setPriceSourceMode(normalizePriceSourceMode(priceSourceData.mode));
 
@@ -190,6 +223,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       } finally {
         setLoading(false);
         setApiKeyLoading(false);
+        setSkinBaronApiKeyLoading(false);
       }
     };
 
@@ -257,6 +291,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     setApiKeySuccess("");
   };
 
+  const handleSkinBaronApiKeyChange = (event) => {
+    setSkinBaronApiKey(event.target.value);
+    setSkinBaronApiKeyError("");
+    setSkinBaronApiKeySuccess("");
+  };
+
   const handleUpdateCsFloatApiKey = async () => {
     try {
       setApiKeySaving(true);
@@ -316,6 +356,41 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setSuccess("");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdateSkinBaronApiKey = async () => {
+    try {
+      setSkinBaronApiKeySaving(true);
+      setSkinBaronApiKeyError("");
+      setSkinBaronApiKeySuccess("");
+
+      if (!desktopRuntime) {
+        setSkinBaronApiKeyError("SkinBaron API Key kann nur in der Desktop-App gesetzt werden.");
+        return;
+      }
+
+      const trimmedApiKey = skinBaronApiKey.trim();
+      await updateSkinBaronApiKey(trimmedApiKey);
+
+      setSkinBaronApiKeySuccess("API Key wurde erfolgreich aktualisiert und Rechte wurden geprueft.");
+      setSkinBaronApiKey("");
+
+      const statusResponse = await fetchSkinBaronApiKeyStatus();
+      const nextStatus = statusResponse?.data || statusResponse || {};
+      setSkinBaronApiKeyStatus({
+        configured: Boolean(nextStatus?.configured || nextStatus?.hasKey),
+        lastFour: nextStatus?.lastFour || null,
+        capabilities:
+          nextStatus?.capabilities && typeof nextStatus.capabilities === "object"
+            ? nextStatus.capabilities
+            : {},
+        checkedAt: nextStatus?.checkedAt || null,
+      });
+    } catch (err) {
+      setSkinBaronApiKeyError(err.message || "Fehler beim Aktualisieren des API Keys.");
+    } finally {
+      setSkinBaronApiKeySaving(false);
     }
   };
 
@@ -432,6 +507,10 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       : priceSourceMode === "steam"
         ? "Nur Steam"
         : "Auto (CSFloat bevorzugt)";
+    const currencyEntries = Object.entries(currencies);
+    const exchangeRateEntries = Object.entries(exchangeRates)
+      .filter(([code, value]) => code !== "EUR" && Number.isFinite(Number(value)) && Number(value) > 0)
+      .sort(([left], [right]) => left.localeCompare(right));
 
     return (
       <div className="space-y-4">
@@ -491,22 +570,24 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               <label className="text-sm font-medium text-foreground">
                 Anzeige-Waehrung
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {Object.entries(currencies).map(([code, info]) => (
-                  <button
-                    key={code}
-                    onClick={() => setCurrency(code)}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-3 transition-colors ${
-                      currency === code
-                        ? "border-primary/40 bg-primary/12 shadow-none dark:shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
-                        : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
-                    }`}
-                  >
-                    <span className="text-lg font-bold">{info.symbol}</span>
-                    <span className="text-xs font-medium">{info.code}</span>
-                    <span className="text-[10px] text-muted-foreground">{info.name}</span>
-                  </button>
-                ))}
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-border/70 p-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {currencyEntries.map(([code, info]) => (
+                    <button
+                      key={code}
+                      onClick={() => setCurrency(code)}
+                      className={`flex min-h-[92px] flex-col items-center justify-center gap-1 rounded-xl border p-3 transition-colors ${
+                        currency === code
+                          ? "border-primary/40 bg-primary/12 shadow-none dark:shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
+                          : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
+                      }`}
+                    >
+                      <span className="text-lg font-bold">{info.symbol}</span>
+                      <span className="text-xs font-medium">{info.code}</span>
+                      <span className="line-clamp-2 text-center text-[10px] text-muted-foreground">{info.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -518,10 +599,16 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             ) : (
               <div className="rounded-lg border border-border bg-transparent p-3 text-sm dark:border-border/70 dark:bg-card/65">
                 <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <div>1 EUR = {formatExchangeRate(exchangeRates.USD)} USD</div>
-                  <div>1 EUR = {formatExchangeRate(exchangeRates.GBP)} GBP</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                  {exchangeRateEntries.slice(0, 12).map(([code, value]) => (
+                    <div key={code}>1 EUR = {formatExchangeRate(value)} {code}</div>
+                  ))}
                 </div>
+                {exchangeRateEntries.length > 12 ? (
+                  <p className="mt-2 text-[10px] text-muted-foreground">
+                    {exchangeRateEntries.length} Waehrungen verfuegbar.
+                  </p>
+                ) : null}
                 <p className="mt-2 text-[10px] text-muted-foreground">
                   Kurse werden taeglich aktualisiert.
                 </p>
@@ -936,6 +1023,195 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     );
   };
 
+  const renderSkinBaronApiKeyTab = () => {
+    if (skinBaronApiKeyLoading) {
+      return (
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-4 w-80" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const capabilityRows = [
+      {
+        id: "getBalance",
+        label: "GetBalance",
+        requirement: "Zeigt Guthaben/Key-Validitaet.",
+      },
+      {
+        id: "getSales",
+        label: "GetSales",
+        requirement: "Pflicht fuer SkinBaron-Import in die lokale Portfolio-Datenbank.",
+      },
+      {
+        id: "search",
+        label: "Search",
+        requirement: "Optional fuer spaetere Suche/Erweiterungen.",
+      },
+      {
+        id: "getActiveTradeOffers",
+        label: "GetActiveTradeOffers",
+        requirement: "Optional fuer aktive Tradeoffer-Ansichten.",
+      },
+      {
+        id: "getPriceList",
+        label: "GetPriceList",
+        requirement: "Optional fuer Preislisten-Sync.",
+      },
+    ];
+
+    const capabilities = skinBaronApiKeyStatus?.capabilities || {};
+    const getSalesAllowed = capabilities?.getSales?.allowed === true;
+    const readOnlyImportReady = Boolean(skinBaronApiKeyStatus.configured) && getSalesAllowed;
+
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Key className="h-5 w-5" />
+            <CardTitle>SkinBaron API Key</CardTitle>
+            {skinBaronApiKeyStatus.configured && (
+              <Badge variant="outline" className="ml-auto border-emerald-400/35 text-emerald-300">
+                Konfiguriert
+              </Badge>
+            )}
+          </div>
+          <CardDescription>
+            Key wird lokal verschluesselt gespeichert. Beim Speichern pruefen wir automatisch die API-Rechte.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div
+            className={
+              readOnlyImportReady
+                ? "rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300"
+                : "rounded-xl border border-amber-400/35 bg-amber-500/12 p-3 text-sm text-amber-200"
+            }
+          >
+            <p className="font-medium">
+              {readOnlyImportReady ? "Read-only Preset: Import bereit" : "Read-only Preset: Import noch nicht bereit"}
+            </p>
+            <p className="mt-1 text-xs text-current/90">
+              Voraussetzung ist mindestens <span className="font-semibold">GetSales</span>.{" "}
+              {readOnlyImportReady
+                ? "Der SkinBaron-Import kann jetzt genutzt werden."
+                : "Bitte API-Rechte pruefen oder erweitern."}
+            </p>
+          </div>
+
+          {skinBaronApiKeyError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {skinBaronApiKeyError}
+            </div>
+          )}
+          {skinBaronApiKeySuccess && (
+            <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
+              {skinBaronApiKeySuccess}
+            </div>
+          )}
+
+          {skinBaronApiKeyStatus.configured && (
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/18">
+                <Lock className="h-5 w-5 text-emerald-300" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">API Key aktiv</p>
+                <p className="text-xs text-muted-foreground">
+                  Endet auf ...{skinBaronApiKeyStatus.lastFour || "----"}
+                  {skinBaronApiKeyStatus.checkedAt
+                    ? ` | letzte Rechtepruefung: ${new Date(skinBaronApiKeyStatus.checkedAt).toLocaleString("de-DE")}`
+                    : ""}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <label className="text-sm font-medium">
+              {skinBaronApiKeyStatus.configured ? "Neuen Key eingeben" : "API Key eingeben"}
+            </label>
+            <div className="relative">
+              <Input
+                type={showSkinBaronApiKey ? "text" : "password"}
+                value={skinBaronApiKey}
+                onChange={handleSkinBaronApiKeyChange}
+                placeholder={
+                  skinBaronApiKeyStatus.configured
+                    ? "Zum Aendern neuen SkinBaron Key eingeben..."
+                    : "SkinBaron API Key..."
+                }
+                disabled={skinBaronApiKeySaving || !encryptionReady}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSkinBaronApiKey(!showSkinBaronApiKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                disabled={skinBaronApiKeySaving}
+              >
+                {showSkinBaronApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Import benoetigt mindestens die Capability <span className="font-medium">GetSales</span>.
+            </p>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Rechte-Check</p>
+            <p className="text-[11px] text-muted-foreground">
+              Hinweis: SkinBaron API ist auf 10 Requests/Sekunde limitiert. Import nutzt deshalb gedrosselte Seitenabrufe.
+            </p>
+            {capabilityRows.map((row) => {
+              const capability = capabilities?.[row.id] || null;
+              const allowed = capability?.allowed === true;
+              return (
+                <div key={row.id} className="flex items-start justify-between gap-3 rounded-md border border-border/60 p-2">
+                  <div>
+                    <p className="text-sm font-medium">{row.label}</p>
+                    <p className="text-xs text-muted-foreground">{row.requirement}</p>
+                    {capability?.message ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        Status: {capability.message}
+                      </p>
+                    ) : null}
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={allowed ? "border-emerald-400/35 text-emerald-300" : "border-amber-400/35 text-amber-300"}
+                  >
+                    {allowed ? "Erlaubt" : "Nicht erlaubt"}
+                  </Badge>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleUpdateSkinBaronApiKey}
+              disabled={skinBaronApiKeySaving || !encryptionReady || !skinBaronApiKey.trim()}
+            >
+              {skinBaronApiKeySaving
+                ? "Speichert + prueft..."
+                : skinBaronApiKeyStatus.configured
+                  ? "Key Aktualisieren"
+                  : "Key Speichern"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderRemoteConnectionsTab = () => {
     if (!desktopRuntime) {
       return (
@@ -1045,6 +1321,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             </CardContent>
           </Card>
         ) : null}
+        {renderSkinBaronApiKeyTab()}
         {renderApiKeyTab()}
       </div>
     );

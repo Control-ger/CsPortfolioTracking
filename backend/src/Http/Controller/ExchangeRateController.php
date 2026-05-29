@@ -20,19 +20,51 @@ final class ExchangeRateController
             // Provider gives USD-based rates (1 USD = X).
             $usdRates = $this->exchangeRateClient->usdRates();
             $usdToEur = (float) ($usdRates['EUR'] ?? 0.92);
-            $usdToGbp = (float) ($usdRates['GBP'] ?? (0.85 * $usdToEur));
+            if ($usdToEur <= 0.0) {
+                $usdToEur = 0.92;
+            }
 
             // Convert to EUR-based rates (1 EUR = X).
-            $eurToUsd = $usdToEur > 0 ? round(1 / $usdToEur, 4) : 1.08;
-            $eurToGbp = $usdToEur > 0 ? round($usdToGbp / $usdToEur, 4) : 0.85;
+            $rates = [
+                'EUR' => 1.0,
+            ];
+            foreach ($usdRates as $currencyCode => $usdRate) {
+                $code = strtoupper(trim((string) $currencyCode));
+                if ($code === 'EUR' || preg_match('/^[A-Z]{3}$/', $code) !== 1 || !is_numeric($usdRate)) {
+                    continue;
+                }
+
+                $numericUsdRate = (float) $usdRate;
+                if ($numericUsdRate <= 0.0) {
+                    continue;
+                }
+
+                $rates[$code] = round($numericUsdRate / $usdToEur, 6);
+            }
+
+            if (!isset($rates['USD']) || !is_numeric($rates['USD']) || (float) $rates['USD'] <= 0.0) {
+                $rates['USD'] = round(1 / $usdToEur, 6);
+            }
+            if (!isset($rates['GBP']) || !is_numeric($rates['GBP']) || (float) $rates['GBP'] <= 0.0) {
+                $rates['GBP'] = 0.85;
+            }
+
+            uksort($rates, static function (string $left, string $right): int {
+                if ($left === 'EUR') {
+                    return -1;
+                }
+                if ($right === 'EUR') {
+                    return 1;
+                }
+                return strcmp($left, $right);
+            });
+
+            $eurToUsd = (float) ($rates['USD'] ?? 1.08);
+            $eurToGbp = (float) ($rates['GBP'] ?? 0.85);
 
             JsonResponseFactory::success([
                 'base' => 'EUR',
-                'rates' => [
-                    'EUR' => 1.0,
-                    'USD' => $eurToUsd,
-                    'GBP' => $eurToGbp,
-                ],
+                'rates' => $rates,
                 'USD' => $eurToUsd,
                 'GBP' => $eurToGbp,
                 'timestamp' => time(),

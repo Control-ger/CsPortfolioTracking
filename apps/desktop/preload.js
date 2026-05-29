@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getCsFloatApiKeyStatus: () => ipcRenderer.invoke("secret-csfloat-status"),
     setCsFloatApiKey: (apiKey) => ipcRenderer.invoke("secret-csfloat-set", apiKey),
     clearCsFloatApiKey: () => ipcRenderer.invoke("secret-csfloat-clear"),
+    getSkinBaronApiKeyStatus: () => ipcRenderer.invoke("secret-skinbaron-status"),
+    setSkinBaronApiKey: (apiKey) => ipcRenderer.invoke("secret-skinbaron-set", apiKey),
+    clearSkinBaronApiKey: () => ipcRenderer.invoke("secret-skinbaron-clear"),
   },
   
   // IPC event bridge

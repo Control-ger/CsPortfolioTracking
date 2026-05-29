@@ -44,7 +44,9 @@ This document tracks:
 - Renderer uses `window.electronAPI.localStore` for local persistence.
 - Steam/CSFloat import triggers originate in desktop runtime; desktop may call sidecar/upstream endpoints for execution.
 - Desktop sidecar exposes CSFloat import endpoints and a desktop-local buyorder read endpoint (`GET /api/v1/csfloat/buy-orders`) for watchlist enrichment.
+- Desktop sidecar exposes SkinBaron preview endpoints (`POST /api/v1/portfolio/sync/skinbaron/preview`) for desktop-local import.
 - Secrets stay local (Electron safe storage / process env only).
+- SkinBaron API keys are stored in Electron safe storage and are checked for API capability flags during key updates so UI/import logic can honor granted scopes.
 
 ### 3.2 Web runtime
 
@@ -102,6 +104,7 @@ From `apps/web/src/App.jsx`:
 - `useCsUpdatesFeed` uses in-memory snapshots with TTL `120s`.
 - Web runtime app shell uses a fixed viewport container (`h-[100dvh]`) and a flex-constrained `<main>` scroll area (`flex-1 min-h-0 overflow-y-auto`) to avoid mobile scroll-lock regressions.
 - `PortfolioPage` no longer uses horizontal swipe tab switching on mobile; tab changes are explicit to avoid accidental gesture-triggered navigation.
+- Desktop supports SkinBaron import preview/execute flow in Management; import writes locally and then re-runs Steam-vs-external matching so duplicates can be auto-resolved like the existing CSFloat flow.
 - Search-to-watchlist add checks in `PortfolioPage`/`ItemSearch` use watchlist entries only (not inventory/investment presence), so web runtime can add watchlist items independently.
 - `ItemSearch` mobile controls use larger touch targets (>=44px) for pagination/actions to improve finger usability.
 - Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.

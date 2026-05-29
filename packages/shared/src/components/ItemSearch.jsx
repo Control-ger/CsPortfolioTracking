@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { searchWatchlistItems } from "@shared/lib/apiClient.js";
 import { createWatchlistItemData } from "@shared/lib/dataSource.js";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const ITEM_TYPE_OPTIONS = [
   { value: "all", label: "Alle Typen" },
@@ -122,13 +123,6 @@ function resolveKeywordBrowseType(term) {
   return BROWSE_KEYWORD_MAP[normalized] || null;
 }
 
-function formatPriceEur(value) {
-  if (!Number.isFinite(value)) {
-    return "Preis folgt";
-  }
-  return `${Number(value).toFixed(2)} EUR`;
-}
-
 export const ItemSearch = ({
   onAddToWatchlist,
   existingItems = [],
@@ -138,6 +132,7 @@ export const ItemSearch = ({
   showSearchInput = true,
   submittedTerm = null,
 }) => {
+  const { formatPrice } = useCurrency();
   const [searchTerm, setSearchTerm] = useState(() => String(initialSearchTerm || "").trim());
   const [submittedSearchTerm, setSubmittedSearchTerm] = useState(() =>
     normalizeSearchTerm(String(initialSearchTerm || "").trim()),
@@ -363,7 +358,9 @@ export const ItemSearch = ({
                 </div>
               </td>
               <td className="px-3 py-3 text-sm font-semibold text-foreground">
-                {formatPriceEur(candidate.livePriceEur)}
+                {Number.isFinite(Number(candidate.livePriceEur))
+                  ? formatPrice(Number(candidate.livePriceEur))
+                  : "Preis folgt"}
               </td>
               <td className="px-3 py-3 text-sm text-muted-foreground">
                 {candidate.wearLabel || "-"}

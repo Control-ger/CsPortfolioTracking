@@ -1,103 +1,195 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchExchangeRate } from '@shared/lib/apiClient.js';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import { fetchExchangeRate } from "@shared/lib/apiClient.js";
 
-const CURRENCIES = {
-  EUR: { symbol: '€', code: 'EUR', name: 'Euro' },
-  USD: { symbol: '$', code: 'USD', name: 'US Dollar' },
-  GBP: { symbol: '£', code: 'GBP', name: 'British Pound' },
+const STORAGE_KEY = "preferred_currency";
+const DEFAULT_CURRENCY = "EUR";
+const FALLBACK_EXCHANGE_RATES = {
+  EUR: 1,
+  USD: 1.08,
+  GBP: 0.85,
 };
-
-const STORAGE_KEY = 'preferred_currency';
-const DEFAULT_CURRENCY = 'EUR';
 
 const CurrencyContext = createContext(null);
 
+function isValidCurrencyCode(value) {
+  return /^[A-Z]{3}$/.test(String(value || "").toUpperCase());
+}
+
+function getLocale() {
+  if (typeof navigator !== "undefined" && typeof navigator.language === "string" && navigator.language.trim() !== "") {
+    return navigator.language;
+  }
+  return "en-US";
+}
+
+function getCurrencySymbol(code) {
+  try {
+    const parts = new Intl.NumberFormat(getLocale(), {
+      style: "currency",
+      currency: code,
+      currencyDisplay: "symbol",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).formatToParts(0);
+    const symbolPart = parts.find((part) => part.type === "currency");
+    return symbolPart?.value || code;
+  } catch {
+    return code;
+  }
+}
+
+function getCurrencyName(code) {
+  try {
+    const displayNames = new Intl.DisplayNames([getLocale()], { type: "currency" });
+    return displayNames.of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+function normalizeRates(rawRates) {
+  const normalized = {};
+  if (!rawRates || typeof rawRates !== "object") {
+    return { ...FALLBACK_EXCHANGE_RATES };
+  }
+
+  Object.entries(rawRates).forEach(([currencyCode, value]) => {
+    const code = String(currencyCode || "").trim().toUpperCase();
+    const rate = Number(value);
+    if (!isValidCurrencyCode(code) || !Number.isFinite(rate) || rate <= 0) {
+      return;
+    }
+    normalized[code] = rate;
+  });
+
+  if (Object.keys(normalized).length === 0) {
+    return { ...FALLBACK_EXCHANGE_RATES };
+  }
+
+  normalized.EUR = 1;
+  return normalized;
+}
+
+function buildCurrencyCatalog(rates) {
+  const codes = Object.keys(rates).filter((code) => isValidCurrencyCode(code.toUpperCase()));
+  codes.sort((left, right) => {
+    if (left === DEFAULT_CURRENCY) {
+      return -1;
+    }
+    if (right === DEFAULT_CURRENCY) {
+      return 1;
+    }
+    return left.localeCompare(right);
+  });
+
+  return codes.reduce((result, code) => {
+    result[code] = {
+      code,
+      symbol: getCurrencySymbol(code),
+      name: getCurrencyName(code),
+    };
+    return result;
+  }, {});
+}
+
 export function CurrencyProvider({ children }) {
   const [currency, setCurrency] = useState(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored && CURRENCIES[stored] ? stored : DEFAULT_CURRENCY;
+      const normalizedStored = String(stored || "").trim().toUpperCase();
+      if (isValidCurrencyCode(normalizedStored)) {
+        return normalizedStored;
+      }
     }
     return DEFAULT_CURRENCY;
   });
-
-  const [exchangeRates, setExchangeRates] = useState({
-    EUR: 1,
-    USD: 1.08, // Fallback rates
-    GBP: 0.85,
-  });
+  const [exchangeRates, setExchangeRates] = useState(() => ({ ...FALLBACK_EXCHANGE_RATES }));
   const [ratesLoading, setRatesLoading] = useState(false);
 
-  // Load exchange rates on mount
+  const currencies = useMemo(() => buildCurrencyCatalog(exchangeRates), [exchangeRates]);
+
   useEffect(() => {
     const loadRates = async () => {
       setRatesLoading(true);
       try {
         // Works for web and desktop (desktop resolves local sidecar base URL in apiClient).
         const data = await fetchExchangeRate();
-        setExchangeRates({
-          EUR: 1,
-          USD: data?.USD || 1.08,
-          GBP: data?.GBP || 0.85,
-        });
+        const normalized = normalizeRates(data?.rates || data);
+        setExchangeRates(normalized);
       } catch (err) {
         // Keep fallback rates on network error (silent fail)
-        console.debug('[CurrencyContext] Exchange rate fetch failed, using fallback rates', err?.message);
+        console.debug("[CurrencyContext] Exchange rate fetch failed, using fallback rates", err?.message);
       } finally {
         setRatesLoading(false);
       }
     };
-    loadRates();
+    void loadRates();
   }, []);
 
-  const setPreferredCurrency = useCallback((newCurrency) => {
-    if (CURRENCIES[newCurrency]) {
-      setCurrency(newCurrency);
-      localStorage.setItem(STORAGE_KEY, newCurrency);
+  useEffect(() => {
+    if (!currencies[currency]) {
+      setCurrency(DEFAULT_CURRENCY);
+      localStorage.setItem(STORAGE_KEY, DEFAULT_CURRENCY);
     }
-  }, []);
+  }, [currencies, currency]);
+
+  const setPreferredCurrency = useCallback((newCurrency) => {
+    const normalized = String(newCurrency || "").trim().toUpperCase();
+    if (!isValidCurrencyCode(normalized) || !Number.isFinite(exchangeRates[normalized])) {
+      return;
+    }
+    setCurrency(normalized);
+    localStorage.setItem(STORAGE_KEY, normalized);
+  }, [exchangeRates]);
 
   // Convert price from EUR to target currency
   const convertPrice = useCallback((priceInEur) => {
-    if (!priceInEur || typeof priceInEur !== 'number') return 0;
+    if (!priceInEur || typeof priceInEur !== "number") {
+      return 0;
+    }
     const rate = exchangeRates[currency] || 1;
     return priceInEur * rate;
   }, [currency, exchangeRates]);
 
   // Convert from USD to target currency
   const convertFromUsd = useCallback((priceInUsd) => {
-    if (!priceInUsd || typeof priceInUsd !== 'number') return 0;
-    // First convert USD to EUR, then to target
-    const eurRate = exchangeRates.USD || 1.08;
+    if (!priceInUsd || typeof priceInUsd !== "number") {
+      return 0;
+    }
+    // First convert USD to EUR, then to target.
+    const eurRate = exchangeRates.USD || FALLBACK_EXCHANGE_RATES.USD;
     const priceInEur = priceInUsd / eurRate;
     const targetRate = exchangeRates[currency] || 1;
     return priceInEur * targetRate;
   }, [currency, exchangeRates]);
 
   const formatPrice = useCallback((price, options = {}) => {
-    const { 
-      useUsd = false, // If true and buyPriceUsd available, use that
+    const {
+      useUsd = false, // If true and buyPriceUsd available, use that.
       buyPriceUsd = null,
-      decimals = 2 
+      decimals = 2,
     } = options;
-    
-    let convertedPrice;
-    if (useUsd && buyPriceUsd !== null) {
-      // User paid in USD, convert to their preferred currency
-      convertedPrice = convertFromUsd(buyPriceUsd);
-    } else {
-      // Use EUR price
-      convertedPrice = convertPrice(price);
+
+    const convertedPrice = useUsd && buyPriceUsd !== null
+      ? convertFromUsd(buyPriceUsd)
+      : convertPrice(price);
+
+    try {
+      return new Intl.NumberFormat(getLocale(), {
+        style: "currency",
+        currency,
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }).format(convertedPrice);
+    } catch {
+      return `${currency} ${Number(convertedPrice || 0).toFixed(decimals)}`;
     }
-    
-    const currencyInfo = CURRENCIES[currency];
-    return `${currencyInfo.symbol}${convertedPrice.toFixed(decimals)}`;
   }, [currency, convertPrice, convertFromUsd]);
 
   const value = {
     currency,
-    currencies: CURRENCIES,
+    currencies,
     setCurrency: setPreferredCurrency,
     convertPrice,
     convertFromUsd,
@@ -116,7 +208,7 @@ export function CurrencyProvider({ children }) {
 export function useCurrency() {
   const context = useContext(CurrencyContext);
   if (!context) {
-    throw new Error('useCurrency must be used within CurrencyProvider');
+    throw new Error("useCurrency must be used within CurrencyProvider");
   }
   return context;
 }

@@ -4,14 +4,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { BaseModal } from "@shared/components/BaseModal";
 import { Badge } from "@shared/components/ui/badge";
 import { BREAKPOINTS } from "@shared/lib/constants";
-
-const formatPrice = (value) =>
-  typeof value === "number" && !Number.isNaN(value) ? `${value.toFixed(2)} EUR` : "-";
-
-const formatSignedPrice = (value) =>
-  typeof value === "number" && !Number.isNaN(value)
-    ? `${value >= 0 ? "+" : ""}${value.toFixed(2)} EUR`
-    : "-";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const formatSignedPercent = (value) =>
   typeof value === "number" && !Number.isNaN(value)
@@ -39,7 +32,7 @@ function freshnessBadgeClass(status) {
   }
 }
 
-function ChangeMetric({ label, percent, euro }) {
+function ChangeMetric({ label, percent, euro, formatSignedPrice }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/65 px-2 py-1.5">
       <span className="text-[10px] uppercase text-muted-foreground">{label}</span>
@@ -52,7 +45,15 @@ function ChangeMetric({ label, percent, euro }) {
 }
 
 export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
+  const { formatPrice } = useCurrency();
   const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < BREAKPOINTS.MOBILE);
+  const formatSignedPrice = (value) => {
+    if (typeof value !== "number" || Number.isNaN(value)) {
+      return "-";
+    }
+    const sign = value >= 0 ? "+" : "-";
+    return `${sign}${formatPrice(Math.abs(value))}`;
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -163,16 +164,19 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
                   label="24h"
                   percent={item.change24hPercent}
                   euro={item.change24hEuro}
+                  formatSignedPrice={formatSignedPrice}
                 />
                 <ChangeMetric
                   label="7d"
                   percent={item.change7dPercent}
                   euro={item.change7dEuro}
+                  formatSignedPrice={formatSignedPrice}
                 />
                 <ChangeMetric
                   label="30d"
                   percent={item.change30dPercent}
                   euro={item.change30dEuro}
+                  formatSignedPrice={formatSignedPrice}
                 />
               </div>
             </div>
@@ -184,7 +188,7 @@ export function ItemDetailModal({ isOpen, onClose, item, history = [] }) {
               <ResponsiveContainer width="100%" height={isSmallScreen ? 200 : 280}>
                 <AreaChart data={history}>
                   <XAxis dataKey="date" fontSize={10} />
-                  <Tooltip formatter={(value) => `${Number(value).toFixed(2)} EUR`} />
+                  <Tooltip formatter={(value) => formatPrice(Number(value))} />
                   <Area
                     type="linear"
                     dataKey="wert"

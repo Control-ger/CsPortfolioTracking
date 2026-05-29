@@ -152,7 +152,7 @@ final class ExchangeRateClient
     /**
      * Returns USD-based rates from provider response (1 USD = X).
      *
-     * @return array{EUR: float, GBP: float}
+     * @return array<string, float>
      */
     public function usdRates(): array
     {
@@ -166,28 +166,53 @@ final class ExchangeRateClient
         curl_close($ch);
 
         if ($response === false || $httpCode !== 200 || !is_string($response) || trim($response) === '') {
-            return [
-                'EUR' => self::FALLBACK_RATE,
-                'GBP' => 0.85 * self::FALLBACK_RATE,
-            ];
+            return $this->fallbackUsdRates();
         }
 
         $json = json_decode($response, true);
         if (!is_array($json) || !isset($json['rates']) || !is_array($json['rates'])) {
-            return [
-                'EUR' => self::FALLBACK_RATE,
-                'GBP' => 0.85 * self::FALLBACK_RATE,
-            ];
+            return $this->fallbackUsdRates();
         }
 
-        $eur = isset($json['rates']['EUR']) && is_numeric($json['rates']['EUR'])
-            ? (float) $json['rates']['EUR']
-            : self::FALLBACK_RATE;
+        $rates = [];
+        foreach ($json['rates'] as $currencyCode => $rateValue) {
+            $code = strtoupper(trim((string) $currencyCode));
+            if (preg_match('/^[A-Z]{3}$/', $code) !== 1 || !is_numeric($rateValue)) {
+                continue;
+            }
 
-        $gbp = isset($json['rates']['GBP']) && is_numeric($json['rates']['GBP'])
-            ? (float) $json['rates']['GBP']
-            : (0.85 * $eur);
+            $rate = (float) $rateValue;
+            if ($rate <= 0.0) {
+                continue;
+            }
 
-        return ['EUR' => $eur, 'GBP' => $gbp];
+            $rates[$code] = $rate;
+        }
+
+        if ($rates === []) {
+            return $this->fallbackUsdRates();
+        }
+
+        if (!isset($rates['EUR']) || $rates['EUR'] <= 0.0) {
+            $rates['EUR'] = self::FALLBACK_RATE;
+        }
+        if (!isset($rates['USD']) || $rates['USD'] <= 0.0) {
+            $rates['USD'] = 1.0;
+        }
+
+        ksort($rates);
+        return $rates;
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function fallbackUsdRates(): array
+    {
+        return [
+            'EUR' => self::FALLBACK_RATE,
+            'GBP' => 0.85 * self::FALLBACK_RATE,
+            'USD' => 1.0,
+        ];
     }
 }

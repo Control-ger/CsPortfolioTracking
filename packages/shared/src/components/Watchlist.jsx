@@ -144,7 +144,7 @@ function WatchlistItemsLoadingSkeleton() {
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const navigate = useNavigate();
-  const { formatPrice } = useCurrency();
+  const { currency, formatPrice } = useCurrency();
   const validSnapshot = getValidWatchlistSnapshot();
   const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
   const [buyOrderSummary, setBuyOrderSummary] = useState(() => validSnapshot?.buyOrderSummary || []);
@@ -503,7 +503,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                         {hasFiniteNumber(selectedItem.currentPrice) && (
                           <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-muted-foreground">
                             <p>
-                              Aktuell: {Number(selectedItem.currentPrice).toFixed(2)} EUR
+                              Aktuell: {formatPrice(Number(selectedItem.currentPrice))}
                             </p>
                             {selectedItem?.hasBuyOrder && Number(selectedItem?.buyOrderBestPriceUsd || 0) > 0 ? (
                               <p>
@@ -540,9 +540,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                           className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                         >
                           {showAbsolute ? (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">EUR</span>
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">{currency}</span>
                           ) : (
-                            <span className="text-muted-foreground/50">EUR</span>
+                            <span className="text-muted-foreground/50">{currency}</span>
                           )}
                           /
                           {showAbsolute ? (

@@ -7,11 +7,8 @@ import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { Trash2 } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
-const formatPrice = (value) =>
-  typeof value === "number" && !Number.isNaN(value) ? `${value.toFixed(2)} EUR` : "-";
-
 export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
-  const { formatPrice: formatCurrencyPrice } = useCurrency();
+  const { currency, formatPrice: formatCurrencyPrice } = useCurrency();
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
@@ -71,7 +68,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
             <div>
               <p className="text-xs uppercase text-muted-foreground">Aktueller Preis</p>
               <p className="text-lg font-bold">
-                {item.currentPrice !== null ? formatPrice(item.currentPrice) : "N/A"}
+                {item.currentPrice !== null ? formatCurrencyPrice(item.currentPrice) : "N/A"}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -95,34 +92,34 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-border/70 bg-card/65 p-2">
             <p className="text-xs uppercase text-muted-foreground">Aktuell</p>
-            <p className="text-sm font-semibold">{formatPrice(item.currentPrice)}</p>
+            <p className="text-sm font-semibold">{formatCurrencyPrice(item.currentPrice)}</p>
           </div>
 
           {item.lastPrice !== null && (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Letzter Preis</p>
-              <p className="text-sm font-semibold">{formatPrice(item.lastPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(item.lastPrice)}</p>
             </div>
           )}
 
           {item.highestPrice !== null && (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Hoechst</p>
-              <p className="text-sm font-semibold">{formatPrice(item.highestPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(item.highestPrice)}</p>
             </div>
           )}
 
           {item.lowestPrice !== null && (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Tiefst</p>
-              <p className="text-sm font-semibold">{formatPrice(item.lowestPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(item.lowestPrice)}</p>
             </div>
           )}
 
           {item.avgPrice !== null && (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Durchschnitt</p>
-              <p className="text-sm font-semibold">{formatPrice(item.avgPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(item.avgPrice)}</p>
             </div>
           )}
 
@@ -130,7 +127,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
             <div className="col-span-2 rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Preis-Spanne</p>
               <p className="text-sm font-semibold">
-                {formatPrice(item.lowestPrice)} - {formatPrice(item.highestPrice)}
+                {formatCurrencyPrice(item.lowestPrice)} - {formatCurrencyPrice(item.highestPrice)}
               </p>
             </div>
           ) : null}
@@ -146,12 +143,12 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
               >
                 {showAbsolute ? (
                   <>
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">EUR</span>
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">{currency}</span>
                     <span className="text-muted-foreground/50">%</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-muted-foreground/50">EUR</span>
+                    <span className="text-muted-foreground/50">{currency}</span>
                     <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">%</span>
                   </>
                 )}

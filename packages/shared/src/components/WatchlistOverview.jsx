@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Eye, TrendingUp, TrendingDown } from "lucide-re
 import { fetchWatchlistData } from "@shared/lib/dataSource.js";
 import { cn } from "@shared/lib/utils";
 import { UI } from "@shared/lib/constants";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 let watchlistOverviewSnapshot = {
   loaded: false,
@@ -61,7 +62,7 @@ const calculateTopMovers = (items) => {
 };
 
 // Spezielle ItemRow fuer Top Mover mit Highlighting
-const TopMoverItemRow = ({ item, type, onClick }) => {
+const TopMoverItemRow = ({ item, type, onClick, formatPrice }) => {
   const isGainer = type === "gainer";
   const Icon = isGainer ? TrendingUp : TrendingDown;
   const derivedPercentCandidate = Number(item.priceChangePercent);
@@ -91,7 +92,7 @@ const TopMoverItemRow = ({ item, type, onClick }) => {
         <div className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-medium">{item.name}</h4>
           {hasCurrentPrice && (
-            <p className="truncate text-xs text-muted-foreground">{currentPriceCandidate.toFixed(2)} EUR</p>
+            <p className="truncate text-xs text-muted-foreground">{formatPrice(currentPriceCandidate)}</p>
           )}
         </div>
       </div>
@@ -114,6 +115,7 @@ export const WatchlistOverview = ({
   allowExpand = true,
   onWarningsChange,
 }) => {
+  const { formatPrice } = useCurrency();
   const validSnapshot = getValidWatchlistOverviewSnapshot();
   const [allWatchlistItems, setAllWatchlistItems] = useState(() => validSnapshot?.items || []);
   const [loading, setLoading] = useState(() => !validSnapshot);
@@ -258,6 +260,7 @@ export const WatchlistOverview = ({
                     key={item.id}
                     item={item}
                     type="gainer"
+                    formatPrice={formatPrice}
                     onClick={() => onOpenItem?.(item)}
                   />
                 ))}
@@ -278,6 +281,7 @@ export const WatchlistOverview = ({
                     key={item.id}
                     item={item}
                     type="loser"
+                    formatPrice={formatPrice}
                     onClick={() => onOpenItem?.(item)}
                   />
                 ))}

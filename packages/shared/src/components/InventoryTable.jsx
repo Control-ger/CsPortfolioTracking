@@ -32,12 +32,13 @@ const ItemThumbnail = ({ imageUrl, name }) => (
   </div>
 );
 
-function formatSignedCurrency(value) {
+function formatSignedCurrency(value, formatPrice) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "-";
   }
 
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)} EUR`;
+  const sign = value >= 0 ? "+" : "-";
+  return `${sign}${formatPrice(Math.abs(value))}`;
 }
 
 function formatSignedPercent(value) {
@@ -81,7 +82,7 @@ function freshnessBadgeClass(status) {
   }
 }
 
-function ChangeCell({ euro, percent }) {
+function ChangeCell({ euro, percent, formatPrice }) {
   if (typeof percent !== "number" || Number.isNaN(percent)) {
     return <span className="text-xs text-muted-foreground">-</span>;
   }
@@ -92,7 +93,7 @@ function ChangeCell({ euro, percent }) {
         {formatSignedPercent(percent)}
       </span>
       <span className={`text-[10px] ${deltaClassName(euro)}`}>
-        {formatSignedCurrency(euro)}
+        {formatSignedCurrency(euro, formatPrice)}
       </span>
     </div>
   );

@@ -31,9 +31,54 @@ const formatPercent = (value, fractionDigits = 2) => {
   return `${sign}${numericValue.toFixed(fractionDigits)}%`;
 };
 
+const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
+  if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
+    return {
+      label: "keine live quotes",
+      tone: "text-slate-300",
+      iconClass: "rounded-full border border-slate-500/35 bg-slate-500/12 p-2 text-slate-300",
+      icon: "clock",
+    };
+  }
+
+  if (!Number.isFinite(oldestAgeSeconds)) {
+    return {
+      label: "status unbekannt",
+      tone: "text-slate-300",
+      iconClass: "rounded-full border border-slate-500/35 bg-slate-500/12 p-2 text-slate-300",
+      icon: "clock",
+    };
+  }
+
+  if (oldestAgeSeconds <= 90 * 60) {
+    return {
+      label: "im plan",
+      tone: "text-emerald-300",
+      iconClass: "rounded-full border border-emerald-400/30 bg-emerald-500/12 p-2 text-emerald-300",
+      icon: "clock",
+    };
+  }
+
+  if (oldestAgeSeconds <= 3 * 60 * 60) {
+    return {
+      label: "verzoegert",
+      tone: "text-amber-300",
+      iconClass: "rounded-full border border-amber-400/30 bg-amber-500/12 p-2 text-amber-300",
+      icon: "refresh",
+    };
+  }
+
+  return {
+    label: "nachlauf",
+    tone: "text-red-300",
+    iconClass: "rounded-full border border-red-400/30 bg-red-500/12 p-2 text-red-300",
+    icon: "refresh",
+  };
+};
+
 /**
  * PortfolioHeaderCard - Minimalistische Portfolio-Uebersicht fuer mobiles Design
- * Zeigt: Portfolio-Wert mit Trend, prozentuale Aenderung, Total Items und Data Freshness
+ * Zeigt: Portfolio-Wert mit Trend, prozentuale Aenderung, Total Items und Price Sync
  */
 export const PortfolioHeaderCard = ({
   totalValue = 0,
@@ -41,7 +86,6 @@ export const PortfolioHeaderCard = ({
   isPositive = true,
   totalQuantity = 0,
   liveItemsCount = 0,
-  staleItemsCount = 0,
   freshestDataAgeSeconds = 0,
   oldestDataAgeSeconds = 0,
 }) => {
@@ -51,10 +95,8 @@ export const PortfolioHeaderCard = ({
   const effectiveIsPositive = hasValidRoiPercent ? numericRoiPercent >= 0 : isPositive;
   const Icon = effectiveIsPositive ? TrendingUp : TrendingDown;
   const trendColor = effectiveIsPositive ? "text-emerald-400" : "text-red-400";
-  const hasStaleItems = staleItemsCount > 0;
-  const freshnessTitle = hasStaleItems
-    ? `${staleItemsCount}/${liveItemsCount + staleItemsCount} Items veraltet - aeltest: ${formatAge(oldestDataAgeSeconds)}`
-    : `Aktuell - frischestes Update: ${formatAge(freshestDataAgeSeconds)}`;
+  const syncHealth = resolveSyncHealth(Number(oldestDataAgeSeconds), Number(liveItemsCount));
+  const syncTitle = `Price Sync - Live Quotes: ${liveItemsCount} | Aeltestes Cache-Alter: ${formatAge(oldestDataAgeSeconds)}`;
 
   return (
     <div className="space-y-3 rounded-2xl border border-border/70 bg-card/65 p-3.5">
@@ -83,29 +125,20 @@ export const PortfolioHeaderCard = ({
           </div>
         </div>
 
-        {/* Data Freshness Icon - rechts oben */}
+        {/* Price Sync Icon - rechts oben */}
         <div className="flex flex-col items-end gap-2 text-right">
-          {hasStaleItems ? (
-            <div
-              className="rounded-full border border-amber-400/30 bg-amber-500/12 p-2 text-amber-300"
-              title={freshnessTitle}
-            >
+          <div
+            className={syncHealth.iconClass}
+            title={syncTitle}
+          >
+            {syncHealth.icon === "refresh" ? (
               <RotateCw className="h-4 w-4" />
-            </div>
-          ) : (
-            <div
-              className="rounded-full border border-emerald-400/30 bg-emerald-500/12 p-2 text-emerald-300"
-              title={freshnessTitle}
-            >
-              <Clock className="h-4 w-4" />
-            </div>
-          )}
-          <div className="text-xs text-muted-foreground">
-            {hasStaleItems ? (
-              <span>{staleItemsCount}v</span>
             ) : (
-              <span>{formatAge(freshestDataAgeSeconds)}</span>
+              <Clock className="h-4 w-4" />
             )}
+          </div>
+          <div className={`text-xs ${syncHealth.tone}`}>
+            <span>{syncHealth.label}</span>
           </div>
         </div>
       </div>
@@ -113,8 +146,9 @@ export const PortfolioHeaderCard = ({
       {/* Zusaetzliche Infos in kleinerer Schrift */}
       <div className="text-xs text-muted-foreground">
         <span>{totalQuantity} Items - </span>
-        <span className="font-medium">{liveItemsCount} live</span>
-        {hasStaleItems && <span>, {staleItemsCount} veraltet</span>}
+        <span className="font-medium">{liveItemsCount} live quotes</span>
+        <span>, aeltestes Cache-Alter {formatAge(oldestDataAgeSeconds)}</span>
+        <span>, letztes Update {formatAge(freshestDataAgeSeconds)}</span>
       </div>
     </div>
   );

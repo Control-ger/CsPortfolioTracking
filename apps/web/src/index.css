@@ -183,6 +183,17 @@
 .tr-desktop-rail {
   border-right: 1px solid color-mix(in oklab, var(--color-border) 82%, transparent);
   background:
+    radial-gradient(circle at 18% 24%, color-mix(in oklab, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.24)) 30%, transparent), transparent 58%),
+    radial-gradient(circle at 78% 72%, color-mix(in oklab, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.18)) 26%, transparent), transparent 60%),
+    radial-gradient(circle at 58% 18%, color-mix(in oklab, var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.14)) 24%, transparent), transparent 56%),
+    radial-gradient(circle at 82% 30%, color-mix(in oklab, var(--steam-shell-color-d, hsla(32, 42%, 46%, 0.14)) 25%, transparent), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.18)),
+    color-mix(in oklab, var(--color-card) 94%, black 6%);
+  backdrop-filter: blur(14px) saturate(0.98);
+}
+
+.dark .tr-desktop-rail {
+  background:
     radial-gradient(circle at 18% 24%, color-mix(in oklab, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.24)) 42%, transparent), transparent 52%),
     radial-gradient(circle at 78% 72%, color-mix(in oklab, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.18)) 38%, transparent), transparent 54%),
     radial-gradient(circle at 58% 18%, color-mix(in oklab, var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.14)) 34%, transparent), transparent 50%),

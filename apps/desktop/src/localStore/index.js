@@ -1175,7 +1175,12 @@ export function createLocalStore(userDataPath) {
 
       const csfloatCandidates = allInvestments.filter((investment) => {
         const platform = String(investment.platform || investment.source || "").toLowerCase();
-        return platform === "csfloat" || String(investment.id || "").startsWith("csfloat-");
+        return (
+          platform === "csfloat" ||
+          platform === "skinbaron" ||
+          String(investment.id || "").startsWith("csfloat-") ||
+          String(investment.id || "").startsWith("skinbaron-")
+        );
       });
 
       const confidenceRank = { high: 3, medium: 2, low: 1 };

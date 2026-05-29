@@ -4,9 +4,9 @@ import { PortfolioChart } from "@shared/components/PortfolioChart";
 import { Badge } from "@shared/components/ui/badge";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
-const formatSignedPrice = (value) =>
+const formatSignedPrice = (value, formatPrice) =>
   typeof value === "number" && !Number.isNaN(value)
-    ? `${value >= 0 ? "+" : ""}${value.toFixed(2)} EUR`
+    ? `${value >= 0 ? "+" : "-"}${formatPrice(Math.abs(value))}`
     : "-";
 
 const formatSignedPercent = (value) =>
@@ -35,14 +35,14 @@ function freshnessBadgeClass(status) {
   }
 }
 
-function ChangeMetric({ label, percent, euro }) {
+function ChangeMetric({ label, percent, euro, formatPrice }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/65 px-2 py-1.5">
       <span className="text-[10px] uppercase text-muted-foreground">{label}</span>
       <span className={`text-xs font-semibold ${deltaClassName(percent)}`}>
         {formatSignedPercent(percent)}
       </span>
-      <span className={`text-[10px] ${deltaClassName(euro)}`}>{formatSignedPrice(euro)}</span>
+      <span className={`text-[10px] ${deltaClassName(euro)}`}>{formatSignedPrice(euro, formatPrice)}</span>
     </div>
   );
 }
@@ -122,7 +122,7 @@ export function ItemDetailsModal({
   onBucketChange,
   canToggleExclude = true,
 }) {
-  const { formatPrice } = useCurrency();
+  const { currency, formatPrice } = useCurrency();
   const [showAbsolute, setShowAbsolute] = useState(false);
   const excludeEnabled = canToggleExclude && typeof onToggleExclude === "function";
   const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
@@ -258,16 +258,19 @@ export function ItemDetailsModal({
                 label="24h"
                 percent={item.change24hPercent}
                 euro={item.change24hEuro}
+                formatPrice={formatPrice}
               />
               <ChangeMetric
                 label="7d"
                 percent={item.change7dPercent}
                 euro={item.change7dEuro}
+                formatPrice={formatPrice}
               />
               <ChangeMetric
                 label="30d"
                 percent={item.change30dPercent}
                 euro={item.change30dEuro}
+                formatPrice={formatPrice}
               />
             </div>
           </div>
@@ -293,12 +296,12 @@ export function ItemDetailsModal({
               >
                 {showAbsolute ? (
                   <>
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">EUR</span>
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">{currency}</span>
                     <span className="text-muted-foreground/50">%</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-muted-foreground/50">EUR</span>
+                    <span className="text-muted-foreground/50">{currency}</span>
                     <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">%</span>
                   </>
                 )}

@@ -564,3 +564,12 @@ Updated: 2026-05-28
 Change: Verbindliche Avatar-Palette-Regel fuer alle Color-Gradients
 - Produktive Frontend-Gradients muessen die avatarbasierte Steam-Palette (`--steam-shell-color-a` bis `--steam-shell-color-d`) verwenden.
 - Die Palette bleibt zentral ueber `deriveSteamPaletteFromUser` in `packages/shared/src/components/SteamLoginPrompt.jsx` definiert (inkl. Komplementaerfarbe).
+
+---
+
+Updated: 2026-05-28
+Change: SkinBaron Desktop-Import + Capability-Checks ergaenzt
+- Electron Main speichert SkinBaron API Keys lokal via `safeStorage` (analog zu CSFloat) und fuehrt beim Speichern einen Capability-Probe-Check fuer Read-Rechte aus.
+- Desktop-Sidecar erweitert um `POST /api/v1/portfolio/sync/skinbaron/preview` (plus `execute`-Stub) sowie Key-Statusroute `GET /api/v1/settings/skinbaron-api-key`.
+- Management-Flow in der Desktop-App bietet jetzt einen SkinBaron-Sync-Dialog (Preview/Import) analog zum CSFloat-Sync.
+- Steam-Matching beruecksichtigt neben CSFloat auch SkinBaron-importierte Positionen fuer automatische Zuordnung.

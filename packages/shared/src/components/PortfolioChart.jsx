@@ -5,6 +5,7 @@ import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAx
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { Skeleton } from "./ui/skeleton";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const RANGE_OPTIONS = [
   { key: "7T", label: "7T", days: 7 },
@@ -63,16 +64,13 @@ function formatTooltipDate(timestamp) {
   });
 }
 
-function formatSignedCurrency(value) {
+function formatSignedCurrency(value, formatPrice) {
   if (!Number.isFinite(value)) {
     return "-";
   }
 
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toLocaleString("de-DE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} EUR`;
+  const sign = value >= 0 ? "+" : "-";
+  return `${sign}${formatPrice(Math.abs(value))}`;
 }
 
 function formatSignedPercent(value) {
@@ -93,15 +91,12 @@ function formatAxisPercent(value) {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function formatAxisAbsolute(value, decimals = 2) {
+function formatAxisAbsolute(value, formatPrice) {
   if (!Number.isFinite(value)) {
     return "-";
   }
 
-  return `${value.toLocaleString("de-DE", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })}€`;
+  return formatPrice(value);
 }
 
 function buildAbsoluteAxisConfig(chartData = []) {
@@ -127,7 +122,6 @@ function buildAbsoluteAxisConfig(chartData = []) {
 
   return {
     domain: [minValue - pad, maxValue + pad],
-    tickFormatter: (value) => formatAxisAbsolute(value, 2),
     tickCount: 6,
   };
 }
@@ -230,6 +224,7 @@ export const PortfolioChart = ({
   flat = false,
   cardRef = null,
 }) => {
+  const { currency, formatPrice } = useCurrency();
   const [rangeKey, setRangeKey] = useState("90T");
   const hoverAnimationFrameRef = useRef(null);
   const lastHoveredIndexRef = useRef(null);
@@ -330,11 +325,11 @@ export const PortfolioChart = ({
   const chartConfig = useMemo(
     () => ({
       growthPercent: {
-        label: showAbsolute ? "Preis (EUR)" : "Zuwachs (%)",
+        label: showAbsolute ? `Preis (${currency})` : "Zuwachs (%)",
         color: trendStats.lineColor,
       },
     }),
-    [trendStats.lineColor, showAbsolute],
+    [currency, trendStats.lineColor, showAbsolute],
   );
 
   const dispatchHoverChange = useCallback(
@@ -574,7 +569,7 @@ export const PortfolioChart = ({
                 tickMargin={4}
                 tickFormatter={
                   showAbsolute && absoluteAxisConfig
-                    ? absoluteAxisConfig.tickFormatter
+                    ? (value) => formatAxisAbsolute(value, formatPrice)
                     : formatAxisPercent
                 }
               />
@@ -584,7 +579,7 @@ export const PortfolioChart = ({
                     indicator="line"
                     nameKey="displayValue"
                     labelFormatter={(value) => formatTooltipDate(value)}
-                    formatter={(value) => showAbsolute ? `${Number(value).toLocaleString("de-DE", {minimumFractionDigits: 2, maximumFractionDigits: 2})} EUR` : formatAxisPercent(Number(value))}
+                    formatter={(value) => showAbsolute ? formatPrice(Number(value)) : formatAxisPercent(Number(value))}
                   />
                 }
               />
@@ -617,7 +612,7 @@ export const PortfolioChart = ({
         ) : (
           <>
             <div className="flex items-center gap-2 leading-none font-semibold">
-              {trendStats.isPositive ? "Gewinn" : "Verlust"}: {formatSignedCurrency(trendStats.deltaValue)} (
+              {trendStats.isPositive ? "Gewinn" : "Verlust"}: {formatSignedCurrency(trendStats.deltaValue, formatPrice)} (
               {formatSignedPercent(trendStats.deltaPercent)})
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             </div>

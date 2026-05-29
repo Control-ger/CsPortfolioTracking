@@ -2,8 +2,10 @@
 declare(strict_types=1);
 
 use App\Http\Controller\DesktopCsFloatController;
+use App\Http\Controller\DesktopSkinBaronController;
 use App\Http\Controller\DesktopSteamAuthController;
 use App\Infrastructure\External\CsFloatTradeClient;
+use App\Infrastructure\External\SkinBaronClient;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Http\Router;
@@ -70,6 +72,7 @@ if ($providedSidecarSecret === '' || !hash_equals($expectedSidecarSecret, $provi
 $request = Request::fromGlobals();
 $steamAuthController = new DesktopSteamAuthController();
 $csFloatController = new DesktopCsFloatController(new CsFloatTradeClient());
+$skinBaronController = new DesktopSkinBaronController(new SkinBaronClient());
 
 $router = new Router();
 
@@ -128,6 +131,28 @@ $router->register('POST', '/api/v1/settings/csfloat-api-key', static function ()
     JsonResponseFactory::error(
         'DESKTOP_SECRET_IPC_REQUIRED',
         'Set the CSFloat API Key through the Electron settings UI so it can be stored with OS encryption.',
+        ['desktopLocal' => true],
+        400
+    );
+});
+
+$router->register('GET', '/api/v1/settings/skinbaron-api-key', static function (): void {
+    $apiKey = getenv('SKINBARON_API_KEY') ?: ($_ENV['SKINBARON_API_KEY'] ?? '');
+    $hasConfiguredKey = is_string($apiKey)
+        && trim($apiKey) !== ''
+        && !in_array(strtolower(trim($apiKey)), ['expired', 'replace-with-skinbaron-api-key'], true);
+
+    JsonResponseFactory::success([
+        'hasKey' => $hasConfiguredKey,
+        'source' => $hasConfiguredKey ? 'electron-safe-storage' : 'missing',
+        'desktopLocal' => true,
+    ]);
+});
+
+$router->register('POST', '/api/v1/settings/skinbaron-api-key', static function (): void {
+    JsonResponseFactory::error(
+        'DESKTOP_SECRET_IPC_REQUIRED',
+        'Set the SkinBaron API Key through the Electron settings UI so it can be stored with OS encryption.',
         ['desktopLocal' => true],
         400
     );
@@ -224,6 +249,8 @@ $router->register('GET', '/api/v1/auth/steam/inventory', static function () use 
 
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/preview', [$csFloatController, 'preview']);
 $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatController, 'execute']);
+$router->register('POST', '/api/v1/portfolio/sync/skinbaron/preview', [$skinBaronController, 'preview']);
+$router->register('POST', '/api/v1/portfolio/sync/skinbaron/execute', [$skinBaronController, 'execute']);
 $router->register('GET', '/api/v1/csfloat/buy-orders', [$csFloatController, 'buyOrders']);
 
 // Proxy selected read-only routes to upstream server when configured.
