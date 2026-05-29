@@ -533,6 +533,96 @@ $router->register('GET', '/api/v1/settings/price-source', static function () use
     );
 });
 
+$router->register('GET', '/api/v1/settings/currency', static function () use ($proxyUpstreamGet): void {
+    $proxied = $proxyUpstreamGet('/api/v1/settings/currency');
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($proxied['data'] ?? null) ? $proxied['data'] : ['currency' => 'EUR', 'popularCurrencies' => []],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success(
+        [
+            'userId' => 1,
+            'currency' => 'EUR',
+            'updatedAt' => null,
+            'source' => 'desktop-defaults',
+            'popularCurrencies' => [],
+        ],
+        [
+            'source' => 'desktop-local-fallback',
+            'proxyAttempts' => $proxied['attempts'] ?? [],
+        ]
+    );
+});
+
+$router->register('PUT', '/api/v1/settings/currency', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+    $baseUrl = $resolveUpstreamApiBase();
+    $currencyRaw = strtoupper(trim((string) ($request->body['currency'] ?? 'EUR')));
+    $currency = preg_match('/^[A-Z]{3}$/', $currencyRaw) === 1 ? $currencyRaw : 'EUR';
+
+    if ($baseUrl === '') {
+        JsonResponseFactory::success(
+            [
+                'userId' => 1,
+                'currency' => $currency,
+                'updatedAt' => gmdate('Y-m-d H:i:s'),
+                'source' => 'desktop-local-fallback',
+                'popularCurrencies' => [],
+            ],
+            ['source' => 'desktop-local-fallback']
+        );
+        return;
+    }
+
+    $payloadJson = json_encode(['currency' => $currency], JSON_UNESCAPED_SLASHES);
+    if (!is_string($payloadJson)) {
+        JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', 'Ungueltiger Payload.', [], 400);
+        return;
+    }
+
+    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/settings/currency') as $candidate) {
+        $ch = curl_init($candidate);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || trim($response) === '') {
+            continue;
+        }
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            JsonResponseFactory::success(
+                is_array($decoded['data'] ?? null) ? $decoded['data'] : ['currency' => $currency, 'popularCurrencies' => []],
+                array_merge(is_array($decoded['meta'] ?? null) ? $decoded['meta'] : [], ['source' => 'upstream'])
+            );
+            return;
+        }
+    }
+
+    JsonResponseFactory::error(
+        'SETTINGS_SAVE_FAILED',
+        'Currency-Preference konnte nicht zum Server gespeichert werden.',
+        [],
+        502
+    );
+});
+
 $router->register('PUT', '/api/v1/settings/price-source', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
     $baseUrl = $resolveUpstreamApiBase();
     $mode = strtolower(trim((string) ($request->body['mode'] ?? 'auto')));

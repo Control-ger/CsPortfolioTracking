@@ -573,3 +573,12 @@ Change: SkinBaron Desktop-Import + Capability-Checks ergaenzt
 - Desktop-Sidecar erweitert um `POST /api/v1/portfolio/sync/skinbaron/preview` (plus `execute`-Stub) sowie Key-Statusroute `GET /api/v1/settings/skinbaron-api-key`.
 - Management-Flow in der Desktop-App bietet jetzt einen SkinBaron-Sync-Dialog (Preview/Import) analog zum CSFloat-Sync.
 - Steam-Matching beruecksichtigt neben CSFloat auch SkinBaron-importierte Positionen fuer automatische Zuordnung.
+
+---
+
+Updated: 2026-05-29
+Change: Serverseitige Currency-Preference + anonymisierte Popularitaets-Stats ergaenzt
+- Neue zentrale Repository-Komponente: `backend/src/Infrastructure/Persistence/Repository/UserCurrencyPreferenceRepository.php`.
+- Neue API-Routen fuer User-Waehrung: `GET /api/v1/settings/currency`, `PUT /api/v1/settings/currency` (Server + Desktop-Sidecar-Proxy/Fallback).
+- Persistenzregel: `user_currency_preferences` speichert pro User nur die aktuelle Anzeige-Waehrung; aggregierte Beliebtheit in `currency_usage_stats` bleibt anonym ohne User-IDs.
+- Frontend `CurrencyContext` persistiert die Waehrungswahl serverseitig und nutzt anonyme Popular-Codes fuer sortierte Anzeige im Settings-UI.

@@ -454,6 +454,82 @@ function mapSkinBaronPreviewSaleToInvestment(sale) {
   };
 }
 
+function normalizeImportIdentifier(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.toLowerCase();
+}
+
+function resolveInvestmentPlatform(entry) {
+  return String(entry?.platform || entry?.source || "").trim().toLowerCase();
+}
+
+function buildExistingInvestmentLookup(rows = [], platformFilter = null) {
+  const byId = new Map();
+  const byExternalTradeId = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((entry) => {
+    const investmentId = String(entry?.id || "").trim();
+    if (investmentId) {
+      byId.set(investmentId, entry);
+    }
+
+    if (!platformFilter) {
+      return;
+    }
+
+    if (resolveInvestmentPlatform(entry) !== platformFilter) {
+      return;
+    }
+
+    const externalTradeId = normalizeImportIdentifier(entry?.externalTradeId);
+    if (externalTradeId && !byExternalTradeId.has(externalTradeId)) {
+      byExternalTradeId.set(externalTradeId, entry);
+    }
+  });
+
+  return { byId, byExternalTradeId };
+}
+
+function resolveExistingCsFloatInvestmentMatch(lookup, mappedTrade, previewTrade) {
+  const candidateIds = [String(mappedTrade?.id || "").trim()];
+  const legacyExternalTradeId = String(previewTrade?.legacyExternalTradeId || "").trim();
+  if (legacyExternalTradeId) {
+    candidateIds.push(`csfloat-${legacyExternalTradeId}`);
+  }
+
+  for (const candidateId of candidateIds) {
+    if (!candidateId) {
+      continue;
+    }
+    const existingById = lookup?.byId?.get(candidateId);
+    if (existingById) {
+      return existingById;
+    }
+  }
+
+  const candidateExternalTradeIds = [
+    mappedTrade?.externalTradeId,
+    previewTrade?.externalTradeId,
+    previewTrade?.legacyExternalTradeId,
+  ];
+  for (const candidateExternalTradeId of candidateExternalTradeIds) {
+    const normalizedExternalTradeId = normalizeImportIdentifier(candidateExternalTradeId);
+    if (!normalizedExternalTradeId) {
+      continue;
+    }
+    const existingByTradeId = lookup?.byExternalTradeId?.get(normalizedExternalTradeId);
+    if (existingByTradeId) {
+      return existingByTradeId;
+    }
+  }
+
+  return null;
+}
+
 async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
   const localStore = getDesktopLocalStore();
   if (!localStore) {
@@ -479,25 +555,11 @@ async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
       await localStore.listInvestments(userId),
       "local-store-list-investments",
     );
-    const existingInvestmentsById = new Map();
-    (Array.isArray(investments) ? investments : []).forEach((entry) => {
-      const investmentId = String(entry?.id || "").trim();
-      if (investmentId) {
-        existingInvestmentsById.set(investmentId, entry);
-      }
-    });
+    const existingLookup = buildExistingInvestmentLookup(investments, "csfloat");
 
     const enrichedImportTrades = importTrades.map((trade) => {
       const mapped = mapCsFloatPreviewTradeToInvestment(trade);
-      const candidateIds = [String(mapped.id || "").trim()];
-      const legacyExternalTradeId = String(trade?.legacyExternalTradeId || "").trim();
-      if (legacyExternalTradeId) {
-        candidateIds.push(`csfloat-${legacyExternalTradeId}`);
-      }
-
-      const existingMatch = candidateIds
-        .map((candidateId) => existingInvestmentsById.get(candidateId))
-        .find(Boolean);
+      const existingMatch = resolveExistingCsFloatInvestmentMatch(existingLookup, mapped, trade);
       const { status, quantityDelta } = determineDesktopPreviewTradeStatus(trade, mapped, existingMatch || null);
 
       return {
@@ -716,21 +778,20 @@ export async function executeCsFloatTradeSync(payload = {}) {
       : Array.isArray(preview?.data?.sampleTrades)
         ? preview.data.sampleTrades
       : [];
-    const rows = trades.map((trade) => ({
-      ...mapCsFloatPreviewTradeToInvestment(trade),
-      bucket: targetBucket,
-    }));
+    const investments = unwrapLocalStoreResult(
+      await localStore.listInvestments(userId),
+      "local-store-list-investments",
+    );
+    const existingLookup = buildExistingInvestmentLookup(investments, "csfloat");
     let inserted = 0;
     let duplicates = 0;
 
-    for (const row of rows) {
-      const investmentId = String(row?.id || "");
-      const existing = investmentId
-        ? unwrapLocalStoreResult(
-            await localStore.getInvestment(investmentId),
-            "local-store-get-investment",
-          )
-        : null;
+    for (const trade of trades) {
+      const row = {
+        ...mapCsFloatPreviewTradeToInvestment(trade),
+        bucket: targetBucket,
+      };
+      const existing = resolveExistingCsFloatInvestmentMatch(existingLookup, row, trade);
 
       unwrapLocalStoreResult(
         await localStore.upsertInvestment({
@@ -746,6 +807,15 @@ export async function executeCsFloatTradeSync(payload = {}) {
         duplicates += 1;
       } else {
         inserted += 1;
+      }
+
+      const rowId = String(row?.id || "").trim();
+      if (rowId) {
+        existingLookup.byId.set(rowId, row);
+      }
+      const externalTradeId = normalizeImportIdentifier(row?.externalTradeId);
+      if (externalTradeId) {
+        existingLookup.byExternalTradeId.set(externalTradeId, row);
       }
     }
 
@@ -1029,6 +1099,18 @@ export async function updatePriceSourcePreference(mode) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ mode }),
+  });
+}
+
+export async function fetchCurrencyPreference() {
+  return requestWithMeta("/api/v1/settings/currency");
+}
+
+export async function updateCurrencyPreference(currency) {
+  return requestWithMeta("/api/v1/settings/currency", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currency }),
   });
 }
 

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
-import { fetchExchangeRate } from "@shared/lib/apiClient.js";
+import { fetchExchangeRate, fetchCurrencyPreference, updateCurrencyPreference } from "@shared/lib/apiClient.js";
 
 const STORAGE_KEY = "preferred_currency";
 const DEFAULT_CURRENCY = "EUR";
@@ -9,11 +9,25 @@ const FALLBACK_EXCHANGE_RATES = {
   USD: 1.08,
   GBP: 0.85,
 };
+const CURRENCY_REGION_OVERRIDES = {
+  EUR: "EU",
+  USD: "US",
+  GBP: "GB",
+  XAF: "CM",
+  XCD: "AG",
+  XOF: "SN",
+  XPF: "PF",
+};
 
 const CurrencyContext = createContext(null);
 
 function isValidCurrencyCode(value) {
   return /^[A-Z]{3}$/.test(String(value || "").toUpperCase());
+}
+
+function normalizeCurrencyCode(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return isValidCurrencyCode(normalized) ? normalized : "";
 }
 
 function getLocale() {
@@ -23,20 +37,47 @@ function getLocale() {
   return "en-US";
 }
 
-function getCurrencySymbol(code) {
+function getCurrencySymbolVariant(code, currencyDisplay) {
   try {
     const parts = new Intl.NumberFormat(getLocale(), {
       style: "currency",
       currency: code,
-      currencyDisplay: "symbol",
+      currencyDisplay,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).formatToParts(0);
     const symbolPart = parts.find((part) => part.type === "currency");
-    return symbolPart?.value || code;
+    return String(symbolPart?.value || "").trim();
   } catch {
-    return code;
+    return "";
   }
+}
+
+function isSymbolEffectivelyCode(symbol, code) {
+  if (!symbol) {
+    return true;
+  }
+
+  const normalizedSymbol = String(symbol).trim().toUpperCase();
+  if (normalizedSymbol === code) {
+    return true;
+  }
+
+  return /^[A-Z]{3}$/.test(normalizedSymbol);
+}
+
+function getCurrencySymbol(code) {
+  const narrow = getCurrencySymbolVariant(code, "narrowSymbol");
+  if (!isSymbolEffectivelyCode(narrow, code)) {
+    return narrow;
+  }
+
+  const generic = getCurrencySymbolVariant(code, "symbol");
+  if (!isSymbolEffectivelyCode(generic, code)) {
+    return generic;
+  }
+
+  return "";
 }
 
 function getCurrencyName(code) {
@@ -45,6 +86,42 @@ function getCurrencyName(code) {
     return displayNames.of(code) || code;
   } catch {
     return code;
+  }
+}
+
+function inferRegionCode(code) {
+  const override = CURRENCY_REGION_OVERRIDES[code];
+  if (override) {
+    return override;
+  }
+
+  if (code.startsWith("X")) {
+    return null;
+  }
+
+  const region = code.slice(0, 2);
+  return /^[A-Z]{2}$/.test(region) ? region : null;
+}
+
+function regionToFlagEmoji(regionCode) {
+  if (!regionCode || !/^[A-Z]{2}$/.test(regionCode)) {
+    return "🌍";
+  }
+
+  const chars = [...regionCode].map((char) => 0x1F1E6 + (char.charCodeAt(0) - 65));
+  return String.fromCodePoint(...chars);
+}
+
+function getRegionName(regionCode) {
+  if (!regionCode || !/^[A-Z]{2}$/.test(regionCode)) {
+    return null;
+  }
+
+  try {
+    const displayNames = new Intl.DisplayNames([getLocale()], { type: "region" });
+    return displayNames.of(regionCode) || null;
+  } catch {
+    return null;
   }
 }
 
@@ -71,6 +148,30 @@ function normalizeRates(rawRates) {
   return normalized;
 }
 
+function normalizePopularCurrencies(rawPopularCurrencies) {
+  if (!Array.isArray(rawPopularCurrencies)) {
+    return [];
+  }
+
+  const seenCodes = new Set();
+  const normalizedEntries = [];
+  rawPopularCurrencies.forEach((entry) => {
+    const code = normalizeCurrencyCode(entry?.currency || entry?.code);
+    if (!code || seenCodes.has(code)) {
+      return;
+    }
+    seenCodes.add(code);
+    normalizedEntries.push({
+      currency: code,
+      activeUsers: Math.max(0, Number(entry?.activeUsers || 0)),
+      selectionEvents: Math.max(0, Number(entry?.selectionEvents || 0)),
+      lastSelectedAt: entry?.lastSelectedAt || null,
+    });
+  });
+
+  return normalizedEntries;
+}
+
 function buildCurrencyCatalog(rates) {
   const codes = Object.keys(rates).filter((code) => isValidCurrencyCode(code.toUpperCase()));
   codes.sort((left, right) => {
@@ -84,10 +185,16 @@ function buildCurrencyCatalog(rates) {
   });
 
   return codes.reduce((result, code) => {
+    const regionCode = inferRegionCode(code);
+    const symbol = getCurrencySymbol(code);
     result[code] = {
       code,
-      symbol: getCurrencySymbol(code),
+      symbol,
+      hasDistinctSymbol: Boolean(symbol),
       name: getCurrencyName(code),
+      regionCode,
+      regionName: getRegionName(regionCode),
+      flag: regionToFlagEmoji(regionCode),
     };
     return result;
   }, {});
@@ -106,25 +213,48 @@ export function CurrencyProvider({ children }) {
   });
   const [exchangeRates, setExchangeRates] = useState(() => ({ ...FALLBACK_EXCHANGE_RATES }));
   const [ratesLoading, setRatesLoading] = useState(false);
+  const [popularCurrencies, setPopularCurrencies] = useState([]);
 
   const currencies = useMemo(() => buildCurrencyCatalog(exchangeRates), [exchangeRates]);
+  const popularCurrencyCodes = useMemo(
+    () => popularCurrencies.map((entry) => entry.currency).filter((code) => isValidCurrencyCode(code)),
+    [popularCurrencies],
+  );
 
   useEffect(() => {
-    const loadRates = async () => {
+    const loadCurrencyData = async () => {
       setRatesLoading(true);
       try {
-        // Works for web and desktop (desktop resolves local sidecar base URL in apiClient).
-        const data = await fetchExchangeRate();
-        const normalized = normalizeRates(data?.rates || data);
-        setExchangeRates(normalized);
+        const [ratesResult, preferenceResult] = await Promise.allSettled([
+          fetchExchangeRate(),
+          fetchCurrencyPreference(),
+        ]);
+
+        if (ratesResult.status === "fulfilled") {
+          // Works for web and desktop (desktop resolves local sidecar base URL in apiClient).
+          const normalizedRates = normalizeRates(ratesResult.value?.rates || ratesResult.value);
+          setExchangeRates(normalizedRates);
+        }
+
+        if (preferenceResult.status === "fulfilled") {
+          const preferencePayload = preferenceResult.value?.data || {};
+          const normalizedPreference = normalizeCurrencyCode(preferencePayload?.currency);
+          if (normalizedPreference) {
+            setCurrency(normalizedPreference);
+            localStorage.setItem(STORAGE_KEY, normalizedPreference);
+          }
+
+          const normalizedPopular = normalizePopularCurrencies(preferencePayload?.popularCurrencies);
+          setPopularCurrencies(normalizedPopular);
+        }
       } catch (err) {
         // Keep fallback rates on network error (silent fail)
-        console.debug("[CurrencyContext] Exchange rate fetch failed, using fallback rates", err?.message);
+        console.debug("[CurrencyContext] Currency bootstrap failed, using fallback data", err?.message);
       } finally {
         setRatesLoading(false);
       }
     };
-    void loadRates();
+    void loadCurrencyData();
   }, []);
 
   useEffect(() => {
@@ -141,6 +271,24 @@ export function CurrencyProvider({ children }) {
     }
     setCurrency(normalized);
     localStorage.setItem(STORAGE_KEY, normalized);
+
+    void updateCurrencyPreference(normalized)
+      .then((response) => {
+        const payload = response?.data || {};
+        const persistedCurrency = normalizeCurrencyCode(payload?.currency);
+        if (persistedCurrency) {
+          setCurrency(persistedCurrency);
+          localStorage.setItem(STORAGE_KEY, persistedCurrency);
+        }
+
+        const normalizedPopular = normalizePopularCurrencies(payload?.popularCurrencies);
+        if (normalizedPopular.length > 0) {
+          setPopularCurrencies(normalizedPopular);
+        }
+      })
+      .catch((error) => {
+        console.debug("[CurrencyContext] Failed to persist currency preference", error?.message || error);
+      });
   }, [exchangeRates]);
 
   // Convert price from EUR to target currency
@@ -196,6 +344,8 @@ export function CurrencyProvider({ children }) {
     formatPrice,
     exchangeRates,
     ratesLoading,
+    popularCurrencies,
+    popularCurrencyCodes,
   };
 
   return (

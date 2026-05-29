@@ -1,7 +1,7 @@
 # MVC API Contract (v1)
 
 Status: FINAL  
-Updated: 2026-05-23
+Updated: 2026-05-29
 
 ## 1. Base Routing
 
@@ -276,6 +276,27 @@ Returns user preference mode (`auto` | `csfloat` | `steam`).
 
 Body:
 - `mode: "auto" | "csfloat" | "steam"`
+
+### `GET /settings/currency`
+
+Returns:
+- `userId`
+- `currency` (ISO 4217, e.g. `EUR`)
+- `updatedAt`
+- `source` (`db` | `defaults`)
+- `popularCurrencies[]` (anonymized aggregate rows)
+  - `currency`
+  - `activeUsers`
+  - `selectionEvents`
+  - `lastSelectedAt`
+
+### `PUT /settings/currency`
+
+Body:
+- `currency: string` (ISO 4217 code)
+
+Returns same payload shape as `GET /settings/currency` including `popularCurrencies[]`.
+`popularCurrencies[]` is anonymized aggregate data and contains no user identifiers.
 
 ### `GET /settings/csfloat-api-key`
 

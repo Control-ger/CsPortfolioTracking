@@ -7,6 +7,7 @@ use App\Application\Service\EncryptionService;
 use App\Application\Service\EnvSettingsService;
 use App\Application\Service\FeeSettingsService;
 use App\Application\Service\PricingService;
+use App\Infrastructure\Persistence\Repository\UserCurrencyPreferenceRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Logger;
@@ -22,6 +23,7 @@ final class SettingsController
     public function __construct(
         private readonly FeeSettingsService $feeSettingsService,
         private readonly PricingService $pricingService,
+        private readonly UserCurrencyPreferenceRepository $userCurrencyPreferenceRepository,
         string $projectRootPath = __DIR__ . '/../../../'
     ) {
         $encryptionKey = getenv('ENCRYPTION_KEY') ?: $_ENV['ENCRYPTION_KEY'] ?? '';
@@ -190,6 +192,66 @@ final class SettingsController
                 'error',
                 'error.http_5xx',
                 'Price source preference update request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_SAVE_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function getCurrencyPreference(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $preference = $this->userCurrencyPreferenceRepository->getByUserId($userId);
+            $popular = $this->userCurrencyPreferenceRepository->listPopularCurrencies(16);
+
+            JsonResponseFactory::success(array_merge(
+                $preference,
+                [
+                    'popularCurrencies' => $popular,
+                ]
+            ));
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Currency preference read request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_FETCH_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function updateCurrencyPreference(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $currency = (string) ($request->body['currency'] ?? $request->body['code'] ?? '');
+            $saved = $this->userCurrencyPreferenceRepository->upsertByUserId($userId, $currency);
+            $popular = $this->userCurrencyPreferenceRepository->listPopularCurrencies(16);
+
+            JsonResponseFactory::success(array_merge(
+                $saved,
+                [
+                    'popularCurrencies' => $popular,
+                ]
+            ), statusCode: 200);
+        } catch (InvalidArgumentException $exception) {
+            Logger::event(
+                'warning',
+                'error',
+                'error.validation',
+                'Currency preference validation failed',
+                ['statusCode' => 400, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', $exception->getMessage(), [], 400);
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Currency preference update request failed',
                 ['statusCode' => 500, 'exception' => $exception]
             );
             JsonResponseFactory::error('SETTINGS_SAVE_FAILED', $exception->getMessage(), [], 500);

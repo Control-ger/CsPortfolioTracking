@@ -137,6 +137,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [_webPushPublicKey, setWebPushPublicKey] = useState("");
   const [webPushError, setWebPushError] = useState("");
   const [webPushSuccess, setWebPushSuccess] = useState("");
+  const [currencySearchTerm, setCurrencySearchTerm] = useState("");
   const desktopRuntime = isDesktopRuntime();
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const webPushSupported =
@@ -496,7 +497,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
   
   const renderGeneralTab = () => {
-    const { currency, currencies, setCurrency, exchangeRates, ratesLoading } = currencyContext;
+    const {
+      currency,
+      currencies,
+      setCurrency,
+      exchangeRates,
+      ratesLoading,
+      popularCurrencyCodes = [],
+    } = currencyContext;
     const themeModeLabel = themeMode === "system"
       ? `System (${isDark ? "dunkel" : "hell"})`
       : themeMode === "dark"
@@ -508,9 +516,51 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         ? "Nur Steam"
         : "Auto (CSFloat bevorzugt)";
     const currencyEntries = Object.entries(currencies);
-    const exchangeRateEntries = Object.entries(exchangeRates)
-      .filter(([code, value]) => code !== "EUR" && Number.isFinite(Number(value)) && Number(value) > 0)
-      .sort(([left], [right]) => left.localeCompare(right));
+    const popularRankByCode = new Map(
+      popularCurrencyCodes.map((code, index) => [String(code || "").toUpperCase(), index]),
+    );
+    const sortedCurrencyEntries = [...currencyEntries].sort(([leftCode], [rightCode]) => {
+      const leftRank = popularRankByCode.has(leftCode) ? Number(popularRankByCode.get(leftCode)) : Number.POSITIVE_INFINITY;
+      const rightRank = popularRankByCode.has(rightCode) ? Number(popularRankByCode.get(rightCode)) : Number.POSITIVE_INFINITY;
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+      if (leftCode === currency) {
+        return -1;
+      }
+      if (rightCode === currency) {
+        return 1;
+      }
+      return leftCode.localeCompare(rightCode);
+    });
+    const normalizedCurrencySearchTerm = String(currencySearchTerm || "").trim().toLowerCase();
+    const filteredCurrencyEntries = (() => {
+      if (!normalizedCurrencySearchTerm) {
+        return sortedCurrencyEntries;
+      }
+
+      return sortedCurrencyEntries.filter(([code, info]) => {
+        const haystack = [
+          code,
+          info?.name,
+          info?.regionName,
+          info?.symbol,
+        ]
+          .map((entry) => String(entry || "").toLowerCase())
+          .join(" ");
+        return haystack.includes(normalizedCurrencySearchTerm);
+      });
+    })();
+    const popularCurrencyEntries = popularCurrencyCodes
+      .map((code) => {
+        const normalizedCode = String(code || "").toUpperCase();
+        return [normalizedCode, currencies[normalizedCode]];
+      })
+      .filter((entry) => Boolean(entry[1]))
+      .slice(0, 8);
+    const currentCurrencyInfo = currencies[currency] || null;
+    const currentCurrencyRate = Number(exchangeRates[currency]);
+    const hasCurrentCurrencyRate = Number.isFinite(currentCurrencyRate) && currentCurrencyRate > 0;
 
     return (
       <div className="space-y-4">
@@ -570,21 +620,65 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               <label className="text-sm font-medium text-foreground">
                 Anzeige-Waehrung
               </label>
+              {popularCurrencyEntries.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Beliebt bei Nutzern (anonym)
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {popularCurrencyEntries.map(([code, info]) => (
+                      <button
+                        key={`popular-${code}`}
+                        type="button"
+                        onClick={() => setCurrency(code)}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          currency === code
+                            ? "border-primary/40 bg-primary/12 text-foreground"
+                            : "border-border/70 text-muted-foreground hover:bg-accent/55 hover:text-foreground"
+                        }`}
+                      >
+                        <span>{info.flag}</span>
+                        <span>{code}</span>
+                        {info.hasDistinctSymbol ? <span className="text-muted-foreground">({info.symbol})</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <Input
+                  value={currencySearchTerm}
+                  onChange={(event) => setCurrencySearchTerm(event.target.value)}
+                  placeholder="Waehrung suchen (Code, Name oder Land)"
+                  className="h-10"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {filteredCurrencyEntries.length} von {currencyEntries.length} Waehrungen sichtbar
+                </p>
+              </div>
               <div className="max-h-80 overflow-y-auto rounded-lg border border-border/70 p-2">
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                  {currencyEntries.map(([code, info]) => (
+                  {filteredCurrencyEntries.map(([code, info]) => (
                     <button
                       key={code}
                       onClick={() => setCurrency(code)}
-                      className={`flex min-h-[92px] flex-col items-center justify-center gap-1 rounded-xl border p-3 transition-colors ${
+                      className={`flex min-h-[108px] flex-col items-center justify-center gap-1 rounded-xl border p-3 transition-colors ${
                         currency === code
                           ? "border-primary/40 bg-primary/12 shadow-none dark:shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
                           : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
                       }`}
                     >
-                      <span className="text-lg font-bold">{info.symbol}</span>
-                      <span className="text-xs font-medium">{info.code}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base leading-none">{info.flag}</span>
+                        {info.hasDistinctSymbol ? (
+                          <span className="text-lg font-bold leading-none">{info.symbol}</span>
+                        ) : null}
+                      </div>
+                      <span className="text-xs font-semibold">{info.code}</span>
                       <span className="line-clamp-2 text-center text-[10px] text-muted-foreground">{info.name}</span>
+                      <span className="line-clamp-1 text-center text-[10px] text-muted-foreground/80">
+                        {info.regionName || info.regionCode || "Global"}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -598,17 +692,19 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               </div>
             ) : (
               <div className="rounded-lg border border-border bg-transparent p-3 text-sm dark:border-border/70 dark:bg-card/65">
-                <p className="font-medium text-foreground">Aktuelle Wechselkurse</p>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-                  {exchangeRateEntries.slice(0, 12).map(([code, value]) => (
-                    <div key={code}>1 EUR = {formatExchangeRate(value)} {code}</div>
-                  ))}
+                <p className="font-medium text-foreground">Aktueller Wechselkurs</p>
+                <div className="mt-2 rounded-md border border-border/70 bg-background/35 p-2 text-xs text-muted-foreground">
+                  <div className="font-semibold text-foreground">
+                    {currentCurrencyInfo?.flag || "🌍"} {currency}
+                    {currentCurrencyInfo?.hasDistinctSymbol ? ` (${currentCurrencyInfo.symbol})` : ""}
+                  </div>
+                  <div className="mt-1">
+                    {hasCurrentCurrencyRate ? `1 EUR = ${formatExchangeRate(currentCurrencyRate)} ${currency}` : "Kein Wechselkurs verfuegbar"}
+                  </div>
+                  {hasCurrentCurrencyRate ? (
+                    <div className="mt-1">1 {currency} = {formatExchangeRate(1 / currentCurrencyRate)} EUR</div>
+                  ) : null}
                 </div>
-                {exchangeRateEntries.length > 12 ? (
-                  <p className="mt-2 text-[10px] text-muted-foreground">
-                    {exchangeRateEntries.length} Waehrungen verfuegbar.
-                  </p>
-                ) : null}
                 <p className="mt-2 text-[10px] text-muted-foreground">
                   Kurse werden taeglich aktualisiert.
                 </p>

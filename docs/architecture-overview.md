@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-05-28
+Last updated: 2026-05-29
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -58,6 +58,7 @@ This document tracks:
 - Owns sync API (`/api/v1/sync/pull`, `/api/v1/sync/push`).
 - Owns pricing ingestion/read flows.
 - Owns CS-updates ingest and web push.
+- Owns user currency preference persistence (`GET/PUT /api/v1/settings/currency`) and anonymized aggregate popularity stats (`currency_usage_stats`).
 
 ### 3.4 WS gateway runtime
 
@@ -105,6 +106,8 @@ From `apps/web/src/App.jsx`:
 - Web runtime app shell uses a fixed viewport container (`h-[100dvh]`) and a flex-constrained `<main>` scroll area (`flex-1 min-h-0 overflow-y-auto`) to avoid mobile scroll-lock regressions.
 - `PortfolioPage` no longer uses horizontal swipe tab switching on mobile; tab changes are explicit to avoid accidental gesture-triggered navigation.
 - Desktop supports SkinBaron import preview/execute flow in Management; import writes locally and then re-runs Steam-vs-external matching so duplicates can be auto-resolved like the existing CSFloat flow.
+- `CurrencyContext` persists selected display currency server-side via settings API and still keeps local fallback in `localStorage`.
+- Currency popularity ranking in Settings is sourced from anonymized server aggregates (no user identifiers in `currency_usage_stats`).
 - Search-to-watchlist add checks in `PortfolioPage`/`ItemSearch` use watchlist entries only (not inventory/investment presence), so web runtime can add watchlist items independently.
 - `ItemSearch` mobile controls use larger touch targets (>=44px) for pagination/actions to improve finger usability.
 - Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.
