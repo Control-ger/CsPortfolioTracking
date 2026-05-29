@@ -582,3 +582,10 @@ Change: Serverseitige Currency-Preference + anonymisierte Popularitaets-Stats er
 - Neue API-Routen fuer User-Waehrung: `GET /api/v1/settings/currency`, `PUT /api/v1/settings/currency` (Server + Desktop-Sidecar-Proxy/Fallback).
 - Persistenzregel: `user_currency_preferences` speichert pro User nur die aktuelle Anzeige-Waehrung; aggregierte Beliebtheit in `currency_usage_stats` bleibt anonym ohne User-IDs.
 - Frontend `CurrencyContext` persistiert die Waehrungswahl serverseitig und nutzt anonyme Popular-Codes fuer sortierte Anzeige im Settings-UI.
+
+---
+
+Updated: 2026-05-29
+Change: SkinBaron Preview-Abdeckung fuer GetSales-States erweitert
+- `DesktopSkinBaronController` laedt fuer die Preview jetzt `GetSales` ueber alle dokumentierten `type`-States (`1..7`) statt implizit nur Teilmengen.
+- Responses werden pro `saleId` dedupliziert (bevorzugt neuere `last_updated`/`list_time` Datensaetze), damit die Preview keine state-uebergreifenden Doppelzeilen zeigt.

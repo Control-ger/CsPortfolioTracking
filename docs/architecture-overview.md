@@ -106,6 +106,7 @@ From `apps/web/src/App.jsx`:
 - Web runtime app shell uses a fixed viewport container (`h-[100dvh]`) and a flex-constrained `<main>` scroll area (`flex-1 min-h-0 overflow-y-auto`) to avoid mobile scroll-lock regressions.
 - `PortfolioPage` no longer uses horizontal swipe tab switching on mobile; tab changes are explicit to avoid accidental gesture-triggered navigation.
 - Desktop supports SkinBaron import preview/execute flow in Management; import writes locally and then re-runs Steam-vs-external matching so duplicates can be auto-resolved like the existing CSFloat flow.
+- SkinBaron desktop preview requests now iterate `GetSales` across all documented sale states (`type=1..7`) and deduplicate by `saleId` before rendering/import mapping.
 - `CurrencyContext` persists selected display currency server-side via settings API and still keeps local fallback in `localStorage`.
 - Currency popularity ranking in Settings is sourced from anonymized server aggregates (no user identifiers in `currency_usage_stats`).
 - Search-to-watchlist add checks in `PortfolioPage`/`ItemSearch` use watchlist entries only (not inventory/investment presence), so web runtime can add watchlist items independently.
