@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import {
-  devModeLogin,
   fetchCS2Inventory,
   getCurrentUser,
   getSession,
@@ -645,31 +644,6 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     }
   };
 
-  const handleDevModeLogin = async () => {
-    setIsLoading(true);
-    setError("");
-
-    try {
-      const result = await devModeLogin();
-
-      if (result.success) {
-        const hydratedUser = await hydrateUserMediaIfNeeded(result.user);
-        setUser(hydratedUser);
-        try {
-          await runPostLoginPreparation(hydratedUser);
-        } catch (prepError) {
-          markPreparationFailed(prepError);
-        }
-      } else {
-        setError("Dev mode login failed");
-      }
-    } catch (err) {
-      setError(err.message || "Failed to start dev mode");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   if (user) {
     const progressPercent =
       setupProgress.total > 0
@@ -683,9 +657,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         <CardHeader className="relative z-10 pb-3">
           <CardTitle className="text-2xl tracking-tight text-slate-50">Willkommen, {user.name}!</CardTitle>
           <CardDescription className="text-sm leading-relaxed text-slate-300">
-            {user.isDevMode
-              ? "Dev Mode ist aktiv. Deine lokalen Daten werden jetzt vorbereitet."
-              : "Dein Steam-Account ist verbunden. Wir bereiten jetzt deine Daten fuer das Dashboard vor."}
+            Dein Steam-Account ist verbunden. Wir bereiten jetzt deine Daten fuer das Dashboard vor.
           </CardDescription>
         </CardHeader>
         <CardContent className="relative z-10 space-y-4">
@@ -712,7 +684,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
             ) : null}
             <div>
               <p className="text-lg font-semibold text-slate-100">{user.name}</p>
-              <p className="text-sm text-slate-300">{user.isDevMode ? "Dev Mode" : "Steam verbunden"}</p>
+              <p className="text-sm text-slate-300">Steam verbunden</p>
             </div>
           </div>
 
@@ -809,24 +781,6 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
               Sign in with Steam
             </span>
           )}
-        </Button>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">Or</span>
-          </div>
-        </div>
-
-        <Button onClick={handleDevModeLogin} disabled={isLoading} variant="outline" className="w-full">
-          <span className="flex items-center gap-2">
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-            </svg>
-            Continue in Dev Mode (no server)
-          </span>
         </Button>
       </CardContent>
     </Card>

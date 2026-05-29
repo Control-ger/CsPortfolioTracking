@@ -133,6 +133,11 @@ function hasAnimatedAvatarData(user) {
   return candidates.some((value) => typeof value === "string" && value.trim() !== "");
 }
 
+function isLegacyDevUser(user) {
+  const id = String(user?.id || "").trim();
+  return id.startsWith("dev-user-");
+}
+
 /**
  * Initiate Steam login flow
  * 
@@ -348,6 +353,14 @@ export async function getSession() {
       if (!session || !session.token) {
         return null;
       }
+      if (isLegacyDevUser(session.user)) {
+        try {
+          await window.electronAPI.clearSession();
+        } catch {
+          // ignore best-effort cleanup
+        }
+        return null;
+      }
 
       // Some callback paths may persist token-only sessions first.
       // Hydrate missing user data once via backend validation and persist it.
@@ -419,6 +432,15 @@ export async function getSession() {
         }
       }
 
+      if (isLegacyDevUser(user)) {
+        sessionStorage.removeItem(WEB_AUTH_TOKEN_KEY);
+        sessionStorage.removeItem(WEB_AUTH_USER_KEY);
+        localStorage.removeItem(WEB_AUTH_TOKEN_KEY);
+        localStorage.removeItem(WEB_AUTH_USER_KEY);
+        clearWebCookie(WEB_AUTH_COOKIE_KEY);
+        return null;
+      }
+
       return { token, user };
     } catch {
       return null;
@@ -458,34 +480,6 @@ export async function logout() {
 }
 
 /**
- * Dev mode login - creates local session without server
- * For testing desktop app before server is deployed
- */
-export async function devModeLogin() {
-  const devUser = {
-    id: 'dev-user-001',
-    steamId: '76561198000000000',
-    name: 'Dev User',
-    avatar: null,
-    isDevMode: true,
-  };
-  
-  const devSession = {
-    token: 'dev-token-' + Date.now(),
-    user: devUser,
-    isDevMode: true,
-  };
-  
-    await storeSession(devSession.token, devSession.user);
-  
-  return {
-    success: true,
-    user: devUser,
-    isDevMode: true,
-  };
-}
-
-/**
  * Validate session token with backend and return user data
  * 
  * This is the secure way to get user data - the token is sent to the backend
@@ -517,14 +511,6 @@ export async function validateSession(token) {
     console.error('[auth] Session validation failed:', error);
     return null;
   }
-}
-
-/**
- * Check if running in dev mode (no server)
- */
-export async function isDevMode() {
-  const session = await getSession();
-  return session?.user?.id?.startsWith('dev-user-') || false;
 }
 
 /**
