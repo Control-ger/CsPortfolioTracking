@@ -10,6 +10,7 @@ use App\Shared\Http\Request;
 final class DesktopSkinBaronController
 {
     private const MIN_REQUEST_INTERVAL_US = 120000; // ~8.3 req/s (below 10 req/s limit)
+    private const SALES_TYPES = [1, 2, 3, 4, 5, 6, 7];
 
     public function __construct(private readonly SkinBaronClient $client)
     {
@@ -20,40 +21,70 @@ final class DesktopSkinBaronController
         $limit = $this->readInt($request, 'limit', 100, 1, 200);
         $maxPages = $this->readInt($request, 'maxPages', 10, 1, 25);
 
-        $sales = [];
+        $salesById = [];
+        $salesWithoutId = [];
         $pageStats = [];
         $errors = [];
-        $cursor = null;
+        $requestCount = 0;
 
-        for ($page = 0; $page < $maxPages; $page++) {
-            if ($page > 0) {
-                usleep(self::MIN_REQUEST_INTERVAL_US);
+        foreach (self::SALES_TYPES as $saleType) {
+            $cursor = null;
+            for ($page = 0; $page < $maxPages; $page++) {
+                if ($requestCount > 0) {
+                    usleep(self::MIN_REQUEST_INTERVAL_US);
+                }
+                $requestCount += 1;
+
+                $result = $this->client->fetchSalesPage($limit, $cursor, $saleType);
+                if (!empty($result['error'])) {
+                    $errors[] = [
+                        ...$result['error'],
+                        'saleType' => $saleType,
+                        'page' => $page,
+                    ];
+                    break;
+                }
+
+                $pageSales = is_array($result['sales'] ?? null) ? $result['sales'] : [];
+                $pageStats[] = [
+                    'type' => $saleType,
+                    'page' => $page,
+                    'count' => count($pageSales),
+                ];
+
+                foreach ($pageSales as $sale) {
+                    if (!is_array($sale)) {
+                        $salesWithoutId[] = $sale;
+                        continue;
+                    }
+
+                    $saleId = $this->readString($sale, ['id']);
+                    if ($saleId === null) {
+                        $salesWithoutId[] = $sale;
+                        continue;
+                    }
+
+                    if (
+                        !isset($salesById[$saleId]) ||
+                        $this->shouldReplaceSaleRecord($salesById[$saleId], $sale)
+                    ) {
+                        $salesById[$saleId] = $sale;
+                    }
+                }
+
+                if (count($pageSales) < $limit) {
+                    break;
+                }
+
+                $lastId = $this->readString($pageSales[count($pageSales) - 1] ?? [], ['id']);
+                if ($lastId === null) {
+                    break;
+                }
+                $cursor = $lastId;
             }
-
-            $result = $this->client->fetchSalesPage($limit, $cursor);
-            if (!empty($result['error'])) {
-                $errors[] = $result['error'];
-                break;
-            }
-
-            $pageSales = is_array($result['sales'] ?? null) ? $result['sales'] : [];
-            $pageStats[] = [
-                'page' => $page,
-                'count' => count($pageSales),
-            ];
-            $sales = array_merge($sales, $pageSales);
-
-            if (count($pageSales) < $limit) {
-                break;
-            }
-
-            $lastId = $this->readString($pageSales[count($pageSales) - 1] ?? [], ['id']);
-            if ($lastId === null) {
-                break;
-            }
-            $cursor = $lastId;
         }
 
+        $sales = array_merge(array_values($salesById), $salesWithoutId);
         $importTrades = [];
         $skipped = 0;
         foreach ($sales as $sale) {
@@ -76,6 +107,7 @@ final class DesktopSkinBaronController
                 'limit' => $limit,
                 'maxPages' => $maxPages,
                 'type' => 'sales',
+                'salesTypes' => self::SALES_TYPES,
             ],
             'pagesFetched' => count($pageStats),
             'pageStats' => $pageStats,
@@ -89,6 +121,8 @@ final class DesktopSkinBaronController
             'sampleTrades' => array_slice($importTrades, 0, 20),
             'importTrades' => $importTrades,
             'rawCount' => count($sales),
+            'rawDistinctBySaleId' => count($salesById),
+            'rawWithoutSaleId' => count($salesWithoutId),
             'errors' => $errors,
             'rawTrades' => $sales,
         ]);
@@ -182,5 +216,22 @@ final class DesktopSkinBaronController
             return null;
         }
         return gmdate('c', (int) round($value));
+    }
+
+    private function shouldReplaceSaleRecord(array $existing, array $incoming): bool
+    {
+        $existingUpdated = $this->readNumeric($existing, ['last_updated']) ?? 0.0;
+        $incomingUpdated = $this->readNumeric($incoming, ['last_updated']) ?? 0.0;
+        if ($incomingUpdated !== $existingUpdated) {
+            return $incomingUpdated > $existingUpdated;
+        }
+
+        $existingListed = $this->readNumeric($existing, ['list_time']) ?? 0.0;
+        $incomingListed = $this->readNumeric($incoming, ['list_time']) ?? 0.0;
+        if ($incomingListed !== $existingListed) {
+            return $incomingListed > $existingListed;
+        }
+
+        return false;
     }
 }

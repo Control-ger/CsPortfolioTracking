@@ -21,7 +21,7 @@ final class SkinBaronClient
         503 => ['code' => 'SKINBARON_SERVICE_UNAVAILABLE', 'label' => 'Service Unavailable'],
     ];
 
-    public function fetchSalesPage(int $itemsPerPage = 100, ?string $afterSaleId = null): array
+    public function fetchSalesPage(int $itemsPerPage = 100, ?string $afterSaleId = null, ?int $saleType = null): array
     {
         $limit = max(1, min($itemsPerPage, 200));
         $payload = [
@@ -29,6 +29,9 @@ final class SkinBaronClient
             'appid' => 730,
             'sort_order' => 0,
         ];
+        if ($saleType !== null && $saleType >= 1 && $saleType <= 7) {
+            $payload['type'] = $saleType;
+        }
         if ($afterSaleId !== null && trim($afterSaleId) !== '') {
             $payload['after_saleid'] = trim($afterSaleId);
         }
@@ -37,6 +40,7 @@ final class SkinBaronClient
             'provider' => 'skinbaron',
             'limit' => $limit,
             'afterSaleId' => $afterSaleId,
+            'saleType' => $payload['type'] ?? 'all',
         ]);
 
         if ($result['error'] !== null) {
@@ -285,4 +289,3 @@ final class SkinBaronClient
         ];
     }
 }
-
