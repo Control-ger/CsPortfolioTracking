@@ -20,6 +20,7 @@ import {
   fetchSkinBaronApiKeyStatus,
   updateSkinBaronApiKey,
   updateSkinBaronSessionCookie,
+  connectSkinBaronSessionCookieViaBrowser,
   fetchPriceSourcePreference,
   updatePriceSourcePreference,
   fetchWebPushPublicKey,
@@ -66,6 +67,28 @@ function normalizePriceSourceMode(value) {
   return "auto";
 }
 
+function normalizeSkinBaronStatusPayload(statusPayload) {
+  const nextStatus = statusPayload && typeof statusPayload === "object" ? statusPayload : {};
+  return {
+    configured: Boolean(nextStatus?.configured || nextStatus?.hasKey),
+    lastFour: nextStatus?.lastFour || null,
+    capabilities:
+      nextStatus?.capabilities && typeof nextStatus.capabilities === "object"
+        ? nextStatus.capabilities
+        : {},
+    checkedAt: nextStatus?.checkedAt || null,
+    sessionCookieConfigured: Boolean(nextStatus?.sessionCookieConfigured),
+    sessionCookieHasAuthId: Boolean(nextStatus?.sessionCookieHasAuthId),
+    sessionCookieLastFour: nextStatus?.sessionCookieLastFour || null,
+    sessionCookieCheckedAt: nextStatus?.sessionCookieCheckedAt || null,
+    sessionCookieAccess:
+      nextStatus?.sessionCookieAccess && typeof nextStatus.sessionCookieAccess === "object"
+        ? nextStatus.sessionCookieAccess
+        : { allowed: false, statusCode: null, message: null },
+    importReady: Boolean(nextStatus?.importReady),
+  };
+}
+
 function base64UrlToUint8Array(base64Url) {
   const padding = "=".repeat((4 - (base64Url.length % 4)) % 4);
   const base64 = `${base64Url}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
@@ -110,24 +133,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [skinBaronApiKey, setSkinBaronApiKey] = useState("");
   const [skinBaronApiKeyLoading, setSkinBaronApiKeyLoading] = useState(true);
   const [skinBaronApiKeySaving, setSkinBaronApiKeySaving] = useState(false);
-  const [skinBaronApiKeyStatus, setSkinBaronApiKeyStatus] = useState({
-    configured: false,
-    lastFour: null,
-    capabilities: {},
-    checkedAt: null,
-    sessionCookieConfigured: false,
-    sessionCookieHasAuthId: false,
-    sessionCookieLastFour: null,
-    sessionCookieCheckedAt: null,
-    sessionCookieAccess: { allowed: false, statusCode: null, message: null },
-    importReady: false,
-  });
+  const [skinBaronApiKeyStatus, setSkinBaronApiKeyStatus] = useState(() => normalizeSkinBaronStatusPayload());
   const [showSkinBaronApiKey, setShowSkinBaronApiKey] = useState(false);
   const [skinBaronApiKeyError, setSkinBaronApiKeyError] = useState("");
   const [skinBaronApiKeySuccess, setSkinBaronApiKeySuccess] = useState("");
   const [skinBaronSessionCookie, setSkinBaronSessionCookie] = useState("");
   const [showSkinBaronSessionCookie, setShowSkinBaronSessionCookie] = useState(false);
   const [skinBaronSessionSaving, setSkinBaronSessionSaving] = useState(false);
+  const [skinBaronSessionBrowserConnecting, setSkinBaronSessionBrowserConnecting] = useState(false);
   const [encryptionReady, setEncryptionReady] = useState(false);
   const [vaultStatus, setVaultStatus] = useState(null);
   const [vaultActionSaving, setVaultActionSaving] = useState(false);
@@ -207,36 +220,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
         const keyStatus = keyStatusResponse?.data || { configured: false, lastFour: null };
         setApiKeyStatus(keyStatus);
-        const skinBaronStatus = skinBaronStatusResponse?.data || {
-          configured: false,
-          lastFour: null,
-          capabilities: {},
-          checkedAt: null,
-          sessionCookieConfigured: false,
-          sessionCookieHasAuthId: false,
-          sessionCookieLastFour: null,
-          sessionCookieCheckedAt: null,
-          sessionCookieAccess: { allowed: false, statusCode: null, message: null },
-          importReady: false,
-        };
-        setSkinBaronApiKeyStatus({
-          configured: Boolean(skinBaronStatus?.configured || skinBaronStatus?.hasKey),
-          lastFour: skinBaronStatus?.lastFour || null,
-          capabilities:
-            skinBaronStatus?.capabilities && typeof skinBaronStatus.capabilities === "object"
-              ? skinBaronStatus.capabilities
-              : {},
-          checkedAt: skinBaronStatus?.checkedAt || null,
-          sessionCookieConfigured: Boolean(skinBaronStatus?.sessionCookieConfigured),
-          sessionCookieHasAuthId: Boolean(skinBaronStatus?.sessionCookieHasAuthId),
-          sessionCookieLastFour: skinBaronStatus?.sessionCookieLastFour || null,
-          sessionCookieCheckedAt: skinBaronStatus?.sessionCookieCheckedAt || null,
-          sessionCookieAccess:
-            skinBaronStatus?.sessionCookieAccess && typeof skinBaronStatus.sessionCookieAccess === "object"
-              ? skinBaronStatus.sessionCookieAccess
-              : { allowed: false, statusCode: null, message: null },
-          importReady: Boolean(skinBaronStatus?.importReady),
-        });
+        const skinBaronStatus = skinBaronStatusResponse?.data || {};
+        setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(skinBaronStatus));
         const priceSourceData = priceSourceResponse?.data || {};
         setPriceSourceMode(normalizePriceSourceMode(priceSourceData.mode));
 
@@ -418,15 +403,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
       const statusResponse = await fetchSkinBaronApiKeyStatus();
       const nextStatus = statusResponse?.data || statusResponse || {};
-      setSkinBaronApiKeyStatus({
-        configured: Boolean(nextStatus?.configured || nextStatus?.hasKey),
-        lastFour: nextStatus?.lastFour || null,
-        capabilities:
-          nextStatus?.capabilities && typeof nextStatus.capabilities === "object"
-            ? nextStatus.capabilities
-            : {},
-        checkedAt: nextStatus?.checkedAt || null,
-      });
+      setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(nextStatus));
     } catch (err) {
       setSkinBaronApiKeyError(err.message || "Fehler beim Aktualisieren des API Keys.");
     } finally {
@@ -453,28 +430,36 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
       const statusResponse = await fetchSkinBaronApiKeyStatus();
       const nextStatus = statusResponse?.data || statusResponse || {};
-      setSkinBaronApiKeyStatus({
-        configured: Boolean(nextStatus?.configured || nextStatus?.hasKey),
-        lastFour: nextStatus?.lastFour || null,
-        capabilities:
-          nextStatus?.capabilities && typeof nextStatus.capabilities === "object"
-            ? nextStatus.capabilities
-            : {},
-        checkedAt: nextStatus?.checkedAt || null,
-        sessionCookieConfigured: Boolean(nextStatus?.sessionCookieConfigured),
-        sessionCookieHasAuthId: Boolean(nextStatus?.sessionCookieHasAuthId),
-        sessionCookieLastFour: nextStatus?.sessionCookieLastFour || null,
-        sessionCookieCheckedAt: nextStatus?.sessionCookieCheckedAt || null,
-        sessionCookieAccess:
-          nextStatus?.sessionCookieAccess && typeof nextStatus.sessionCookieAccess === "object"
-            ? nextStatus.sessionCookieAccess
-            : { allowed: false, statusCode: null, message: null },
-        importReady: Boolean(nextStatus?.importReady),
-      });
+      setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(nextStatus));
     } catch (err) {
       setSkinBaronApiKeyError(err.message || "Fehler beim Speichern des Session-Cookies.");
     } finally {
       setSkinBaronSessionSaving(false);
+    }
+  };
+
+  const handleConnectSkinBaronSessionViaBrowser = async () => {
+    try {
+      setSkinBaronSessionBrowserConnecting(true);
+      setSkinBaronApiKeyError("");
+      setSkinBaronApiKeySuccess("");
+
+      if (!desktopRuntime) {
+        setSkinBaronApiKeyError("SkinBaron Browser-Login ist nur in der Desktop-App verfuegbar.");
+        return;
+      }
+
+      await connectSkinBaronSessionCookieViaBrowser();
+      setSkinBaronApiKeySuccess("Session-Cookie wurde per Browser verbunden und verifiziert.");
+      setSkinBaronSessionCookie("");
+
+      const statusResponse = await fetchSkinBaronApiKeyStatus();
+      const nextStatus = statusResponse?.data || statusResponse || {};
+      setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(nextStatus));
+    } catch (err) {
+      setSkinBaronApiKeyError(err.message || "SkinBaron Browser-Login fehlgeschlagen.");
+    } finally {
+      setSkinBaronSessionBrowserConnecting(false);
     }
   };
 
@@ -1311,20 +1296,34 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               </p>
             )}
 
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background/40 p-2">
+              <p className="text-[11px] text-muted-foreground">
+                Automatisch: Login-Fenster oeffnen, bei erfolgreichem Login wird `AUTHID` direkt uebernommen.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleConnectSkinBaronSessionViaBrowser}
+                disabled={skinBaronSessionSaving || skinBaronSessionBrowserConnecting || !encryptionReady}
+              >
+                {skinBaronSessionBrowserConnecting ? "Warte auf Login..." : "Mit SkinBaron verbinden"}
+              </Button>
+            </div>
+
             <div className="relative">
               <Input
                 type={showSkinBaronSessionCookie ? "text" : "password"}
                 value={skinBaronSessionCookie}
                 onChange={handleSkinBaronSessionCookieChange}
                 placeholder="AUTHID=..."
-                disabled={skinBaronSessionSaving || !encryptionReady}
+                disabled={skinBaronSessionSaving || skinBaronSessionBrowserConnecting || !encryptionReady}
                 className="pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowSkinBaronSessionCookie(!showSkinBaronSessionCookie)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                disabled={skinBaronSessionSaving}
+                disabled={skinBaronSessionSaving || skinBaronSessionBrowserConnecting}
               >
                 {showSkinBaronSessionCookie ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -1333,7 +1332,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             <div className="flex justify-end">
               <Button
                 onClick={handleUpdateSkinBaronSessionCookie}
-                disabled={skinBaronSessionSaving || !encryptionReady || !skinBaronSessionCookie.trim()}
+                disabled={
+                  skinBaronSessionSaving
+                  || skinBaronSessionBrowserConnecting
+                  || !encryptionReady
+                  || !skinBaronSessionCookie.trim()
+                }
               >
                 {skinBaronSessionSaving ? "Prueft + speichert..." : "Session-Cookie Speichern"}
               </Button>

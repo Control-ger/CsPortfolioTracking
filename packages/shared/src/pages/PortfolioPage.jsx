@@ -7,6 +7,7 @@ import { InventoryTable } from "@shared/components";
 import { ItemDetailsModal } from "@shared/components";
 import { ItemDetailPanel } from "@shared/components";
 import { CsFloatTradeSyncModal } from "@shared/components";
+import { SkinBaronSalesSyncModal } from "@shared/components";
 import { PortfolioChart } from "@shared/components";
 import { PortfolioCompositionChart } from "@shared/components";
 import { PortfolioHeaderCard } from "@shared/components";
@@ -16,6 +17,7 @@ import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
 import { Watchlist } from "@shared/components";
 import { ItemSearch } from "@shared/components";
+import { PortfolioGroupsPanel } from "@shared/components/PortfolioGroupsPanel.jsx";
 import { Badge } from "@shared/components";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components";
 import { Button } from "@shared/components";
@@ -48,6 +50,7 @@ import {
   resolveMetricsScopeFromPreferences,
   createWatchlistItemData,
   fetchCsFloatApiKeyStatus,
+  fetchSkinBaronApiKeyStatus,
   updateCsFloatApiKey,
   toggleExcludeInvestment,
   updatePortfolioPreferences,
@@ -58,6 +61,14 @@ import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { runDesktopSyncNowIfDue } from "@shared/lib/desktopSync.js";
 import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
+import {
+  PORTFOLIO_GROUPS_STORAGE_KEY,
+  buildPortfolioGroupMembershipMap,
+  buildPortfolioGroupSummaries,
+  createPortfolioGroupDraft,
+  normalizePortfolioGroups,
+  summarizeManagementClusterAssignment,
+} from "@shared/lib/portfolioGroups.js";
 
 function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -79,15 +90,54 @@ function formatAge(seconds) {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-function freshnessBadgeClass(staleRatio) {
-  if (staleRatio <= 0) {
+function syncHealthBadgeClass(oldestAgeSeconds, liveItemsCount) {
+  if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
+    return "border-slate-500/35 bg-slate-500/12 text-slate-300";
+  }
+
+  if (!Number.isFinite(oldestAgeSeconds)) {
+    return "border-slate-500/35 bg-slate-500/12 text-slate-300";
+  }
+
+  if (oldestAgeSeconds <= 90 * 60) {
     return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
   }
-  if (staleRatio < 50) {
+
+  if (oldestAgeSeconds <= 3 * 60 * 60) {
     return "border-amber-400/35 bg-amber-500/12 text-amber-300";
   }
 
   return "border-red-400/35 bg-red-500/12 text-red-300";
+}
+
+function getClusterUpdatedAt(cluster) {
+  return cluster.positions.reduce((latest, position) => {
+    const timestamp = Date.parse(String(position.updatedAt || position.purchasedAt || ""));
+    if (!Number.isFinite(timestamp)) {
+      return latest;
+    }
+    return Math.max(latest, timestamp);
+  }, 0);
+}
+
+function syncHealthLabel(oldestAgeSeconds, liveItemsCount) {
+  if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
+    return "keine live quotes";
+  }
+
+  if (!Number.isFinite(oldestAgeSeconds)) {
+    return "status unbekannt";
+  }
+
+  if (oldestAgeSeconds <= 90 * 60) {
+    return "im plan";
+  }
+
+  if (oldestAgeSeconds <= 3 * 60 * 60) {
+    return "verzoegert";
+  }
+
+  return "nachlauf";
 }
 
 function formatRelativeHours(hours) {
@@ -206,7 +256,7 @@ function getCsUpdateBannerTone(level) {
   if (level === "high") {
     return {
       wrapper:
-        "border-red-500/35 bg-gradient-to-r from-red-950/80 via-background to-amber-950/60 shadow-[0_16px_38px_rgba(127,29,29,0.35)]",
+        "steam-avatar-gradient-banner border-red-500/35 shadow-[0_16px_38px_rgba(127,29,29,0.35)]",
       eyebrow: "text-red-300",
       panel: "border-red-500/35 bg-red-950/35",
     };
@@ -215,7 +265,7 @@ function getCsUpdateBannerTone(level) {
   if (level === "medium") {
     return {
       wrapper:
-        "border-amber-500/35 bg-gradient-to-r from-amber-950/65 via-background to-card shadow-[0_14px_30px_rgba(146,64,14,0.22)]",
+        "steam-avatar-gradient-banner border-amber-500/35 shadow-[0_14px_30px_rgba(146,64,14,0.22)]",
       eyebrow: "text-amber-300",
       panel: "border-amber-500/35 bg-amber-950/30",
     };
@@ -224,7 +274,7 @@ function getCsUpdateBannerTone(level) {
   if (level === "pending") {
     return {
       wrapper:
-        "border-cyan-400/30 bg-gradient-to-r from-cyan-950/60 via-background to-card shadow-[0_12px_26px_rgba(8,47,73,0.25)]",
+        "steam-avatar-gradient-banner border-cyan-400/30 shadow-[0_12px_26px_rgba(8,47,73,0.25)]",
       eyebrow: "text-cyan-300",
       panel: "border-cyan-400/30 bg-cyan-950/30",
     };
@@ -232,7 +282,7 @@ function getCsUpdateBannerTone(level) {
 
   return {
     wrapper:
-      "border-cyan-400/25 bg-gradient-to-r from-cyan-500/12 via-background to-amber-500/12 shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
+      "steam-avatar-gradient-banner border-cyan-400/25 shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
     eyebrow: "text-cyan-300",
     panel: "border-border/70 bg-card/70",
   };
@@ -344,6 +394,26 @@ function normalizeBucket(value, fallback = "investment") {
     return "investment";
   }
   return fallback === "inventory" ? "inventory" : "investment";
+}
+
+function normalizeInvestmentId(value) {
+  return String(value || "").trim();
+}
+
+function uniqueInvestmentIds(values = []) {
+  const seen = new Set();
+  const result = [];
+
+  values.forEach((value) => {
+    const normalized = normalizeInvestmentId(value);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+
+  return result;
 }
 
 function normalizeCsFloatApiKeyInput(value) {
@@ -512,7 +582,7 @@ function buildManagementClusters(items = []) {
       platform: String(item.platform || item.source || "").toLowerCase(),
       steamAssetId: item.steamAssetId ? String(item.steamAssetId) : null,
       bucket: normalizeBucket(item.bucket),
-      excluded: Boolean(item.excluded),
+      excluded: Boolean(item.excluded ?? item.isExcluded),
     });
   });
 
@@ -632,8 +702,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     warnings,
     refreshPortfolio,
     removeInvestmentFromView,
-  } =
-    usePortfolio({ scope: metricsScope, rowScope: "all" });
+  } = usePortfolio({ scope: metricsScope, rowScope: "all" });
   const {
     latestItem: latestCsUpdate,
     latestItemAgeHours: latestCsUpdateAgeHours,
@@ -654,7 +723,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [activeTab, setActiveTab] = useState(initialVisitedTab);
   const [visitedTabs, setVisitedTabs] = useState(() => new Set([initialVisitedTab]));
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
+  const [inventoryGroupFocusId, setInventoryGroupFocusId] = useState("");
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
+  const [isSkinBaronSyncOpen, setIsSkinBaronSyncOpen] = useState(false);
   const [hoveredChartData, setHoveredChartData] = useState(null);
   const [chartTrendData, setChartTrendData] = useState({
     rangeLabel: "90T",
@@ -674,6 +745,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [managementBucketFilter, setManagementBucketFilter] = useState("all");
   const [managementSortBy, setManagementSortBy] = useState("name_asc");
   const [managementSection, setManagementSection] = useState("matching");
+  const [portfolioGroups, setPortfolioGroups] = useState([]);
+  const [portfolioGroupsLoading, setPortfolioGroupsLoading] = useState(true);
+  const [portfolioGroupDraft, setPortfolioGroupDraft] = useState(createPortfolioGroupDraft);
+  const [portfolioGroupEditorId, setPortfolioGroupEditorId] = useState("");
+  const [portfolioGroupMessage, setPortfolioGroupMessage] = useState("");
+  const [portfolioGroupError, setPortfolioGroupError] = useState("");
+  const [expandedGroupManagementClusters, setExpandedGroupManagementClusters] = useState({});
+  const [groupSearchTerm, setGroupSearchTerm] = useState("");
+  const [groupSortBy, setGroupSortBy] = useState("name_asc");
   const [priceSearchTerm, setPriceSearchTerm] = useState("");
   const [priceSortBy, setPriceSortBy] = useState("name_asc");
   const [priceMissingOnly, setPriceMissingOnly] = useState(false);
@@ -715,6 +795,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [journeyLoading, setJourneyLoading] = useState(true);
   const [journeyUserName, setJourneyUserName] = useState("");
   const [hasCsFloatKey, setHasCsFloatKey] = useState(false);
+  const [hasSkinBaronImportReady, setHasSkinBaronImportReady] = useState(false);
   const [journeyApiKey, setJourneyApiKey] = useState("");
   const [journeyApiKeySaving, setJourneyApiKeySaving] = useState(false);
   const [journeyApiKeyError, setJourneyApiKeyError] = useState("");
@@ -750,7 +831,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchAddingItem, setGlobalSearchAddingItem] = useState("");
   const [globalSearchRecentTerms, setGlobalSearchRecentTerms] = useState([]);
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
-  const portfolioChartContainerRef = useRef(null);
+  const portfolioChartCardRef = useRef(null);
   const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
 
   // Keyboard shortcuts for tab navigation and search
@@ -823,11 +904,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           readJourneyState(),
           getCurrentUser(),
         ]);
-        const keyStatus = isDesktopRuntime ? await fetchCsFloatApiKeyStatus() : null;
+        const [csFloatKeyStatus, skinBaronKeyStatus] = isDesktopRuntime
+          ? await Promise.all([
+              fetchCsFloatApiKeyStatus(),
+              fetchSkinBaronApiKeyStatus(),
+            ])
+          : [null, null];
         setJourneyState(normalizeJourneyState(savedJourney));
         setJourneyUserName(String(currentUser?.name || currentUser?.steamName || ""));
-        const keyConnected = Boolean(keyStatus?.data?.hasKey || keyStatus?.data?.configured);
-        setHasCsFloatKey(keyConnected);
+        const csFloatKeyConnected = Boolean(
+          csFloatKeyStatus?.data?.hasKey || csFloatKeyStatus?.data?.configured,
+        );
+        const skinBaronImportReady = Boolean(
+          skinBaronKeyStatus?.data?.importReady
+            || skinBaronKeyStatus?.data?.sessionCookieAccess?.allowed
+            || (
+              skinBaronKeyStatus?.data?.sessionCookieConfigured
+              && skinBaronKeyStatus?.data?.sessionCookieHasAuthId
+            ),
+        );
+        setHasCsFloatKey(csFloatKeyConnected);
+        setHasSkinBaronImportReady(skinBaronImportReady);
       } catch (journeyError) {
         console.warn("Failed to load onboarding journey state", journeyError);
       } finally {
@@ -855,6 +952,38 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     void loadPortfolioPreferences();
   }, [isDesktopRuntime]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPortfolioGroups = async () => {
+      setPortfolioGroupsLoading(true);
+      try {
+        const stored = await readLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: [] });
+        if (cancelled) {
+          return;
+        }
+        setPortfolioGroups(normalizePortfolioGroups(stored));
+        setPortfolioGroupError("");
+      } catch (groupLoadError) {
+        if (cancelled) {
+          return;
+        }
+        console.warn("Failed to load portfolio groups", groupLoadError);
+        setPortfolioGroups([]);
+        setPortfolioGroupError("Gruppen konnten nicht geladen werden.");
+      } finally {
+        if (!cancelled) {
+          setPortfolioGroupsLoading(false);
+        }
+      }
+    };
+
+    void loadPortfolioGroups();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isDesktopRuntime || typeof document === "undefined") {
@@ -1332,6 +1461,248 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       navigate(targetPath, { replace: true });
     }
   }, [activeTab, location.pathname, location.search, navigate, runtimeTabs]);
+
+  const persistPortfolioGroups = useCallback(async (nextGroups) => {
+    const normalizedGroups = normalizePortfolioGroups(nextGroups);
+    setPortfolioGroups(normalizedGroups);
+    await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: normalizedGroups });
+    return normalizedGroups;
+  }, []);
+
+  const handleManageGroupsOpen = useCallback(() => {
+    if (isDesktopRuntime) {
+      setManagementSection("groups");
+      handleTabSelect("management");
+      return;
+    }
+    handleTabSelect("overview");
+  }, [handleTabSelect, isDesktopRuntime]);
+
+  const resetPortfolioGroupEditor = useCallback(() => {
+    setPortfolioGroupEditorId("");
+    setPortfolioGroupDraft(createPortfolioGroupDraft());
+    setPortfolioGroupMessage("");
+    setPortfolioGroupError("");
+  }, []);
+
+  const handleStartCreatePortfolioGroup = useCallback(() => {
+    resetPortfolioGroupEditor();
+    setManagementSection("groups");
+    if (isDesktopRuntime) {
+      handleTabSelect("management");
+    }
+  }, [handleTabSelect, isDesktopRuntime, resetPortfolioGroupEditor]);
+
+  const handleEditPortfolioGroup = useCallback((group) => {
+    if (!group) {
+      resetPortfolioGroupEditor();
+      return;
+    }
+    setPortfolioGroupEditorId(group.id);
+    setPortfolioGroupDraft({
+      id: group.id,
+      name: group.name || "",
+      thesis: group.thesis || "",
+    });
+    setPortfolioGroupMessage("");
+    setPortfolioGroupError("");
+  }, [resetPortfolioGroupEditor]);
+
+  const handlePortfolioGroupDraftChange = useCallback((field, value) => {
+    setPortfolioGroupDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setPortfolioGroupMessage("");
+    setPortfolioGroupError("");
+  }, []);
+
+  const handleSavePortfolioGroup = useCallback(async () => {
+    const name = String(portfolioGroupDraft?.name || "").trim();
+    const thesis = String(portfolioGroupDraft?.thesis || "").trim();
+    if (!name) {
+      setPortfolioGroupError("Bitte einen Gruppennamen vergeben.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const existingGroup = portfolioGroupEditorId
+      ? portfolioGroups.find((group) => group.id === portfolioGroupEditorId) || null
+      : null;
+    const nextGroupId = existingGroup?.id || `group-${Date.now()}`;
+    const nextGroups = existingGroup
+      ? portfolioGroups.map((group) =>
+          group.id === existingGroup.id
+            ? {
+                ...group,
+                name,
+                thesis,
+                updatedAt: now,
+              }
+            : group,
+        )
+      : [
+          ...portfolioGroups,
+          {
+            id: nextGroupId,
+            name,
+            thesis,
+            memberInvestmentIds: [],
+            createdAt: now,
+            updatedAt: now,
+          },
+        ];
+
+    try {
+      const persistedGroups = await persistPortfolioGroups(nextGroups);
+      const savedGroup = persistedGroups.find((group) => group.id === nextGroupId) || null;
+      if (savedGroup) {
+        setPortfolioGroupEditorId(savedGroup.id);
+        setPortfolioGroupDraft({
+          id: savedGroup.id,
+          name: savedGroup.name,
+          thesis: savedGroup.thesis || "",
+        });
+      }
+      setPortfolioGroupMessage(existingGroup ? "Gruppe aktualisiert." : "Gruppe angelegt.");
+      setPortfolioGroupError("");
+    } catch (groupSaveError) {
+      console.warn("Failed to persist portfolio group", groupSaveError);
+      setPortfolioGroupError("Gruppe konnte nicht gespeichert werden.");
+    }
+  }, [
+    persistPortfolioGroups,
+    portfolioGroupDraft,
+    portfolioGroupEditorId,
+    portfolioGroups,
+  ]);
+
+  const handleDeletePortfolioGroup = useCallback(async (groupId) => {
+    const normalizedGroupId = String(groupId || "").trim();
+    if (!normalizedGroupId) {
+      return;
+    }
+
+    try {
+      await persistPortfolioGroups(
+        portfolioGroups.filter((group) => group.id !== normalizedGroupId),
+      );
+      if (portfolioGroupEditorId === normalizedGroupId) {
+        resetPortfolioGroupEditor();
+      }
+      setPortfolioGroupMessage("Gruppe geloescht.");
+      setPortfolioGroupError("");
+    } catch (groupDeleteError) {
+      console.warn("Failed to delete portfolio group", groupDeleteError);
+      setPortfolioGroupError("Gruppe konnte nicht geloescht werden.");
+    }
+  }, [
+    persistPortfolioGroups,
+    portfolioGroupEditorId,
+    portfolioGroups,
+    resetPortfolioGroupEditor,
+  ]);
+
+  const handleAssignInvestmentIdsToGroup = useCallback(async (groupId, investmentIds = []) => {
+    const normalizedGroupId = String(groupId || "").trim();
+    const nextIds = uniqueInvestmentIds(investmentIds);
+    const nextIdSet = new Set(nextIds);
+    if (!normalizedGroupId || nextIds.length === 0) {
+      return;
+    }
+
+    try {
+      await persistPortfolioGroups(
+        portfolioGroups.map((group) => {
+          const filteredIds = group.memberInvestmentIds.filter((investmentId) => !nextIdSet.has(investmentId));
+          if (group.id === normalizedGroupId) {
+            return {
+              ...group,
+              memberInvestmentIds: uniqueInvestmentIds([...filteredIds, ...nextIds]),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return {
+            ...group,
+            memberInvestmentIds: filteredIds,
+            updatedAt:
+              filteredIds.length === group.memberInvestmentIds.length
+                ? group.updatedAt
+                : new Date().toISOString(),
+          };
+        }),
+      );
+      setPortfolioGroupMessage("Mitglieder zur Gruppe hinzugefuegt.");
+      setPortfolioGroupError("");
+    } catch (groupAssignError) {
+      console.warn("Failed to assign investments to group", groupAssignError);
+      setPortfolioGroupError("Mitglieder konnten nicht zur Gruppe hinzugefuegt werden.");
+    }
+  }, [persistPortfolioGroups, portfolioGroups]);
+
+  const handleRemoveInvestmentIdsFromGroup = useCallback(async (groupId, investmentIds = []) => {
+    const normalizedGroupId = String(groupId || "").trim();
+    const nextIds = uniqueInvestmentIds(investmentIds);
+    const nextIdSet = new Set(nextIds);
+    if (!normalizedGroupId || nextIds.length === 0) {
+      return;
+    }
+
+    try {
+      await persistPortfolioGroups(
+        portfolioGroups.map((group) =>
+          group.id === normalizedGroupId
+            ? {
+                ...group,
+                memberInvestmentIds: group.memberInvestmentIds.filter(
+                  (investmentId) => !nextIdSet.has(investmentId),
+                ),
+                updatedAt: new Date().toISOString(),
+              }
+            : group,
+        ),
+      );
+      setPortfolioGroupMessage("Mitglieder aus der Gruppe entfernt.");
+      setPortfolioGroupError("");
+    } catch (groupRemoveError) {
+      console.warn("Failed to remove investments from group", groupRemoveError);
+      setPortfolioGroupError("Mitglieder konnten nicht aus der Gruppe entfernt werden.");
+    }
+  }, [persistPortfolioGroups, portfolioGroups]);
+
+  const toggleExpandedGroupManagementCluster = useCallback((clusterKey) => {
+    setExpandedGroupManagementClusters((current) => ({
+      ...current,
+      [clusterKey]: !current[clusterKey],
+    }));
+  }, []);
+
+  const handleOpenPortfolioGroupInInventory = useCallback((groupId) => {
+    const normalizedGroupId = String(groupId || "").trim();
+    if (!normalizedGroupId) {
+      return;
+    }
+
+    setInventoryScope("all");
+    setInventoryGroupFocusId(normalizedGroupId);
+    setGlobalSearchOpen(false);
+    handleTabSelect("inventory");
+  }, [handleTabSelect]);
+
+  const handleOpenPortfolioGroupInManagement = useCallback((groupId) => {
+    const normalizedGroupId = String(groupId || "").trim();
+    if (!normalizedGroupId) {
+      return;
+    }
+
+    const group = portfolioGroups.find((entry) => entry.id === normalizedGroupId) || null;
+    if (group) {
+      handleEditPortfolioGroup(group);
+    }
+    setManagementSection("groups");
+    setGlobalSearchOpen(false);
+    handleTabSelect("management");
+  }, [handleEditPortfolioGroup, handleTabSelect, portfolioGroups]);
 
   const loadGlobalSearchWatchlistItems = useCallback(async () => {
     try {
@@ -1843,7 +2214,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!globalSearchOpen || typeof document === "undefined") {
       return;
     }
-
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusTimer = window.setTimeout(() => globalSearchInputRef.current?.focus(), 50);
@@ -1867,7 +2237,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       return undefined;
     }
 
-    const target = portfolioChartContainerRef.current;
+    const target = portfolioChartCardRef.current;
     if (!target) {
       return undefined;
     }
@@ -1919,7 +2289,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
-  const staleRatio = Number(stats.staleLiveItemsRatioPercent || 0);
   const fallbackRangeDeltaPercent = Number(chartTrendData?.deltaPercent);
   const fallbackRangeDeltaValue = Number(chartTrendData?.deltaValue);
   const headerPortfolioValue = hoveredChartData?.wert ?? (stats.totalValue || 0);
@@ -1982,6 +2351,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     useUsd: true,
     buyPriceUsd: stats.totalValue || 0,
   });
+  const formatUsdPrice = useCallback(
+    (value, decimals = 2) =>
+      formatPrice(Number(value || 0), {
+        useUsd: true,
+        buyPriceUsd: Number(value || 0),
+        decimals,
+      }),
+    [formatPrice],
+  );
   const headerPortfolioValueLabel = formatPrice(headerPortfolioValue || 0, {
     useUsd: true,
     buyPriceUsd: headerPortfolioValue || 0,
@@ -1995,6 +2373,48 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const managementInvestmentById = new Map(
     managementInvestments.map((item) => [String(item.id), item]),
   );
+  const portfolioGroupMembershipMap = useMemo(
+    () => buildPortfolioGroupMembershipMap(portfolioGroups),
+    [portfolioGroups],
+  );
+  const portfolioGroupsById = useMemo(
+    () => new Map(portfolioGroups.map((group) => [String(group.id), group])),
+    [portfolioGroups],
+  );
+  const portfolioGroupSummaries = useMemo(
+    () =>
+      buildPortfolioGroupSummaries({
+        groups: portfolioGroups,
+        clusteredInvestments: enrichedInvestments,
+        rawInvestments: managementInvestments,
+      }),
+    [enrichedInvestments, managementInvestments, portfolioGroups],
+  );
+  const portfolioGroupSummaryById = useMemo(
+    () => new Map(portfolioGroupSummaries.map((group) => [String(group.id), group])),
+    [portfolioGroupSummaries],
+  );
+  const groupedInvestmentIds = useMemo(
+    () => new Set(Array.from(portfolioGroupMembershipMap.keys())),
+    [portfolioGroupMembershipMap],
+  );
+  const ungroupedInvestmentCount = managementInvestments.reduce((count, item) => {
+    const investmentId = normalizeInvestmentId(item?.id);
+    if (!investmentId || groupedInvestmentIds.has(investmentId)) {
+      return count;
+    }
+    return count + 1;
+  }, 0);
+  const managementGroupsByClusterKey = useMemo(() => {
+    const map = new Map();
+    managementClusters.forEach((cluster) => {
+      map.set(
+        cluster.key,
+        summarizeManagementClusterAssignment(cluster, portfolioGroupMembershipMap, portfolioGroupsById),
+      );
+    });
+    return map;
+  }, [managementClusters, portfolioGroupMembershipMap, portfolioGroupsById]);
   const managementSearchQuery = normalizeSearchText(managementSearchTerm);
   const filteredManagementClusters = (() => {
     let rows = [...managementClusters];
@@ -2021,15 +2441,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         cluster.positions.some((position) => normalizeSearchText(position.externalTradeId).includes(managementSearchQuery)),
       );
     }
-
-    const getClusterUpdatedAt = (cluster) =>
-      cluster.positions.reduce((latest, position) => {
-        const timestamp = Date.parse(String(position.updatedAt || position.purchasedAt || ""));
-        if (!Number.isFinite(timestamp)) {
-          return latest;
-        }
-        return Math.max(latest, timestamp);
-      }, 0);
 
     rows.sort((left, right) => {
       if (managementSortBy === "name_desc") {
@@ -2059,6 +2470,63 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     uniqueTypes.sort((left, right) => left.localeCompare(right, "de"));
     return uniqueTypes;
   })();
+  const portfolioGroupEditor = portfolioGroups.find((group) => group.id === portfolioGroupEditorId) || null;
+  const groupSearchQuery = normalizeSearchText(groupSearchTerm);
+  const filteredGroupManagementClusters = useMemo(() => {
+    let rows = [...managementClusters];
+
+    if (groupSearchQuery) {
+      rows = rows.filter((cluster) => {
+        const assignment = managementGroupsByClusterKey.get(cluster.key);
+        return (
+          normalizeSearchText(cluster.name).includes(groupSearchQuery) ||
+          normalizeSearchText(assignment?.assignedGroupName || "").includes(groupSearchQuery) ||
+          cluster.positions.some((position) =>
+            normalizeSearchText(position.externalTradeId).includes(groupSearchQuery),
+          )
+        );
+      });
+    }
+
+    rows.sort((left, right) => {
+      if (groupSortBy === "updated_desc") {
+        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, "de");
+      }
+      return left.name.localeCompare(right.name, "de");
+    });
+    return rows;
+  }, [groupSearchQuery, groupSortBy, managementClusters, managementGroupsByClusterKey]);
+  const globalSearchGroupSuggestions = useMemo(() => {
+    if (!globalSearchTermNormalized) {
+      return [];
+    }
+
+    return portfolioGroups
+      .map((group) => {
+        const summary = portfolioGroupSummaryById.get(String(group.id)) || null;
+        const searchText = normalizeSearchText(
+          [group.name, group.thesis, summary?.clusters?.map((cluster) => cluster.name).join(" ")]
+            .filter(Boolean)
+            .join(" "),
+        );
+        if (!searchText.includes(globalSearchTermNormalized)) {
+          return null;
+        }
+
+        return {
+          ...group,
+          summary,
+          searchText,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        const leftValue = Number(left?.summary?.totalValue || 0);
+        const rightValue = Number(right?.summary?.totalValue || 0);
+        return rightValue - leftValue || String(left.name || "").localeCompare(String(right.name || ""), "de");
+      })
+      .slice(0, 8);
+  }, [globalSearchTermNormalized, portfolioGroupSummaryById, portfolioGroups]);
   const pendingMatchingRows = matchingRows.filter((row) => row.status === "suggested");
   const matchedMatchingRows = matchingRows.filter((row) => {
     const status = String(row?.status || "").toLowerCase();
@@ -3125,7 +3593,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   return (
     <div
       className={`${isElectronRuntime ? "h-full box-border" : "min-h-screen"} ${
-        renderLocalDesktopSidebar ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
+        renderLocalDesktopSidebar
+          ? "lg:h-full lg:min-h-0 lg:overflow-hidden"
+          : ""
       } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
@@ -3196,7 +3666,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </header>
           </>
         ) : null}
-
         {showJourneyBannerLegacy ? (
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader className="pb-2">
@@ -4028,19 +4497,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-                    Data Freshness
+                    Price Sync
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="text-2xl font-bold">
-                    {formatAge(stats.freshestDataAgeSeconds)} - {formatAge(stats.oldestDataAgeSeconds)}
+                    {formatAge(stats.freshestDataAgeSeconds)} zuletzt
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>
-                      Live: {liveItems} | Stale: {staleItems}
+                      Live Quotes: {liveItems} | Aeltestes Cache-Alter: {formatAge(stats.oldestDataAgeSeconds)}
                     </span>
-                    <Badge variant="outline" className={freshnessBadgeClass(staleRatio)}>
-                      {staleRatio.toFixed(0)}% stale
+                    <Badge variant="outline" className={syncHealthBadgeClass(Number(stats.oldestDataAgeSeconds), liveItems)}>
+                      {syncHealthLabel(Number(stats.oldestDataAgeSeconds), liveItems)}
                     </Badge>
                   </div>
                 </CardContent>
@@ -4048,8 +4517,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
-              <div ref={portfolioChartContainerRef} className="min-w-0">
+              <div className="min-w-0">
                 <PortfolioChart
+                  cardRef={portfolioChartCardRef}
                   history={portfolioHistory}
                   isLoading={portfolioLoading}
                   onHoverChange={setHoveredChartData}
@@ -4115,7 +4585,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   <div className="flex min-w-0 flex-1 items-center gap-2">
                                     <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
                                       {imageUrl ? (
-                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                        <img
+                                          src={imageUrl}
+                                          alt={item.name}
+                                          className="h-full w-full object-contain"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
                                       ) : (
                                         <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
                                       )}
@@ -4168,7 +4644,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   <div className="flex min-w-0 flex-1 items-center gap-2">
                                     <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
                                       {imageUrl ? (
-                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                        <img
+                                          src={imageUrl}
+                                          alt={item.name}
+                                          className="h-full w-full object-contain"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
                                       ) : (
                                         <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
                                       )}
@@ -4223,13 +4705,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   <div className="flex min-w-0 flex-1 items-center gap-2">
                                     <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
                                       {imageUrl ? (
-                                        <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                                        <img
+                                          src={imageUrl}
+                                          alt={item.name}
+                                          className="h-full w-full object-cover"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
                                       ) : (
                                         <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
                                       )}
                                     </div>
                                     <div className="min-w-0">
-                                      <p className="truncate text-xs font-semibold">{item.name}</p>
+                                      <p className="truncate text-sm font-semibold">{item.name}</p>
                                       {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
                                     </div>
                                   </div>
@@ -4323,9 +4811,22 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </div>
             </div>
 
+            <div className="md:col-span-2">
+              <PortfolioGroupsPanel
+                groups={portfolioGroupSummaries}
+                isLoading={portfolioGroupsLoading && portfolioGroups.length === 0}
+                formatUsdPrice={formatUsdPrice}
+                onManageGroups={handleManageGroupsOpen}
+                title="Gruppenansicht"
+                description="Deine manuellen Investment-Gruppen direkt im Inventar-Tab, inklusive gewichteter Kennzahlen und Drilldown."
+                focusGroupId={inventoryGroupFocusId}
+              />
+            </div>
+
             <div className="overflow-x-auto md:col-span-1 sm:rounded-2xl sm:border sm:border-border/70 sm:bg-card/65">
               <InventoryTable
                 investments={inventoryTabItems}
+                groups={portfolioGroupSummaries}
                 onSelectItem={(item) => {
                   setSelectedItem(item);
                   if (window.innerWidth < BREAKPOINTS.MOBILE) {
@@ -4445,10 +4946,22 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     <Button size="sm" variant="outline" onClick={() => void handleToggleAutoSync()}>
                       Auto-Sync umschalten
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
-                      CSFloat Sync
-                    </Button>
+                    {hasCsFloatKey ? (
+                      <Button size="sm" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
+                        CSFloat Sync
+                      </Button>
+                    ) : null}
+                    {hasSkinBaronImportReady ? (
+                      <Button size="sm" variant="outline" onClick={() => setIsSkinBaronSyncOpen(true)}>
+                        SkinBaron Sync
+                      </Button>
+                    ) : null}
                   </div>
+                  {!hasCsFloatKey && !hasSkinBaronImportReady ? (
+                    <p className="text-xs text-muted-foreground">
+                      Kein CSFloat-Key bzw. kein gueltiger SkinBaron Session-Zugriff hinterlegt. Import-Buttons erscheinen automatisch nach Setup.
+                    </p>
+                  ) : null}
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -4471,6 +4984,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       onClick={() => setManagementSection("exclude")}
                     >
                       Exclude
+                    </Button>
+                    <Button
+                      variant={managementSection === "groups" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setManagementSection("groups")}
+                    >
+                      Gruppen
                     </Button>
                     <Button
                       variant={managementSection === "create" ? "default" : "outline"}
@@ -4665,6 +5185,399 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   </Card>
                 ) : null}
 
+                {managementSection === "groups" ? (
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+                    <Card className="overflow-hidden">
+                      <CardHeader className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle>Investment Gruppen</CardTitle>
+                          <Badge variant="secondary">{portfolioGroups.length} Gruppen</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Gruppen sind nur ein Anzeige-Layer. Cluster und Positionen darunter bleiben fachlich unveraendert.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button size="sm" onClick={() => handleStartCreatePortfolioGroup()}>
+                            Neue Gruppe hinzufuegen
+                          </Button>
+                          {portfolioGroupEditor ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resetPortfolioGroupEditor()}
+                            >
+                              Bearbeitung verlassen
+                            </Button>
+                          ) : null}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-3 rounded-xl border border-border/70 bg-background/40 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold">
+                              {portfolioGroupEditor ? "Gruppe bearbeiten" : "Neue Gruppe"}
+                            </p>
+                            {portfolioGroupEditor ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => resetPortfolioGroupEditor()}
+                              >
+                                Reset
+                              </Button>
+                            ) : null}
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">Name</label>
+                            <input
+                              type="text"
+                              value={portfolioGroupDraft.name}
+                              onChange={(event) =>
+                                handlePortfolioGroupDraftChange("name", event.target.value)
+                              }
+                              placeholder="z. B. Souvenir Mix Antwerp"
+                              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">These / Notiz</label>
+                            <textarea
+                              value={portfolioGroupDraft.thesis}
+                              onChange={(event) =>
+                                handlePortfolioGroupDraftChange("thesis", event.target.value)
+                              }
+                              placeholder="Optional: Warum gehoeren diese Cluster zusammen?"
+                              className="min-h-[92px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button size="sm" onClick={() => void handleSavePortfolioGroup()}>
+                              {portfolioGroupEditor ? "Aenderungen speichern" : "Gruppe anlegen"}
+                            </Button>
+                            {portfolioGroupEditor ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleDeletePortfolioGroup(portfolioGroupEditor.id)}
+                              >
+                                Gruppe loeschen
+                              </Button>
+                            ) : null}
+                          </div>
+                          {portfolioGroupMessage ? (
+                            <p className="text-xs text-emerald-400">{portfolioGroupMessage}</p>
+                          ) : null}
+                          {portfolioGroupError ? (
+                            <p className="text-xs text-destructive">{portfolioGroupError}</p>
+                          ) : null}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold">Bestehende Gruppen</p>
+                            <Badge variant="outline">{ungroupedInvestmentCount} Positionen ungruppiert</Badge>
+                          </div>
+                          {portfolioGroupsLoading ? (
+                            <div className="space-y-2">
+                              <Skeleton className="h-16 w-full" />
+                              <Skeleton className="h-16 w-full" />
+                            </div>
+                          ) : portfolioGroups.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              Noch keine Gruppen angelegt.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {portfolioGroups.map((group) => {
+                                const summary = portfolioGroupSummaryById.get(String(group.id)) || null;
+                                const isActive = portfolioGroupEditorId === group.id;
+                                return (
+                                  <button
+                                    key={group.id}
+                                    type="button"
+                                    onClick={() => handleEditPortfolioGroup(group)}
+                                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                                      isActive
+                                        ? "border-primary/45 bg-primary/10"
+                                        : "border-border/70 bg-background/35 hover:bg-accent/35"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold">{group.name}</p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {summary
+                                            ? `${summary.clusterCount} Cluster | ${summary.memberCount} Positionen`
+                                            : "Noch keine Positionen zugeordnet"}
+                                        </p>
+                                      </div>
+                                      <div className="text-right">
+                                        {summary ? (
+                                          <>
+                                            <p className="text-sm font-semibold">{formatUsdPrice(summary.totalValue)}</p>
+                                            <p className={`text-xs ${summary.totalProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                              {summary.roiPercent >= 0 ? "+" : ""}
+                                              {summary.roiPercent.toFixed(2)}%
+                                            </p>
+                                          </>
+                                        ) : (
+                                          <p className="text-xs text-muted-foreground">leer</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="overflow-hidden">
+                      <CardHeader className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <CardTitle>Cluster und Positionen zuweisen</CardTitle>
+                          {portfolioGroupEditor ? (
+                            <Badge variant="secondary">Aktiv: {portfolioGroupEditor.name}</Badge>
+                          ) : (
+                            <Badge variant="outline">Bitte links Gruppe waehlen</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          "Cluster hinzufuegen" ist nur ein Shortcut. Intern werden die konkreten Positionen der Gruppe zugeordnet.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="relative block flex-1">
+                            <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                              type="text"
+                              value={groupSearchTerm}
+                              onChange={(event) => setGroupSearchTerm(event.target.value)}
+                              placeholder="Nach Cluster oder Gruppenname suchen..."
+                              className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
+                            />
+                          </label>
+                          <select
+                            value={groupSortBy}
+                            onChange={(event) => setGroupSortBy(event.target.value)}
+                            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                          >
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="updated_desc">Neueste</option>
+                          </select>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {managementLoading ? (
+                          <div className="space-y-2">
+                            <Skeleton className="h-16 w-full" />
+                            <Skeleton className="h-16 w-full" />
+                            <Skeleton className="h-16 w-full" />
+                          </div>
+                        ) : filteredGroupManagementClusters.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Kein Cluster passt zur Suche.
+                          </p>
+                        ) : (
+                          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+                            {filteredGroupManagementClusters.map((cluster) => {
+                              const clusterAssignment = managementGroupsByClusterKey.get(cluster.key) || {
+                                assignmentState: "ungrouped",
+                                assignedGroupId: "",
+                                assignedGroupName: "",
+                                assignedCount: 0,
+                                totalCount: cluster.positions.length,
+                              };
+                              const clusterInvestmentIds = uniqueInvestmentIds(
+                                cluster.positions.map((position) => position.id),
+                              );
+                              const isExpanded = Boolean(expandedGroupManagementClusters[cluster.key]);
+                              const activeGroupAssignedCount = portfolioGroupEditor
+                                ? clusterInvestmentIds.filter(
+                                    (investmentId) =>
+                                      portfolioGroupMembershipMap.get(investmentId) === portfolioGroupEditor.id,
+                                  ).length
+                                : 0;
+                              const isAssignedToActiveGroup =
+                                portfolioGroupEditor && clusterAssignment.assignedGroupId === portfolioGroupEditor.id;
+                              const canAssignCluster = Boolean(portfolioGroupEditor) && !isAssignedToActiveGroup;
+                              const canRemoveCluster =
+                                Boolean(portfolioGroupEditor) && activeGroupAssignedCount > 0;
+
+                              return (
+                                <div key={cluster.id} className="rounded-xl border border-border/70 bg-background/30 p-3">
+                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-border/70 bg-muted/25 p-1">
+                                        {cluster.imageUrl ? (
+                                          <img
+                                            src={cluster.imageUrl}
+                                            alt={cluster.name}
+                                            className="h-full w-full object-contain"
+                                            loading="lazy"
+                                            decoding="async"
+                                          />
+                                        ) : (
+                                          <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
+                                            N/A
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold">{cluster.name}</p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                          <span>{cluster.totalCount} Stk.</span>
+                                          <span>|</span>
+                                          <span>{cluster.positions.length} Positionen</span>
+                                          {getClusterUpdatedAt(cluster) > 0 ? (
+                                            <>
+                                              <span>|</span>
+                                              <span>{new Date(getClusterUpdatedAt(cluster)).toLocaleDateString("de-DE")}</span>
+                                            </>
+                                          ) : null}
+                                          {clusterAssignment.assignmentState === "grouped" ? (
+                                            <>
+                                              <span>|</span>
+                                              <span>Gruppe: {clusterAssignment.assignedGroupName}</span>
+                                            </>
+                                          ) : null}
+                                          {clusterAssignment.assignmentState === "partial" ? (
+                                            <>
+                                              <span>|</span>
+                                              <span>
+                                                Teilweise gruppiert ({clusterAssignment.assignedCount}/{clusterAssignment.totalCount})
+                                              </span>
+                                            </>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {clusterAssignment.assignmentState === "grouped" ? (
+                                        <Badge variant="secondary">Vollstaendig gruppiert</Badge>
+                                      ) : clusterAssignment.assignmentState === "partial" ? (
+                                        <Badge variant="outline">Teilweise gruppiert</Badge>
+                                      ) : (
+                                        <Badge variant="outline">Nicht gruppiert</Badge>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => toggleExpandedGroupManagementCluster(cluster.key)}
+                                      >
+                                        {isExpanded ? "Positionen ausblenden" : "Positionen anzeigen"}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={!canAssignCluster}
+                                        onClick={() =>
+                                          void handleAssignInvestmentIdsToGroup(
+                                            portfolioGroupEditor?.id,
+                                            clusterInvestmentIds,
+                                          )
+                                        }
+                                      >
+                                        Cluster hinzufuegen
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={!canRemoveCluster}
+                                        onClick={() =>
+                                          void handleRemoveInvestmentIdsFromGroup(
+                                            portfolioGroupEditor?.id,
+                                            clusterInvestmentIds,
+                                          )
+                                        }
+                                      >
+                                        Cluster entfernen
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  {isExpanded ? (
+                                    <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                                      {cluster.positions.map((position) => {
+                                        const positionId = normalizeInvestmentId(position.id);
+                                        const assignedGroupId = portfolioGroupMembershipMap.get(positionId) || "";
+                                        const assignedGroupName = assignedGroupId
+                                          ? portfolioGroupsById.get(assignedGroupId)?.name || ""
+                                          : "";
+                                        const inActiveGroup =
+                                          Boolean(portfolioGroupEditor) && assignedGroupId === portfolioGroupEditor.id;
+                                        const canAssignPosition =
+                                          Boolean(portfolioGroupEditor) && !inActiveGroup;
+                                        const canRemovePosition =
+                                          Boolean(portfolioGroupEditor) && inActiveGroup;
+                                        const positionPrice = Number(position.buyPriceUsd || 0);
+
+                                        return (
+                                          <div
+                                            key={position.id}
+                                            className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card/55 p-3 md:flex-row md:items-center md:justify-between"
+                                          >
+                                            <div className="min-w-0">
+                                              <p className="truncate text-sm font-medium">{position.name}</p>
+                                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                                <span>{position.quantity} Stk.</span>
+                                                <span>|</span>
+                                                <span>{position.bucket === "inventory" ? "Inventar" : "Investment"}</span>
+                                                <span>|</span>
+                                                <span>{positionPrice > 0 ? `${positionPrice.toFixed(2)} USD Buy-in` : "ohne Buy-in"}</span>
+                                                {assignedGroupName ? (
+                                                  <>
+                                                    <span>|</span>
+                                                    <span>Gruppe: {assignedGroupName}</span>
+                                                  </>
+                                                ) : null}
+                                              </div>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={!canAssignPosition}
+                                                onClick={() =>
+                                                  void handleAssignInvestmentIdsToGroup(
+                                                    portfolioGroupEditor?.id,
+                                                    [positionId],
+                                                  )
+                                                }
+                                              >
+                                                Position hinzufuegen
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={!canRemovePosition}
+                                                onClick={() =>
+                                                  void handleRemoveInvestmentIdsFromGroup(
+                                                    portfolioGroupEditor?.id,
+                                                    [positionId],
+                                                  )
+                                                }
+                                              >
+                                                Entfernen
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : null}
+
                 {managementSection === "create" ? (
                   <Card className="overflow-hidden">
                     <CardHeader>
@@ -4717,12 +5630,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   onClick={() => handleManualSuggestionPick(candidate)}
                                   className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left hover:border-border hover:bg-accent/40"
                                 >
-                                  <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
+                                  <div className="h-10 w-10 overflow-hidden rounded-md border border-border/70 bg-muted/25">
                                     {candidateImageUrl ? (
                                       <img
                                         src={candidateImageUrl}
                                         alt={candidateName}
-                                        className="h-full w-full object-contain"
+                                        className="h-full w-full object-cover"
                                         loading="lazy"
                                         decoding="async"
                                       />
@@ -5360,6 +6273,64 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     </section>
                   ) : null}
 
+                  {globalSearchGroupSuggestions.length > 0 ? (
+                    <section className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Investment Gruppen</h3>
+                      <div className="space-y-2">
+                        {globalSearchGroupSuggestions.map((group) => {
+                          const summary = group.summary || null;
+                          const topVisual = Array.isArray(summary?.topVisuals) ? summary.topVisuals[0] : null;
+                          const canOpenInventory = Boolean(summary);
+                          return (
+                            <div
+                              key={`group-search-${group.id}`}
+                              className="flex items-center gap-3 rounded-md border border-border/70 bg-background/35 px-3 py-2.5 dark:rounded-xl dark:bg-card/65"
+                            >
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/25">
+                                {topVisual?.imageUrl ? (
+                                  <img
+                                    src={topVisual.imageUrl}
+                                    alt={group.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground">GR</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold">{group.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {summary
+                                    ? `${summary.clusterCount} Cluster | ${summary.memberCount} Positionen | ${formatUsdPrice(summary.totalValue)}`
+                                    : "Noch leer - nur in Verwaltung sichtbar"}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!canOpenInventory}
+                                  onClick={() => handleOpenPortfolioGroupInInventory(group.id)}
+                                >
+                                  Im Inventar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenPortfolioGroupInManagement(group.id)}
+                                >
+                                  Verwaltung
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : null}
+
                   {canRunGlobalCatalogSearch ? (
                     <section className="space-y-2">
                       <button
@@ -5528,6 +6499,17 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             setActiveTab("management");
             setManagementSection("matching");
             setIsCsFloatSyncOpen(false);
+          }}
+        />
+        <SkinBaronSalesSyncModal
+          isOpen={isSkinBaronSyncOpen}
+          onClose={() => setIsSkinBaronSyncOpen(false)}
+          onSynced={async () => {
+            await refreshPortfolio();
+            setCompositionRefreshToken((current) => current + 1);
+            setActiveTab("management");
+            setManagementSection("matching");
+            setIsSkinBaronSyncOpen(false);
           }}
         />
       </div>

@@ -473,6 +473,11 @@ function normalizeImportIdentifier(value) {
   return normalized.toLowerCase();
 }
 
+function normalizePreviewStatus(value, fallback = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized || fallback;
+}
+
 function resolveInvestmentPlatform(entry) {
   return String(entry?.platform || entry?.source || "").trim().toLowerCase();
 }
@@ -616,13 +621,14 @@ async function applyDesktopCsFloatPreviewDeduplication(previewResponse) {
     });
 
     const localDuplicates = enrichedImportTrades.filter(
-      (trade) => String(trade?.status || "") === "duplicate",
+      (trade) => normalizePreviewStatus(trade?.status) === "duplicate",
     ).length;
-    const localInsertable = enrichedImportTrades.filter((trade) =>
-      String(trade?.status || "") !== "duplicate",
-    ).length;
+    const localInsertable = enrichedImportTrades.filter((trade) => {
+      const status = normalizePreviewStatus(trade?.status, "new");
+      return status !== "duplicate" && status !== "excluded";
+    }).length;
     const localUpdated = enrichedImportTrades.filter(
-      (trade) => String(trade?.status || "") === "updated",
+      (trade) => normalizePreviewStatus(trade?.status) === "updated",
     ).length;
 
     return {
@@ -682,13 +688,14 @@ async function applyDesktopSkinBaronPreviewDeduplication(previewResponse) {
     });
 
     const localDuplicates = enrichedImportTrades.filter(
-      (trade) => String(trade?.status || "") === "duplicate",
+      (trade) => normalizePreviewStatus(trade?.status) === "duplicate",
     ).length;
-    const localInsertable = enrichedImportTrades.filter((trade) =>
-      String(trade?.status || "") !== "duplicate",
-    ).length;
+    const localInsertable = enrichedImportTrades.filter((trade) => {
+      const status = normalizePreviewStatus(trade?.status, "new");
+      return status !== "duplicate" && status !== "excluded";
+    }).length;
     const localUpdated = enrichedImportTrades.filter(
-      (trade) => String(trade?.status || "") === "updated",
+      (trade) => normalizePreviewStatus(trade?.status) === "updated",
     ).length;
 
     return {
@@ -953,7 +960,8 @@ export async function executeSkinBaronTradeSync(payload = {}) {
   if (localStore) {
     const preview = await fetchSkinBaronTradeSyncPreview(payload);
     const preferences = await getPortfolioPreferences();
-    const targetBucket = preferences.csfloatImportBucket === "inventory" ? "inventory" : "investment";
+    const preferredBucket = preferences?.skinBaronImportBucket ?? preferences?.csfloatImportBucket;
+    const targetBucket = preferredBucket === "inventory" ? "inventory" : "investment";
     const currentUser = await getCurrentUser();
     const userId = resolveDesktopLocalUserId(currentUser);
     const trades = Array.isArray(preview?.data?.importTrades)
@@ -1236,6 +1244,25 @@ export async function updateSkinBaronSessionCookie(sessionCookie) {
   }
 
   throw new Error("SkinBaron Session-Cookie updates are only supported in the Desktop app.");
+}
+
+export async function connectSkinBaronSessionCookieViaBrowser() {
+  const desktopSecrets = getDesktopSecrets();
+  if (desktopSecrets?.connectSkinBaronSessionCookieViaBrowser) {
+    const result = await desktopSecrets.connectSkinBaronSessionCookieViaBrowser();
+    if (!result?.ok) {
+      throw new Error(result?.error || "SkinBaron Login konnte nicht abgeschlossen werden.");
+    }
+
+    return {
+      data: result?.status || result,
+      meta: {
+        source: "desktop-safe-storage",
+      },
+    };
+  }
+
+  throw new Error("SkinBaron Browser-Login ist nur in der Desktop-App verfuegbar.");
 }
 
 export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds = []) {

@@ -92,6 +92,7 @@ let backendBaseUrl = null;
 let sidecarSecret = null;
 let updateCheckTimer = null;
 let cloudflareAccessLoginPromise = null;
+let skinBaronSessionLoginPromise = null;
 let sidecarRequestHeaderBridgeInstalled = false;
 let latestAvailableUpdateInfo = null;
 let updateDownloadInProgress = false;
@@ -1521,6 +1522,140 @@ function extractSkinBaronAuthIdTail(cookieHeader) {
   return authIdValue.slice(-4);
 }
 
+async function findSkinBaronAuthIdFromSession(targetSession) {
+  const resolvedSession = targetSession?.cookies?.get
+    ? targetSession
+    : session.defaultSession;
+  const candidates = [
+    "https://skinbaron.de",
+    "https://www.skinbaron.de",
+  ];
+
+  for (const targetUrl of candidates) {
+    try {
+      const cookies = await resolvedSession.cookies.get({ url: targetUrl });
+      if (!Array.isArray(cookies) || cookies.length === 0) {
+        continue;
+      }
+      const authCookie = cookies.find((cookie) => {
+        const name = String(cookie?.name || "").trim().toLowerCase();
+        const value = String(cookie?.value || "").trim();
+        return name === "authid" && value !== "";
+      });
+      if (authCookie) {
+        return String(authCookie.value || "").trim();
+      }
+    } catch (error) {
+      console.warn(`[skinbaron-session] failed to read cookies for ${targetUrl}`, error);
+    }
+  }
+
+  return "";
+}
+
+async function openSkinBaronSessionLoginWindow() {
+  if (skinBaronSessionLoginPromise) {
+    return skinBaronSessionLoginPromise;
+  }
+
+  skinBaronSessionLoginPromise = new Promise((resolve, reject) => {
+    let loginWindow = null;
+    let finished = false;
+    let pollTimer = null;
+    let savingAuthCookie = false;
+
+    const cleanup = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const finish = (handler) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      cleanup();
+      if (loginWindow && !loginWindow.isDestroyed()) {
+        loginWindow.close();
+      }
+      loginWindow = null;
+      skinBaronSessionLoginPromise = null;
+      handler();
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish(() => reject(new Error("SkinBaron Login Timeout (kein AUTHID Cookie gefunden).")));
+    }, 180000);
+
+    const start = async () => {
+      loginWindow = new BrowserWindow({
+        parent: mainWindow || undefined,
+        modal: false,
+        width: 1180,
+        height: 860,
+        minWidth: 980,
+        minHeight: 700,
+        show: true,
+        title: "SkinBaron Login",
+        webPreferences: {
+          contextIsolation: true,
+          partition: "persist:skinbaron-auth",
+        },
+      });
+
+      loginWindow.on("closed", () => {
+        clearTimeout(timeoutId);
+        finish(() => reject(new Error("SkinBaron Login wurde geschlossen, bevor AUTHID erkannt wurde.")));
+      });
+
+      const pollAuthCookie = async () => {
+        if (finished || !loginWindow || loginWindow.isDestroyed()) {
+          return;
+        }
+        if (savingAuthCookie) {
+          return;
+        }
+
+        const authIdValue = await findSkinBaronAuthIdFromSession(loginWindow.webContents.session);
+        if (!authIdValue) {
+          return;
+        }
+
+        clearTimeout(timeoutId);
+        try {
+          savingAuthCookie = true;
+          const status = await writeSkinBaronSessionCookie(`AUTHID=${authIdValue}`);
+          finish(() => resolve({
+            ok: true,
+            status,
+          }));
+        } catch (error) {
+          finish(() => reject(error));
+        } finally {
+          savingAuthCookie = false;
+        }
+      };
+
+      await loginWindow.loadURL("https://skinbaron.de/de/profile/purchases");
+      await delay(1000);
+
+      await pollAuthCookie();
+      pollTimer = setInterval(() => {
+        void pollAuthCookie();
+      }, 1200);
+    };
+
+    start().catch((error) => {
+      clearTimeout(timeoutId);
+      finish(() => reject(error));
+    });
+  });
+
+  return skinBaronSessionLoginPromise;
+}
+
 function readSkinBaronCapabilitiesSnapshot() {
   const filePath = getSkinBaronCapabilitiesFilePath();
   if (!fsSync.existsSync(filePath)) {
@@ -2679,6 +2814,17 @@ ipcMain.handle("secret-skinbaron-session-set", async (event, sessionCookie) => {
     status,
     backendBaseUrl,
   };
+});
+ipcMain.handle("secret-skinbaron-session-connect-browser", async () => {
+  ensureDesktopRuntimeUnlocked();
+  try {
+    return await openSkinBaronSessionLoginWindow();
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || String(error),
+    };
+  }
 });
 ipcMain.handle("secret-skinbaron-session-clear", async () => {
   ensureDesktopRuntimeUnlocked();

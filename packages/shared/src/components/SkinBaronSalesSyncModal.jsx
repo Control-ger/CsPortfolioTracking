@@ -90,7 +90,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
         ? preview.sampleTrades
         : [];
 
-    return rows.filter((trade) => String(trade?.status || "") === "duplicate").length;
+    return rows.filter((trade) => String(trade?.status || "").toLowerCase() === "duplicate").length;
   }, [preview]);
   const updatedCount = useMemo(() => {
     const rows = Array.isArray(preview?.importTrades)
@@ -99,7 +99,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
         ? preview.sampleTrades
         : [];
 
-    return rows.filter((trade) => String(trade?.status || "") === "updated").length;
+    return rows.filter((trade) => String(trade?.status || "").toLowerCase() === "updated").length;
   }, [preview]);
   const hiddenExcludedCount = useMemo(() => {
     const rows = Array.isArray(preview?.importTrades)
@@ -181,7 +181,9 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
               <div className="text-sm text-muted-foreground">Keine neuen SkinBaron-Eintraege zum Import gefunden.</div>
             ) : (
               <div className="h-full space-y-2 overflow-y-auto pr-1">
-                {sampleRows.slice(0, 20).map((trade) => (
+                {sampleRows.slice(0, 20).map((trade) => {
+                  const tradeStatus = String(trade?.status || "").toLowerCase();
+                  return (
                   <div
                     key={trade.externalTradeId}
                     className="grid gap-2 rounded-xl border border-border/70 bg-card/65 p-3 text-sm md:grid-cols-[1.2fr_0.5fr_0.6fr_0.7fr_0.8fr] md:items-center"
@@ -204,13 +206,14 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
                     </div>
                     <div className="text-xs text-muted-foreground md:text-right">{formatDate(trade.purchasedAt)}</div>
                     <div className="flex items-center justify-between gap-2 md:justify-end">
-                      <Badge variant={trade.status === "duplicate" ? "outline" : "default"}>
-                        {trade.status}
+                      <Badge variant={tradeStatus === "duplicate" ? "outline" : "default"}>
+                        {tradeStatus || "new"}
                       </Badge>
                       <span className="text-[10px] uppercase text-muted-foreground">{trade.typeLabel}</span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {hiddenDuplicateCount > 0 ? (

@@ -26,55 +26,75 @@ final class DesktopSkinBaronController
         $pageStats = [];
         $errors = [];
         $requestCount = 0;
+        $preferenceAutomation = $this->preparePurchasesImportContext();
 
-        for ($page = 1; $page <= $maxPages; $page++) {
-            if ($requestCount > 0) {
-                usleep(self::MIN_REQUEST_INTERVAL_US);
+        if (!empty($preferenceAutomation['errors']) && is_array($preferenceAutomation['errors'])) {
+            foreach ($preferenceAutomation['errors'] as $automationError) {
+                if (is_array($automationError)) {
+                    $errors[] = $automationError;
+                }
             }
-            $requestCount += 1;
+        }
 
-            $result = $this->client->fetchPurchasesPage($page, $searchString);
-            if (!empty($result['error'])) {
-                $errors[] = [
-                    ...$result['error'],
+        try {
+            for ($page = 1; $page <= $maxPages; $page++) {
+                if ($requestCount > 0) {
+                    usleep(self::MIN_REQUEST_INTERVAL_US);
+                }
+                $requestCount += 1;
+
+                $result = $this->client->fetchPurchasesPage($page, $searchString, 200);
+                if (!empty($result['error'])) {
+                    $errors[] = [
+                        ...$result['error'],
+                        'page' => $page,
+                    ];
+                    break;
+                }
+
+                $pageGroups = is_array($result['purchaseGroups'] ?? null) ? $result['purchaseGroups'] : [];
+                $pagination = is_array($result['pagination'] ?? null) ? $result['pagination'] : null;
+                $pageStats[] = [
                     'page' => $page,
+                    'count' => count($pageGroups),
+                    'numPages' => (int) ($pagination['numPages'] ?? 0),
+                    'total' => (int) ($pagination['total'] ?? 0),
                 ];
-                break;
-            }
 
-            $pageGroups = is_array($result['purchaseGroups'] ?? null) ? $result['purchaseGroups'] : [];
-            $pagination = is_array($result['pagination'] ?? null) ? $result['pagination'] : null;
-            $pageStats[] = [
-                'page' => $page,
-                'count' => count($pageGroups),
-                'numPages' => (int) ($pagination['numPages'] ?? 0),
-                'total' => (int) ($pagination['total'] ?? 0),
-            ];
+                foreach ($pageGroups as $group) {
+                    if (!is_array($group)) {
+                        $groupsWithoutTransferId[] = $group;
+                        continue;
+                    }
 
-            foreach ($pageGroups as $group) {
-                if (!is_array($group)) {
-                    $groupsWithoutTransferId[] = $group;
-                    continue;
+                    $transferId = $this->readString($group, ['transferId']);
+                    if ($transferId === null) {
+                        $groupsWithoutTransferId[] = $group;
+                        continue;
+                    }
+
+                    if (!isset($groupsByTransferId[$transferId])) {
+                        $groupsByTransferId[$transferId] = $group;
+                    }
                 }
 
-                $transferId = $this->readString($group, ['transferId']);
-                if ($transferId === null) {
-                    $groupsWithoutTransferId[] = $group;
-                    continue;
+                if (count($pageGroups) === 0) {
+                    break;
                 }
 
-                if (!isset($groupsByTransferId[$transferId])) {
-                    $groupsByTransferId[$transferId] = $group;
+                $numPages = (int) ($pagination['numPages'] ?? 0);
+                if ($numPages > 0 && $page >= $numPages) {
+                    break;
                 }
             }
-
-            if (count($pageGroups) === 0) {
-                break;
-            }
-
-            $numPages = (int) ($pagination['numPages'] ?? 0);
-            if ($numPages > 0 && $page >= $numPages) {
-                break;
+        } finally {
+            $restoreResult = $this->restorePurchasesImportContext($preferenceAutomation);
+            if (!empty($restoreResult['errors']) && is_array($restoreResult['errors'])) {
+                foreach ($restoreResult['errors'] as $restoreError) {
+                    if (is_array($restoreError)) {
+                        $errors[] = $restoreError;
+                    }
+                }
             }
         }
 
@@ -140,6 +160,16 @@ final class DesktopSkinBaronController
             'rawDistinctByTransferId' => count($groupsByTransferId),
             'rawWithoutTransferId' => count($groupsWithoutTransferId),
             'errors' => $errors,
+            'preferenceAutomation' => [
+                'targetLanguage' => 'en',
+                'targetAdditionalCurrency' => 'USD',
+                'previousLanguage' => $preferenceAutomation['previousLanguage'] ?? null,
+                'previousAdditionalCurrency' => $preferenceAutomation['previousAdditionalCurrency'] ?? null,
+                'languageChangedForImport' => (bool) ($preferenceAutomation['languageChangedForImport'] ?? false),
+                'languageRestored' => (bool) ($preferenceAutomation['languageRestored'] ?? false),
+                'currencySetForImport' => (bool) ($preferenceAutomation['currencySetForImport'] ?? false),
+                'currencyRestored' => (bool) ($preferenceAutomation['currencyRestored'] ?? false),
+            ],
             'rawTrades' => $purchaseGroups,
         ]);
     }
@@ -161,7 +191,7 @@ final class DesktopSkinBaronController
             return [];
         }
 
-        $transferId = $this->readString($group, ['transferId']) ?? sprintf('group-%d', $groupIndex + 1);
+        $transferId = $this->resolveTransferId($group, $groupIndex);
         $formattedDate = $this->readString($group, ['formattedDate']);
         $purchasedAt = $this->parseGermanDateToIso($formattedDate);
         $paymentOption = $this->readString($group, ['paymentOption']);
@@ -177,8 +207,7 @@ final class DesktopSkinBaronController
                 continue;
             }
 
-            $name = $this->readString($item, ['localizedName'])
-                ?? $this->readString($item, ['marketHashName'])
+            $name = $this->readString($item, ['marketHashName'])
                 ?? $this->readString($item, ['name']);
             if ($name === null) {
                 continue;
@@ -198,7 +227,6 @@ final class DesktopSkinBaronController
                 $name,
                 $unitPrice,
                 $amount,
-                $groupIndex,
                 (int) $itemIndex
             );
 
@@ -290,7 +318,6 @@ final class DesktopSkinBaronController
         string $name,
         float $unitPrice,
         int $amount,
-        int $groupIndex,
         int $itemIndex
     ): string {
         $signature = implode('|', [
@@ -299,10 +326,52 @@ final class DesktopSkinBaronController
             $name,
             number_format($unitPrice, 8, '.', ''),
             $amount,
-            $groupIndex,
             $itemIndex,
         ]);
         return sprintf('%s-%s', $transferId, substr(sha1($signature), 0, 16));
+    }
+
+    private function resolveTransferId(array $group, int $groupIndex): string
+    {
+        $transferId = $this->readString($group, ['transferId']);
+        if ($transferId !== null) {
+            return $transferId;
+        }
+
+        return $this->buildFallbackTransferId($group, $groupIndex);
+    }
+
+    private function buildFallbackTransferId(array $group, int $groupIndex): string
+    {
+        $items = $this->readPath($group, ['purchaseItems']);
+        $itemFingerprint = [];
+        if (is_array($items)) {
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+
+                $itemFingerprint[] = implode('|', [
+                    $this->readString($item, ['marketHashName']) ?? $this->readString($item, ['name']) ?? '',
+                    number_format($this->readNumeric($item, ['price']) ?? 0.0, 8, '.', ''),
+                    (int) round($this->readNumeric($item, ['amount']) ?? 1.0),
+                    $this->readString($item, ['offerLink']) ?? '',
+                ]);
+            }
+        }
+
+        $groupFingerprint = implode('|', [
+            $this->readString($group, ['formattedDate']) ?? '',
+            $this->readString($group, ['paymentOption']) ?? '',
+            $this->readString($group, ['state']) ?? '',
+            implode(';', $itemFingerprint),
+        ]);
+
+        if ($groupFingerprint === '|||') {
+            return sprintf('group-fallback-%d', $groupIndex + 1);
+        }
+
+        return sprintf('group-%s', substr(sha1($groupFingerprint), 0, 16));
     }
 
     private function addSkipReason(array &$skipReasons, string $reason): void
@@ -324,5 +393,112 @@ final class DesktopSkinBaronController
         }
 
         return 'skin';
+    }
+
+    private function preparePurchasesImportContext(): array
+    {
+        $context = [
+            'previousLanguage' => null,
+            'previousAdditionalCurrency' => null,
+            'languageChangedForImport' => false,
+            'currencySetForImport' => false,
+            'languageRestored' => false,
+            'currencyRestored' => false,
+            'errors' => [],
+        ];
+
+        $configResult = $this->client->fetchPersonalUserConfig();
+        if (!empty($configResult['error']) && is_array($configResult['error'])) {
+            $context['errors'][] = [
+                ...$configResult['error'],
+                'step' => 'fetch_personal_user_config',
+            ];
+        } else {
+            $config = is_array($configResult['config'] ?? null) ? $configResult['config'] : [];
+            $language = strtolower(trim((string) ($config['language'] ?? '')));
+            if ($language !== '') {
+                $context['previousLanguage'] = $language;
+            }
+
+            $currencyCandidates = [
+                $config['additionalCurrency'] ?? null,
+                $config['currency'] ?? null,
+                $config['additionalCurrencyCode'] ?? null,
+            ];
+            foreach ($currencyCandidates as $candidate) {
+                $normalized = strtoupper(trim((string) $candidate));
+                if ($normalized !== '') {
+                    $context['previousAdditionalCurrency'] = $normalized;
+                    break;
+                }
+            }
+        }
+
+        if (($context['previousLanguage'] ?? null) !== 'en') {
+            $setLanguageResult = $this->client->setLanguage('en');
+            if (!empty($setLanguageResult['error']) && is_array($setLanguageResult['error'])) {
+                $context['errors'][] = [
+                    ...$setLanguageResult['error'],
+                    'step' => 'set_language_en',
+                ];
+            } else {
+                $context['languageChangedForImport'] = true;
+            }
+        }
+
+        $setCurrencyResult = $this->client->setAdditionalCurrency('USD');
+        if (!empty($setCurrencyResult['error']) && is_array($setCurrencyResult['error'])) {
+            $context['errors'][] = [
+                ...$setCurrencyResult['error'],
+                'step' => 'set_currency_usd',
+                'attempts' => $setCurrencyResult['attempts'] ?? [],
+            ];
+        } else {
+            $context['currencySetForImport'] = true;
+        }
+
+        return $context;
+    }
+
+    private function restorePurchasesImportContext(array &$context): array
+    {
+        $errors = [];
+
+        $previousLanguage = strtolower(trim((string) ($context['previousLanguage'] ?? '')));
+        $languageWasChanged = (bool) ($context['languageChangedForImport'] ?? false);
+        if ($languageWasChanged && $previousLanguage !== '' && $previousLanguage !== 'en') {
+            $restoreLanguageResult = $this->client->setLanguage($previousLanguage);
+            if (!empty($restoreLanguageResult['error']) && is_array($restoreLanguageResult['error'])) {
+                $errors[] = [
+                    ...$restoreLanguageResult['error'],
+                    'step' => 'restore_language',
+                    'targetLanguage' => $previousLanguage,
+                ];
+            } else {
+                $context['languageRestored'] = true;
+            }
+        } elseif ($languageWasChanged && $previousLanguage === 'en') {
+            $context['languageRestored'] = true;
+        }
+
+        $previousCurrency = strtoupper(trim((string) ($context['previousAdditionalCurrency'] ?? '')));
+        $currencyWasChanged = (bool) ($context['currencySetForImport'] ?? false);
+        if ($currencyWasChanged && $previousCurrency !== '' && $previousCurrency !== 'USD') {
+            $restoreCurrencyResult = $this->client->setAdditionalCurrency($previousCurrency);
+            if (!empty($restoreCurrencyResult['error']) && is_array($restoreCurrencyResult['error'])) {
+                $errors[] = [
+                    ...$restoreCurrencyResult['error'],
+                    'step' => 'restore_currency',
+                    'targetCurrency' => $previousCurrency,
+                    'attempts' => $restoreCurrencyResult['attempts'] ?? [],
+                ];
+            } else {
+                $context['currencyRestored'] = true;
+            }
+        } elseif ($currencyWasChanged && $previousCurrency === 'USD') {
+            $context['currencyRestored'] = true;
+        }
+
+        return ['errors' => $errors];
     }
 }

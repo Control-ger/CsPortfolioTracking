@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Badge } from "@shared/components/ui/badge";
 import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import { ItemListRow } from "@shared/components/ItemListRow";
@@ -13,6 +13,43 @@ import {
 
 import { Abbr } from "@shared/components/AbbreviationTooltip";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+
+function LayeredGroupIcon({ visuals = [], fallbackLabel }) {
+  const items = Array.isArray(visuals) ? visuals.slice(0, 2) : [];
+
+  return (
+    <div className="relative h-14 w-14 shrink-0">
+      {items.length === 0 ? (
+        <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-border/70 bg-card/70 text-[11px] font-semibold text-muted-foreground">
+          {String(fallbackLabel || "Group").slice(0, 2).toUpperCase()}
+        </div>
+      ) : null}
+      {items.map((item, index) => {
+        const offsetClass = index === 0 ? "left-0 top-0 z-20" : "left-7 top-2 z-10";
+        return (
+          <div
+            key={item.id || `${item.name}-${index}`}
+            className={`absolute ${offsetClass} h-14 w-14 overflow-hidden rounded-xl border border-border/70 bg-card/85 p-1 shadow-[0_12px_28px_rgba(0,0,0,0.18)]`}
+          >
+            {item.imageUrl ? (
+              <img
+                src={item.imageUrl}
+                alt={item.name || "Group visual"}
+                className="h-full w-full object-contain"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-muted-foreground">
+                {String(item.name || fallbackLabel || "Group").slice(0, 2).toUpperCase()}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const ItemThumbnail = ({ imageUrl, name }) => (
   <div className="h-14 w-14 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1">
@@ -59,6 +96,14 @@ function formatSignedPercentOneDecimal(value) {
   }
 
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatSharePercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "-";
+  }
+  return `${numeric.toFixed(1)}% Anteil`;
 }
 
 function deltaClassName(value) {
@@ -138,10 +183,18 @@ function SortHeaderButton({ label, align = "left", isActive, sortDirection, onCl
   );
 }
 
-export function InventoryTable({ investments, onSelectItem }) {
+export function InventoryTable({ investments, onSelectItem, groups = [] }) {
   const { formatPrice } = useCurrency();
   const [sortKey, setSortKey] = useState("roi");
   const [sortDirection, setSortDirection] = useState("desc");
+  const [expandedGroupIds, setExpandedGroupIds] = useState({});
+
+  const toggleExpanded = (groupId) => {
+    setExpandedGroupIds((current) => ({
+      ...current,
+      [groupId]: !current[groupId],
+    }));
+  };
 
   const sortedInvestments = useMemo(() => {
     const getLiveSortValue = (item) => {
@@ -244,6 +297,100 @@ export function InventoryTable({ investments, onSelectItem }) {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {groups.map((group) => {
+              const isExpanded = Boolean(expandedGroupIds[group.id]);
+              const profitClassName = deltaClassName(group.totalProfit);
+              const roiClassName = deltaClassName(group.roiPercent);
+
+              return (
+                <React.Fragment key={`group-${group.id}`}>
+                  <TableRow
+                    className="group cursor-pointer border-border/70 transition-colors hover:bg-accent/40"
+                    onClick={() => toggleExpanded(group.id)}
+                  >
+                    <TableCell className="font-medium text-sm">
+                      <div className="flex items-center gap-3">
+                        <LayeredGroupIcon visuals={group.topVisuals} fallbackLabel={group.name} />
+                        <span className="flex flex-col">
+                          <span className="font-semibold transition-colors group-hover:text-primary">
+                            {group.name}
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                            <Badge variant="outline" className="text-[9px]">
+                              Gruppe
+                            </Badge>
+                            <span>{group.clusterCount} Cluster</span>
+                            <span>|</span>
+                            <span>{group.memberCount} Positionen</span>
+                          </span>
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                      {group.totalQuantity}x
+                    </TableCell>
+
+                    <TableCell
+                      className={`text-right text-sm font-bold ${group.totalValue > 0 ? "text-primary" : "text-muted-foreground"}`}
+                    >
+                      <div className="flex flex-col items-end gap-1">
+                        <span>{formatPrice(group.totalValue)}</span>
+                        <span className={`text-[10px] ${roiClassName}`}>
+                          {formatSignedPercentOneDecimal(group.roiPercent)}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell className="text-right">
+                      <span className={`text-sm font-bold ${profitClassName}`}>
+                        {formatSignedCurrency(group.totalProfit, formatPrice)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+
+                  {isExpanded && group.clusters ? (
+                    group.clusters.map((cluster) => (
+                      <TableRow
+                        key={`cluster-${cluster.id}`}
+                        className="border-border/50 bg-muted/20"
+                      >
+                        <TableCell className="font-medium text-sm pl-12">
+                          <div className="flex items-center gap-3">
+                            <ItemThumbnail imageUrl={cluster.imageUrl} name={cluster.name} />
+                            <span className="flex flex-col">
+                              <span className="font-semibold">
+                                {cluster.name}
+                              </span>
+                              <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                                <span>{cluster.quantity} Stk.</span>
+                                <span>|</span>
+                                <span>{formatSharePercent(cluster.sharePercent)}</span>
+                              </span>
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground pl-12">
+                          {cluster.quantity}x
+                        </TableCell>
+
+                        <TableCell className="text-right text-sm font-bold text-muted-foreground pl-12">
+                          {formatPrice(cluster.totalValue)}
+                        </TableCell>
+
+                        <TableCell className="text-right pl-12">
+                          <span className={`text-sm font-bold ${deltaClassName(cluster.roiPercent)}`}>
+                            {formatSignedPercentOneDecimal(cluster.roiPercent)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : null}
+                </React.Fragment>
+              );
+            })}
+
             {sortedInvestments.map((item) => (
               <TableRow
                 key={item.id}

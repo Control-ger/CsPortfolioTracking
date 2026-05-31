@@ -71,18 +71,21 @@ final class SkinBaronClient
         ];
     }
 
-    public function fetchPurchasesPage(int $page = 1, string $searchString = ''): array
+    public function fetchPurchasesPage(int $page = 1, string $searchString = '', int $itemsPerPage = 200): array
     {
         $safePage = max(1, $page);
+        $safeItemsPerPage = max(1, min($itemsPerPage, 200));
         $query = [
             'searchString' => $searchString,
             'page' => $safePage,
+            'itemsPerPage' => $safeItemsPerPage,
         ];
 
         $result = $this->requestWeb('/api/v2/Purchases', $query, [
             'provider' => 'skinbaron',
             'source' => 'web-purchases',
             'page' => $safePage,
+            'itemsPerPage' => $safeItemsPerPage,
         ]);
 
         if ($result['error'] !== null) {
@@ -107,6 +110,192 @@ final class SkinBaronClient
             'pagination' => $pagination,
             'error' => null,
             'meta' => $result['meta'],
+        ];
+    }
+
+    public function fetchPersonalUserConfig(): array
+    {
+        $result = $this->requestWebRaw('/api/v2/Profile/PersonalUserConfig', [], [
+            'provider' => 'skinbaron',
+            'source' => 'web-personal-user-config',
+        ]);
+
+        if ($result['error'] !== null) {
+            return [
+                'config' => null,
+                'error' => $result['error'],
+                'meta' => $result['meta'],
+            ];
+        }
+
+        $data = is_array($result['data']) ? $result['data'] : null;
+        if (!is_array($data)) {
+            return [
+                'config' => null,
+                'error' => [
+                    'source' => 'skinbaron',
+                    'statusCode' => null,
+                    'code' => 'SKINBARON_WEB_INVALID_RESPONSE',
+                    'label' => 'Invalid Response',
+                    'message' => 'SkinBaron PersonalUserConfig hat eine ungueltige Antwort geliefert.',
+                ],
+                'meta' => $result['meta'],
+            ];
+        }
+
+        return [
+            'config' => $data,
+            'error' => null,
+            'meta' => $result['meta'],
+        ];
+    }
+
+    public function setLanguage(string $language): array
+    {
+        $normalizedLanguage = strtolower(trim($language));
+        if ($normalizedLanguage === '') {
+            return [
+                'applied' => false,
+                'resultLanguage' => null,
+                'error' => [
+                    'source' => 'skinbaron',
+                    'statusCode' => null,
+                    'code' => 'SKINBARON_LANGUAGE_INVALID',
+                    'label' => 'Invalid Language',
+                    'message' => 'SkinBaron Sprache ist ungueltig.',
+                ],
+                'meta' => [],
+            ];
+        }
+
+        $result = $this->requestWebRaw('/api/v2/User/Language/Set/' . rawurlencode($normalizedLanguage), [], [
+            'provider' => 'skinbaron',
+            'source' => 'web-language-set',
+            'language' => $normalizedLanguage,
+        ]);
+
+        if ($result['error'] !== null) {
+            return [
+                'applied' => false,
+                'resultLanguage' => null,
+                'error' => $result['error'],
+                'meta' => $result['meta'],
+            ];
+        }
+
+        $data = is_array($result['data']) ? $result['data'] : [];
+        $resultLanguage = strtolower(trim((string) ($data['result'] ?? '')));
+        $applied = $resultLanguage === '' || $resultLanguage === $normalizedLanguage;
+
+        return [
+            'applied' => $applied,
+            'resultLanguage' => $resultLanguage !== '' ? $resultLanguage : null,
+            'error' => $applied ? null : [
+                'source' => 'skinbaron',
+                'statusCode' => null,
+                'code' => 'SKINBARON_LANGUAGE_SET_MISMATCH',
+                'label' => 'Language Set Mismatch',
+                'message' => sprintf(
+                    'SkinBaron Sprache konnte nicht bestaetigt werden (expected=%s, got=%s).',
+                    $normalizedLanguage,
+                    $resultLanguage !== '' ? $resultLanguage : 'empty'
+                ),
+            ],
+            'meta' => $result['meta'],
+        ];
+    }
+
+    public function setAdditionalCurrency(string $currencyCode): array
+    {
+        $normalizedCurrency = strtoupper(trim($currencyCode));
+        if ($normalizedCurrency === '') {
+            return [
+                'applied' => false,
+                'error' => [
+                    'source' => 'skinbaron',
+                    'statusCode' => null,
+                    'code' => 'SKINBARON_CURRENCY_INVALID',
+                    'label' => 'Invalid Currency',
+                    'message' => 'SkinBaron Waehrung ist ungueltig.',
+                ],
+                'meta' => [],
+                'attempts' => [],
+            ];
+        }
+
+        $attemptDefinitions = [
+            ['method' => 'GET', 'query' => ['currency' => $normalizedCurrency], 'body' => null],
+            ['method' => 'GET', 'query' => ['additionalCurrency' => $normalizedCurrency], 'body' => null],
+            ['method' => 'POST', 'query' => [], 'body' => ['currency' => $normalizedCurrency]],
+            ['method' => 'POST', 'query' => [], 'body' => ['additionalCurrency' => $normalizedCurrency]],
+            ['method' => 'POST', 'query' => [], 'body' => ['code' => $normalizedCurrency]],
+        ];
+
+        $attempts = [];
+        $lastError = null;
+        foreach ($attemptDefinitions as $attemptDefinition) {
+            $method = (string) ($attemptDefinition['method'] ?? 'GET');
+            $query = is_array($attemptDefinition['query'] ?? null) ? $attemptDefinition['query'] : [];
+            $body = is_array($attemptDefinition['body'] ?? null) ? $attemptDefinition['body'] : null;
+
+            $result = $this->requestWebRaw(
+                '/api/v2/User/AdditionalCurrency/Set',
+                $query,
+                [
+                    'provider' => 'skinbaron',
+                    'source' => 'web-additional-currency-set',
+                    'method' => $method,
+                    'currency' => $normalizedCurrency,
+                ],
+                $method,
+                $body
+            );
+
+            $attemptEntry = [
+                'method' => $method,
+                'query' => $query,
+                'body' => $body,
+                'ok' => $result['error'] === null,
+                'statusCode' => $result['error']['statusCode'] ?? null,
+                'errorCode' => $result['error']['code'] ?? null,
+            ];
+            $attempts[] = $attemptEntry;
+
+            if ($result['error'] !== null) {
+                $lastError = $result['error'];
+                continue;
+            }
+
+            $data = is_array($result['data']) ? $result['data'] : [];
+            if (($data['success'] ?? null) === true) {
+                return [
+                    'applied' => true,
+                    'error' => null,
+                    'meta' => $result['meta'],
+                    'attempts' => $attempts,
+                ];
+            }
+
+            $lastError = [
+                'source' => 'skinbaron',
+                'statusCode' => null,
+                'code' => 'SKINBARON_CURRENCY_SET_UNEXPECTED_RESPONSE',
+                'label' => 'Unexpected Response',
+                'message' => 'SkinBaron AdditionalCurrency/Set hat keine success=true Antwort geliefert.',
+            ];
+        }
+
+        return [
+            'applied' => false,
+            'error' => $lastError ?? [
+                'source' => 'skinbaron',
+                'statusCode' => null,
+                'code' => 'SKINBARON_CURRENCY_SET_FAILED',
+                'label' => 'Currency Set Failed',
+                'message' => 'SkinBaron Waehrung konnte nicht gesetzt werden.',
+            ],
+            'meta' => [],
+            'attempts' => $attempts,
         ];
     }
 
@@ -253,6 +442,55 @@ final class SkinBaronClient
 
     private function requestWeb(string $path, array $query = [], array $context = []): array
     {
+        $result = $this->requestWebRaw($path, $query, $context, 'GET');
+        if ($result['error'] !== null) {
+            return $result;
+        }
+
+        $decoded = is_array($result['data']) ? $result['data'] : null;
+        if (!is_array($decoded)) {
+            return [
+                'data' => null,
+                'meta' => [],
+                'error' => [
+                    'source' => 'skinbaron',
+                    'statusCode' => null,
+                    'code' => 'SKINBARON_WEB_INVALID_RESPONSE',
+                    'label' => 'Invalid Response',
+                    'message' => 'SkinBaron Purchases hat eine ungueltige Antwort geliefert.',
+                ],
+            ];
+        }
+
+        if (!isset($decoded['purchaseGroups']) || !is_array($decoded['purchaseGroups'])) {
+            return [
+                'data' => null,
+                'meta' => [],
+                'error' => [
+                    'source' => 'skinbaron',
+                    'statusCode' => null,
+                    'code' => 'SKINBARON_WEB_SESSION_INVALID',
+                    'label' => 'Session Invalid',
+                    'message' => 'SkinBaron Session scheint ungueltig oder abgelaufen zu sein.',
+                ],
+            ];
+        }
+
+        return [
+            'data' => $decoded,
+            'meta' => $result['meta'],
+            'error' => null,
+        ];
+    }
+
+    private function requestWebRaw(
+        string $path,
+        array $query = [],
+        array $context = [],
+        string $method = 'GET',
+        ?array $body = null
+    ): array
+    {
         $sessionCookie = $this->getSessionCookieHeader();
         if ($sessionCookie === '') {
             return [
@@ -266,6 +504,11 @@ final class SkinBaronClient
                     'message' => 'SkinBaron Session-Cookie fehlt. Bitte in den Einstellungen hinterlegen.',
                 ],
             ];
+        }
+
+        $normalizedMethod = strtoupper(trim($method));
+        if (!in_array($normalizedMethod, ['GET', 'POST'], true)) {
+            $normalizedMethod = 'GET';
         }
 
         $queryString = http_build_query($query);
@@ -288,7 +531,13 @@ final class SkinBaronClient
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_HTTPGET, true);
+        if ($normalizedMethod === 'POST') {
+            curl_setopt($ch, CURLOPT_POST, true);
+            $payload = $body !== null ? json_encode($body, JSON_UNESCAPED_SLASHES) : '{}';
+            curl_setopt($ch, CURLOPT_POSTFIELDS, is_string($payload) ? $payload : '{}');
+        } else {
+            curl_setopt($ch, CURLOPT_HTTPGET, true);
+        }
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 20);
         curl_setopt($ch, CURLOPT_USERAGENT, 'CsPortfolioTracking/1.0');
@@ -298,6 +547,7 @@ final class SkinBaronClient
         }
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Accept: application/json, text/plain, */*',
+            'Content-Type: application/json',
             'x-requested-with: XMLHttpRequest',
             'Referer: https://skinbaron.de/de/profile/purchases',
             'Cookie: ' . $sessionCookie,
@@ -357,21 +607,7 @@ final class SkinBaronClient
                     'statusCode' => $httpCode,
                     'code' => 'SKINBARON_WEB_INVALID_RESPONSE',
                     'label' => 'Invalid Response',
-                    'message' => 'SkinBaron Purchases hat eine ungueltige Antwort geliefert.',
-                ],
-            ];
-        }
-
-        if (!isset($decoded['purchaseGroups']) || !is_array($decoded['purchaseGroups'])) {
-            return [
-                'data' => null,
-                'meta' => [],
-                'error' => [
-                    'source' => 'skinbaron',
-                    'statusCode' => $httpCode,
-                    'code' => 'SKINBARON_WEB_SESSION_INVALID',
-                    'label' => 'Session Invalid',
-                    'message' => $rawMessage !== '' ? $rawMessage : 'SkinBaron Session scheint ungueltig oder abgelaufen zu sein.',
+                    'message' => 'SkinBaron Web API hat eine ungueltige Antwort geliefert.',
                 ],
             ];
         }

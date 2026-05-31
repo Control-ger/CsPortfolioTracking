@@ -228,6 +228,7 @@ export const PortfolioChart = ({
   metricsScope = null,
   onMetricsScopeChange = null,
   flat = false,
+  cardRef = null,
 }) => {
   const [rangeKey, setRangeKey] = useState("90T");
   const hoverAnimationFrameRef = useRef(null);
@@ -437,7 +438,7 @@ export const PortfolioChart = ({
     : "flex-col items-start gap-2 text-xs sm:text-sm";
 
   return (
-    <Card className={cardClassName}>
+    <Card ref={cardRef} className={cardClassName}>
       <CardHeader className={headerClassName}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>

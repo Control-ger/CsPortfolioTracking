@@ -608,3 +608,11 @@ Change: Secret Vault mit App-Passwort + globalem Desktop-Unlock-Guard eingefuehr
 - `apps/desktop/preload.js` exponiert neue Vault-IPC-Methoden (`getVaultStatus`, `setVaultPassword`, `unlockVault`, `lockVault`, `touchVaultActivity`).
 - `apps/web/src/App.jsx` blockiert Desktop-Routen global, solange der Vault nicht eingerichtet/entsperrt ist, und zeigt Setup/Unlock-UI.
 - Sensitive Desktop-IPC-Pfade (`backend-base-url`, `backend-auth-headers`, `local-store-*`, Secret-Mutationen) sind bei gesperrtem Vault technisch blockiert.
+
+---
+
+Updated: 2026-05-31
+Change: SkinBaron Session-Cookie Auto-Connect per Login-Fenster
+- `apps/desktop/main.js` erweitert um einen Browser-Login-Flow, der `AUTHID` direkt aus den SkinBaron-Cookies liest und als verschluesselten Session-Cookie speichert (inkl. Purchases-Probe).
+- Neuer Desktop-IPC `secret-skinbaron-session-connect-browser` fuer automatischen Session-Connect statt manuellem Cookie-Copy.
+- `apps/desktop/preload.js` und `packages/shared/src/pages/SettingsPage.jsx` binden den Flow als "Mit SkinBaron verbinden"-Aktion in den Settings ein.
