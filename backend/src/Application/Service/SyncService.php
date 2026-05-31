@@ -685,9 +685,21 @@ final class SyncService
 
     private function resolveItemIdForSync(array $payload, string $fallbackName, string $fallbackType): int
     {
+        $imageUrl = trim((string) ($payload['imageUrl'] ?? ''));
+        $resolvedImageUrl = $imageUrl !== '' ? $imageUrl : null;
+
         $candidateItemId = $this->extractPositiveInt($payload['itemId'] ?? null);
-        if ($candidateItemId !== null && $this->findItemById($candidateItemId) !== null) {
-            return $candidateItemId;
+        if ($candidateItemId !== null) {
+            $candidateItem = $this->findItemById($candidateItemId);
+            if ($candidateItem !== null) {
+                if ($resolvedImageUrl !== null) {
+                    $canonicalByImage = $this->findItemIdByImageUrl($resolvedImageUrl);
+                    if ($canonicalByImage !== null && $canonicalByImage !== $candidateItemId) {
+                        return $canonicalByImage;
+                    }
+                }
+                return $candidateItemId;
+            }
         }
 
         $itemName = trim((string) ($payload['marketHashName'] ?? $payload['name'] ?? $fallbackName));
@@ -698,9 +710,8 @@ final class SyncService
         if ($itemType === '') {
             $itemType = 'skin';
         }
-        $imageUrl = trim((string) ($payload['imageUrl'] ?? ''));
 
-        return $this->findOrCreateItem($itemName, $itemType, $imageUrl !== '' ? $imageUrl : null);
+        return $this->findOrCreateItem($itemName, $itemType, $resolvedImageUrl);
     }
 
     private function findItemById(int $itemId): ?array
@@ -724,8 +735,107 @@ final class SyncService
         return $this->extractPositiveInt($row['id'] ?? null);
     }
 
+    private function findItemIdByImageUrl(string $imageUrl): ?int
+    {
+        $normalizedUrl = trim($imageUrl);
+        if ($normalizedUrl === '') {
+            return null;
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM items WHERE image_url = ? LIMIT 1'
+        );
+        $stmt->execute([$normalizedUrl]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $exactId = $row !== false ? $this->extractPositiveInt($row['id'] ?? null) : null;
+        if ($exactId !== null) {
+            return $exactId;
+        }
+
+        $steamImageToken = $this->extractSteamImageToken($normalizedUrl);
+        if ($steamImageToken === null) {
+            return null;
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id
+             FROM items
+             WHERE image_url IS NOT NULL
+               AND image_url LIKE ?
+             ORDER BY catalog_cached_at DESC, updated_at DESC, id DESC
+             LIMIT 1'
+        );
+        $stmt->execute(['%/economy/image/' . $steamImageToken . '%']);
+        $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $tokenRow !== false ? $this->extractPositiveInt($tokenRow['id'] ?? null) : null;
+    }
+
+    private function extractSteamImageToken(string $imageUrl): ?string
+    {
+        $trimmed = trim($imageUrl);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (preg_match('~/economy/image/([^?]+)~i', $trimmed, $matches) !== 1) {
+            return null;
+        }
+
+        $token = trim((string) ($matches[1] ?? ''));
+        if ($token === '') {
+            return null;
+        }
+
+        return $token;
+    }
+
+    private function updateItemMetadataForSync(int $itemId, string $type, ?string $imageUrl = null): void
+    {
+        $trimmedType = trim($type);
+        if ($trimmedType === '') {
+            $trimmedType = 'skin';
+        }
+
+        if ($imageUrl !== null && trim($imageUrl) !== '') {
+            $stmt = $this->pdo->prepare(
+                'UPDATE items
+                 SET type = COALESCE(NULLIF(type, \'\'), ?),
+                     image_url = COALESCE(NULLIF(image_url, \'\'), ?)
+                 WHERE id = ?'
+            );
+            $stmt->execute([$trimmedType, trim($imageUrl), $itemId]);
+            return;
+        }
+
+        $stmt = $this->pdo->prepare(
+            'UPDATE items
+             SET type = COALESCE(NULLIF(type, \'\'), ?)
+             WHERE id = ?'
+        );
+        $stmt->execute([$trimmedType, $itemId]);
+    }
+
     private function findOrCreateItem(string $name, string $type, ?string $imageUrl = null): int
     {
+        $normalizedName = trim((string) preg_replace('/\s+/', ' ', $name));
+        if ($normalizedName === '') {
+            throw new \RuntimeException('Failed to resolve item for sync payload (empty name).');
+        }
+
+        $existingByName = $this->findItemIdByName($normalizedName);
+        if ($existingByName !== null) {
+            $this->updateItemMetadataForSync($existingByName, $type, $imageUrl);
+            return $existingByName;
+        }
+
+        if ($imageUrl !== null && trim($imageUrl) !== '') {
+            $existingByImage = $this->findItemIdByImageUrl($imageUrl);
+            if ($existingByImage !== null) {
+                $this->updateItemMetadataForSync($existingByImage, $type, $imageUrl);
+                return $existingByImage;
+            }
+        }
+
         $stmt = $this->pdo->prepare(
             'INSERT INTO items (name, market_hash_name, type, image_url)
              VALUES (?, ?, ?, ?)
@@ -735,14 +845,15 @@ final class SyncService
                 type = VALUES(type),
                 image_url = COALESCE(VALUES(image_url), image_url)'
         );
-        $stmt->execute([$name, $name, $type, $imageUrl]);
+        $stmt->execute([$normalizedName, $normalizedName, $type, $imageUrl]);
         $lastInsertId = (int) $this->pdo->lastInsertId();
         if ($lastInsertId > 0) {
             return $lastInsertId;
         }
 
-        $existingId = $this->findItemIdByName($name);
+        $existingId = $this->findItemIdByName($normalizedName);
         if ($existingId !== null) {
+            $this->updateItemMetadataForSync($existingId, $type, $imageUrl);
             return $existingId;
         }
 

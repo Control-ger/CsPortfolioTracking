@@ -207,11 +207,12 @@ final class DesktopSkinBaronController
                 continue;
             }
 
-            $name = $this->readString($item, ['marketHashName'])
-                ?? $this->readString($item, ['name']);
-            if ($name === null) {
+            $resolvedName = $this->resolveItemNames($item);
+            $marketHashName = $resolvedName['marketHashName'] ?? null;
+            if ($marketHashName === null) {
                 continue;
             }
+            $displayName = $resolvedName['displayName'] ?? $marketHashName;
 
             $amount = (int) round($this->readNumeric($item, ['amount']) ?? 1.0);
             if ($amount <= 0) {
@@ -224,7 +225,7 @@ final class DesktopSkinBaronController
             $externalTradeId = $this->buildPurchaseItemExternalTradeId(
                 $transferId,
                 $offerLink,
-                $name,
+                $marketHashName,
                 $unitPrice,
                 $amount,
                 (int) $itemIndex
@@ -233,9 +234,9 @@ final class DesktopSkinBaronController
             $rows[] = [
                 'externalTradeId' => $externalTradeId,
                 'status' => 'new',
-                'name' => $name,
-                'marketHashName' => $name,
-                'type' => $this->inferTypeFromName($name),
+                'name' => $displayName,
+                'marketHashName' => $marketHashName,
+                'type' => $this->inferTypeFromName($marketHashName),
                 'typeLabel' => 'SkinBaron Purchase',
                 'quantity' => $amount,
                 'buyPrice' => $unitPrice,
@@ -393,6 +394,165 @@ final class DesktopSkinBaronController
         }
 
         return 'skin';
+    }
+
+    private function resolveItemNames(array $item): array
+    {
+        $rawName = $this->readString($item, ['marketHashName'])
+            ?? $this->readString($item, ['name'])
+            ?? $this->readString($item, ['localizedName']);
+        if ($rawName === null) {
+            return [];
+        }
+
+        $offerLink = $this->readString($item, ['offerLink']) ?? '';
+        $offerLinkName = $this->extractBaseNameFromOfferLink($offerLink);
+        $baseName = $offerLinkName ?? $rawName;
+        $baseName = $this->normalizeNameWhitespace($baseName);
+
+        $wearLabel = $this->resolveWearLabel($item);
+        $marketHashName = $this->appendWearIfMissing($baseName, $wearLabel);
+        $marketHashName = $this->prefixSouvenirIfNeeded($marketHashName, $item);
+        $marketHashName = $this->normalizeNameWhitespace($marketHashName);
+
+        return [
+            'displayName' => $rawName,
+            'marketHashName' => $marketHashName,
+        ];
+    }
+
+    private function extractBaseNameFromOfferLink(string $offerLink): ?string
+    {
+        $trimmed = trim($offerLink);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $path = (string) (parse_url($trimmed, PHP_URL_PATH) ?? '');
+        $query = (string) (parse_url($trimmed, PHP_URL_QUERY) ?? '');
+        if ($path === '') {
+            return null;
+        }
+
+        $segments = array_values(array_filter(explode('/', trim($path, '/'))));
+        if (count($segments) < 4 || strtolower((string) ($segments[0] ?? '')) !== 'o') {
+            return null;
+        }
+
+        $weapon = urldecode((string) ($segments[2] ?? ''));
+        $skin = '';
+        if ($query !== '') {
+            $queryValues = [];
+            parse_str($query, $queryValues);
+            $skin = urldecode(trim((string) ($queryValues['skinName'] ?? '')));
+        }
+        if ($skin === '') {
+            $candidate = urldecode((string) ($segments[3] ?? ''));
+            if (!$this->looksLikeUuid($candidate)) {
+                $skin = $candidate;
+            }
+        }
+
+        $weapon = $this->normalizeNameWhitespace($weapon);
+        $skin = $this->normalizeNameWhitespace($skin);
+        if ($weapon === '' || $skin === '') {
+            return null;
+        }
+
+        return sprintf('%s | %s', $weapon, $skin);
+    }
+
+    private function looksLikeUuid(string $value): bool
+    {
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return false;
+        }
+
+        return preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $trimmed) === 1;
+    }
+
+    private function resolveWearLabel(array $item): ?string
+    {
+        $exteriorClass = strtolower(trim((string) ($item['exteriorClassName'] ?? '')));
+        $mapping = [
+            'factory-new' => 'Factory New',
+            'minimal-wear' => 'Minimal Wear',
+            'field-tested' => 'Field-Tested',
+            'well-worn' => 'Well-Worn',
+            'battle-scarred' => 'Battle-Scarred',
+        ];
+        if ($exteriorClass !== '' && isset($mapping[$exteriorClass])) {
+            return $mapping[$exteriorClass];
+        }
+
+        $localizedExterior = $this->readString($item, ['localizedExteriorName']);
+        if ($localizedExterior === null) {
+            return null;
+        }
+
+        return $this->mapLocalizedWearLabel($localizedExterior);
+    }
+
+    private function mapLocalizedWearLabel(string $label): string
+    {
+        $trimmed = trim($label);
+        if ($trimmed === '') {
+            return $label;
+        }
+
+        $normalized = strtolower($trimmed);
+        $mapping = [
+            'fabrikneu' => 'Factory New',
+            'fabrik neu' => 'Factory New',
+            'minimale gebrauchsspuren' => 'Minimal Wear',
+            'einsatzerprobt' => 'Field-Tested',
+            'abgenutzt' => 'Well-Worn',
+            'kampfspuren' => 'Battle-Scarred',
+            'kampfspuren vorhanden' => 'Battle-Scarred',
+        ];
+
+        return $mapping[$normalized] ?? $trimmed;
+    }
+
+    private function appendWearIfMissing(string $name, ?string $wearLabel): string
+    {
+        if ($wearLabel === null || trim($wearLabel) === '') {
+            return $name;
+        }
+
+        if (preg_match('/\([^)]+\)\s*$/', $name) === 1) {
+            return $name;
+        }
+
+        if (str_contains($name, '|') === false) {
+            return $name;
+        }
+
+        return sprintf('%s (%s)', $name, $wearLabel);
+    }
+
+    private function prefixSouvenirIfNeeded(string $name, array $item): string
+    {
+        $souvenirString = $this->readString($item, ['souvenirString']);
+        if ($souvenirString === null || trim($souvenirString) === '') {
+            return $name;
+        }
+
+        if (!str_contains($name, '|')) {
+            return $name;
+        }
+
+        if (stripos($name, 'souvenir ') === 0) {
+            return $name;
+        }
+
+        return 'Souvenir ' . $name;
+    }
+
+    private function normalizeNameWhitespace(string $value): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', $value));
     }
 
     private function preparePurchasesImportContext(): array
