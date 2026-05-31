@@ -549,7 +549,8 @@ final class SkinBaronClient
             'Accept: application/json, text/plain, */*',
             'Content-Type: application/json',
             'x-requested-with: XMLHttpRequest',
-            'Referer: https://skinbaron.de/de/profile/purchases',
+            'Referer: https://skinbaron.de/en/profile/purchases',
+            'Accept-Language: en-US,en;q=0.9',
             'Cookie: ' . $sessionCookie,
         ]);
 

@@ -1638,7 +1638,7 @@ async function openSkinBaronSessionLoginWindow() {
         }
       };
 
-      await loginWindow.loadURL("https://skinbaron.de/de/profile/purchases");
+      await loginWindow.loadURL("https://skinbaron.de/en/profile/purchases");
       await delay(1000);
 
       await pollAuthCookie();
@@ -1752,7 +1752,8 @@ async function probeSkinBaronPurchasesSession(cookieHeader) {
       headers: {
         Accept: "application/json, text/plain, */*",
         "x-requested-with": "XMLHttpRequest",
-        Referer: "https://skinbaron.de/de/profile/purchases",
+        Referer: "https://skinbaron.de/en/profile/purchases",
+        "Accept-Language": "en-US,en;q=0.9",
         Cookie: normalizedCookie,
       },
       signal: controller.signal,

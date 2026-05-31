@@ -639,3 +639,11 @@ Change: SkinBaron auf AUTHID-only UX reduziert, API-Key-Logik archiviert
 - Settings zeigen fuer SkinBaron nur noch Session-Cookie/AUTHID-Setup (inkl. Browser-Connect); API-Key-Eingabe und Capability-UI sind ausgeblendet.
 - `apps/desktop/preload.js` exponiert keine SkinBaron-API-Key IPC-Methoden mehr im Renderer.
 - Bestehende API-Key-Implementierung in `apps/desktop/main.js` bleibt als archivierter Legacy-Code fuer spaetere Reaktivierung erhalten, ist aber aktuell nicht user-sichtbar.
+
+---
+
+Updated: 2026-05-31
+Change: SkinBaron Purchases Import auf Englisch-Hinweise gehaertet
+- `apps/desktop/main.js` nutzt fuer SkinBaron Browser-Connect und Purchases-Probe jetzt `/en/profile/purchases` statt `/de/profile/purchases`.
+- `backend/src/Infrastructure/External/SkinBaronClient.php` sendet bei Purchases-Webrequests denselben `/en/profile/purchases` Referer plus `Accept-Language: en-US,en;q=0.9`.
+- Ziel: konsistente englische Payload-Hinweise fuer den Import, statt implizit deutschsprachiger Session-/Request-Kontexte.
