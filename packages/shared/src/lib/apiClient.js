@@ -1033,11 +1033,38 @@ export async function executeSkinBaronTradeSync(payload = {}) {
         bucket: targetBucket,
       };
       const existing = resolveExistingSkinBaronInvestmentMatch(existingLookup, row, trade);
+      const rowForUpsert = existing
+        ? {
+            ...row,
+            // Keep stable identifiers for already-known entries so re-imports
+            // with changed language-derived hashes do not create duplicates.
+            id: String(existing?.id || row.id),
+            externalTradeId: String(existing?.externalTradeId || row.externalTradeId || "").trim()
+              || row.externalTradeId,
+            skinBaronTransferId:
+              existing?.skinBaronTransferId
+                || existing?.skinBaronSaleId
+                || row.skinBaronTransferId
+                || row.skinBaronSaleId
+                || null,
+            skinBaronSaleId:
+              existing?.skinBaronTransferId
+                || existing?.skinBaronSaleId
+                || row.skinBaronTransferId
+                || row.skinBaronSaleId
+                || null,
+            skinBaronOfferLink:
+              existing?.skinBaronOfferLink
+                || existing?.offerLink
+                || row.skinBaronOfferLink
+                || null,
+          }
+        : row;
 
       unwrapLocalStoreResult(
         await localStore.upsertInvestment({
           ...(existing || {}),
-          ...row,
+          ...rowForUpsert,
           userId,
           excluded: Boolean(existing?.excluded),
         }),
@@ -1050,13 +1077,25 @@ export async function executeSkinBaronTradeSync(payload = {}) {
         inserted += 1;
       }
 
-      const rowId = String(row?.id || "").trim();
+      const rowId = String(rowForUpsert?.id || "").trim();
       if (rowId) {
-        existingLookup.byId.set(rowId, row);
+        existingLookup.byId.set(rowId, rowForUpsert);
       }
-      const externalTradeId = normalizeImportIdentifier(row?.externalTradeId);
+      const externalTradeId = normalizeImportIdentifier(rowForUpsert?.externalTradeId);
       if (externalTradeId) {
-        existingLookup.byExternalTradeId.set(externalTradeId, row);
+        existingLookup.byExternalTradeId.set(externalTradeId, rowForUpsert);
+      }
+      const normalizedTransfer = normalizeImportIdentifier(
+        rowForUpsert?.skinBaronTransferId || rowForUpsert?.skinBaronSaleId,
+      );
+      const normalizedOffer = normalizeImportIdentifier(
+        rowForUpsert?.skinBaronOfferLink || rowForUpsert?.offerLink,
+      );
+      if (normalizedTransfer && normalizedOffer) {
+        existingLookup.bySkinBaronTransferOffer.set(
+          `${normalizedTransfer}::${normalizedOffer}`,
+          rowForUpsert,
+        );
       }
     }
 

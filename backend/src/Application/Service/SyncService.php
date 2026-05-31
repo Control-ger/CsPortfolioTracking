@@ -307,6 +307,31 @@ final class SyncService
         $quantity = max(1, (int) ($payload['quantity'] ?? $existingPayload['quantity'] ?? 1));
         $buyPriceUsd = $this->normalizePriceUsd($payload, $existingPayload);
         $purchasedAt = $this->normalizeDateTime((string) ($payload['purchasedAt'] ?? $existingPayload['purchasedAt'] ?? ''));
+
+        if ($targetInvestment === null) {
+            $targetInvestment = $this->findInvestmentByExternalTrade($userId, $platform, $externalTradeId);
+        }
+
+        $skinBaronTransferId = $this->resolveSkinBaronTransferId($payload, $existingPayload);
+        $skinBaronOfferLink = $this->resolveSkinBaronOfferLink($payload, $existingPayload);
+        if (
+            $targetInvestment === null
+            && $platform === 'skinbaron'
+            && $skinBaronTransferId !== null
+            && $skinBaronOfferLink !== null
+        ) {
+            $targetInvestment = $this->findSkinBaronInvestmentByTransferOffer(
+                $userId,
+                $skinBaronTransferId,
+                $skinBaronOfferLink
+            );
+        }
+
+        $existingExternalTradeId = trim((string) ($targetInvestment['external_trade_id'] ?? ''));
+        if ($existingExternalTradeId !== '') {
+            $externalTradeId = mb_substr($existingExternalTradeId, 0, 255);
+        }
+
         $mergedPayload = $this->mergeExcludedFlagsForInvestmentSync(
             $payload,
             $existingPayload,
@@ -875,6 +900,46 @@ final class SyncService
         return mb_substr($candidate, 0, 255);
     }
 
+    private function resolveSkinBaronTransferId(array $payload, array $existingPayload): ?string
+    {
+        $candidate = $payload['skinBaronTransferId']
+            ?? $payload['skinBaronSaleId']
+            ?? $existingPayload['skinBaronTransferId']
+            ?? $existingPayload['skinBaronSaleId']
+            ?? null;
+
+        if (!is_scalar($candidate)) {
+            return null;
+        }
+
+        $normalized = trim((string) $candidate);
+        if ($normalized === '') {
+            return null;
+        }
+
+        return mb_substr($normalized, 0, 255);
+    }
+
+    private function resolveSkinBaronOfferLink(array $payload, array $existingPayload): ?string
+    {
+        $candidate = $payload['skinBaronOfferLink']
+            ?? $payload['offerLink']
+            ?? $existingPayload['skinBaronOfferLink']
+            ?? $existingPayload['offerLink']
+            ?? null;
+
+        if (!is_scalar($candidate)) {
+            return null;
+        }
+
+        $normalized = trim((string) $candidate);
+        if ($normalized === '') {
+            return null;
+        }
+
+        return mb_substr($normalized, 0, 512);
+    }
+
     private function normalizePlatform(string $platform): string
     {
         $normalized = strtolower(trim($platform));
@@ -925,9 +990,40 @@ final class SyncService
     private function findInvestmentByExternalTrade(int $userId, string $platform, string $externalTradeId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id FROM investments WHERE user_id = ? AND platform = ? AND external_trade_id = ? LIMIT 1'
+            'SELECT id, platform, external_trade_id, raw_payload_json
+             FROM investments
+             WHERE user_id = ? AND platform = ? AND external_trade_id = ?
+             LIMIT 1'
         );
         $stmt->execute([$userId, $platform, $externalTradeId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row !== false ? $row : null;
+    }
+
+    private function findSkinBaronInvestmentByTransferOffer(int $userId, string $transferId, string $offerLink): ?array
+    {
+        $transferLookup = strtolower(trim($transferId));
+        $offerLookup = strtolower(trim($offerLink));
+        if ($transferLookup === '' || $offerLookup === '') {
+            return null;
+        }
+
+        $stmt = $this->pdo->prepare(
+            "SELECT id, platform, external_trade_id, raw_payload_json
+             FROM investments
+             WHERE user_id = ?
+               AND platform = 'skinbaron'
+               AND (
+                 LOWER(TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_payload_json, '$.skinBaronTransferId')), ''))) = ?
+                 OR LOWER(TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_payload_json, '$.skinBaronSaleId')), ''))) = ?
+               )
+               AND (
+                 LOWER(TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_payload_json, '$.skinBaronOfferLink')), ''))) = ?
+                 OR LOWER(TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_payload_json, '$.offerLink')), ''))) = ?
+               )
+             LIMIT 1"
+        );
+        $stmt->execute([$userId, $transferLookup, $transferLookup, $offerLookup, $offerLookup]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row !== false ? $row : null;
     }
@@ -935,7 +1031,7 @@ final class SyncService
     private function findInvestmentByIdForUser(int $userId, int $investmentId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, raw_payload_json
+            'SELECT id, platform, external_trade_id, raw_payload_json
              FROM investments
              WHERE user_id = ? AND id = ?
              LIMIT 1'
