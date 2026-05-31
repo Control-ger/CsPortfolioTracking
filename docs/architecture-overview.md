@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-05-29
+Last updated: 2026-05-31
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -47,6 +47,7 @@ This document tracks:
 - Desktop sidecar exposes SkinBaron preview endpoints (`POST /api/v1/portfolio/sync/skinbaron/preview`) for desktop-local import.
 - Secrets stay local (Electron safe storage / process env only).
 - SkinBaron access uses two local secrets in Electron safe storage: API key (optional capability checks) and Session-Cookie (AUTHID) for purchases import data.
+- Desktop runtime enforces an app-password-gated Secret Vault: secrets are decrypted only after unlock in Electron main-memory, always locked on restart, with optional auto-lock after 15 minutes idle (user opt-in).
 
 ### 3.2 Web runtime
 
@@ -72,7 +73,7 @@ This document tracks:
 | Investments + watchlist | Desktop | local SQLite + synced server DB | Desktop + Web |
 | Prices | Server workers | server DB | Web + Desktop (via sidecar/upstream) |
 | Import execution (Steam/CSFloat) | Desktop-initiated | Desktop + server processing path | Desktop |
-| Steam/CSFloat secrets | Desktop only | Electron safe storage | Desktop only |
+| Steam/CSFloat secrets | Desktop only | Local Secret Vault (app-password wrapped, main-memory unlock session) | Desktop only |
 
 ## 5. Frontend Route Map (current)
 
@@ -114,6 +115,7 @@ From `apps/web/src/App.jsx`:
 - Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.
 - Electron updater download requests self-heal missing in-memory update metadata by running `checkForUpdates()` before prompting download, and return structured failure reasons to renderer/UI when download cannot start.
 - Update notifications are dual-path in desktop runtime: native OS toast (when supported) plus persisted in-app system notifications (`category=app_update`) for reliable visibility.
+- Desktop app runtime is globally gated by Secret Vault status in `App.jsx`: while locked/not configured, shared routes are blocked by an unlock/setup screen and sensitive IPC paths (`backend-base-url`, local-store IPC, secret mutations) stay denied.
 - `GET /api/v1/portfolio/summary` uses enriched rows without live refresh (`allowLiveRefresh=false`) to avoid duplicate CSFloat load in the same page cycle.
 - Interactive pricing requests apply a capped CSFloat lookup budget per request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`), while CLI workers remain uncapped.
 - `CsFloatClient::fetchLowestListingResult()` uses `GET /api/v1/listings/price-list` as primary bulk source (90s in-memory cache), with per-item listing lookup as fallback.

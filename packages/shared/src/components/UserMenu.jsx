@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { UserRound, LogOut } from "lucide-react"
+import { UserRound, LogOut, Lock } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
 import { Button } from "@shared/components/ui/button"
@@ -71,8 +71,15 @@ export function UserMenu({
     }
   }, [])
 
-  const handleLogout = async () => {
+  const handleLogout = async ({ lockVault = false } = {}) => {
     await logout()
+    if (lockVault && window.electronAPI?.secrets?.lockVault) {
+      try {
+        await window.electronAPI.secrets.lockVault()
+      } catch (error) {
+        console.warn("[user-menu] vault lock after logout failed", error)
+      }
+    }
     const isDesktopFileRuntime =
       typeof window !== "undefined" && window.location.protocol === "file:"
     if (isDesktopFileRuntime) {
@@ -150,6 +157,12 @@ export function UserMenu({
           <LogOut className="mr-2 h-4 w-4" />
           <span>Abmelden</span>
         </DropdownMenuItem>
+        {window.electronAPI?.secrets?.lockVault ? (
+          <DropdownMenuItem onClick={() => void handleLogout({ lockVault: true })} className="text-destructive focus:text-destructive">
+            <Lock className="mr-2 h-4 w-4" />
+            <span>Abmelden & sperren</span>
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -128,7 +128,7 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 - `backend/public/index.php` bleibt der Server/API-Frontcontroller fuer Web, Sync und spaetere Server-Funktionen.
 - Die fachliche PHP-Logik bleibt in `backend/src` und wird von beiden Clients genutzt; es gibt keinen Rewrite dieser Logik nach JavaScript oder Node.js.
 - SQLite ist ausschliesslich fuer lokale Persistenz zustaendig und enthaelt keine Business-Logik.
-- Lokale API-Secrets wie der CSFloat API Key werden ueber Electron `safeStorage` im OS-verschluesselten Speicher abgelegt; nicht in `.env`, nicht in SQLite und nicht auf dem Server.
+- Lokale API-Secrets wie CSFloat/SkinBaron werden im app-passwortgeschuetzten Secret Vault gespeichert; Entschluesselung nur im Electron Main Process nach Unlock (Auto-Lock nach Inaktivitaet). Keine Ablage in `.env`, SQLite oder Server.
 
 ## User/Auth Richtung
 
@@ -598,3 +598,13 @@ Change: SkinBaron Import auf Purchases + Session-Cookie umgestellt
 - Desktop-Sidecar/Backend nutzen fuer den SkinBaron-Preview jetzt den Purchases-Endpoint (statt `GetSales`) und flatten `purchaseGroups[*].purchaseItems[*]` zu importierbaren Einzelzeilen.
 - Preview filtert auf `state=SUCCEEDED`, erzeugt stabile `externalTradeId`s pro Purchase-Item und liefert damit die erwartete Vollstaendigkeit fuer Kauf-Historie.
 - Desktop-Settings zeigen Import-Readiness ueber Session-Cookie separat vom optionalen SkinBaron API-Key an.
+
+---
+
+Updated: 2026-05-31
+Change: Secret Vault mit App-Passwort + globalem Desktop-Unlock-Guard eingefuehrt
+- `apps/desktop/main.js` verwaltet jetzt einen lokalen Secret Vault (app-passwortgeschuetzt) und entschluesselt Secrets nur im Main-Process-RAM.
+- Auto-Sperre ist als User-Opt-in konfigurierbar; Standard bleibt "Unlock bei App-Start/Neustart erforderlich".
+- `apps/desktop/preload.js` exponiert neue Vault-IPC-Methoden (`getVaultStatus`, `setVaultPassword`, `unlockVault`, `lockVault`, `touchVaultActivity`).
+- `apps/web/src/App.jsx` blockiert Desktop-Routen global, solange der Vault nicht eingerichtet/entsperrt ist, und zeigt Setup/Unlock-UI.
+- Sensitive Desktop-IPC-Pfade (`backend-base-url`, `backend-auth-headers`, `local-store-*`, Secret-Mutationen) sind bei gesperrtem Vault technisch blockiert.

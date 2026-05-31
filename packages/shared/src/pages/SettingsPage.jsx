@@ -129,6 +129,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [showSkinBaronSessionCookie, setShowSkinBaronSessionCookie] = useState(false);
   const [skinBaronSessionSaving, setSkinBaronSessionSaving] = useState(false);
   const [encryptionReady, setEncryptionReady] = useState(false);
+  const [vaultStatus, setVaultStatus] = useState(null);
+  const [vaultActionSaving, setVaultActionSaving] = useState(false);
   const [priceSourceMode, setPriceSourceMode] = useState("auto");
   const [priceSourceSaving, setPriceSourceSaving] = useState(false);
   const [priceSourceError, setPriceSourceError] = useState("");
@@ -243,6 +245,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             ? keyStatus.encryptionAvailable !== false
             : isEncryptionConfigured(),
         );
+        if (desktopRuntime && window.electronAPI?.secrets?.getVaultStatus) {
+          const status = await window.electronAPI.secrets.getVaultStatus();
+          setVaultStatus(status || null);
+        } else {
+          setVaultStatus(null);
+        }
         setError("");
       } catch (loadError) {
         setError(loadError.message || "Settings konnten nicht geladen werden.");
@@ -1438,6 +1446,73 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     );
   };
 
+  const renderSecretVaultCard = () => {
+    if (!desktopRuntime || !window.electronAPI?.secrets?.getVaultStatus) {
+      return null;
+    }
+
+    const isConfigured = vaultStatus?.configured === true;
+    const isUnlocked = vaultStatus?.unlocked === true;
+    const idleMinutes = Number(vaultStatus?.idleTimeoutMinutes || 15);
+    const autoLockEnabled = vaultStatus?.policy?.autoLockOnIdle === true;
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Secret Vault</CardTitle>
+          <CardDescription>
+            Lokale API-Secrets bleiben verschluesselt. Unlock ist nach jedem App-Start erforderlich.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className={isUnlocked ? "border-emerald-400/35 text-emerald-300" : "border-amber-400/35 text-amber-300"}
+            >
+              {isUnlocked ? "Entsperrt" : "Gesperrt"}
+            </Badge>
+            <Badge variant="outline" className="border-border/70 text-muted-foreground">
+              {isConfigured ? "App-Passwort gesetzt" : "App-Passwort fehlt"}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Optional: Auto-Sperre nach {idleMinutes} Minuten Inaktivitaet.
+          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
+            <div>
+              <p className="text-sm font-medium">Auto-Sperre</p>
+              <p className="text-xs text-muted-foreground">
+                {autoLockEnabled
+                  ? `Aktiv: sperrt nach ${idleMinutes} Minuten Inaktivitaet`
+                  : "Inaktiv: nur bei Neustart oder explizitem Sperren"}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              disabled={vaultActionSaving || !window.electronAPI?.secrets?.setVaultPreferences}
+              onClick={async () => {
+                try {
+                  setVaultActionSaving(true);
+                  const result = await window.electronAPI.secrets.setVaultPreferences({
+                    autoLockEnabled: !autoLockEnabled,
+                  });
+                  setVaultStatus(result?.status || vaultStatus);
+                } catch (error) {
+                  setError(error?.message || "Secret-Vault Einstellungen konnten nicht gespeichert werden.");
+                } finally {
+                  setVaultActionSaving(false);
+                }
+              }}
+            >
+              {vaultActionSaving ? "Speichert..." : autoLockEnabled ? "Auto-Sperre deaktivieren" : "Auto-Sperre aktivieren"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderRemoteConnectionsTab = () => {
     if (!desktopRuntime) {
       return (
@@ -1454,6 +1529,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
     return (
       <div className="space-y-4">
+        {renderSecretVaultCard()}
         {window.electronAPI?.serverConfig ? (
           <Card>
             <CardHeader>

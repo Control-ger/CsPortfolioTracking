@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell, safeStorage, session } from "electron";
 import { spawn } from "child_process";
-import { randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 import fs from "fs/promises";
 import fsSync from "fs";
 import net from "net";
@@ -75,6 +75,15 @@ const skinBaronSessionCookieFileName = "skinbaron-session-cookie.bin";
 const skinBaronCapabilitiesFileName = "skinbaron-capabilities.json";
 const skinBaronSessionProbeFileName = "skinbaron-session-probe.json";
 const encryptionKeyFileName = "encryption-key.bin";
+const secretVaultFileName = "secret-vault.json";
+const secretVaultPreferencesFileName = "secret-vault-preferences.json";
+const csFloatApiKeyVaultFileName = "csfloat-api-key.vault.json";
+const skinBaronApiKeyVaultFileName = "skinbaron-api-key.vault.json";
+const skinBaronSessionCookieVaultFileName = "skinbaron-session-cookie.vault.json";
+const SECRET_VAULT_VERSION = 1;
+const SECRET_VAULT_PASSWORD_MIN_LENGTH = 16;
+const SECRET_VAULT_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+const SECRET_VAULT_AUTO_LOCK_DEFAULT = false;
 let createLocalStore = null;
 let localStore = null;
 let distIndexPath = null; // Will be set when app is ready
@@ -86,6 +95,13 @@ let cloudflareAccessLoginPromise = null;
 let sidecarRequestHeaderBridgeInstalled = false;
 let latestAvailableUpdateInfo = null;
 let updateDownloadInProgress = false;
+let secretVaultConfigCache = null;
+let secretVaultPreferencesCache = null;
+let unlockedSecretVaultMasterKey = null;
+let secretVaultUnlockedAt = null;
+let secretVaultLastActivityAt = 0;
+let secretVaultAutoLockTimer = null;
+let sidecarSecretsUnlockedForCurrentRun = false;
 const notifiedUpdateVersions = new Set();
 const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const shouldAutoOpenDevTools = !app.isPackaged || process.env.DEBUG === "1";
@@ -389,6 +405,26 @@ function getEncryptionKeyFilePath() {
   return path.join(getSecretsDirPath(), encryptionKeyFileName);
 }
 
+function getSecretVaultFilePath() {
+  return path.join(getSecretsDirPath(), secretVaultFileName);
+}
+
+function getSecretVaultPreferencesFilePath() {
+  return path.join(getSecretsDirPath(), secretVaultPreferencesFileName);
+}
+
+function getCsFloatApiKeyVaultFilePath() {
+  return path.join(getSecretsDirPath(), csFloatApiKeyVaultFileName);
+}
+
+function getSkinBaronApiKeyVaultFilePath() {
+  return path.join(getSecretsDirPath(), skinBaronApiKeyVaultFileName);
+}
+
+function getSkinBaronSessionCookieVaultFilePath() {
+  return path.join(getSecretsDirPath(), skinBaronSessionCookieVaultFileName);
+}
+
 function getOrCreateEncryptionKey() {
   const filePath = getEncryptionKeyFilePath();
 
@@ -423,6 +459,427 @@ function getOrCreateEncryptionKey() {
     console.error("[desktop-secrets] failed to create encryption key", error);
     return null;
   }
+}
+
+function toBase64(buffer) {
+  return Buffer.from(buffer).toString("base64");
+}
+
+function fromBase64(value) {
+  return Buffer.from(String(value || ""), "base64");
+}
+
+function loadSecretVaultConfig() {
+  if (secretVaultConfigCache) {
+    return secretVaultConfigCache;
+  }
+
+  const filePath = getSecretVaultFilePath();
+  if (!fsSync.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const raw = fsSync.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    if (Number(parsed.version) !== SECRET_VAULT_VERSION) {
+      console.warn("[desktop-secrets] unsupported secret vault version");
+      return null;
+    }
+
+    secretVaultConfigCache = parsed;
+    return parsed;
+  } catch (error) {
+    console.warn("[desktop-secrets] failed to read secret vault config", error);
+    return null;
+  }
+}
+
+function getDefaultSecretVaultPreferences() {
+  return {
+    autoLockEnabled: SECRET_VAULT_AUTO_LOCK_DEFAULT,
+  };
+}
+
+function normalizeSecretVaultPreferences(input) {
+  const normalized = getDefaultSecretVaultPreferences();
+  if (input && typeof input === "object") {
+    if (typeof input.autoLockEnabled === "boolean") {
+      normalized.autoLockEnabled = input.autoLockEnabled;
+    }
+  }
+  return normalized;
+}
+
+function loadSecretVaultPreferences() {
+  if (secretVaultPreferencesCache) {
+    return secretVaultPreferencesCache;
+  }
+
+  const filePath = getSecretVaultPreferencesFilePath();
+  if (!fsSync.existsSync(filePath)) {
+    secretVaultPreferencesCache = getDefaultSecretVaultPreferences();
+    return secretVaultPreferencesCache;
+  }
+
+  try {
+    const raw = fsSync.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    secretVaultPreferencesCache = normalizeSecretVaultPreferences(parsed);
+    return secretVaultPreferencesCache;
+  } catch (error) {
+    console.warn("[desktop-secrets] failed to read secret vault preferences", error);
+    secretVaultPreferencesCache = getDefaultSecretVaultPreferences();
+    return secretVaultPreferencesCache;
+  }
+}
+
+async function writeSecretVaultPreferences(prefs) {
+  const normalized = normalizeSecretVaultPreferences(prefs);
+  await fs.mkdir(getSecretsDirPath(), { recursive: true });
+  await fs.writeFile(getSecretVaultPreferencesFilePath(), JSON.stringify(normalized, null, 2), "utf8");
+  secretVaultPreferencesCache = normalized;
+  return normalized;
+}
+
+async function writeSecretVaultConfig(config) {
+  await fs.mkdir(getSecretsDirPath(), { recursive: true });
+  await fs.writeFile(getSecretVaultFilePath(), JSON.stringify(config, null, 2), "utf8");
+  secretVaultConfigCache = config;
+}
+
+function isSecretVaultConfigured() {
+  return Boolean(loadSecretVaultConfig());
+}
+
+function deriveSecretVaultWrappingKey(password, saltBuffer) {
+  return scryptSync(String(password || ""), saltBuffer, 32);
+}
+
+function encryptSecretVaultPayload(plaintextBuffer, keyBuffer) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", keyBuffer, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintextBuffer), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    iv: toBase64(iv),
+    ciphertext: toBase64(encrypted),
+    tag: toBase64(tag),
+  };
+}
+
+function decryptSecretVaultPayload(payload, keyBuffer) {
+  const iv = fromBase64(payload?.iv);
+  const ciphertext = fromBase64(payload?.ciphertext);
+  const tag = fromBase64(payload?.tag);
+  const decipher = createDecipheriv("aes-256-gcm", keyBuffer, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+function getSecretVaultMasterKeyFromMemory() {
+  return unlockedSecretVaultMasterKey ? Buffer.from(unlockedSecretVaultMasterKey) : null;
+}
+
+function clearSecretVaultMasterKeyFromMemory() {
+  if (unlockedSecretVaultMasterKey) {
+    unlockedSecretVaultMasterKey.fill(0);
+    unlockedSecretVaultMasterKey = null;
+  }
+}
+
+function getSafeStorageBackendLabel() {
+  if (typeof safeStorage.getSelectedStorageBackend !== "function") {
+    return "unknown";
+  }
+  try {
+    return String(safeStorage.getSelectedStorageBackend() || "unknown");
+  } catch {
+    return "unknown";
+  }
+}
+
+function getSecretVaultStatus() {
+  const preferences = loadSecretVaultPreferences();
+  const configured = isSecretVaultConfigured();
+  const unlocked = configured && Boolean(unlockedSecretVaultMasterKey);
+  const now = Date.now();
+  const autoLockEnabled = preferences.autoLockEnabled === true;
+  const remainingMs = unlocked && autoLockEnabled
+    ? Math.max(0, SECRET_VAULT_IDLE_TIMEOUT_MS - Math.max(0, now - secretVaultLastActivityAt))
+    : 0;
+
+  return {
+    configured,
+    unlocked,
+    idleTimeoutMinutes: Math.round(SECRET_VAULT_IDLE_TIMEOUT_MS / 60000),
+    minPasswordLength: SECRET_VAULT_PASSWORD_MIN_LENGTH,
+    lastUnlockedAt: secretVaultUnlockedAt,
+    remainingSeconds: Math.ceil(remainingMs / 1000),
+    safeStorageAvailable: safeStorage.isEncryptionAvailable(),
+    safeStorageBackend: getSafeStorageBackendLabel(),
+    platform: process.platform,
+    policy: {
+      requireUnlockAfterRestart: true,
+      autoLockOnIdle: autoLockEnabled,
+    },
+  };
+}
+
+function scheduleSecretVaultAutoLock() {
+  if (secretVaultAutoLockTimer) {
+    clearTimeout(secretVaultAutoLockTimer);
+    secretVaultAutoLockTimer = null;
+  }
+
+  if (!unlockedSecretVaultMasterKey) {
+    return;
+  }
+  const preferences = loadSecretVaultPreferences();
+  if (preferences.autoLockEnabled !== true) {
+    return;
+  }
+
+  secretVaultAutoLockTimer = setTimeout(() => {
+    void lockSecretVault("idle-timeout");
+  }, SECRET_VAULT_IDLE_TIMEOUT_MS + 250);
+}
+
+function touchSecretVaultActivity() {
+  if (!unlockedSecretVaultMasterKey) {
+    return getSecretVaultStatus();
+  }
+  secretVaultLastActivityAt = Date.now();
+  if (loadSecretVaultPreferences().autoLockEnabled === true) {
+    scheduleSecretVaultAutoLock();
+  }
+  return getSecretVaultStatus();
+}
+
+async function lockSecretVault(reason = "manual-lock") {
+  const wasUnlocked = Boolean(unlockedSecretVaultMasterKey);
+  clearSecretVaultMasterKeyFromMemory();
+  secretVaultLastActivityAt = 0;
+  secretVaultUnlockedAt = null;
+  if (secretVaultAutoLockTimer) {
+    clearTimeout(secretVaultAutoLockTimer);
+    secretVaultAutoLockTimer = null;
+  }
+  sidecarSecretsUnlockedForCurrentRun = false;
+  if (wasUnlocked) {
+    await restartPhpSidecar().catch((error) => {
+      console.warn("[desktop-secrets] sidecar restart after lock failed", error);
+    });
+  }
+  return getSecretVaultStatus();
+}
+
+async function ensureSecretVaultUnlocked() {
+  if (!isSecretVaultConfigured()) {
+    throw new Error("Secret Vault ist noch nicht eingerichtet.");
+  }
+  if (!unlockedSecretVaultMasterKey) {
+    const error = new Error("Secret Vault ist gesperrt.");
+    error.code = "SECRET_VAULT_LOCKED";
+    throw error;
+  }
+}
+
+function readEncryptedSecretFile(filePath, masterKey) {
+  if (!fsSync.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const raw = fsSync.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    const decrypted = decryptSecretVaultPayload(parsed.payload, masterKey);
+    return decrypted.toString("utf8");
+  } catch (error) {
+    console.warn("[desktop-secrets] failed to read encrypted secret file", filePath, error);
+    return null;
+  }
+}
+
+async function writeEncryptedSecretFile(filePath, plaintext, masterKey, metadata = {}) {
+  const payload = encryptSecretVaultPayload(Buffer.from(String(plaintext || ""), "utf8"), masterKey);
+  await fs.mkdir(getSecretsDirPath(), { recursive: true });
+  await fs.writeFile(
+    filePath,
+    JSON.stringify(
+      {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        metadata,
+        payload,
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+}
+
+function readSecretMetadata(filePath) {
+  if (!fsSync.existsSync(filePath)) {
+    return {};
+  }
+  try {
+    const raw = fsSync.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.metadata || typeof parsed.metadata !== "object") {
+      return {};
+    }
+    return parsed.metadata;
+  } catch {
+    return {};
+  }
+}
+
+async function migrateLegacySecretFileIfNeeded({ legacyFilePath, vaultFilePath, normalize = (value) => value }) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return;
+  }
+  if (!unlockedSecretVaultMasterKey) {
+    return;
+  }
+  if (!fsSync.existsSync(legacyFilePath) || fsSync.existsSync(vaultFilePath)) {
+    return;
+  }
+
+  try {
+    const encrypted = fsSync.readFileSync(legacyFilePath);
+    const decrypted = normalize(safeStorage.decryptString(encrypted));
+    if (!decrypted) {
+      return;
+    }
+    await writeEncryptedSecretFile(
+      vaultFilePath,
+      decrypted,
+      unlockedSecretVaultMasterKey,
+      { lastFour: String(decrypted).slice(-4) },
+    );
+    await fs.unlink(legacyFilePath).catch(() => {});
+    console.log("[desktop-secrets] migrated legacy secret file:", path.basename(legacyFilePath));
+  } catch (error) {
+    console.warn("[desktop-secrets] failed to migrate legacy secret file", legacyFilePath, error);
+  }
+}
+
+async function migrateLegacySecretsIfNeeded() {
+  await migrateLegacySecretFileIfNeeded({
+    legacyFilePath: getCsFloatApiKeyFilePath(),
+    vaultFilePath: getCsFloatApiKeyVaultFilePath(),
+  });
+  await migrateLegacySecretFileIfNeeded({
+    legacyFilePath: getSkinBaronApiKeyFilePath(),
+    vaultFilePath: getSkinBaronApiKeyVaultFilePath(),
+  });
+  await migrateLegacySecretFileIfNeeded({
+    legacyFilePath: getSkinBaronSessionCookieFilePath(),
+    vaultFilePath: getSkinBaronSessionCookieVaultFilePath(),
+    normalize: (value) => normalizeSkinBaronSessionCookieInput(value) || "",
+  });
+}
+
+async function configureSecretVaultPassword(password) {
+  const normalizedPassword = String(password || "");
+  if (normalizedPassword.length < SECRET_VAULT_PASSWORD_MIN_LENGTH) {
+    throw new Error(`App-Passwort muss mindestens ${SECRET_VAULT_PASSWORD_MIN_LENGTH} Zeichen haben.`);
+  }
+  if (isSecretVaultConfigured()) {
+    throw new Error("Secret Vault ist bereits eingerichtet.");
+  }
+
+  const salt = randomBytes(16);
+  const wrappingKey = deriveSecretVaultWrappingKey(normalizedPassword, salt);
+  const masterKey = randomBytes(32);
+  const wrappedMaster = encryptSecretVaultPayload(masterKey, wrappingKey);
+
+  await writeSecretVaultConfig({
+    version: SECRET_VAULT_VERSION,
+    createdAt: new Date().toISOString(),
+    wrap: {
+      algorithm: "aes-256-gcm",
+      kdf: "scrypt",
+      salt: toBase64(salt),
+      payload: wrappedMaster,
+    },
+  });
+
+  unlockedSecretVaultMasterKey = Buffer.from(masterKey);
+  secretVaultUnlockedAt = new Date().toISOString();
+  secretVaultLastActivityAt = Date.now();
+  scheduleSecretVaultAutoLock();
+
+  wrappingKey.fill(0);
+  masterKey.fill(0);
+
+  await migrateLegacySecretsIfNeeded();
+  sidecarSecretsUnlockedForCurrentRun = true;
+  await restartPhpSidecar().catch((error) => {
+    console.warn("[desktop-secrets] sidecar restart after vault setup failed", error);
+  });
+
+  return getSecretVaultStatus();
+}
+
+async function unlockSecretVault(password) {
+  const config = loadSecretVaultConfig();
+  if (!config) {
+    throw new Error("Secret Vault ist noch nicht eingerichtet.");
+  }
+  const normalizedPassword = String(password || "");
+  if (!normalizedPassword) {
+    throw new Error("Bitte App-Passwort eingeben.");
+  }
+
+  try {
+    const salt = fromBase64(config.wrap?.salt);
+    const wrappingKey = deriveSecretVaultWrappingKey(normalizedPassword, salt);
+    const masterKey = decryptSecretVaultPayload(config.wrap?.payload || {}, wrappingKey);
+    wrappingKey.fill(0);
+
+    clearSecretVaultMasterKeyFromMemory();
+    unlockedSecretVaultMasterKey = Buffer.from(masterKey);
+    masterKey.fill(0);
+    secretVaultUnlockedAt = new Date().toISOString();
+    secretVaultLastActivityAt = Date.now();
+    scheduleSecretVaultAutoLock();
+
+    await migrateLegacySecretsIfNeeded();
+    sidecarSecretsUnlockedForCurrentRun = true;
+    await restartPhpSidecar().catch((error) => {
+      console.warn("[desktop-secrets] sidecar restart after unlock failed", error);
+    });
+    return getSecretVaultStatus();
+  } catch (error) {
+    const unlockError = new Error("App-Passwort ist ungueltig.");
+    unlockError.code = "SECRET_VAULT_INVALID_PASSWORD";
+    throw unlockError;
+  }
+}
+
+async function updateSecretVaultPreferences(patch = {}) {
+  const current = loadSecretVaultPreferences();
+  const next = {
+    ...current,
+    ...patch,
+  };
+  await writeSecretVaultPreferences(next);
+
+  if (unlockedSecretVaultMasterKey) {
+    secretVaultLastActivityAt = Date.now();
+    scheduleSecretVaultAutoLock();
+  }
+
+  return getSecretVaultStatus();
 }
 
 function resolveRuntimePath(...segments) {
@@ -490,13 +947,16 @@ function buildSidecarEnv(extraEnv = {}) {
   merged.DESKTOP_SIDECAR_SECRET = sidecarSecret;
   merged.DESKTOP_LOG_FILE = LOG_FILE;
   merged.DESKTOP_STATE_DIR = app.getPath("userData");
-  if (localCsFloatApiKey) {
+  delete merged.CSFLOAT_API_KEY;
+  delete merged.SKINBARON_API_KEY;
+  delete merged.SKINBARON_SESSION_COOKIE;
+  if (localCsFloatApiKey && sidecarSecretsUnlockedForCurrentRun) {
     merged.CSFLOAT_API_KEY = localCsFloatApiKey;
   }
-  if (localSkinBaronApiKey) {
+  if (localSkinBaronApiKey && sidecarSecretsUnlockedForCurrentRun) {
     merged.SKINBARON_API_KEY = localSkinBaronApiKey;
   }
-  if (localSkinBaronSessionCookie) {
+  if (localSkinBaronSessionCookie && sidecarSecretsUnlockedForCurrentRun) {
     merged.SKINBARON_SESSION_COOKIE = localSkinBaronSessionCookie;
   }
   if (encryptionKey) {
@@ -932,89 +1392,89 @@ async function testServerConnection(serverUrl) {
 }
 
 function getStoredCsFloatApiKey() {
-  const filePath = getCsFloatApiKeyFilePath();
-
-  if (!fsSync.existsSync(filePath)) {
-    return null;
-  }
-
-  if (!safeStorage.isEncryptionAvailable()) {
-    console.warn("[desktop-secrets] safeStorage is not available; CSFloat key cannot be decrypted.");
+  const masterKey = getSecretVaultMasterKeyFromMemory();
+  if (!masterKey) {
     return null;
   }
 
   try {
-    const encrypted = fsSync.readFileSync(filePath);
-    return safeStorage.decryptString(encrypted);
-  } catch (error) {
-    console.warn("[desktop-secrets] failed to decrypt CSFloat API key", error);
-    return null;
+    return readEncryptedSecretFile(getCsFloatApiKeyVaultFilePath(), masterKey);
+  } finally {
+    masterKey.fill(0);
   }
 }
 
 function getCsFloatApiKeyStatus() {
+  const configured = fsSync.existsSync(getCsFloatApiKeyVaultFilePath())
+    || fsSync.existsSync(getCsFloatApiKeyFilePath());
+  const vaultStatus = getSecretVaultStatus();
   const storedKey = getStoredCsFloatApiKey();
+  const metadata = readSecretMetadata(getCsFloatApiKeyVaultFilePath());
+  const lastFour = storedKey
+    ? storedKey.slice(-4)
+    : (typeof metadata.lastFour === "string" ? metadata.lastFour : null);
 
   return {
-    configured: Boolean(storedKey),
-    hasKey: Boolean(storedKey),
-    lastFour: storedKey ? storedKey.slice(-4) : null,
-    source: "electron-safe-storage",
+    configured,
+    hasKey: configured,
+    lastFour,
+    source: "electron-secret-vault",
     desktopLocal: true,
     encryptionAvailable: safeStorage.isEncryptionAvailable(),
+    vaultConfigured: vaultStatus.configured,
+    vaultUnlocked: vaultStatus.unlocked,
+    vaultLocked: vaultStatus.configured && !vaultStatus.unlocked,
   };
 }
 
 async function writeCsFloatApiKey(apiKey) {
+  await ensureSecretVaultUnlocked();
   const trimmedKey = String(apiKey || "").trim();
 
   if (!trimmedKey) {
     throw new Error("CSFloat API Key darf nicht leer sein.");
   }
 
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("OS-Verschluesselung ist auf diesem System nicht verfuegbar.");
-  }
-
-  const encrypted = safeStorage.encryptString(trimmedKey);
-  await fs.mkdir(getSecretsDirPath(), { recursive: true });
-  await fs.writeFile(getCsFloatApiKeyFilePath(), encrypted);
+  await writeEncryptedSecretFile(
+    getCsFloatApiKeyVaultFilePath(),
+    trimmedKey,
+    unlockedSecretVaultMasterKey,
+    { lastFour: trimmedKey.slice(-4) },
+  );
+  sidecarSecretsUnlockedForCurrentRun = true;
+  touchSecretVaultActivity();
+  await fs.unlink(getCsFloatApiKeyFilePath()).catch(() => {});
 
   await restartPhpSidecar();
   return getCsFloatApiKeyStatus();
 }
 
 async function clearCsFloatApiKey() {
+  await ensureSecretVaultUnlocked();
   try {
-    await fs.unlink(getCsFloatApiKeyFilePath());
+    await fs.unlink(getCsFloatApiKeyVaultFilePath());
   } catch (error) {
     if (error.code !== "ENOENT") {
       throw error;
     }
   }
+  await fs.unlink(getCsFloatApiKeyFilePath()).catch(() => {});
+  touchSecretVaultActivity();
 
   await restartPhpSidecar();
   return getCsFloatApiKeyStatus();
 }
 
 function getStoredSkinBaronApiKey() {
-  const filePath = getSkinBaronApiKeyFilePath();
-
-  if (!fsSync.existsSync(filePath)) {
-    return null;
-  }
-
-  if (!safeStorage.isEncryptionAvailable()) {
-    console.warn("[desktop-secrets] safeStorage is not available; SkinBaron key cannot be decrypted.");
+  const masterKey = getSecretVaultMasterKeyFromMemory();
+  if (!masterKey) {
     return null;
   }
 
   try {
-    const encrypted = fsSync.readFileSync(filePath);
-    return safeStorage.decryptString(encrypted);
-  } catch (error) {
-    console.warn("[desktop-secrets] failed to decrypt SkinBaron API key", error);
-    return null;
+    return readEncryptedSecretFile(getSkinBaronApiKeyVaultFilePath(), masterKey);
+  } finally {
+    masterKey.fill(0);
   }
 }
 
@@ -1037,23 +1497,16 @@ function normalizeSkinBaronSessionCookieInput(rawValue) {
 }
 
 function getStoredSkinBaronSessionCookie() {
-  const filePath = getSkinBaronSessionCookieFilePath();
-
-  if (!fsSync.existsSync(filePath)) {
-    return null;
-  }
-
-  if (!safeStorage.isEncryptionAvailable()) {
-    console.warn("[desktop-secrets] safeStorage is not available; SkinBaron session cookie cannot be decrypted.");
+  const masterKey = getSecretVaultMasterKeyFromMemory();
+  if (!masterKey) {
     return null;
   }
 
   try {
-    const encrypted = fsSync.readFileSync(filePath);
-    return normalizeSkinBaronSessionCookieInput(safeStorage.decryptString(encrypted)) || null;
-  } catch (error) {
-    console.warn("[desktop-secrets] failed to decrypt SkinBaron session cookie", error);
-    return null;
+    const decrypted = readEncryptedSecretFile(getSkinBaronSessionCookieVaultFilePath(), masterKey);
+    return normalizeSkinBaronSessionCookieInput(decrypted) || null;
+  } finally {
+    masterKey.fill(0);
   }
 }
 
@@ -1368,24 +1821,38 @@ async function probeSkinBaronCapabilities(apiKey) {
 }
 
 function getSkinBaronApiKeyStatus() {
+  const vaultStatus = getSecretVaultStatus();
   const storedKey = getStoredSkinBaronApiKey();
   const storedSessionCookie = getStoredSkinBaronSessionCookie();
+  const keyConfigured = fsSync.existsSync(getSkinBaronApiKeyVaultFilePath())
+    || fsSync.existsSync(getSkinBaronApiKeyFilePath());
+  const sessionCookieConfigured = fsSync.existsSync(getSkinBaronSessionCookieVaultFilePath())
+    || fsSync.existsSync(getSkinBaronSessionCookieFilePath());
+  const keyMetadata = readSecretMetadata(getSkinBaronApiKeyVaultFilePath());
+  const sessionMetadata = readSecretMetadata(getSkinBaronSessionCookieVaultFilePath());
   const snapshot = readSkinBaronCapabilitiesSnapshot();
   const sessionProbeSnapshot = readSkinBaronSessionProbeSnapshot();
-  const sessionLastFour = extractSkinBaronAuthIdTail(storedSessionCookie);
+  const sessionLastFour = storedSessionCookie
+    ? extractSkinBaronAuthIdTail(storedSessionCookie)
+    : (typeof sessionMetadata.lastFour === "string" ? sessionMetadata.lastFour : null);
   const sessionHasAuthId = /authid\s*=/i.test(String(storedSessionCookie || ""));
   const sessionAllowed = sessionProbeSnapshot?.allowed === true;
 
   return {
-    configured: Boolean(storedKey),
-    hasKey: Boolean(storedKey),
-    lastFour: storedKey ? storedKey.slice(-4) : null,
-    source: "electron-safe-storage",
+    configured: keyConfigured,
+    hasKey: keyConfigured,
+    lastFour: storedKey
+      ? storedKey.slice(-4)
+      : (typeof keyMetadata.lastFour === "string" ? keyMetadata.lastFour : null),
+    source: "electron-secret-vault",
     desktopLocal: true,
     encryptionAvailable: safeStorage.isEncryptionAvailable(),
+    vaultConfigured: vaultStatus.configured,
+    vaultUnlocked: vaultStatus.unlocked,
+    vaultLocked: vaultStatus.configured && !vaultStatus.unlocked,
     capabilities: snapshot?.capabilities || {},
     checkedAt: snapshot?.checkedAt || null,
-    sessionCookieConfigured: Boolean(storedSessionCookie),
+    sessionCookieConfigured,
     sessionCookieHasAuthId: sessionHasAuthId,
     sessionCookieLastFour: sessionLastFour,
     sessionCookieCheckedAt: typeof sessionProbeSnapshot?.checkedAt === "string"
@@ -1405,21 +1872,24 @@ function getSkinBaronApiKeyStatus() {
 }
 
 async function writeSkinBaronApiKey(apiKey) {
+  await ensureSecretVaultUnlocked();
   const trimmedKey = String(apiKey || "").trim();
 
   if (!trimmedKey) {
     throw new Error("SkinBaron API Key darf nicht leer sein.");
   }
 
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("OS-Verschluesselung ist auf diesem System nicht verfuegbar.");
-  }
-
   const capabilitySnapshot = await probeSkinBaronCapabilities(trimmedKey);
 
-  const encrypted = safeStorage.encryptString(trimmedKey);
-  await fs.mkdir(getSecretsDirPath(), { recursive: true });
-  await fs.writeFile(getSkinBaronApiKeyFilePath(), encrypted);
+  await writeEncryptedSecretFile(
+    getSkinBaronApiKeyVaultFilePath(),
+    trimmedKey,
+    unlockedSecretVaultMasterKey,
+    { lastFour: trimmedKey.slice(-4) },
+  );
+  await fs.unlink(getSkinBaronApiKeyFilePath()).catch(() => {});
+  sidecarSecretsUnlockedForCurrentRun = true;
+  touchSecretVaultActivity();
   await writeSkinBaronCapabilitiesSnapshot(capabilitySnapshot);
 
   await restartPhpSidecar();
@@ -1427,13 +1897,16 @@ async function writeSkinBaronApiKey(apiKey) {
 }
 
 async function clearSkinBaronApiKey() {
+  await ensureSecretVaultUnlocked();
   try {
-    await fs.unlink(getSkinBaronApiKeyFilePath());
+    await fs.unlink(getSkinBaronApiKeyVaultFilePath());
   } catch (error) {
     if (error.code !== "ENOENT") {
       throw error;
     }
   }
+  await fs.unlink(getSkinBaronApiKeyFilePath()).catch(() => {});
+  touchSecretVaultActivity();
 
   await clearSkinBaronCapabilitiesSnapshot();
   await restartPhpSidecar();
@@ -1441,13 +1914,10 @@ async function clearSkinBaronApiKey() {
 }
 
 async function writeSkinBaronSessionCookie(sessionCookie) {
+  await ensureSecretVaultUnlocked();
   const normalizedCookie = normalizeSkinBaronSessionCookieInput(sessionCookie);
   if (!normalizedCookie) {
     throw new Error("SkinBaron Session-Cookie darf nicht leer sein.");
-  }
-
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("OS-Verschluesselung ist auf diesem System nicht verfuegbar.");
   }
 
   const probeSnapshot = await probeSkinBaronPurchasesSession(normalizedCookie);
@@ -1459,9 +1929,15 @@ async function writeSkinBaronSessionCookie(sessionCookie) {
     );
   }
 
-  const encrypted = safeStorage.encryptString(normalizedCookie);
-  await fs.mkdir(getSecretsDirPath(), { recursive: true });
-  await fs.writeFile(getSkinBaronSessionCookieFilePath(), encrypted);
+  await writeEncryptedSecretFile(
+    getSkinBaronSessionCookieVaultFilePath(),
+    normalizedCookie,
+    unlockedSecretVaultMasterKey,
+    { lastFour: extractSkinBaronAuthIdTail(normalizedCookie) },
+  );
+  await fs.unlink(getSkinBaronSessionCookieFilePath()).catch(() => {});
+  sidecarSecretsUnlockedForCurrentRun = true;
+  touchSecretVaultActivity();
   await writeSkinBaronSessionProbeSnapshot(probeSnapshot);
 
   await restartPhpSidecar();
@@ -1469,13 +1945,16 @@ async function writeSkinBaronSessionCookie(sessionCookie) {
 }
 
 async function clearSkinBaronSessionCookie() {
+  await ensureSecretVaultUnlocked();
   try {
-    await fs.unlink(getSkinBaronSessionCookieFilePath());
+    await fs.unlink(getSkinBaronSessionCookieVaultFilePath());
   } catch (error) {
     if (error.code !== "ENOENT") {
       throw error;
     }
   }
+  await fs.unlink(getSkinBaronSessionCookieFilePath()).catch(() => {});
+  touchSecretVaultActivity();
 
   await clearSkinBaronSessionProbeSnapshot();
   await restartPhpSidecar();
@@ -2039,10 +2518,27 @@ ipcMain.handle("cloudflare-access-login", async (event, serverUrl) => {
   }
 });
 
+function ensureDesktopRuntimeUnlocked() {
+  const vaultStatus = getSecretVaultStatus();
+  if (!vaultStatus.configured) {
+    const setupError = new Error("Secret Vault ist noch nicht eingerichtet.");
+    setupError.code = "SECRET_VAULT_NOT_CONFIGURED";
+    throw setupError;
+  }
+  if (!vaultStatus.unlocked) {
+    const lockError = new Error("Secret Vault ist gesperrt.");
+    lockError.code = "SECRET_VAULT_LOCKED";
+    throw lockError;
+  }
+  touchSecretVaultActivity();
+}
+
 ipcMain.handle("backend-base-url", async () => {
+  ensureDesktopRuntimeUnlocked();
   return await ensurePhpSidecarForRenderer();
 });
 ipcMain.handle("backend-auth-headers", async () => {
+  ensureDesktopRuntimeUnlocked();
   await ensurePhpSidecarForRenderer();
   return getSidecarAuthHeaders();
 });
@@ -2107,8 +2603,43 @@ ipcMain.handle("server-config-set", async (event, payload) => {
 ipcMain.handle("server-config-test", async (event, serverUrl) => {
   return await testServerConnection(serverUrl);
 });
+ipcMain.handle("secret-vault-status", () => getSecretVaultStatus());
+ipcMain.handle("secret-vault-set-preferences", async (_event, patch) => {
+  const status = await updateSecretVaultPreferences(patch || {});
+  return {
+    status,
+  };
+});
+ipcMain.handle("secret-vault-set-password", async (_event, password) => {
+  const status = await configureSecretVaultPassword(password);
+  return {
+    status,
+    backendBaseUrl,
+  };
+});
+ipcMain.handle("secret-vault-unlock", async (_event, password) => {
+  const status = await unlockSecretVault(password);
+  return {
+    status,
+    backendBaseUrl,
+  };
+});
+ipcMain.handle("secret-vault-lock", async () => {
+  const status = await lockSecretVault("manual-lock");
+  return {
+    status,
+    backendBaseUrl,
+  };
+});
+ipcMain.handle("secret-vault-touch", () => {
+  const status = touchSecretVaultActivity();
+  return {
+    status,
+  };
+});
 ipcMain.handle("secret-csfloat-status", () => getCsFloatApiKeyStatus());
 ipcMain.handle("secret-csfloat-set", async (event, apiKey) => {
+  ensureDesktopRuntimeUnlocked();
   const status = await writeCsFloatApiKey(apiKey);
   return {
     status,
@@ -2116,6 +2647,7 @@ ipcMain.handle("secret-csfloat-set", async (event, apiKey) => {
   };
 });
 ipcMain.handle("secret-csfloat-clear", async () => {
+  ensureDesktopRuntimeUnlocked();
   const status = await clearCsFloatApiKey();
   return {
     status,
@@ -2124,6 +2656,7 @@ ipcMain.handle("secret-csfloat-clear", async () => {
 });
 ipcMain.handle("secret-skinbaron-status", () => getSkinBaronApiKeyStatus());
 ipcMain.handle("secret-skinbaron-set", async (event, apiKey) => {
+  ensureDesktopRuntimeUnlocked();
   const status = await writeSkinBaronApiKey(apiKey);
   return {
     status,
@@ -2131,6 +2664,7 @@ ipcMain.handle("secret-skinbaron-set", async (event, apiKey) => {
   };
 });
 ipcMain.handle("secret-skinbaron-clear", async () => {
+  ensureDesktopRuntimeUnlocked();
   const status = await clearSkinBaronApiKey();
   return {
     status,
@@ -2139,6 +2673,7 @@ ipcMain.handle("secret-skinbaron-clear", async () => {
 });
 ipcMain.handle("secret-skinbaron-session-status", () => getSkinBaronApiKeyStatus());
 ipcMain.handle("secret-skinbaron-session-set", async (event, sessionCookie) => {
+  ensureDesktopRuntimeUnlocked();
   const status = await writeSkinBaronSessionCookie(sessionCookie);
   return {
     status,
@@ -2146,6 +2681,7 @@ ipcMain.handle("secret-skinbaron-session-set", async (event, sessionCookie) => {
   };
 });
 ipcMain.handle("secret-skinbaron-session-clear", async () => {
+  ensureDesktopRuntimeUnlocked();
   const status = await clearSkinBaronSessionCookie();
   return {
     status,
@@ -2156,6 +2692,7 @@ ipcMain.handle("secret-skinbaron-session-clear", async () => {
 function safeLocalStoreInvoke(channel, handler) {
   ipcMain.handle(channel, async (event, ...args) => {
     try {
+      ensureDesktopRuntimeUnlocked();
       const store = getLocalStore();
       return await handler(store, ...args);
     } catch (error) {
@@ -2256,5 +2793,10 @@ app.on("before-quit", () => {
     clearInterval(updateCheckTimer);
     updateCheckTimer = null;
   }
+  if (secretVaultAutoLockTimer) {
+    clearTimeout(secretVaultAutoLockTimer);
+    secretVaultAutoLockTimer = null;
+  }
+  clearSecretVaultMasterKeyFromMemory();
   stopPhpSidecar();
 });

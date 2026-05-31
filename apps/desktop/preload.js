@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getSkinBaronSessionStatus: () => ipcRenderer.invoke("secret-skinbaron-session-status"),
     setSkinBaronSessionCookie: (sessionCookie) => ipcRenderer.invoke("secret-skinbaron-session-set", sessionCookie),
     clearSkinBaronSessionCookie: () => ipcRenderer.invoke("secret-skinbaron-session-clear"),
+    getVaultStatus: () => ipcRenderer.invoke("secret-vault-status"),
+    setVaultPreferences: (patch) => ipcRenderer.invoke("secret-vault-set-preferences", patch),
+    setVaultPassword: (password) => ipcRenderer.invoke("secret-vault-set-password", password),
+    unlockVault: (password) => ipcRenderer.invoke("secret-vault-unlock", password),
+    lockVault: () => ipcRenderer.invoke("secret-vault-lock"),
+    touchVaultActivity: () => ipcRenderer.invoke("secret-vault-touch"),
   },
   
   // IPC event bridge

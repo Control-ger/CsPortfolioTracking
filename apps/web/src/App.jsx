@@ -1,9 +1,11 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { Lock } from "lucide-react";
 
 import { CurrencyProvider } from "@shared/contexts";
 import { BottomNavigation, DesktopSidebarRail, Titlebar } from "@shared/components";
 import { Button } from "@shared/components/ui/button";
+import { Input } from "@shared/components/ui/input";
 import { PortfolioPage } from "@shared/pages";
 import { handleWebAuthCallback } from "@shared/lib/auth.js";
 import { startDesktopAutoSync } from "@shared/lib/desktopSync.js";
@@ -16,6 +18,13 @@ const CsUpdatesPage = lazy(() => import("@shared/pages/CsUpdatesPage.jsx"));
 export default function App() {
   const isElectron = window.electronAPI !== undefined;
   const desktopRuntime = Boolean(window.electronAPI?.localStore);
+  const [vaultStatus, setVaultStatus] = useState(null);
+  const [vaultLoading, setVaultLoading] = useState(() => Boolean(isElectron && desktopRuntime));
+  const [vaultError, setVaultError] = useState("");
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [setupPassword, setSetupPassword] = useState("");
+  const [setupPasswordConfirm, setSetupPasswordConfirm] = useState("");
+  const [vaultActionRunning, setVaultActionRunning] = useState(false);
   const [updaterStatus, setUpdaterStatus] = useState({
     state: "idle",
     version: null,
@@ -30,6 +39,70 @@ export default function App() {
     const hash = window.location.hash || "";
     return hash.includes("token=") || window.location.pathname === "/auth/callback";
   });
+  const shouldUseVaultGate = isElectron && desktopRuntime;
+
+  const refreshVaultStatus = useMemo(() => {
+    return async ({ quiet = false } = {}) => {
+      if (!shouldUseVaultGate || !window.electronAPI?.secrets?.getVaultStatus) {
+        setVaultStatus(null);
+        setVaultLoading(false);
+        return null;
+      }
+
+      if (!quiet) {
+        setVaultLoading(true);
+      }
+
+      try {
+        const nextStatus = await window.electronAPI.secrets.getVaultStatus();
+        setVaultStatus(nextStatus || null);
+        setVaultError("");
+        return nextStatus || null;
+      } catch (error) {
+        setVaultError(error?.message || "Secret-Vault Status konnte nicht geladen werden.");
+        return null;
+      } finally {
+        if (!quiet) {
+          setVaultLoading(false);
+        }
+      }
+    };
+  }, [shouldUseVaultGate]);
+
+  const isVaultUnlocked = !shouldUseVaultGate || (vaultStatus?.configured === true && vaultStatus?.unlocked === true);
+
+  useEffect(() => {
+    void refreshVaultStatus();
+  }, [refreshVaultStatus]);
+
+  useEffect(() => {
+    if (!shouldUseVaultGate || !isVaultUnlocked || !window.electronAPI?.secrets?.touchVaultActivity) {
+      return;
+    }
+
+    let lastTouch = 0;
+    const touch = () => {
+      const now = Date.now();
+      if (now - lastTouch < 5000) {
+        return;
+      }
+      lastTouch = now;
+      void window.electronAPI.secrets.touchVaultActivity().catch(() => {});
+    };
+
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "wheel"];
+    events.forEach((eventName) => window.addEventListener(eventName, touch, { passive: true }));
+
+    const intervalId = window.setInterval(() => {
+      void refreshVaultStatus({ quiet: true });
+    }, 20000);
+
+    touch();
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, touch));
+      window.clearInterval(intervalId);
+    };
+  }, [isVaultUnlocked, refreshVaultStatus, shouldUseVaultGate]);
 
   useEffect(() => {
     if (!isProcessingAuthCallback || isElectron || typeof window === "undefined") {
@@ -53,12 +126,12 @@ export default function App() {
   }, [isElectron, isProcessingAuthCallback]);
 
   useEffect(() => {
-    if (!isElectron) {
+    if (!isElectron || !isVaultUnlocked) {
       return;
     }
 
     return startDesktopAutoSync();
-  }, [isElectron]);
+  }, [isElectron, isVaultUnlocked]);
 
   useEffect(() => {
     if (!isElectron || !window.electronAPI?.updater?.onStatus) {
@@ -87,6 +160,134 @@ export default function App() {
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
         <p className="text-sm text-muted-foreground">Anmeldung wird abgeschlossen...</p>
       </div>
+    );
+  }
+
+  const handleSetVaultPassword = async () => {
+    const minLength = Number(vaultStatus?.minPasswordLength || 16);
+    if (setupPassword.length < minLength) {
+      setVaultError(`App-Passwort muss mindestens ${minLength} Zeichen haben.`);
+      return;
+    }
+    if (setupPassword !== setupPasswordConfirm) {
+      setVaultError("Passwort-Bestaetigung stimmt nicht ueberein.");
+      return;
+    }
+
+    setVaultActionRunning(true);
+    setVaultError("");
+    try {
+      await window.electronAPI.secrets.setVaultPassword(setupPassword);
+      setSetupPassword("");
+      setSetupPasswordConfirm("");
+      await refreshVaultStatus();
+    } catch (error) {
+      setVaultError(error?.message || "App-Passwort konnte nicht gesetzt werden.");
+    } finally {
+      setVaultActionRunning(false);
+    }
+  };
+
+  const handleUnlockVault = async () => {
+    if (!unlockPassword.trim()) {
+      setVaultError("Bitte App-Passwort eingeben.");
+      return;
+    }
+
+    setVaultActionRunning(true);
+    setVaultError("");
+    try {
+      await window.electronAPI.secrets.unlockVault(unlockPassword);
+      setUnlockPassword("");
+      await refreshVaultStatus();
+    } catch (error) {
+      setVaultError(error?.message || "Secret Vault konnte nicht entsperrt werden.");
+    } finally {
+      setVaultActionRunning(false);
+    }
+  };
+
+  if (shouldUseVaultGate && (vaultLoading || !vaultStatus || !isVaultUnlocked)) {
+    const requiresSetup = vaultStatus?.configured !== true;
+    const minPasswordLength = Number(vaultStatus?.minPasswordLength || 16);
+
+    return (
+      <CurrencyProvider>
+        <div className={`flex flex-col ${isElectron ? "h-full overflow-hidden" : "min-h-screen"} bg-background text-foreground`}>
+          {isElectron && <Titlebar />}
+          <main className="flex flex-1 items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl border border-border/80 bg-card/95 p-5 shadow-xl backdrop-blur">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold">Lokaler Secret-Schutz</p>
+                  <p className="text-xs text-muted-foreground">
+                    API-Secrets sind gesperrt, bis du die App entsperrst.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 p-3 text-xs text-cyan-100">
+                Tipp: Mit Windows-PIN/Biometrie wird der lokale Schutz zusaetzlich gehaertet.
+              </div>
+
+              {requiresSetup ? (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">App-Passwort erstellen</p>
+                  <Input
+                    type="password"
+                    value={setupPassword}
+                    onChange={(event) => setSetupPassword(event.target.value)}
+                    placeholder={`Mindestens ${minPasswordLength} Zeichen`}
+                    disabled={vaultActionRunning}
+                  />
+                  <Input
+                    type="password"
+                    value={setupPasswordConfirm}
+                    onChange={(event) => setSetupPasswordConfirm(event.target.value)}
+                    placeholder="Passwort bestaetigen"
+                    disabled={vaultActionRunning}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Empfehlung: Lange Passphrase mit Gross-/Kleinbuchstaben, Zahlen und Sonderzeichen.
+                  </p>
+                  <Button className="w-full" onClick={() => void handleSetVaultPassword()} disabled={vaultActionRunning}>
+                    {vaultActionRunning ? "Speichert..." : "App-Passwort setzen"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">App entsperren</p>
+                  <Input
+                    type="password"
+                    value={unlockPassword}
+                    onChange={(event) => setUnlockPassword(event.target.value)}
+                    placeholder="App-Passwort"
+                    disabled={vaultActionRunning}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void handleUnlockVault();
+                      }
+                    }}
+                  />
+                  <Button className="w-full" onClick={() => void handleUnlockVault()} disabled={vaultActionRunning}>
+                    {vaultActionRunning ? "Entsperrt..." : "Entsperren"}
+                  </Button>
+                </div>
+              )}
+
+              {vaultError ? (
+                <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                  {vaultError}
+                </div>
+              ) : null}
+            </div>
+          </main>
+        </div>
+      </CurrencyProvider>
     );
   }
 
