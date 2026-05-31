@@ -612,6 +612,13 @@ Change: Secret Vault mit App-Passwort + globalem Desktop-Unlock-Guard eingefuehr
 ---
 
 Updated: 2026-05-31
+Change: Welcome-Kontext in den Secret-Vault Einstieg integriert
+- Die geschuetzte Unlock/Setup-Ansicht in `apps/web/src/App.jsx` zeigt jetzt zusaetzlich Welcome-/Onboarding-Kontext (Steam-Login-Hinweise), ohne die Guard-Reihenfolge zu aendern.
+- Technisch bleibt der Vault-Guard vor dem Route-Mount aktiv, sodass Auth-/Portfolio-Flows weiterhin erst nach erfolgreichem Unlock starten.
+
+---
+
+Updated: 2026-05-31
 Change: SkinBaron Session-Cookie Auto-Connect per Login-Fenster
 - `apps/desktop/main.js` erweitert um einen Browser-Login-Flow, der `AUTHID` direkt aus den SkinBaron-Cookies liest und als verschluesselten Session-Cookie speichert (inkl. Purchases-Probe).
 - Neuer Desktop-IPC `secret-skinbaron-session-connect-browser` fuer automatischen Session-Connect statt manuellem Cookie-Copy.

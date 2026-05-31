@@ -117,6 +117,7 @@ From `apps/web/src/App.jsx`:
 - Electron updater download requests self-heal missing in-memory update metadata by running `checkForUpdates()` before prompting download, and return structured failure reasons to renderer/UI when download cannot start.
 - Update notifications are dual-path in desktop runtime: native OS toast (when supported) plus persisted in-app system notifications (`category=app_update`) for reliable visibility.
 - Desktop app runtime is globally gated by Secret Vault status in `App.jsx`: while locked/not configured, shared routes are blocked by an unlock/setup screen and sensitive IPC paths (`backend-base-url`, local-store IPC, secret mutations) stay denied.
+- The Secret Vault setup/unlock screen now embeds welcome/onboarding context, so users see Steam onboarding messaging in the same guarded entry screen before route mount.
 - `GET /api/v1/portfolio/summary` uses enriched rows without live refresh (`allowLiveRefresh=false`) to avoid duplicate CSFloat load in the same page cycle.
 - Interactive pricing requests apply a capped CSFloat lookup budget per request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`), while CLI workers remain uncapped.
 - `CsFloatClient::fetchLowestListingResult()` uses `GET /api/v1/listings/price-list` as primary bulk source (90s in-memory cache), with per-item listing lookup as fallback.
