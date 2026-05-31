@@ -623,3 +623,11 @@ Change: SkinBaron Session-Cookie Auto-Connect per Login-Fenster
 - `apps/desktop/main.js` erweitert um einen Browser-Login-Flow, der `AUTHID` direkt aus den SkinBaron-Cookies liest und als verschluesselten Session-Cookie speichert (inkl. Purchases-Probe).
 - Neuer Desktop-IPC `secret-skinbaron-session-connect-browser` fuer automatischen Session-Connect statt manuellem Cookie-Copy.
 - `apps/desktop/preload.js` und `packages/shared/src/pages/SettingsPage.jsx` binden den Flow als "Mit SkinBaron verbinden"-Aktion in den Settings ein.
+
+---
+
+Updated: 2026-05-31
+Change: Steam OpenID Callback ohne Sidecar-Secret freigegeben (nur Callback-Route)
+- `backend/desktop/index.php` erzwingt den Header `X-Desktop-Sidecar-Secret` weiterhin fuer alle lokalen API-Calls aus dem Renderer.
+- Ausnahme ist ausschliesslich `GET /api/v1/auth/steam/callback`, damit der externe Steam-Browser-Redirect den Login im lokalen Sidecar erfolgreich abschliessen kann.
+- Hintergrund: Externe Browser-Redirects koennen keinen app-internen Sidecar-Secret-Header mitsenden.

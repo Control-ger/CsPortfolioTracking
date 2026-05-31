@@ -48,8 +48,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
 
 $expectedSidecarSecret = trim((string) (getenv('DESKTOP_SIDECAR_SECRET') ?: ($_ENV['DESKTOP_SIDECAR_SECRET'] ?? '')));
 $providedSidecarSecret = trim((string) ($_SERVER['HTTP_X_DESKTOP_SIDECAR_SECRET'] ?? ''));
+$requestMethod = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+$requestPath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
 
-if ($expectedSidecarSecret === '') {
+$isPublicSidecarRoute = static function (string $method, string $path): bool {
+    $normalizedMethod = strtoupper(trim($method));
+    $normalizedPath = '/' . ltrim(trim($path), '/');
+
+    // Steam OpenID callback is performed by the system browser and cannot
+    // include desktop-sidecar secret headers.
+    return $normalizedMethod === 'GET' && $normalizedPath === '/api/v1/auth/steam/callback';
+};
+
+$requiresSidecarSecret = !$isPublicSidecarRoute($requestMethod, $requestPath);
+
+if ($requiresSidecarSecret && $expectedSidecarSecret === '') {
     JsonResponseFactory::error(
         'DESKTOP_SIDECAR_SECRET_MISSING',
         'Desktop sidecar secret missing in runtime environment.',
@@ -59,7 +72,10 @@ if ($expectedSidecarSecret === '') {
     exit;
 }
 
-if ($providedSidecarSecret === '' || !hash_equals($expectedSidecarSecret, $providedSidecarSecret)) {
+if (
+    $requiresSidecarSecret
+    && ($providedSidecarSecret === '' || !hash_equals($expectedSidecarSecret, $providedSidecarSecret))
+) {
     JsonResponseFactory::error(
         'DESKTOP_SIDECAR_UNAUTHORIZED',
         'Missing or invalid desktop sidecar secret.',

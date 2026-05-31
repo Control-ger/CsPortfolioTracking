@@ -40,6 +40,7 @@ This document tracks:
 ### 3.1 Desktop runtime (primary write client)
 
 - Starts local PHP sidecar on `127.0.0.1` with dynamic port + per-start secret.
+- Sidecar secret is mandatory for desktop renderer/API traffic; only `GET /api/v1/auth/steam/callback` is public to allow the external Steam OpenID browser redirect.
 - Renderer never reads SQLite directly.
 - Renderer uses `window.electronAPI.localStore` for local persistence.
 - Steam/CSFloat import triggers originate in desktop runtime; desktop may call sidecar/upstream endpoints for execution.
