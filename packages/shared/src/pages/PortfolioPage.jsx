@@ -3430,7 +3430,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       normalizedServerSetupHost.startsWith("192.168.") ||
       normalizedServerSetupHost.startsWith("10.");
     const protocol = isLocalHost ? "http" : "https";
-    return `${protocol}://${normalizedServerSetupHost}/settings?settingsTab=general&section=push-notifications`;
+    return `${protocol}://${normalizedServerSetupHost}/#/settings?settingsTab=general&section=push-notifications`;
   }, [normalizedServerSetupHost]);
   const journeyProgressPercent =
     journeySteps.length > 0 ? Math.round((completedJourneySteps / journeySteps.length) * 100) : 0;
