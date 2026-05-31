@@ -631,3 +631,11 @@ Change: Steam OpenID Callback ohne Sidecar-Secret freigegeben (nur Callback-Rout
 - `backend/desktop/index.php` erzwingt den Header `X-Desktop-Sidecar-Secret` weiterhin fuer alle lokalen API-Calls aus dem Renderer.
 - Ausnahme ist ausschliesslich `GET /api/v1/auth/steam/callback`, damit der externe Steam-Browser-Redirect den Login im lokalen Sidecar erfolgreich abschliessen kann.
 - Hintergrund: Externe Browser-Redirects koennen keinen app-internen Sidecar-Secret-Header mitsenden.
+
+---
+
+Updated: 2026-05-31
+Change: SkinBaron auf AUTHID-only UX reduziert, API-Key-Logik archiviert
+- Settings zeigen fuer SkinBaron nur noch Session-Cookie/AUTHID-Setup (inkl. Browser-Connect); API-Key-Eingabe und Capability-UI sind ausgeblendet.
+- `apps/desktop/preload.js` exponiert keine SkinBaron-API-Key IPC-Methoden mehr im Renderer.
+- Bestehende API-Key-Implementierung in `apps/desktop/main.js` bleibt als archivierter Legacy-Code fuer spaetere Reaktivierung erhalten, ist aber aktuell nicht user-sichtbar.

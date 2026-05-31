@@ -47,7 +47,8 @@ This document tracks:
 - Desktop sidecar exposes CSFloat import endpoints and a desktop-local buyorder read endpoint (`GET /api/v1/csfloat/buy-orders`) for watchlist enrichment.
 - Desktop sidecar exposes SkinBaron preview endpoints (`POST /api/v1/portfolio/sync/skinbaron/preview`) for desktop-local import.
 - Secrets stay local (Electron safe storage / process env only).
-- SkinBaron access uses two local secrets in Electron safe storage: API key (optional capability checks) and Session-Cookie (AUTHID) for purchases import data.
+- SkinBaron import currently uses only Session-Cookie (`AUTHID`) in Electron safe storage for purchases import data.
+- Legacy SkinBaron API-key capability code remains archived in Electron main process, but is not exposed in the current renderer/settings UX.
 - Desktop runtime enforces an app-password-gated Secret Vault: secrets are decrypted only after unlock in Electron main-memory, always locked on restart, with optional auto-lock after 15 minutes idle (user opt-in).
 
 ### 3.2 Web runtime
@@ -109,7 +110,7 @@ From `apps/web/src/App.jsx`:
 - `PortfolioPage` no longer uses horizontal swipe tab switching on mobile; tab changes are explicit to avoid accidental gesture-triggered navigation.
 - Desktop supports SkinBaron import preview/execute flow in Management; import writes locally and then re-runs Steam-vs-external matching so duplicates can be auto-resolved like the existing CSFloat flow.
 - SkinBaron desktop preview now uses `GET https://skinbaron.de/api/v2/Purchases` (session-authenticated), filters to `SUCCEEDED` purchase groups, flattens `purchaseItems`, and builds stable external trade ids per purchase item.
-- Settings in desktop runtime provide a SkinBaron browser-connect flow that opens a login window, captures `AUTHID` from Electron cookies, and stores it encrypted as session cookie for Purchases import.
+- Settings in desktop runtime provide only a SkinBaron browser-connect/session-cookie flow that opens a login window, captures `AUTHID` from Electron cookies, and stores it encrypted for Purchases import.
 - `CurrencyContext` persists selected display currency server-side via settings API and still keeps local fallback in `localStorage`.
 - Currency popularity ranking in Settings is sourced from anonymized server aggregates (no user identifiers in `currency_usage_stats`).
 - Search-to-watchlist add checks in `PortfolioPage`/`ItemSearch` use watchlist entries only (not inventory/investment presence), so web runtime can add watchlist items independently.

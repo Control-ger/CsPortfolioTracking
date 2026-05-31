@@ -1202,6 +1202,15 @@ export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
 
 export async function fetchSkinBaronApiKeyStatus() {
   const desktopSecrets = getDesktopSecrets();
+  if (desktopSecrets?.getSkinBaronSessionStatus) {
+    return {
+      data: await desktopSecrets.getSkinBaronSessionStatus(),
+      meta: {
+        source: "desktop-local",
+      },
+    };
+  }
+
   if (desktopSecrets?.getSkinBaronApiKeyStatus) {
     return {
       data: await desktopSecrets.getSkinBaronApiKeyStatus(),

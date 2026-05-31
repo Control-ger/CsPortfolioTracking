@@ -18,7 +18,6 @@ import {
   fetchCsFloatApiKeyStatus,
   updateCsFloatApiKey,
   fetchSkinBaronApiKeyStatus,
-  updateSkinBaronApiKey,
   updateSkinBaronSessionCookie,
   connectSkinBaronSessionCookieViaBrowser,
   fetchPriceSourcePreference,
@@ -129,12 +128,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [apiKeyError, setApiKeyError] = useState("");
   const [apiKeySuccess, setApiKeySuccess] = useState("");
 
-  // SkinBaron API Key State
-  const [skinBaronApiKey, setSkinBaronApiKey] = useState("");
-  const [skinBaronApiKeyLoading, setSkinBaronApiKeyLoading] = useState(true);
-  const [skinBaronApiKeySaving, setSkinBaronApiKeySaving] = useState(false);
+  // SkinBaron AUTHID Session State
+  const [skinBaronStatusLoading, setSkinBaronStatusLoading] = useState(true);
   const [skinBaronApiKeyStatus, setSkinBaronApiKeyStatus] = useState(() => normalizeSkinBaronStatusPayload());
-  const [showSkinBaronApiKey, setShowSkinBaronApiKey] = useState(false);
   const [skinBaronApiKeyError, setSkinBaronApiKeyError] = useState("");
   const [skinBaronApiKeySuccess, setSkinBaronApiKeySuccess] = useState("");
   const [skinBaronSessionCookie, setSkinBaronSessionCookie] = useState("");
@@ -197,7 +193,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       try {
         setLoading(true);
         setApiKeyLoading(true);
-        setSkinBaronApiKeyLoading(true);
+        setSkinBaronStatusLoading(true);
 
         const [feeResponse, keyStatusResponse, skinBaronStatusResponse, priceSourceResponse] = await Promise.all([
           fetchFeeSettings(),
@@ -246,7 +242,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       } finally {
         setLoading(false);
         setApiKeyLoading(false);
-        setSkinBaronApiKeyLoading(false);
+        setSkinBaronStatusLoading(false);
       }
     };
 
@@ -337,12 +333,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     setApiKeySuccess("");
   };
 
-  const handleSkinBaronApiKeyChange = (event) => {
-    setSkinBaronApiKey(event.target.value);
-    setSkinBaronApiKeyError("");
-    setSkinBaronApiKeySuccess("");
-  };
-
   const handleSkinBaronSessionCookieChange = (event) => {
     setSkinBaronSessionCookie(event.target.value);
     setSkinBaronApiKeyError("");
@@ -408,33 +398,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setSuccess("");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleUpdateSkinBaronApiKey = async () => {
-    try {
-      setSkinBaronApiKeySaving(true);
-      setSkinBaronApiKeyError("");
-      setSkinBaronApiKeySuccess("");
-
-      if (!desktopRuntime) {
-        setSkinBaronApiKeyError("SkinBaron API Key kann nur in der Desktop-App gesetzt werden.");
-        return;
-      }
-
-      const trimmedApiKey = skinBaronApiKey.trim();
-      await updateSkinBaronApiKey(trimmedApiKey);
-
-      setSkinBaronApiKeySuccess("API Key wurde erfolgreich aktualisiert und Rechte wurden geprueft.");
-      setSkinBaronApiKey("");
-
-      const statusResponse = await fetchSkinBaronApiKeyStatus();
-      const nextStatus = statusResponse?.data || statusResponse || {};
-      setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(nextStatus));
-    } catch (err) {
-      setSkinBaronApiKeyError(err.message || "Fehler beim Aktualisieren des API Keys.");
-    } finally {
-      setSkinBaronApiKeySaving(false);
     }
   };
 
@@ -1215,7 +1178,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   };
 
   const renderSkinBaronApiKeyTab = () => {
-    if (skinBaronApiKeyLoading) {
+    if (skinBaronStatusLoading) {
       return (
         <Card>
           <CardHeader>
@@ -1230,35 +1193,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       );
     }
 
-    const capabilityRows = [
-      {
-        id: "getBalance",
-        label: "GetBalance",
-        requirement: "Zeigt Guthaben/Key-Validitaet.",
-      },
-      {
-        id: "getSales",
-        label: "GetSales",
-        requirement: "Pflicht fuer SkinBaron-Import in die lokale Portfolio-Datenbank.",
-      },
-      {
-        id: "search",
-        label: "Search",
-        requirement: "Optional fuer spaetere Suche/Erweiterungen.",
-      },
-      {
-        id: "getActiveTradeOffers",
-        label: "GetActiveTradeOffers",
-        requirement: "Optional fuer aktive Tradeoffer-Ansichten.",
-      },
-      {
-        id: "getPriceList",
-        label: "GetPriceList",
-        requirement: "Optional fuer Preislisten-Sync.",
-      },
-    ];
-
-    const capabilities = skinBaronApiKeyStatus?.capabilities || {};
     const sessionCookieAccess = skinBaronApiKeyStatus?.sessionCookieAccess || {};
     const readOnlyImportReady = skinBaronApiKeyStatus?.importReady === true
       || sessionCookieAccess?.allowed === true;
@@ -1268,15 +1202,10 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Key className="h-5 w-5" />
-            <CardTitle>SkinBaron Zugriff</CardTitle>
-            {skinBaronApiKeyStatus.configured && (
-              <Badge variant="outline" className="ml-auto border-emerald-400/35 text-emerald-300">
-                Konfiguriert
-              </Badge>
-            )}
+            <CardTitle>SkinBaron AUTHID</CardTitle>
           </div>
           <CardDescription>
-            SkinBaron-Zugangsdaten werden lokal verschluesselt gespeichert. Fuer den Import nutzen wir Purchases ueber Session-Cookie.
+            Der SkinBaron Import nutzt ausschliesslich den Session-Cookie (AUTHID) und speichert ihn lokal verschluesselt.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1381,97 +1310,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               {skinBaronApiKeySuccess}
             </div>
           )}
-
-          {skinBaronApiKeyStatus.configured && (
-            <div className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/18">
-                <Lock className="h-5 w-5 text-emerald-300" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">API Key aktiv</p>
-                <p className="text-xs text-muted-foreground">
-                  Endet auf ...{skinBaronApiKeyStatus.lastFour || "----"}
-                  {skinBaronApiKeyStatus.checkedAt
-                    ? ` | letzte Rechtepruefung: ${new Date(skinBaronApiKeyStatus.checkedAt).toLocaleString("de-DE")}`
-                    : ""}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            <label className="text-sm font-medium">
-              {skinBaronApiKeyStatus.configured ? "Neuen API-Key eingeben (optional)" : "API-Key eingeben (optional)"}
-            </label>
-            <div className="relative">
-              <Input
-                type={showSkinBaronApiKey ? "text" : "password"}
-                value={skinBaronApiKey}
-                onChange={handleSkinBaronApiKeyChange}
-                placeholder={
-                  skinBaronApiKeyStatus.configured
-                    ? "Zum Aendern neuen SkinBaron Key eingeben..."
-                    : "SkinBaron API Key..."
-                }
-                disabled={skinBaronApiKeySaving || !encryptionReady}
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowSkinBaronApiKey(!showSkinBaronApiKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                disabled={skinBaronApiKeySaving}
-              >
-                {showSkinBaronApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Hinweis: Der API-Key ist optional (z. B. fuer Balance/Legacy-Checks). Der eigentliche Import nutzt den Session-Cookie.
-            </p>
-          </div>
-
-          <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Rechte-Check</p>
-            <p className="text-[11px] text-muted-foreground">
-              Hinweis: API-Checks sind weiterhin verfuegbar, beeinflussen aber nicht mehr die Purchases-Import-Quelle.
-            </p>
-            {capabilityRows.map((row) => {
-              const capability = capabilities?.[row.id] || null;
-              const allowed = capability?.allowed === true;
-              return (
-                <div key={row.id} className="flex items-start justify-between gap-3 rounded-md border border-border/60 p-2">
-                  <div>
-                    <p className="text-sm font-medium">{row.label}</p>
-                    <p className="text-xs text-muted-foreground">{row.requirement}</p>
-                    {capability?.message ? (
-                      <p className="text-[11px] text-muted-foreground">
-                        Status: {capability.message}
-                      </p>
-                    ) : null}
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={allowed ? "border-emerald-400/35 text-emerald-300" : "border-amber-400/35 text-amber-300"}
-                  >
-                    {allowed ? "Erlaubt" : "Nicht erlaubt"}
-                  </Badge>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex justify-end">
-            <Button
-              onClick={handleUpdateSkinBaronApiKey}
-              disabled={skinBaronApiKeySaving || !encryptionReady || !skinBaronApiKey.trim()}
-            >
-              {skinBaronApiKeySaving
-                ? "Speichert + prueft..."
-                : skinBaronApiKeyStatus.configured
-                  ? "Key Aktualisieren"
-                  : "Key Speichern"}
-            </Button>
-          </div>
         </CardContent>
       </Card>
     );

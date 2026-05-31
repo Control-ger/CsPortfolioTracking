@@ -1956,6 +1956,8 @@ async function probeSkinBaronCapabilities(apiKey) {
 }
 
 function getSkinBaronApiKeyStatus() {
+  // API-key metadata is kept for legacy/archive compatibility.
+  // Current renderer UX is AUTHID/session-cookie only.
   const vaultStatus = getSecretVaultStatus();
   const storedKey = getStoredSkinBaronApiKey();
   const storedSessionCookie = getStoredSkinBaronSessionCookie();
@@ -2790,6 +2792,7 @@ ipcMain.handle("secret-csfloat-clear", async () => {
   };
 });
 ipcMain.handle("secret-skinbaron-status", () => getSkinBaronApiKeyStatus());
+// Archived legacy handlers: no renderer bridge in preload, kept for future reactivation only.
 ipcMain.handle("secret-skinbaron-set", async (event, apiKey) => {
   ensureDesktopRuntimeUnlocked();
   const status = await writeSkinBaronApiKey(apiKey);
