@@ -18,18 +18,18 @@ function LayeredGroupIcon({ visuals = [], fallbackLabel }) {
   const items = Array.isArray(visuals) ? visuals.slice(0, 2) : [];
 
   return (
-    <div className="relative h-14 w-14 shrink-0">
+    <div className="relative h-12 w-[4.25rem] shrink-0">
       {items.length === 0 ? (
-        <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-border/70 bg-card/70 text-[11px] font-semibold text-muted-foreground">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/70 bg-card/70 text-[11px] font-semibold text-muted-foreground">
           {String(fallbackLabel || "Group").slice(0, 2).toUpperCase()}
         </div>
       ) : null}
       {items.map((item, index) => {
-        const offsetClass = index === 0 ? "left-0 top-0 z-20" : "left-7 top-2 z-10";
+        const offsetClass = index === 0 ? "left-0 top-0 z-20" : "left-4 top-0 z-10";
         return (
           <div
             key={item.id || `${item.name}-${index}`}
-            className={`absolute ${offsetClass} h-14 w-14 overflow-hidden rounded-xl border border-border/70 bg-card/85 p-1 shadow-[0_12px_28px_rgba(0,0,0,0.18)]`}
+            className={`absolute ${offsetClass} flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-card/85 p-1`}
           >
             {item.imageUrl ? (
               <img
@@ -183,7 +183,13 @@ function SortHeaderButton({ label, align = "left", isActive, sortDirection, onCl
   );
 }
 
-export function InventoryTable({ investments, onSelectItem, groups = [] }) {
+export function InventoryTable({
+  investments,
+  onSelectItem,
+  onSelectGroup,
+  onSelectCluster,
+  groups = [],
+}) {
   const { formatPrice } = useCurrency();
   const [sortKey, setSortKey] = useState("roi");
   const [sortDirection, setSortDirection] = useState("desc");
@@ -195,6 +201,20 @@ export function InventoryTable({ investments, onSelectItem, groups = [] }) {
       [groupId]: !current[groupId],
     }));
   };
+
+  const groupedMemberIds = useMemo(() => {
+    const ids = new Set();
+    (Array.isArray(groups) ? groups : []).forEach((group) => {
+      const memberIds = Array.isArray(group?.memberInvestmentIds) ? group.memberInvestmentIds : [];
+      memberIds.forEach((memberId) => {
+        const normalizedId = String(memberId || "").trim();
+        if (normalizedId) {
+          ids.add(normalizedId);
+        }
+      });
+    });
+    return ids;
+  }, [groups]);
 
   const sortedInvestments = useMemo(() => {
     const getLiveSortValue = (item) => {
@@ -223,7 +243,26 @@ export function InventoryTable({ investments, onSelectItem, groups = [] }) {
       }
     };
 
-    const sorted = [...investments];
+    const visibleInvestments = (Array.isArray(investments) ? investments : []).filter((item) => {
+      const sourceIds = Array.isArray(item?.sourceInvestmentIds)
+        ? item.sourceInvestmentIds
+            .map((entry) => String(entry || "").trim())
+            .filter(Boolean)
+        : [];
+
+      if (sourceIds.length > 0) {
+        const allMemberIdsGrouped = sourceIds.every((sourceId) => groupedMemberIds.has(sourceId));
+        return !allMemberIdsGrouped;
+      }
+
+      const itemId = String(item?.id || "").trim();
+      if (!itemId) {
+        return true;
+      }
+      return !groupedMemberIds.has(itemId);
+    });
+
+    const sorted = [...visibleInvestments];
 
     sorted.sort((a, b) => {
       const aValue = getSortValue(a);
@@ -240,7 +279,7 @@ export function InventoryTable({ investments, onSelectItem, groups = [] }) {
     });
 
     return sorted;
-  }, [investments, sortDirection, sortKey]);
+  }, [groupedMemberIds, investments, sortDirection, sortKey]);
 
   const toggleSort = (nextKey) => {
     if (sortKey === nextKey) {
@@ -306,10 +345,15 @@ export function InventoryTable({ investments, onSelectItem, groups = [] }) {
                 <React.Fragment key={`group-${group.id}`}>
                   <TableRow
                     className="group cursor-pointer border-border/70 transition-colors hover:bg-accent/40"
-                    onClick={() => toggleExpanded(group.id)}
+                    onClick={() => {
+                      toggleExpanded(group.id);
+                      if (typeof onSelectGroup === "function") {
+                        onSelectGroup(group);
+                      }
+                    }}
                   >
                     <TableCell className="font-medium text-sm">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-4">
                         <LayeredGroupIcon visuals={group.topVisuals} fallbackLabel={group.name} />
                         <span className="flex flex-col">
                           <span className="font-semibold transition-colors group-hover:text-primary">
@@ -353,7 +397,12 @@ export function InventoryTable({ investments, onSelectItem, groups = [] }) {
                     group.clusters.map((cluster) => (
                       <TableRow
                         key={`cluster-${cluster.id}`}
-                        className="border-border/50 bg-muted/20"
+                        className="cursor-pointer border-border/50 bg-muted/20 transition-colors hover:bg-accent/30"
+                        onClick={() => {
+                          if (typeof onSelectCluster === "function") {
+                            onSelectCluster(group, cluster);
+                          }
+                        }}
                       >
                         <TableCell className="font-medium text-sm pl-12">
                           <div className="flex items-center gap-3">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Key, Eye, EyeOff, Lock, AlertCircle, Percent, ArrowLeft, DollarSign, LineChart, LayoutGrid, Package, FolderCog, Cog, Bell } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { useTheme } from "@shared/contexts";
@@ -175,7 +175,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const renderLocalDesktopSidebar = useDesktopSidebarShell && !useExternalDesktopSidebarShell;
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const activePortfolioTab = new URLSearchParams(location.search).get("tab") || "overview";
+  const requestedSettingsTab = String(searchParams.get("settingsTab") || "").trim().toLowerCase();
+  const activeSettingsTab = requestedSettingsTab === "api-remote" ? "api-remote" : "general";
+  const requestedSettingsSection = String(searchParams.get("section") || "").trim().toLowerCase();
 
   const isSidebarItemActive = (item) => {
     if (item.key === "settings") {
@@ -298,6 +302,29 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
     void loadWebPushState();
   }, [webPushSupported]);
+
+  useEffect(() => {
+    if (!requestedSettingsSection) {
+      return;
+    }
+    const anchorMap = {
+      "push-notifications": "settings-section-push-notifications",
+      push: "settings-section-push-notifications",
+      "browser-push": "settings-section-push-notifications",
+    };
+    const anchorId = anchorMap[requestedSettingsSection];
+    if (!anchorId) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      const anchor = document.getElementById(anchorId);
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 120);
+    return () => window.clearTimeout(timerId);
+  }, [requestedSettingsSection, activeSettingsTab]);
 
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -632,7 +659,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
     return (
       <div className="space-y-4">
-        <Card>
+        <Card id="settings-section-push-notifications">
           <CardHeader>
             <CardTitle>Darstellung</CardTitle>
             <CardDescription>
@@ -1664,7 +1691,16 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       </header>
 
       <div className="space-y-4">
-        <Tabs defaultValue="general" className="w-full">
+        <Tabs
+          value={activeSettingsTab}
+          onValueChange={(nextValue) => {
+            const normalizedTab = nextValue === "api-remote" ? "api-remote" : "general";
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.set("settingsTab", normalizedTab);
+            setSearchParams(nextParams, { replace: true });
+          }}
+          className="w-full"
+        >
           <TabsList className="grid h-auto w-full grid-cols-2 gap-0 border-b border-border/70 bg-transparent p-0">
             <TabsTrigger
               value="general"

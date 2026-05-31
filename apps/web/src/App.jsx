@@ -230,7 +230,8 @@ export default function App() {
               </div>
 
               <div className="mb-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 p-3 text-xs text-cyan-100">
-                Tipp: Mit Windows-PIN/Biometrie wird der lokale Schutz zusaetzlich gehaertet.
+                Optional: Falls dein Betriebssystem PIN/Biometrie unterstuetzt, wird der lokale Schutz zusaetzlich gehaertet.
+                Ohne diese Optionen funktioniert der App-Schutz weiterhin ueber dein App-Passwort.
               </div>
 
               {requiresSetup ? (
@@ -394,7 +395,7 @@ export default function App() {
           <aside className="hidden lg:flex lg:justify-center lg:pt-2">
             <DesktopSidebarRail desktopRuntime={desktopRuntime} />
           </aside>
-          <main className="w-full flex-1 min-h-0 overflow-y-auto lg:px-6 xl:px-8">
+          <main className="w-full flex-1 min-h-0 overflow-y-auto">
             {routeViews}
           </main>
         </div>

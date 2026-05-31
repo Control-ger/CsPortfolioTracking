@@ -192,8 +192,8 @@ export const ItemDetailPanel = ({
                       onClick={handleExcludeClick}
                       className={`h-8 rounded-lg border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow ${
                           item.excluded
-                              ? "border-sky-400/35 bg-sky-500/12 text-sky-300 hover:bg-sky-500/18"
-                              : "border-amber-400/35 bg-amber-500/12 text-amber-300 hover:bg-amber-500/18"
+                              ? "border-sky-300 bg-sky-100 text-sky-800 hover:bg-sky-200 dark:border-sky-400/35 dark:bg-sky-500/12 dark:text-sky-300 dark:hover:bg-sky-500/18"
+                              : "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200 dark:border-amber-400/35 dark:bg-amber-500/12 dark:text-amber-300 dark:hover:bg-amber-500/18"
                       }`}
                   >
                     <AlertCircle className="mr-1 h-3 w-3" />

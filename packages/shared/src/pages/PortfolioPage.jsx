@@ -17,7 +17,6 @@ import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
 import { Watchlist } from "@shared/components";
 import { ItemSearch } from "@shared/components";
-import { PortfolioGroupsPanel } from "@shared/components/PortfolioGroupsPanel.jsx";
 import { Badge } from "@shared/components";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components";
 import { Button } from "@shared/components";
@@ -550,6 +549,79 @@ function resolveLiveClusterItem(baseItem, rows = []) {
   return null;
 }
 
+function buildGroupDetailSelection(group) {
+  const totalQuantity = Number(group?.totalQuantity || 0);
+  const weightedBuyUnitPrice = Number(group?.weightedBuyUnitPrice || 0);
+  const weightedCurrentUnitPrice = Number(group?.weightedCurrentUnitPrice || 0);
+  const totalValue = Number(group?.totalValue || 0);
+  const totalProfit = Number(group?.totalProfit || 0);
+  const roiPercent = Number(group?.roiPercent || 0);
+  const totalInvested = Number(group?.totalInvested || 0);
+
+  return {
+    id: `group-${group?.id || "unknown"}`,
+    itemId: 0,
+    item_id: 0,
+    __detailKind: "group",
+    name: group?.name || "Gruppe",
+    type: "gruppe",
+    imageUrl: Array.isArray(group?.topVisuals) ? group.topVisuals[0]?.imageUrl || null : null,
+    quantity: totalQuantity,
+    bucket: "investment",
+    fundingMode: "wallet",
+    excluded: false,
+    isLive: Number.isFinite(weightedCurrentUnitPrice) && weightedCurrentUnitPrice > 0,
+    livePrice: weightedCurrentUnitPrice,
+    displayPrice: weightedCurrentUnitPrice,
+    buyPrice: weightedBuyUnitPrice,
+    breakEvenPrice: weightedBuyUnitPrice,
+    breakEvenPriceNet: weightedBuyUnitPrice,
+    currentValue: totalValue,
+    profitEuro: totalProfit,
+    roi: roiPercent,
+    isProfitPositive: Number.isFinite(totalProfit) ? totalProfit >= 0 : null,
+    costBasisTotal: totalInvested,
+    freshnessLabel: `${Number(group?.liveClusterCount || 0)}/${Number(group?.clusterCount || 0)} live`,
+    lastPriceUpdateAt: null,
+  };
+}
+
+function buildGroupClusterDetailSelection(group, cluster) {
+  const quantity = Number(cluster?.quantity || 0);
+  const currentUnitPrice = Number(cluster?.currentUnitPrice || 0);
+  const totalValue = Number(cluster?.totalValue || 0);
+  const totalInvested = Number(cluster?.totalInvested || 0);
+  const totalProfit = totalValue - totalInvested;
+  const roiPercent = Number(cluster?.roiPercent || 0);
+
+  return {
+    id: `group-cluster-${group?.id || "unknown"}-${cluster?.id || "unknown"}`,
+    itemId: 0,
+    item_id: 0,
+    __detailKind: "group-cluster",
+    name: cluster?.name || "Cluster",
+    type: "cluster",
+    imageUrl: cluster?.imageUrl || null,
+    quantity,
+    bucket: "investment",
+    fundingMode: "wallet",
+    excluded: false,
+    isLive: Boolean(cluster?.isLive) || currentUnitPrice > 0,
+    livePrice: currentUnitPrice,
+    displayPrice: currentUnitPrice,
+    buyPrice: Number(cluster?.buyUnitPrice || 0),
+    breakEvenPrice: Number(cluster?.buyUnitPrice || 0),
+    breakEvenPriceNet: Number(cluster?.buyUnitPrice || 0),
+    currentValue: totalValue,
+    profitEuro: totalProfit,
+    roi: roiPercent,
+    isProfitPositive: Number.isFinite(totalProfit) ? totalProfit >= 0 : null,
+    costBasisTotal: totalInvested,
+    freshnessLabel: cluster?.freshnessLabel || `${Number(cluster?.sharePercent || 0).toFixed(1)}% Anteil`,
+    lastPriceUpdateAt: null,
+  };
+}
+
 function buildManagementClusters(items = []) {
   const groups = new Map();
   items.forEach((item) => {
@@ -683,6 +755,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [portfolioPreferences, setPortfolioPreferences] = useState({
     steamImportBucket: "inventory",
     csfloatImportBucket: "investment",
+    skinBaronImportBucket: "investment",
     metricsDisplayMode: "toggle_mode",
     metricsScopeDefault: "investments",
   });
@@ -1392,6 +1465,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!selectedItem) {
       return null;
     }
+    if (selectedItem.__detailKind === "group" || selectedItem.__detailKind === "group-cluster") {
+      return selectedItem;
+    }
 
     return resolveLiveClusterItem(selectedItem, enrichedInvestments);
   }, [selectedItem, enrichedInvestments]);
@@ -1399,6 +1475,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   useEffect(() => {
     const loadItemHistory = async () => {
       if (!selectedItemWithLive) {
+        setSelectedItemHistory([]);
+        setSelectedItemHistoryLoading(false);
+        return;
+      }
+      if (selectedItemWithLive.__detailKind === "group" || selectedItemWithLive.__detailKind === "group-cluster") {
         setSelectedItemHistory([]);
         setSelectedItemHistoryLoading(false);
         return;
@@ -3337,6 +3418,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     !journeyState?.completedAt;
   const showSetupJourney = isDesktopRuntime && showJourneyBanner && activeTab !== "management";
   const showJourneyBannerLegacy = false;
+  const normalizedServerSetupHost = normalizeServerHostInput(serverSetup.serverUrl || "");
+  const mobileCompanionSetupUrl = useMemo(() => {
+    if (!normalizedServerSetupHost) {
+      return "";
+    }
+    const isLocalHost =
+      normalizedServerSetupHost === "localhost" ||
+      normalizedServerSetupHost.startsWith("127.") ||
+      normalizedServerSetupHost.startsWith("192.168.") ||
+      normalizedServerSetupHost.startsWith("10.");
+    const protocol = isLocalHost ? "http" : "https";
+    return `${protocol}://${normalizedServerSetupHost}/settings?settingsTab=general&section=push-notifications`;
+  }, [normalizedServerSetupHost]);
   const journeyProgressPercent =
     journeySteps.length > 0 ? Math.round((completedJourneySteps / journeySteps.length) * 100) : 0;
   const updateJourneyState = async (patch) => {
@@ -3430,6 +3524,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       pushPreferenceSetAt: new Date().toISOString(),
       currentStepId: resolveNextJourneyStepId("push_notifications"),
     });
+  };
+  const handleOpenMobileCompanionPushSetup = async () => {
+    if (!mobileCompanionSetupUrl) {
+      return;
+    }
+    if (window.electronAPI?.openExternal) {
+      await window.electronAPI.openExternal(mobileCompanionSetupUrl);
+      return;
+    }
+    if (typeof window !== "undefined" && window.open) {
+      window.open(mobileCompanionSetupUrl, "_blank", "noopener,noreferrer");
+    }
   };
   const handleManagementHintsSeen = async () => {
     await updateJourneyState({
@@ -3881,7 +3987,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           Kleiner Hinweis: Das kannst du spaeter jederzeit in den Einstellungen aendern.
                         </p>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-1">
                           <label className="text-xs text-slate-300">Steam-Import</label>
                           <select
@@ -3906,6 +4012,22 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             onChange={async (event) => {
                               const updated = await updatePortfolioPreferences({
                                 csfloatImportBucket: event.target.value,
+                              });
+                              setPortfolioPreferences(updated);
+                            }}
+                          >
+                            <option value="investment">In Investments einsortieren</option>
+                            <option value="inventory">In Inventar einsortieren</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-300">SkinBaron-Import</label>
+                          <select
+                            className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100"
+                            value={portfolioPreferences.skinBaronImportBucket}
+                            onChange={async (event) => {
+                              const updated = await updatePortfolioPreferences({
+                                skinBaronImportBucket: event.target.value,
                               });
                               setPortfolioPreferences(updated);
                             }}
@@ -4066,12 +4188,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       <div>
                         <p className="font-semibold text-slate-100">5. Push-Benachrichtigungen fuer CS-Updates</p>
                         <p className="mt-1 text-xs text-slate-300">
-                          Browser Push laeuft in der Web/PWA-Version. In der Desktop-App siehst du Updates weiter im integrierten Feed.
+                          Browser Push ist fuer Mobile gedacht. In Electron reicht der integrierte Feed, daher aktivierst du Push am besten im Mobile Companion.
                         </p>
                       </div>
                       <div className="rounded-md border border-cyan-300/25 bg-cyan-500/10 p-3 text-xs text-cyan-100">
-                        Standard ist deaktiviert. Wenn du Push willst: Web/PWA oeffnen und unter Einstellungen - Allgemein - Browser Push aktivieren.
+                        Empfehlung: Server auf dem Handy oeffnen, einloggen und unter Einstellungen - Allgemein Browser Push aktivieren.
                       </div>
+                      {mobileCompanionSetupUrl ? (
+                        <div className="rounded-md border border-white/15 bg-slate-900/40 p-3 text-xs text-slate-200">
+                          Server-Link fuer Mobile Setup:{" "}
+                          <span className="font-mono text-[11px] text-cyan-200">{mobileCompanionSetupUrl}</span>
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap items-center gap-2">
                         <Button size="sm" onClick={() => void handleSetJourneyPushPreference(false)}>
                           Ohne Push weiter (Standard)
@@ -4080,9 +4208,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           size="sm"
                           variant="outline"
                           className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
-                          onClick={() => void handleSetJourneyPushPreference(true)}
+                          onClick={async () => {
+                            await handleOpenMobileCompanionPushSetup();
+                            await handleSetJourneyPushPreference(true);
+                          }}
                         >
-                          Ja, Push spaeter aktivieren
+                          Mobile Push einrichten (Server oeffnen)
                         </Button>
                       </div>
                     </div>
@@ -4811,18 +4942,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </div>
             </div>
 
-            <div className="md:col-span-2">
-              <PortfolioGroupsPanel
-                groups={portfolioGroupSummaries}
-                isLoading={portfolioGroupsLoading && portfolioGroups.length === 0}
-                formatUsdPrice={formatUsdPrice}
-                onManageGroups={handleManageGroupsOpen}
-                title="Gruppenansicht"
-                description="Deine manuellen Investment-Gruppen direkt im Inventar-Tab, inklusive gewichteter Kennzahlen und Drilldown."
-                focusGroupId={inventoryGroupFocusId}
-              />
-            </div>
-
             <div className="overflow-x-auto md:col-span-1 sm:rounded-2xl sm:border sm:border-border/70 sm:bg-card/65">
               <InventoryTable
                 investments={inventoryTabItems}
@@ -4832,6 +4951,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   if (window.innerWidth < BREAKPOINTS.MOBILE) {
                     openModal("itemDetail", { item });
                   }
+                }}
+                onSelectGroup={(group) => {
+                  setSelectedItem(buildGroupDetailSelection(group));
+                }}
+                onSelectCluster={(group, cluster) => {
+                  setSelectedItem(buildGroupClusterDetailSelection(group, cluster));
                 }}
               />
             </div>
@@ -4843,7 +4968,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                 historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
                 onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                canToggleExclude={isDesktopRuntime}
+                canToggleExclude={
+                  isDesktopRuntime &&
+                  selectedItemWithLive?.__detailKind !== "group" &&
+                  selectedItemWithLive?.__detailKind !== "group-cluster"
+                }
               />
             </div>
 

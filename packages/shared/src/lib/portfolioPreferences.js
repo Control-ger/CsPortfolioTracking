@@ -5,6 +5,7 @@ import { resolveDesktopLocalUserId as resolveDesktopRuntimeUserId } from "./user
 export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   steamImportBucket: "inventory",
   csfloatImportBucket: "investment",
+  skinBaronImportBucket: "investment",
   metricsDisplayMode: "toggle_mode",
   metricsScopeDefault: "investments",
 });
@@ -54,6 +55,10 @@ export function normalizePortfolioPreferences(input = {}) {
     csfloatImportBucket: normalizeBucket(
       input.csfloatImportBucket,
       DEFAULT_PORTFOLIO_PREFERENCES.csfloatImportBucket,
+    ),
+    skinBaronImportBucket: normalizeBucket(
+      input.skinBaronImportBucket,
+      DEFAULT_PORTFOLIO_PREFERENCES.skinBaronImportBucket,
     ),
     metricsDisplayMode: normalizeMetricsDisplayMode(input.metricsDisplayMode),
     metricsScopeDefault: normalizeMetricsScope(

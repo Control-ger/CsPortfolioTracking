@@ -13,6 +13,7 @@ function nowIso() {
 const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   steamImportBucket: "inventory",
   csfloatImportBucket: "investment",
+  skinBaronImportBucket: "investment",
   metricsDisplayMode: "toggle_mode",
   metricsScopeDefault: "investments",
 });
@@ -100,6 +101,10 @@ function normalizePortfolioPreferences(input = {}) {
     csfloatImportBucket: normalizeBucket(
       input.csfloatImportBucket,
       DEFAULT_PORTFOLIO_PREFERENCES.csfloatImportBucket,
+    ),
+    skinBaronImportBucket: normalizeBucket(
+      input.skinBaronImportBucket,
+      DEFAULT_PORTFOLIO_PREFERENCES.skinBaronImportBucket,
     ),
     metricsDisplayMode: normalizeMetricsDisplayMode(
       input.metricsDisplayMode ?? input.kpiDisplayMode,
@@ -1503,6 +1508,7 @@ export function createLocalStore(userDataPath) {
 
       upsert.run(`${prefix}steamImportBucket`, next.steamImportBucket, updatedAt);
       upsert.run(`${prefix}csfloatImportBucket`, next.csfloatImportBucket, updatedAt);
+      upsert.run(`${prefix}skinBaronImportBucket`, next.skinBaronImportBucket, updatedAt);
       upsert.run(`${prefix}metricsDisplayMode`, next.metricsDisplayMode, updatedAt);
       upsert.run(`${prefix}metricsScopeDefault`, next.metricsScopeDefault, updatedAt);
 
