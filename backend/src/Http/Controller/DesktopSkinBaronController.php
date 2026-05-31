@@ -10,6 +10,8 @@ use App\Shared\Http\Request;
 final class DesktopSkinBaronController
 {
     private const MIN_REQUEST_INTERVAL_US = 120000; // ~8.3 req/s (below 10 req/s limit)
+    private const TRANSFER_ITEMS_PAGE_SIZE = 25;
+    private const TRANSFER_ITEMS_MAX_PAGES = 50;
 
     public function __construct(private readonly SkinBaronClient $client)
     {
@@ -26,6 +28,12 @@ final class DesktopSkinBaronController
         $pageStats = [];
         $errors = [];
         $requestCount = 0;
+        $transferItemHydration = [
+            'groupsChecked' => 0,
+            'groupsHydrated' => 0,
+            'pagesFetched' => 0,
+            'itemsFetched' => 0,
+        ];
         $preferenceAutomation = $this->preparePurchasesImportContext();
 
         if (!empty($preferenceAutomation['errors']) && is_array($preferenceAutomation['errors'])) {
@@ -121,6 +129,13 @@ final class DesktopSkinBaronController
                 continue;
             }
 
+            $group = $this->hydrateTransferPurchaseItems(
+                $group,
+                $requestCount,
+                $transferItemHydration,
+                $errors
+            );
+
             $rows = $this->mapPurchaseGroupPreviewRows($group, $groupIndex);
             $groupIndex += 1;
             foreach ($rows as $row) {
@@ -159,6 +174,7 @@ final class DesktopSkinBaronController
             'rawCount' => count($purchaseGroups),
             'rawDistinctByTransferId' => count($groupsByTransferId),
             'rawWithoutTransferId' => count($groupsWithoutTransferId),
+            'transferItemHydration' => $transferItemHydration,
             'errors' => $errors,
             'preferenceAutomation' => [
                 'targetLanguage' => 'en',
@@ -182,6 +198,127 @@ final class DesktopSkinBaronController
             ['desktopLocal' => true],
             501
         );
+    }
+
+    private function hydrateTransferPurchaseItems(
+        array $group,
+        int &$requestCount,
+        array &$transferItemHydration,
+        array &$errors
+    ): array {
+        $transferId = $this->readString($group, ['transferId']);
+        if ($transferId === null) {
+            return $group;
+        }
+
+        $transferItemHydration['groupsChecked'] = (int) ($transferItemHydration['groupsChecked'] ?? 0) + 1;
+        $fetchResult = $this->fetchTransferPurchaseItems($transferId, $requestCount, $errors);
+        if (($fetchResult['loaded'] ?? false) !== true) {
+            return $group;
+        }
+
+        $items = is_array($fetchResult['items'] ?? null) ? $fetchResult['items'] : [];
+        if ($items === []) {
+            return $group;
+        }
+
+        $transferItemHydration['groupsHydrated'] = (int) ($transferItemHydration['groupsHydrated'] ?? 0) + 1;
+        $transferItemHydration['pagesFetched'] = (int) ($transferItemHydration['pagesFetched'] ?? 0) + (int) ($fetchResult['pagesFetched'] ?? 0);
+        $transferItemHydration['itemsFetched'] = (int) ($transferItemHydration['itemsFetched'] ?? 0) + count($items);
+        $group['purchaseItems'] = $items;
+
+        $pagination = is_array($fetchResult['pagination'] ?? null) ? $fetchResult['pagination'] : null;
+        if (is_array($pagination)) {
+            $group['purchaseItemsPagination'] = $pagination;
+        }
+
+        return $group;
+    }
+
+    private function fetchTransferPurchaseItems(string $transferId, int &$requestCount, array &$errors): array
+    {
+        $items = [];
+        $itemFingerprints = [];
+        $pagesFetched = 0;
+        $lastPagination = null;
+
+        for ($page = 1; $page <= self::TRANSFER_ITEMS_MAX_PAGES; $page++) {
+            if ($requestCount > 0) {
+                usleep(self::MIN_REQUEST_INTERVAL_US);
+            }
+            $requestCount += 1;
+
+            $result = $this->client->fetchPurchaseItemsPage($transferId, $page, self::TRANSFER_ITEMS_PAGE_SIZE);
+            if (!empty($result['error']) && is_array($result['error'])) {
+                $errors[] = [
+                    ...$result['error'],
+                    'step' => 'fetch_purchase_items_page',
+                    'transferId' => $transferId,
+                    'page' => $page,
+                ];
+                return [
+                    'loaded' => false,
+                    'items' => [],
+                    'pagination' => null,
+                    'pagesFetched' => $pagesFetched,
+                ];
+            }
+
+            $pagesFetched += 1;
+            $pageItems = is_array($result['items'] ?? null) ? $result['items'] : [];
+            foreach ($pageItems as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $fingerprint = $this->fingerprintSkinBaronPurchaseItem($item);
+                if (isset($itemFingerprints[$fingerprint])) {
+                    continue;
+                }
+                $itemFingerprints[$fingerprint] = true;
+                $items[] = $item;
+            }
+
+            $pagination = is_array($result['pagination'] ?? null) ? $result['pagination'] : null;
+            if (is_array($pagination)) {
+                $lastPagination = $pagination;
+            }
+
+            $numPages = (int) ($pagination['numPages'] ?? 0);
+            if (count($pageItems) === 0) {
+                break;
+            }
+            if ($numPages > 0 && $page >= $numPages) {
+                break;
+            }
+            if ($numPages <= 0 && count($pageItems) < self::TRANSFER_ITEMS_PAGE_SIZE) {
+                break;
+            }
+        }
+
+        return [
+            'loaded' => true,
+            'items' => $items,
+            'pagination' => $lastPagination,
+            'pagesFetched' => $pagesFetched,
+        ];
+    }
+
+    private function fingerprintSkinBaronPurchaseItem(array $item): string
+    {
+        $offerLink = strtolower(trim((string) ($item['offerLink'] ?? '')));
+        if ($offerLink !== '') {
+            return 'offer:' . $offerLink;
+        }
+
+        return 'raw:' . sha1((string) json_encode([
+            'localizedName' => $item['localizedName'] ?? null,
+            'localizedExteriorName' => $item['localizedExteriorName'] ?? null,
+            'price' => $item['price'] ?? null,
+            'amount' => $item['amount'] ?? null,
+            'wearPercent' => $item['wearPercent'] ?? null,
+            'imageUrl' => $item['imageUrl'] ?? null,
+            'souvenirString' => $item['souvenirString'] ?? null,
+        ], JSON_UNESCAPED_SLASHES));
     }
 
     private function mapPurchaseGroupPreviewRows(array $group, int $groupIndex): array

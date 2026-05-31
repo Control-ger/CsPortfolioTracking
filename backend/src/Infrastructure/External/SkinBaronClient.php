@@ -113,6 +113,86 @@ final class SkinBaronClient
         ];
     }
 
+    public function fetchPurchaseItemsPage(string $transferId, int $page = 1, int $pageSize = 25): array
+    {
+        $normalizedTransferId = trim($transferId);
+        if ($normalizedTransferId === '') {
+            return [
+                'items' => [],
+                'pagination' => null,
+                'error' => [
+                    'source' => 'skinbaron',
+                    'statusCode' => null,
+                    'code' => 'SKINBARON_TRANSFER_ID_INVALID',
+                    'label' => 'Transfer ID Invalid',
+                    'message' => 'SkinBaron transferId ist ungueltig.',
+                ],
+                'meta' => [],
+            ];
+        }
+
+        $safePage = max(1, $page);
+        $safePageSize = max(1, min($pageSize, 200));
+        $paginationJson = json_encode([
+            'page' => $safePage,
+            'pageSize' => $safePageSize,
+        ], JSON_UNESCAPED_SLASHES);
+        if (!is_string($paginationJson) || trim($paginationJson) === '') {
+            $paginationJson = '{"page":' . $safePage . ',"pageSize":' . $safePageSize . '}';
+        }
+
+        $query = [
+            'transferId' => $normalizedTransferId,
+            'pagination' => $paginationJson,
+        ];
+        $result = $this->requestWebRaw('/api/v2/Purchase/Purchases', $query, [
+            'provider' => 'skinbaron',
+            'source' => 'web-purchase-items',
+            'transferId' => $normalizedTransferId,
+            'page' => $safePage,
+            'pageSize' => $safePageSize,
+        ]);
+
+        if ($result['error'] !== null) {
+            return [
+                'items' => [],
+                'pagination' => null,
+                'error' => $result['error'],
+                'meta' => $result['meta'],
+            ];
+        }
+
+        $data = is_array($result['data']) ? $result['data'] : null;
+        if (!is_array($data)) {
+            return [
+                'items' => [],
+                'pagination' => null,
+                'error' => [
+                    'source' => 'skinbaron',
+                    'statusCode' => null,
+                    'code' => 'SKINBARON_WEB_INVALID_RESPONSE',
+                    'label' => 'Invalid Response',
+                    'message' => 'SkinBaron Purchase/Purchases hat eine ungueltige Antwort geliefert.',
+                ],
+                'meta' => $result['meta'],
+            ];
+        }
+
+        $items = isset($data['items']) && is_array($data['items'])
+            ? array_values($data['items'])
+            : [];
+        $pagination = isset($data['paginationResponse']) && is_array($data['paginationResponse'])
+            ? $data['paginationResponse']
+            : null;
+
+        return [
+            'items' => $items,
+            'pagination' => $pagination,
+            'error' => null,
+            'meta' => $result['meta'],
+        ];
+    }
+
     public function fetchPersonalUserConfig(): array
     {
         $result = $this->requestWebRaw('/api/v2/Profile/PersonalUserConfig', [], [
