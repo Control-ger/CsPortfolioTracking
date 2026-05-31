@@ -14,6 +14,9 @@ final class SyncService
         'watchlist_items' => true,
     ];
 
+    /** @var array<int, bool> */
+    private array $csfloatLivePriceAvailabilityCache = [];
+
     public function __construct(private readonly PDO $pdo)
     {
     }
@@ -330,6 +333,19 @@ final class SyncService
         $existingExternalTradeId = trim((string) ($targetInvestment['external_trade_id'] ?? ''));
         if ($existingExternalTradeId !== '') {
             $externalTradeId = mb_substr($existingExternalTradeId, 0, 255);
+        }
+
+        if ($platform === 'skinbaron') {
+            $existingItemId = $this->extractPositiveInt($targetInvestment['item_id'] ?? null);
+            if ($existingItemId !== null && $existingItemId !== $itemId) {
+                $existingHasCsfloatPrice = $this->hasCsfloatLivePriceForItem($existingItemId);
+                $candidateHasCsfloatPrice = $this->hasCsfloatLivePriceForItem($itemId);
+                // Guard against regressions from stale/ambiguous local payloads:
+                // never replace a priced SkinBaron mapping with an unpriced one.
+                if ($existingHasCsfloatPrice && !$candidateHasCsfloatPrice) {
+                    $itemId = $existingItemId;
+                }
+            }
         }
 
         $mergedPayload = $this->mergeExcludedFlagsForInvestmentSync(
@@ -990,7 +1006,7 @@ final class SyncService
     private function findInvestmentByExternalTrade(int $userId, string $platform, string $externalTradeId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, platform, external_trade_id, raw_payload_json
+            'SELECT id, item_id, platform, external_trade_id, raw_payload_json
              FROM investments
              WHERE user_id = ? AND platform = ? AND external_trade_id = ?
              LIMIT 1'
@@ -1009,7 +1025,7 @@ final class SyncService
         }
 
         $stmt = $this->pdo->prepare(
-            "SELECT id, platform, external_trade_id, raw_payload_json
+            "SELECT id, item_id, platform, external_trade_id, raw_payload_json
              FROM investments
              WHERE user_id = ?
                AND platform = 'skinbaron'
@@ -1031,7 +1047,7 @@ final class SyncService
     private function findInvestmentByIdForUser(int $userId, int $investmentId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, platform, external_trade_id, raw_payload_json
+            'SELECT id, item_id, platform, external_trade_id, raw_payload_json
              FROM investments
              WHERE user_id = ? AND id = ?
              LIMIT 1'
@@ -1039,6 +1055,30 @@ final class SyncService
         $stmt->execute([$userId, $investmentId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row !== false ? $row : null;
+    }
+
+    private function hasCsfloatLivePriceForItem(int $itemId): bool
+    {
+        if ($itemId <= 0) {
+            return false;
+        }
+
+        if (array_key_exists($itemId, $this->csfloatLivePriceAvailabilityCache)) {
+            return $this->csfloatLivePriceAvailabilityCache[$itemId];
+        }
+
+        $stmt = $this->pdo->prepare(
+            "SELECT 1
+             FROM item_live_cache
+             WHERE item_id = ?
+               AND price_source = 'csfloat'
+             LIMIT 1"
+        );
+        $stmt->execute([$itemId]);
+        $hasPrice = $stmt->fetchColumn() !== false;
+        $this->csfloatLivePriceAvailabilityCache[$itemId] = $hasPrice;
+
+        return $hasPrice;
     }
 
     private function findWatchlistByUserAndItem(int $userId, int $itemId): ?array
