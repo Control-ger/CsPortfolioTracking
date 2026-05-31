@@ -3647,7 +3647,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   // Keep this return after all hooks. Returning before the other hooks run changes
   // hook order after login and triggers React's minified error #310.
-  if (isElectronRuntime && showStartupWelcome && !portfolioLoading) {
+  if (isElectronRuntime && showStartupWelcome) {
     return (
       <div className="steam-startup-shell steam-startup-shell-overlay flex items-center justify-center overflow-auto p-4">
         <SteamLoginPrompt
