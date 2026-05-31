@@ -222,16 +222,34 @@ export default function App() {
                   <Lock className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-base font-semibold">Lokaler Secret-Schutz</p>
-                  <p className="text-xs text-muted-foreground">
-                    API-Secrets sind gesperrt, bis du die App entsperrst.
-                  </p>
+                  <p className="text-base font-semibold">Welcome to CS Investor Hub</p>
+                  <p className="text-xs text-muted-foreground">Sichere zuerst lokale Secrets, dann folgt der Steam-Login.</p>
                 </div>
               </div>
 
               <div className="mb-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 p-3 text-xs text-cyan-100">
                 Optional: Falls dein Betriebssystem PIN/Biometrie unterstuetzt, wird der lokale Schutz zusaetzlich gehaertet.
                 Ohne diese Optionen funktioniert der App-Schutz weiterhin ueber dein App-Passwort.
+              </div>
+
+              <div className="mb-4 space-y-2 text-sm text-muted-foreground">
+                <p>Secure Steam OpenID authentication</p>
+                <p>Import your CS2 inventory automatically</p>
+                <p>Track prices and portfolio value</p>
+                <p>Local-first: Your data stays on your device</p>
+              </div>
+
+              <div className="mb-4 rounded-md border border-border/70 bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+                <p className="font-medium text-foreground">Datenschutz & Steam API</p>
+                <p className="mt-1">
+                  Wir koennen ueber die Steam API nur oeffentlich sichtbare Profil- und Inventarinfos lesen.
+                </p>
+                <p>
+                  Kein Zugriff auf Steam-Passwort, Trades, Kauf/Verkauf oder andere Account-Aktionen.
+                </p>
+                <p>
+                  Diese App ist nicht offiziell von Valve/Steam betrieben oder unterstuetzt.
+                </p>
               </div>
 
               {requiresSetup ? (
@@ -285,6 +303,15 @@ export default function App() {
                   {vaultError}
                 </div>
               ) : null}
+
+              <Button
+                type="button"
+                className="mt-4 w-full bg-[#1b2838] text-white hover:bg-[#2a475e]"
+                disabled
+                title="Nach dem Entsperren verfuegbar"
+              >
+                Sign in with Steam (nach Entsperren)
+              </Button>
             </div>
           </main>
         </div>
