@@ -224,7 +224,18 @@ final class WatchlistService
         $this->watchlistRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
 
-        $itemId = $this->itemRepository->findOrCreateByName($trimmedName, $type);
+        try {
+            $itemId = $this->itemRepository->findOrCreateByName($trimmedName, $type);
+        } catch (\RuntimeException $exception) {
+            throw new \RuntimeException(
+                sprintf(
+                    'Item "%s" ist noch nicht im Server-Katalog. Bitte erst den Server-Preis-Cron laufen lassen.',
+                    $trimmedName
+                ),
+                0,
+                $exception
+            );
+        }
         $item = $this->itemRepository->findById($itemId);
         $imageUrl = is_array($item) ? (string) ($item['image_url'] ?? '') : '';
         if ($imageUrl === '') {

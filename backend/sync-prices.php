@@ -28,6 +28,10 @@ if (!is_file($bootstrapPath)) {
 
 require_once $bootstrapPath;
 
+// Only this cron process may mutate the shared items catalog.
+putenv('ITEMS_CATALOG_WRITE_SCOPE=cron');
+$_ENV['ITEMS_CATALOG_WRITE_SCOPE'] = 'cron';
+
 use App\Application\Service\PortfolioService;
 use App\Application\Service\FeeSettingsService;
 use App\Application\Service\PriceListBulkImportService;

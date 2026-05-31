@@ -4,10 +4,14 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence\Repository;
 
 use PDO;
+use RuntimeException;
 use Throwable;
 
 final class ItemRepository
 {
+    private const CATALOG_WRITE_SCOPE_ENV = 'ITEMS_CATALOG_WRITE_SCOPE';
+    private const CATALOG_WRITE_SCOPE_CRON = 'cron';
+
     private ?bool $priceJoinAvailable = null;
 
     public function __construct(private readonly PDO $pdo)
@@ -125,6 +129,7 @@ final class ItemRepository
             return (int) $existing['id'];
         }
 
+        $this->assertCatalogWriteEnabled(__FUNCTION__);
         return $this->create($name, $name, $type);
     }
 
@@ -139,6 +144,8 @@ final class ItemRepository
         ?string $exterior = null,
         bool $stattrak = false
     ): int {
+        $this->assertCatalogWriteEnabled(__FUNCTION__);
+
         $sql = 'INSERT INTO items (name, market_hash_name, type, csfloat_id, image_url, rarity, collection, exterior, stattrak)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
@@ -187,6 +194,7 @@ final class ItemRepository
             return;
         }
 
+        $this->assertCatalogWriteEnabled(__FUNCTION__);
         $values[] = $itemId;
         $sql = 'UPDATE items SET ' . implode(', ', $fields) . ' WHERE id = ?';
 
@@ -553,6 +561,7 @@ final class ItemRepository
             return 0;
         }
 
+        $this->assertCatalogWriteEnabled(__FUNCTION__);
         $values = [];
         $params = [];
         foreach ($normalized as $name) {
@@ -577,5 +586,34 @@ final class ItemRepository
             );
             throw $exception;
         }
+    }
+
+    public function isCatalogWriteEnabled(): bool
+    {
+        if (PHP_SAPI !== 'cli') {
+            return false;
+        }
+
+        $rawScope = getenv(self::CATALOG_WRITE_SCOPE_ENV);
+        if ($rawScope === false && isset($_ENV[self::CATALOG_WRITE_SCOPE_ENV])) {
+            $rawScope = $_ENV[self::CATALOG_WRITE_SCOPE_ENV];
+        }
+
+        $scope = strtolower(trim((string) ($rawScope ?? '')));
+        return $scope === self::CATALOG_WRITE_SCOPE_CRON;
+    }
+
+    private function assertCatalogWriteEnabled(string $operation): void
+    {
+        if ($this->isCatalogWriteEnabled()) {
+            return;
+        }
+
+        throw new RuntimeException(
+            sprintf(
+                'items catalog is read-only for operation "%s"; only cron catalog sync may mutate items.',
+                $operation
+            )
+        );
     }
 }

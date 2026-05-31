@@ -830,32 +830,6 @@ final class SyncService
         return $token;
     }
 
-    private function updateItemMetadataForSync(int $itemId, string $type, ?string $imageUrl = null): void
-    {
-        $trimmedType = trim($type);
-        if ($trimmedType === '') {
-            $trimmedType = 'skin';
-        }
-
-        if ($imageUrl !== null && trim($imageUrl) !== '') {
-            $stmt = $this->pdo->prepare(
-                'UPDATE items
-                 SET type = COALESCE(NULLIF(type, \'\'), ?),
-                     image_url = COALESCE(NULLIF(image_url, \'\'), ?)
-                 WHERE id = ?'
-            );
-            $stmt->execute([$trimmedType, trim($imageUrl), $itemId]);
-            return;
-        }
-
-        $stmt = $this->pdo->prepare(
-            'UPDATE items
-             SET type = COALESCE(NULLIF(type, \'\'), ?)
-             WHERE id = ?'
-        );
-        $stmt->execute([$trimmedType, $itemId]);
-    }
-
     private function findOrCreateItem(string $name, string $type, ?string $imageUrl = null): int
     {
         $normalizedName = trim((string) preg_replace('/\s+/', ' ', $name));
@@ -865,40 +839,22 @@ final class SyncService
 
         $existingByName = $this->findItemIdByName($normalizedName);
         if ($existingByName !== null) {
-            $this->updateItemMetadataForSync($existingByName, $type, $imageUrl);
             return $existingByName;
         }
 
         if ($imageUrl !== null && trim($imageUrl) !== '') {
             $existingByImage = $this->findItemIdByImageUrl($imageUrl);
             if ($existingByImage !== null) {
-                $this->updateItemMetadataForSync($existingByImage, $type, $imageUrl);
                 return $existingByImage;
             }
         }
 
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO items (name, market_hash_name, type, image_url)
-             VALUES (?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-                id = LAST_INSERT_ID(id),
-                name = VALUES(name),
-                type = VALUES(type),
-                image_url = COALESCE(VALUES(image_url), image_url)'
+        throw new \RuntimeException(
+            sprintf(
+                'Item "%s" not found in server catalog. Run server pricing cron/catalog sync first.',
+                $normalizedName
+            )
         );
-        $stmt->execute([$normalizedName, $normalizedName, $type, $imageUrl]);
-        $lastInsertId = (int) $this->pdo->lastInsertId();
-        if ($lastInsertId > 0) {
-            return $lastInsertId;
-        }
-
-        $existingId = $this->findItemIdByName($normalizedName);
-        if ($existingId !== null) {
-            $this->updateItemMetadataForSync($existingId, $type, $imageUrl);
-            return $existingId;
-        }
-
-        throw new \RuntimeException('Failed to resolve item for sync payload.');
     }
 
     private function resolveExternalTradeId(string $entityId, array $payload, array $existingPayload): string

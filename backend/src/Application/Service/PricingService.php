@@ -200,6 +200,7 @@ final class PricingService
 
         if ($listing !== null) {
             $catalog = $this->persistCatalogEntry($itemName, $catalog, $steamHint, $listing);
+            $itemId = isset($catalog['itemId']) ? (int) $catalog['itemId'] : $itemId;
             if ($instancePricingEligible) {
                 $instanceLive = $this->buildTransientLiveCacheEntry(
                     $itemId,
@@ -216,7 +217,19 @@ final class PricingService
                     ]
                 );
             } else {
-                $liveCache = $this->persistLiveCacheEntry($itemId, (float) $listing['priceUsd'], self::PRICE_SOURCE_CSFLOAT);
+                $liveCache = $itemId > 0
+                    ? $this->persistLiveCacheEntry($itemId, (float) $listing['priceUsd'], self::PRICE_SOURCE_CSFLOAT)
+                    : $this->buildTransientLiveCacheEntry(
+                        $itemId,
+                        (float) $listing['priceUsd'],
+                        self::PRICE_SOURCE_CSFLOAT,
+                        [
+                            'priceScope' => self::PRICE_SCOPE_ITEM,
+                            'priceStrategy' => isset($listing['strategy']) ? (string) $listing['strategy'] : 'market_lowest',
+                            'priceConfidence' => isset($listing['confidence']) ? (string) $listing['confidence'] : null,
+                            'sampleSize' => isset($listing['sampleSize']) ? (int) $listing['sampleSize'] : null,
+                        ]
+                    );
                 $cachedBySource[self::PRICE_SOURCE_CSFLOAT] = $liveCache;
                 $csFloatUpdated = true;
             }
@@ -774,11 +787,6 @@ final class PricingService
         $item = $this->itemRepository->findByMarketHashName($itemName)
             ?? $this->itemRepository->findByName($itemName);
 
-        if ($item === null) {
-            $itemId = $this->itemRepository->findOrCreateByName($itemName, 'other');
-            $item = $this->itemRepository->findById($itemId);
-        }
-
         $catalog = $this->normalizeCatalogRow($item);
         if ($catalog !== null && $this->hasUsefulCatalogData($catalog) && $this->isFreshCatalogCache($catalog)) {
             return $catalog;
@@ -817,10 +825,10 @@ final class PricingService
             $itemName
         );
 
-        $itemId = isset($resolvedExisting['itemId']) ? (int) $resolvedExisting['itemId'] : $this->itemRepository->findOrCreateByName($itemName, (string) ($classification['key'] ?? 'other'));
+        $itemId = isset($resolvedExisting['itemId']) ? (int) $resolvedExisting['itemId'] : 0;
 
         $catalog = [
-            'itemId' => $itemId,
+            'itemId' => $itemId > 0 ? $itemId : null,
             'marketHashName' => $itemName,
             'cachedAt' => date('Y-m-d H:i:s'),
             'imageUrl' => $listing['iconUrl']
@@ -835,6 +843,10 @@ final class PricingService
             'wear' => $wear['key'] ?? ($resolvedExisting['wear'] ?? null),
             'wearLabel' => $wear['label'] ?? ($resolvedExisting['wearLabel'] ?? null),
         ];
+
+        if ($itemId <= 0 || !$this->itemRepository->isCatalogWriteEnabled()) {
+            return $catalog;
+        }
 
         $this->itemRepository->updateCatalogData($itemId, [
             'image_url' => $catalog['imageUrl'],

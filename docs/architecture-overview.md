@@ -62,6 +62,7 @@ This document tracks:
 - Owns pricing ingestion/read flows.
 - Owns CS-updates ingest and web push.
 - Owns user currency preference persistence (`GET/PUT /api/v1/settings/currency`) and anonymized aggregate popularity stats (`currency_usage_stats`).
+- Enforces `items` catalog ownership: only the CLI price-catalog cron path may mutate `items`; request/interactive sync flows are read-only against `items`.
 
 ### 3.4 WS gateway runtime
 
@@ -133,6 +134,7 @@ From `apps/web/src/App.jsx`:
 
 - `backend/sync-prices.php` plans the hourly queue and processes the full planned kickoff batch by default (`PRICE_QUEUE_KICKOFF_BATCH` can override).
 - `backend/sync-prices.php` runs a bulk CSFloat price-list import to upsert all items into `items`, `item_live_cache`, and `price_history_hourly`.
+- `backend/sync-prices.php` is the only write-enabled process for `items` and sets `ITEMS_CATALOG_WRITE_SCOPE=cron` explicitly before catalog upserts.
 - `price_history_hourly` stores hourly USD snapshots as a regular InnoDB table (no partitioning) to stay compatible with MariaDB foreign-key limitations.
 - With `price-list` as bulk source, hourly runs can update all tracked queue items without per-item external lookups in the common case.
 

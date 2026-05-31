@@ -97,6 +97,7 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 - Item-Referenzen: `item_id` statt string-basierter Item-Namen fuer Verknuepfungen.
 - History-Tabellen: keine vorab berechneten Aggregatfelder persistieren, Werte im Service berechnen.
 - Exchange Rates: `exchange_rate_id` statt redundanter `exchange_rate`/`price_eur` Spalten.
+- Items-Katalog-Governance: Tabelle `items` ist serverseitig katalog-owned und standardmaessig read-only; Schreibrechte nur fuer den CLI-Cronpfad `backend/sync-prices.php`.
 
 ## Server-Zuständigkeiten
 
@@ -647,3 +648,11 @@ Change: SkinBaron Purchases Import auf Englisch-Hinweise gehaertet
 - `apps/desktop/main.js` nutzt fuer SkinBaron Browser-Connect und Purchases-Probe jetzt `/en/profile/purchases` statt `/de/profile/purchases`.
 - `backend/src/Infrastructure/External/SkinBaronClient.php` sendet bei Purchases-Webrequests denselben `/en/profile/purchases` Referer plus `Accept-Language: en-US,en;q=0.9`.
 - Ziel: konsistente englische Payload-Hinweise fuer den Import, statt implizit deutschsprachiger Session-/Request-Kontexte.
+
+---
+
+Updated: 2026-05-31
+Change: `items` Katalog auf cron-only Schreibpfad gehaertet
+- `backend/src/Infrastructure/Persistence/Repository/ItemRepository.php` erzwingt jetzt einen Write-Guard: `items`-Mutationen sind nur in CLI-Prozessen mit `ITEMS_CATALOG_WRITE_SCOPE=cron` erlaubt.
+- `backend/sync-prices.php` setzt diesen Scope explizit fuer den stündlichen Katalog-/Preis-Cronlauf.
+- Sync-/Interactive-Flows (`SyncService`, `PricingService`, Watchlist-/CSFloat-Importpfade) erzeugen keine neuen `items` mehr und behandeln fehlende Katalogeintraege kontrolliert als unresolved/skip statt DB-Insert.

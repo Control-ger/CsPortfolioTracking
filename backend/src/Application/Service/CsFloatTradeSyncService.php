@@ -106,10 +106,30 @@ final class CsFloatTradeSyncService
                 continue;
             }
 
-            $itemId = $this->itemRepository->findOrCreateByName(
-                (string) ($trade['marketHashName'] ?? $trade['name'] ?? 'Unknown Item'),
-                (string) ($trade['type'] ?? 'other')
-            );
+            try {
+                $itemId = $this->itemRepository->findOrCreateByName(
+                    (string) ($trade['marketHashName'] ?? $trade['name'] ?? 'Unknown Item'),
+                    (string) ($trade['type'] ?? 'other')
+                );
+            } catch (RuntimeException $exception) {
+                $skipped++;
+                $errors[] = [
+                    'externalTradeId' => $trade['externalTradeId'],
+                    'message' => $exception->getMessage(),
+                ];
+                Logger::event(
+                    'warning',
+                    'domain',
+                    'domain.csfloat_trade_sync.item_catalog_missing',
+                    'CSFloat trade skipped because item is missing in server catalog',
+                    [
+                        'externalSource' => self::PLATFORM,
+                        'externalTradeId' => $trade['externalTradeId'],
+                        'marketHashName' => (string) ($trade['marketHashName'] ?? $trade['name'] ?? ''),
+                    ]
+                );
+                continue;
+            }
             $trade['itemId'] = $itemId;
             $trade['userId'] = $userId;
             $trade['platform'] = self::PLATFORM;
