@@ -459,6 +459,9 @@ function mapSkinBaronPreviewSaleToInvestment(sale) {
     platform: "skinbaron",
     source: "skinbaron",
     externalTradeId: stableSaleKey,
+    skinBaronTransferId: sale?.skinBaronTransferId || sale?.skinBaronSaleId || null,
+    skinBaronSaleId: sale?.skinBaronSaleId || sale?.skinBaronTransferId || null,
+    skinBaronOfferLink: sale?.skinBaronOfferLink || sale?.offerLink || null,
     purchasedAt: sale?.purchasedAt || null,
     notes: `Imported from SkinBaron sale ${stableSaleKey}`.trim(),
   };
@@ -485,6 +488,7 @@ function resolveInvestmentPlatform(entry) {
 function buildExistingInvestmentLookup(rows = [], platformFilter = null) {
   const byId = new Map();
   const byExternalTradeId = new Map();
+  const bySkinBaronTransferOffer = new Map();
 
   (Array.isArray(rows) ? rows : []).forEach((entry) => {
     const investmentId = String(entry?.id || "").trim();
@@ -504,9 +508,22 @@ function buildExistingInvestmentLookup(rows = [], platformFilter = null) {
     if (externalTradeId && !byExternalTradeId.has(externalTradeId)) {
       byExternalTradeId.set(externalTradeId, entry);
     }
+
+    if (platformFilter === "skinbaron") {
+      const skinBaronTransferId = normalizeImportIdentifier(
+        entry?.skinBaronTransferId || entry?.skinBaronSaleId,
+      );
+      const skinBaronOfferLink = normalizeImportIdentifier(entry?.skinBaronOfferLink || entry?.offerLink);
+      if (skinBaronTransferId && skinBaronOfferLink) {
+        const key = `${skinBaronTransferId}::${skinBaronOfferLink}`;
+        if (!bySkinBaronTransferOffer.has(key)) {
+          bySkinBaronTransferOffer.set(key, entry);
+        }
+      }
+    }
   });
 
-  return { byId, byExternalTradeId };
+  return { byId, byExternalTradeId, bySkinBaronTransferOffer };
 }
 
 function resolveExistingCsFloatInvestmentMatch(lookup, mappedTrade, previewTrade) {
@@ -575,6 +592,35 @@ function resolveExistingSkinBaronInvestmentMatch(lookup, mappedTrade, previewTra
     const existingByTradeId = lookup?.byExternalTradeId?.get(normalizedExternalTradeId);
     if (existingByTradeId) {
       return existingByTradeId;
+    }
+  }
+
+  const transferCandidates = [
+    mappedTrade?.skinBaronTransferId,
+    mappedTrade?.skinBaronSaleId,
+    previewTrade?.skinBaronTransferId,
+    previewTrade?.skinBaronSaleId,
+  ];
+  const offerLinkCandidates = [
+    mappedTrade?.skinBaronOfferLink,
+    previewTrade?.skinBaronOfferLink,
+    previewTrade?.offerLink,
+  ];
+  for (const transferCandidate of transferCandidates) {
+    const normalizedTransfer = normalizeImportIdentifier(transferCandidate);
+    if (!normalizedTransfer) {
+      continue;
+    }
+    for (const offerCandidate of offerLinkCandidates) {
+      const normalizedOffer = normalizeImportIdentifier(offerCandidate);
+      if (!normalizedOffer) {
+        continue;
+      }
+      const key = `${normalizedTransfer}::${normalizedOffer}`;
+      const existingByTransferOffer = lookup?.bySkinBaronTransferOffer?.get(key);
+      if (existingByTransferOffer) {
+        return existingByTransferOffer;
+      }
     }
   }
 
