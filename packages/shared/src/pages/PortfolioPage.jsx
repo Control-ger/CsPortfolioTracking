@@ -3609,31 +3609,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setJourneyApiKeySaving(false);
     }
   };
-  const handlePasteJourneyCsFloatKey = async () => {
-    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
-      setJourneyApiKeyError("Zwischenablage ist in dieser Umgebung nicht verfuegbar.");
-      setJourneyApiKeySuccess("");
-      setJourneyApiKeyHelper("");
-      return;
-    }
-
-    try {
-      const rawClipboard = await navigator.clipboard.readText();
-      const normalized = normalizeCsFloatApiKeyInput(rawClipboard);
-      setJourneyApiKey(normalized);
-      setJourneyApiKeyError("");
-      setJourneyApiKeySuccess("");
-      if (!normalized) {
-        setJourneyApiKeyHelper("Zwischenablage war leer oder enthielt keinen verarbeitbaren Key.");
-        return;
-      }
-      setJourneyApiKeyHelper(`Key aus Zwischenablage erkannt (${normalized.length} Zeichen).`);
-    } catch {
-      setJourneyApiKeyError("Konnte nicht auf die Zwischenablage zugreifen.");
-      setJourneyApiKeySuccess("");
-      setJourneyApiKeyHelper("");
-    }
-  };
   const handleToggleAutoSync = async () => {
     const nextEnabled = !autoSyncEnabled;
     setAutoSyncEnabled(nextEnabled);
@@ -3703,6 +3678,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         renderLocalDesktopSidebar
           ? "lg:h-full lg:min-h-0 lg:overflow-hidden"
           : ""
+      } ${
+        showSetupJourney && useExternalDesktopSidebarShell ? "lg:-ml-6" : ""
       } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
@@ -4134,14 +4111,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             onClick={() => void handleSaveJourneyCsFloatKey()}
                           >
                             {journeyApiKeySaving ? "Speichert..." : "Key speichern"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
-                            onClick={() => void handlePasteJourneyCsFloatKey()}
-                          >
-                            Aus Zwischenablage einfuegen
                           </Button>
                           <Button
                             size="sm"
