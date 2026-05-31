@@ -1182,9 +1182,7 @@ export function createLocalStore(userDataPath) {
         const platform = String(investment.platform || investment.source || "").toLowerCase();
         return (
           platform === "csfloat" ||
-          platform === "skinbaron" ||
-          String(investment.id || "").startsWith("csfloat-") ||
-          String(investment.id || "").startsWith("skinbaron-")
+          String(investment.id || "").startsWith("csfloat-")
         );
       });
 
