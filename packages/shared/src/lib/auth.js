@@ -44,10 +44,43 @@ async function resolveApiBase() {
   return API_BASE;
 }
 
+function isDesktopSidecarBase(apiBase) {
+  return /^http:\/\/(127\.0\.0\.1|localhost):\d+$/i.test(String(apiBase || ""));
+}
+
+async function applyDesktopSidecarAuthHeaders(apiBase, options = {}) {
+  const nextHeaders = new Headers(options?.headers || {});
+
+  if (
+    isDesktopSidecarBase(apiBase) &&
+    isDesktopApp() &&
+    window.electronAPI?.backend?.getAuthHeaders
+  ) {
+    try {
+      const authHeaders = await window.electronAPI.backend.getAuthHeaders();
+      if (authHeaders && typeof authHeaders === "object") {
+        Object.entries(authHeaders).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && String(value).trim() !== "") {
+            nextHeaders.set(String(key), String(value));
+          }
+        });
+      }
+    } catch (error) {
+      console.warn("[auth] failed to resolve desktop sidecar auth headers", error);
+    }
+  }
+
+  return {
+    ...options,
+    headers: nextHeaders,
+  };
+}
+
 async function fetchWithDesktopRetry(path, options) {
   let apiBase = await resolveApiBase();
+  let requestOptions = await applyDesktopSidecarAuthHeaders(apiBase, options);
   try {
-    return await fetch(`${apiBase}${path}`, options);
+    return await fetch(`${apiBase}${path}`, requestOptions);
   } catch (error) {
     const isDesktop = isDesktopApp() && window.electronAPI?.backend?.getBaseUrl;
     const shouldRetry =
@@ -65,7 +98,8 @@ async function fetchWithDesktopRetry(path, options) {
     }
 
     apiBase = normalizeApiBase(refreshedBase);
-    return await fetch(`${apiBase}${path}`, options);
+    requestOptions = await applyDesktopSidecarAuthHeaders(apiBase, options);
+    return await fetch(`${apiBase}${path}`, requestOptions);
   }
 }
 
@@ -157,9 +191,8 @@ export async function initiateSteamLogin() {
  */
 async function initiateDesktopSteamLogin() {
   try {
-    const apiBase = await resolveApiBase();
     // 1. Request login URL from backend
-    const response = await fetch(`${apiBase}/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(DESKTOP_PROTOCOL)}`, {
+    const response = await fetchWithDesktopRetry(`/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(DESKTOP_PROTOCOL)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -185,8 +218,8 @@ async function initiateDesktopSteamLogin() {
 
       const interval = setInterval(async () => {
         try {
-          const resultResponse = await fetch(
-            `${apiBase}/api/v1/auth/steam/result?state=${encodeURIComponent(data.state)}`,
+          const resultResponse = await fetchWithDesktopRetry(
+            `/api/v1/auth/steam/result?state=${encodeURIComponent(data.state)}`,
             { method: 'GET', headers: { 'Content-Type': 'application/json' } }
           );
           const result = unwrapApiData(await resultResponse.json());
