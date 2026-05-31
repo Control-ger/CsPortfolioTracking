@@ -566,6 +566,7 @@ function buildGroupDetailSelection(group) {
     name: group?.name || "Gruppe",
     type: "gruppe",
     imageUrl: Array.isArray(group?.topVisuals) ? group.topVisuals[0]?.imageUrl || null : null,
+    topVisuals: Array.isArray(group?.topVisuals) ? group.topVisuals : [],
     quantity: totalQuantity,
     bucket: "investment",
     fundingMode: "wallet",

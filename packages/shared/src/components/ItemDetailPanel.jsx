@@ -15,6 +15,43 @@ import { AlertCircle } from "lucide-react";
 import { PortfolioChart } from "./PortfolioChart";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
+function LayeredPreview({ visuals = [], fallbackLabel = "Group" }) {
+  const items = Array.isArray(visuals) ? visuals.slice(0, 2) : [];
+
+  return (
+    <div className="relative h-16 w-20 shrink-0 sm:h-24 sm:w-28">
+      {items.length === 0 ? (
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/75 bg-muted/25 p-1 text-xs font-semibold text-muted-foreground sm:h-24 sm:w-24">
+          {String(fallbackLabel || "Group").slice(0, 2).toUpperCase()}
+        </div>
+      ) : null}
+      {items.map((entry, index) => {
+        const offsetClass = index === 0 ? "left-0 top-0 z-20" : "left-5 top-0 z-10 sm:left-8";
+        return (
+          <div
+            key={entry?.id || `${entry?.name || fallbackLabel}-${index}`}
+            className={`absolute ${offsetClass} flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1 sm:h-24 sm:w-24`}
+          >
+            {entry?.imageUrl ? (
+              <img
+                src={entry.imageUrl}
+                alt={entry?.name || "Group visual"}
+                className="h-full w-full object-contain"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-muted-foreground">
+                {String(entry?.name || fallbackLabel || "Group").slice(0, 2).toUpperCase()}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function deriveBuyInReferenceValue(item, history = []) {
   const unitCostBasis = Number(item?.costBasisUnit);
   if (Number.isFinite(unitCostBasis) && unitCostBasis > 0) {
@@ -94,6 +131,7 @@ export const ItemDetailPanel = ({
   const [showAbsolute, setShowAbsolute] = useState(false);
   const excludeEnabled = canToggleExclude && typeof onExcludeChange === "function";
   const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
+  const isGroupSelection = item?.__detailKind === "group";
 
   if (!item)
     return (
@@ -151,21 +189,25 @@ export const ItemDetailPanel = ({
         <Card className="border-border/70">
           <CardHeader className="pb-2 sm:pb-4">
             <div className="flex items-start gap-2 sm:gap-4">
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1 sm:h-24 sm:w-24">
-                {item.imageUrl ? (
-                    <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        className="h-full w-full object-contain"
-                        loading="lazy"
-                        decoding="async"
-                    />
-                ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                      N/A
-                    </div>
-                )}
-              </div>
+              {isGroupSelection ? (
+                <LayeredPreview visuals={item?.topVisuals} fallbackLabel={item?.name || "Group"} />
+              ) : (
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1 sm:h-24 sm:w-24">
+                  {item.imageUrl ? (
+                      <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="h-full w-full object-contain"
+                          loading="lazy"
+                          decoding="async"
+                      />
+                  ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                        N/A
+                      </div>
+                  )}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <CardTitle className="text-sm sm:text-lg truncate">
                   {item.name}
