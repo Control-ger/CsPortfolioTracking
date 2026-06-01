@@ -1088,6 +1088,7 @@ export async function fetchCsFloatBuyOrdersData(options = {}) {
       },
       meta: {
         ...(response?.meta || {}),
+        upstreamSource: response?.meta?.source || null,
         source: "desktop-sync",
         fromCache: false,
         cachedAt: snapshot.cachedAt,

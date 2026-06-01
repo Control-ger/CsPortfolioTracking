@@ -238,7 +238,17 @@ final class CsFloatTradeClient
     private function extractRows(array $json): array
     {
         if (isset($json['data']) && is_array($json['data'])) {
-            return array_values($json['data']);
+            $data = $json['data'];
+            $isList = array_keys($data) === range(0, count($data) - 1);
+            if ($isList) {
+                return array_values($data);
+            }
+
+            foreach (['buy_orders', 'orders', 'items', 'results', 'trades'] as $nestedKey) {
+                if (isset($data[$nestedKey]) && is_array($data[$nestedKey])) {
+                    return array_values($data[$nestedKey]);
+                }
+            }
         }
 
         if (isset($json['trades']) && is_array($json['trades'])) {

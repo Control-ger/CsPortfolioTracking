@@ -277,6 +277,17 @@ export const ItemDetailPanel = ({
                   <p className="text-[10px] text-muted-foreground">
                     {item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}
                   </p>
+                  {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
+                    <p className="text-[10px] text-sky-300">
+                      Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
+                        useUsd: true,
+                        buyPriceUsd: Number(item.buyOrderBestPriceUsd),
+                      })}
+                      {Number(item?.buyOrderCount || 0) > 1
+                        ? ` (${Number(item.buyOrderCount)} Orders)`
+                        : ""}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

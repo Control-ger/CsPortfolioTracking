@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { PortfolioChart } from "./PortfolioChart";
@@ -20,6 +19,8 @@ let watchlistViewSnapshot = {
   loaded: false,
   items: [],
   buyOrderSummary: [],
+  buyOrderOrders: [],
+  buyOrderDebug: null,
   warnings: [],
   updatedAt: 0,
 };
@@ -35,6 +36,8 @@ function getValidWatchlistSnapshot() {
       loaded: false,
       items: [],
       buyOrderSummary: [],
+      buyOrderOrders: [],
+      buyOrderDebug: null,
       warnings: [],
       updatedAt: 0,
     };
@@ -109,6 +112,83 @@ function applyBuyOrdersToWatchlistItems(items = [], summaryRows = []) {
   });
 }
 
+function resolveBuyOrderItemName(row) {
+  return String(
+    row?.marketHashName ||
+      row?.name ||
+      row?.expression ||
+      row?.itemName ||
+      row?.item?.market_hash_name ||
+      row?.item?.marketHashName ||
+      row?.item?.name ||
+      "",
+  ).trim();
+}
+
+function isBuyOrderMatchForItem(item, order) {
+  const itemName = item?.marketHashName || item?.name;
+  const orderName = resolveBuyOrderItemName(order);
+  const itemExactKey = normalizeNameKey(itemName);
+  const orderExactKey = normalizeNameKey(orderName);
+  const itemFuzzyKey = normalizeNameKeyForBuyOrderMatch(itemName);
+  const orderFuzzyKey = normalizeNameKeyForBuyOrderMatch(orderName);
+
+  if (!itemExactKey || !orderExactKey || !itemFuzzyKey || !orderFuzzyKey) {
+    return false;
+  }
+
+  if (itemExactKey === orderExactKey || itemFuzzyKey === orderFuzzyKey) {
+    return true;
+  }
+
+  return itemFuzzyKey.includes(orderFuzzyKey) || orderFuzzyKey.includes(itemFuzzyKey);
+}
+
+function buildBuyOrderRowsForItem(item, orders = []) {
+  if (!item || !Array.isArray(orders) || orders.length === 0) {
+    return [];
+  }
+
+  const groupedByPrice = new Map();
+  orders.forEach((order) => {
+    if (!isBuyOrderMatchForItem(item, order)) {
+      return;
+    }
+
+    const priceUsd = Number(order?.priceUsd || 0);
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) {
+      return;
+    }
+
+    const quantity = Math.max(1, Number(order?.quantity || 1));
+    const key = priceUsd.toFixed(4);
+    const existing = groupedByPrice.get(key) || {
+      priceUsd,
+      orders: 0,
+      quantity: 0,
+      createdAtLatest: null,
+    };
+    existing.orders += 1;
+    existing.quantity += quantity;
+
+    const createdAtRaw = String(order?.createdAt || "").trim();
+    const existingTs = Date.parse(String(existing.createdAtLatest || ""));
+    const nextTs = Date.parse(createdAtRaw);
+    if (Number.isFinite(nextTs) && (!Number.isFinite(existingTs) || nextTs > existingTs)) {
+      existing.createdAtLatest = createdAtRaw;
+    }
+
+    groupedByPrice.set(key, existing);
+  });
+
+  return Array.from(groupedByPrice.values()).sort((left, right) => {
+    if (left.priceUsd === right.priceUsd) {
+      return right.orders - left.orders;
+    }
+    return right.priceUsd - left.priceUsd;
+  });
+}
+
 function WatchlistItemsLoadingSkeleton() {
   return (
     <Card>
@@ -143,11 +223,12 @@ function WatchlistItemsLoadingSkeleton() {
 }
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
-  const navigate = useNavigate();
   const { currency, formatPrice } = useCurrency();
   const validSnapshot = getValidWatchlistSnapshot();
   const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
-  const [buyOrderSummary, setBuyOrderSummary] = useState(() => validSnapshot?.buyOrderSummary || []);
+  const [_buyOrderSummary, setBuyOrderSummary] = useState(() => validSnapshot?.buyOrderSummary || []);
+  const [buyOrderOrders, setBuyOrderOrders] = useState(() => validSnapshot?.buyOrderOrders || []);
+  const [buyOrderDebug, setBuyOrderDebug] = useState(() => validSnapshot?.buyOrderDebug || null);
   const [loading, setLoading] = useState(() => !validSnapshot);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -160,16 +241,18 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const isDesktopRuntime = typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
   const hasFiniteNumber = (value) => Number.isFinite(Number(value));
   const combinedWarnings = useMemo(() => [...warnings], [warnings]);
-  const buyOrderStats = useMemo(() => {
-    const summaryRows = Array.isArray(buyOrderSummary) ? buyOrderSummary : [];
-    const orders = summaryRows.reduce((sum, row) => sum + Number(row?.orders || 0), 0);
-    const quantity = summaryRows.reduce((sum, row) => sum + Number(row?.quantity || 0), 0);
-    return {
-      items: summaryRows.length,
-      orders,
-      quantity,
-    };
-  }, [buyOrderSummary]);
+  const selectedItemBuyOrderRows = useMemo(
+    () => buildBuyOrderRowsForItem(selectedItem, buyOrderOrders),
+    [selectedItem, buyOrderOrders],
+  );
+  const selectedItemWithBuyOrderRows = useMemo(() => (
+    selectedItem
+      ? {
+          ...selectedItem,
+          buyOrderRows: selectedItemBuyOrderRows,
+        }
+      : null
+  ), [selectedItem, selectedItemBuyOrderRows]);
 
   const loadWatchlistData = useCallback(async ({ showLoading = true } = {}) => {
     try {
@@ -182,35 +265,63 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       const nextItemsRaw = response?.data || [];
       const nextWarnings = response?.meta?.warnings || [];
       let nextBuyOrderSummary = [];
+      let nextBuyOrderOrders = [];
+      let nextBuyOrderDebug = null;
 
       if (isDesktopRuntime) {
         try {
           const buyOrderResponse = await fetchCsFloatBuyOrdersData();
+          const buyOrderMeta = buyOrderResponse?.meta || {};
           nextBuyOrderSummary = Array.isArray(buyOrderResponse?.data?.summaryByMarketHashName)
             ? buyOrderResponse.data.summaryByMarketHashName
             : [];
+          nextBuyOrderOrders = Array.isArray(buyOrderResponse?.data?.orders)
+            ? buyOrderResponse.data.orders
+            : [];
+          nextBuyOrderDebug = {
+            clientSource: String(buyOrderMeta?.source || "unknown"),
+            upstreamSource: String(buyOrderMeta?.upstreamSource || buyOrderMeta?.source || "unknown"),
+            pagesFetched: Number(buyOrderMeta?.pagesFetched || 0),
+            fromCache: Boolean(buyOrderMeta?.fromCache),
+            rawOrders: nextBuyOrderOrders.length,
+            summaryItems: nextBuyOrderSummary.length,
+            errorCount: Array.isArray(buyOrderMeta?.errors) ? buyOrderMeta.errors.length : 0,
+          };
 
-          const hasSnapshot = Boolean(buyOrderResponse?.meta?.hasCachedSnapshot);
-          const cachedAtIso = String(buyOrderResponse?.meta?.cachedAt || "").trim();
-          const cachedAtMs = cachedAtIso ? Date.parse(cachedAtIso) : NaN;
-          const hasValidCachedAt = Number.isFinite(cachedAtMs);
-          const isStaleCache =
-            hasValidCachedAt &&
-            Date.now() - cachedAtMs > 10 * 60 * 1000;
-          const isUnknownCacheAge = !hasValidCachedAt;
-
-          if (nextBuyOrderSummary.length === 0 && (!hasSnapshot || isStaleCache || isUnknownCacheAge)) {
+          if (nextBuyOrderSummary.length === 0 || nextBuyOrderOrders.length === 0) {
             const liveBuyOrderResponse = await fetchCsFloatBuyOrdersData({
               syncNow: true,
               limit: 200,
               maxPages: 8,
             });
+            const liveMeta = liveBuyOrderResponse?.meta || {};
             nextBuyOrderSummary = Array.isArray(liveBuyOrderResponse?.data?.summaryByMarketHashName)
               ? liveBuyOrderResponse.data.summaryByMarketHashName
               : [];
+            nextBuyOrderOrders = Array.isArray(liveBuyOrderResponse?.data?.orders)
+              ? liveBuyOrderResponse.data.orders
+              : [];
+            nextBuyOrderDebug = {
+              clientSource: String(liveMeta?.source || "unknown"),
+              upstreamSource: String(liveMeta?.upstreamSource || liveMeta?.source || "unknown"),
+              pagesFetched: Number(liveMeta?.pagesFetched || 0),
+              fromCache: Boolean(liveMeta?.fromCache),
+              rawOrders: nextBuyOrderOrders.length,
+              summaryItems: nextBuyOrderSummary.length,
+              errorCount: Array.isArray(liveMeta?.errors) ? liveMeta.errors.length : 0,
+            };
           }
         } catch (buyOrderError) {
           console.warn("[watchlist] CSFloat buyorders unavailable", buyOrderError);
+          nextBuyOrderDebug = {
+            clientSource: "error",
+            upstreamSource: "error",
+            pagesFetched: 0,
+            fromCache: false,
+            rawOrders: 0,
+            summaryItems: 0,
+            errorCount: 1,
+          };
         }
       }
 
@@ -218,11 +329,15 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
 
       setWatchlistItems(nextItems);
       setBuyOrderSummary(nextBuyOrderSummary);
+      setBuyOrderOrders(nextBuyOrderOrders);
+      setBuyOrderDebug(nextBuyOrderDebug);
       setWarnings(nextWarnings);
       watchlistViewSnapshot = {
         loaded: true,
         items: nextItems,
         buyOrderSummary: nextBuyOrderSummary,
+        buyOrderOrders: nextBuyOrderOrders,
+        buyOrderDebug: nextBuyOrderDebug,
         warnings: nextWarnings,
         updatedAt: Date.now(),
       };
@@ -245,10 +360,30 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
 
           setWatchlistItems(fallbackItems);
           setBuyOrderSummary([]);
+          setBuyOrderOrders([]);
+          setBuyOrderDebug({
+            clientSource: "watchlist-fallback",
+            upstreamSource: "watchlist-fallback",
+            pagesFetched: 0,
+            fromCache: false,
+            rawOrders: 0,
+            summaryItems: 0,
+            errorCount: 1,
+          });
           watchlistViewSnapshot = {
             loaded: true,
             items: fallbackItems,
             buyOrderSummary: [],
+            buyOrderOrders: [],
+            buyOrderDebug: {
+              clientSource: "watchlist-fallback",
+              upstreamSource: "watchlist-fallback",
+              pagesFetched: 0,
+              fromCache: false,
+              rawOrders: 0,
+              summaryItems: 0,
+              errorCount: 1,
+            },
             warnings: [
               {
                 code: "WATCHLIST_SYNC_FALLBACK",
@@ -275,6 +410,16 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
 
       setError(requestError.message || "Fehler beim Laden der Watchlist.");
       setBuyOrderSummary([]);
+      setBuyOrderOrders([]);
+      setBuyOrderDebug({
+        clientSource: "watchlist-error",
+        upstreamSource: "watchlist-error",
+        pagesFetched: 0,
+        fromCache: false,
+        rawOrders: 0,
+        summaryItems: 0,
+        errorCount: 1,
+      });
       setWarnings([]);
     } finally {
       setLoading(false);
@@ -359,14 +504,6 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
             Deine beobachteten Items mit aktuellem Verlauf.
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => navigate("/search")}
-        >
-          Zur Produktsuche
-        </Button>
       </div>
 
       {error && (
@@ -375,64 +512,15 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         </div>
       )}
 
-      {isDesktopRuntime && !loading && (
-        <Card>
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg">
-              CSFloat Buyorders ({buyOrderStats.orders})
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {buyOrderStats.items} Items, {buyOrderStats.quantity} Gesamtmenge
-            </p>
-          </CardHeader>
-          <CardContent>
-            {buyOrderSummary.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Keine aktiven Buyorders gefunden.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {buyOrderSummary.slice(0, 8).map((entry, index) => (
-                  <div
-                    key={`${String(entry?.marketHashName || "buyorder")}-${index}`}
-                    className="flex items-center justify-between rounded-md border border-border/70 bg-transparent p-2.5"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{entry.marketHashName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {Number(entry?.orders || 0)} Orders, Menge {Number(entry?.quantity || 0)}
-                      </p>
-                    </div>
-                    <p className="text-xs font-semibold text-sky-300">
-                      {Number(entry?.bestPriceUsd || 0) > 0
-                        ? formatPrice(Number(entry.bestPriceUsd), {
-                            useUsd: true,
-                            buyPriceUsd: Number(entry.bestPriceUsd),
-                          })
-                        : "-"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {loading ? (
         <WatchlistItemsLoadingSkeleton />
       ) : watchlistItems.length === 0 ? (
         <Card>
           <CardContent className="p-4 sm:p-8 text-center text-muted-foreground">
             <p className="text-sm">
-              Keine Items in der Watchlist. Oeffne die Produktsuche und fuege
-              dort neue Items hinzu.
+              Keine Items in der Watchlist. Nutze die Suche oben und fuege
+              neue Items hinzu.
             </p>
-            <div className="mt-4">
-              <Button type="button" size="sm" onClick={() => navigate("/search")}>
-                Produktsuche oeffnen
-              </Button>
-            </div>
           </CardContent>
         </Card>
       ) : (
@@ -477,16 +565,16 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
            </div>
 
           <div className="hidden md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-            {selectedItem ? (
+            {selectedItemWithBuyOrderRows ? (
               <Card>
                 <CardHeader className="pb-2 sm:pb-4">
                   <div className="flex items-start justify-between gap-2 sm:gap-3">
                     <div className="flex min-w-0 gap-2 sm:gap-4">
                       <div className="h-14 w-14 sm:h-20 sm:w-20 overflow-hidden rounded-xl border border-border/75 bg-muted/25 flex-shrink-0">
-                        {selectedItem.imageUrl ? (
+                        {selectedItemWithBuyOrderRows.imageUrl ? (
                           <img
-                            src={selectedItem.imageUrl}
-                            alt={selectedItem.name}
+                            src={selectedItemWithBuyOrderRows.imageUrl}
+                            alt={selectedItemWithBuyOrderRows.name}
                             className="h-full w-full object-cover"
                           />
                         ) : (
@@ -496,23 +584,23 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <CardTitle className="text-base sm:text-lg truncate">{selectedItem.name}</CardTitle>
+                        <CardTitle className="text-base sm:text-lg truncate">{selectedItemWithBuyOrderRows.name}</CardTitle>
                         <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
                           Interaktiver Preisverlauf
                         </p>
-                        {hasFiniteNumber(selectedItem.currentPrice) && (
+                        {hasFiniteNumber(selectedItemWithBuyOrderRows.currentPrice) && (
                           <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-muted-foreground">
                             <p>
-                              Aktuell: {formatPrice(Number(selectedItem.currentPrice))}
+                              Aktuell: {formatPrice(Number(selectedItemWithBuyOrderRows.currentPrice))}
                             </p>
-                            {selectedItem?.hasBuyOrder && Number(selectedItem?.buyOrderBestPriceUsd || 0) > 0 ? (
+                            {selectedItemWithBuyOrderRows?.hasBuyOrder && Number(selectedItemWithBuyOrderRows?.buyOrderBestPriceUsd || 0) > 0 ? (
                               <p>
-                                Buyorder: {formatPrice(Number(selectedItem.buyOrderBestPriceUsd), {
+                                Buyorder: {formatPrice(Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd), {
                                   useUsd: true,
-                                  buyPriceUsd: Number(selectedItem.buyOrderBestPriceUsd),
+                                  buyPriceUsd: Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd),
                                 })}
-                                {Number(selectedItem?.buyOrderCount || 0) > 1
-                                  ? ` (${Number(selectedItem.buyOrderCount)} Orders)`
+                                {Number(selectedItemWithBuyOrderRows?.buyOrderCount || 0) > 1
+                                  ? ` (${Number(selectedItemWithBuyOrderRows.buyOrderCount)} Orders)`
                                   : ""}
                               </p>
                             ) : null}
@@ -530,8 +618,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {selectedItem.priceHistory &&
-                  selectedItem.priceHistory.length > 0 ? (
+                  {selectedItemWithBuyOrderRows.priceHistory &&
+                  selectedItemWithBuyOrderRows.priceHistory.length > 0 ? (
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold">Preisentwicklung</h3>
@@ -553,9 +641,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                         </button>
                       </div>
                       <PortfolioChart
-                        history={selectedItem.priceHistory}
+                        history={selectedItemWithBuyOrderRows.priceHistory}
                         color={
-                          selectedItem.trend === "down" ? "#ef4444" : "#22c55e"
+                          selectedItemWithBuyOrderRows.trend === "down" ? "#ef4444" : "#22c55e"
                         }
                         valueLabel="Preis"
                         title="Preisentwicklung"
@@ -568,24 +656,53 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       Keine Preishistorie verfuegbar.
                     </div>
                   )}
-                  {selectedItem.changeLabel !== "N/A" && (
-                    <div className="mt-4 rounded-xl border border-border/70 bg-card/65 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-muted-foreground">
-                          Preisveraenderung (7 Tage)
+                  <div className="mt-4 rounded-xl border border-border/70 bg-card/65 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold">Buyorders (CSFloat)</h4>
+                      {selectedItemBuyOrderRows.length > 0 ? (
+                        <span className="text-xs text-muted-foreground">
+                          {selectedItemBuyOrderRows.reduce((sum, row) => sum + Number(row.orders || 0), 0)} Orders,{" "}
+                          {selectedItemBuyOrderRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0)} Menge
                         </span>
-                        <span
-                          className={`font-semibold ${
-                            selectedItem.trend === "down"
-                              ? "text-red-400"
-                              : "text-emerald-400"
-                          }`}
-                        >
-                          {selectedItem.changeLabel}
-                        </span>
-                      </div>
+                      ) : null}
                     </div>
-                  )}
+                    {selectedItemBuyOrderRows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Keine passenden Buyorders fuer dieses Item gefunden.
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden rounded-lg border border-border/60">
+                        <table className="w-full text-xs sm:text-sm">
+                          <thead className="bg-muted/30 text-left text-muted-foreground">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Preis</th>
+                              <th className="px-3 py-2 font-medium">Orders</th>
+                              <th className="px-3 py-2 font-medium">Menge</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedItemBuyOrderRows.slice(0, 12).map((row, index) => (
+                              <tr key={`${row.priceUsd}-${index}`} className="border-t border-border/50">
+                                <td className="px-3 py-2 text-sky-300">
+                                  {formatPrice(Number(row.priceUsd), {
+                                    useUsd: true,
+                                    buyPriceUsd: Number(row.priceUsd),
+                                  })}
+                                </td>
+                                <td className="px-3 py-2">{Number(row.orders || 0)}</td>
+                                <td className="px-3 py-2">{Number(row.quantity || 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {isDesktopRuntime && buyOrderDebug ? (
+                      <p className="mt-3 font-mono text-[10px] text-muted-foreground">
+                        Debug: client={buyOrderDebug.clientSource || "-"} | upstream={buyOrderDebug.upstreamSource || "-"} | pages={Number(buyOrderDebug.pagesFetched || 0)} | raw={Number(buyOrderDebug.rawOrders || 0)} | summary={Number(buyOrderDebug.summaryItems || 0)} | cache={buyOrderDebug.fromCache ? "yes" : "no"} | errors={Number(buyOrderDebug.errorCount || 0)}
+                      </p>
+                    ) : null}
+                  </div>
 
                   {/* Delete Section - Desktop */}
                   <div className="mt-6 border-t pt-4">
@@ -624,7 +741,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       <WatchlistItemModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        item={selectedItem}
+        item={selectedItemWithBuyOrderRows}
         onDelete={handleRemoveItem}
       />
     </div>

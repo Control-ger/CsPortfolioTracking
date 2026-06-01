@@ -15,6 +15,38 @@ const SettingsPage = lazy(() =>
 );
 const CsUpdatesPage = lazy(() => import("@shared/pages/CsUpdatesPage.jsx"));
 
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed !== "") {
+        return trimmed;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeAvatarUrl(url) {
+  if (typeof url !== "string") {
+    return null;
+  }
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+  if (trimmed.startsWith("/")) {
+    return `https://steamcommunity.com${trimmed}`;
+  }
+  if (trimmed.startsWith("http://")) {
+    return `https://${trimmed.slice("http://".length)}`;
+  }
+  return trimmed;
+}
+
 export default function App() {
   const isElectron = window.electronAPI !== undefined;
   const desktopRuntime = Boolean(window.electronAPI?.localStore);
@@ -25,6 +57,7 @@ export default function App() {
   const [setupPassword, setSetupPassword] = useState("");
   const [setupPasswordConfirm, setSetupPasswordConfirm] = useState("");
   const [vaultActionRunning, setVaultActionRunning] = useState(false);
+  const [vaultLoginUser, setVaultLoginUser] = useState(null);
   const [updaterStatus, setUpdaterStatus] = useState({
     state: "idle",
     version: null,
@@ -155,6 +188,33 @@ export default function App() {
     };
   }, [isElectron]);
 
+  useEffect(() => {
+    if (!shouldUseVaultGate || !window.electronAPI?.getSession) {
+      setVaultLoginUser(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadVaultLoginUser = async () => {
+      try {
+        const session = await window.electronAPI.getSession();
+        const user = session?.user && typeof session.user === "object" ? session.user : null;
+        if (!cancelled) {
+          setVaultLoginUser(user);
+        }
+      } catch {
+        if (!cancelled) {
+          setVaultLoginUser(null);
+        }
+      }
+    };
+
+    void loadVaultLoginUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldUseVaultGate]);
+
   if (isProcessingAuthCallback) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
@@ -210,6 +270,28 @@ export default function App() {
   if (shouldUseVaultGate && (vaultLoading || !vaultStatus || !isVaultUnlocked)) {
     const requiresSetup = vaultStatus?.configured !== true;
     const minPasswordLength = Number(vaultStatus?.minPasswordLength || 16);
+    const vaultLoginStep = requiresSetup ? 1 : vaultActionRunning ? 3 : 2;
+    const vaultLoginProgressPercent = Math.round((vaultLoginStep / 3) * 100);
+    const vaultLoginProgressLabel = requiresSetup
+      ? "Lokalen Zugang einrichten"
+      : vaultActionRunning
+        ? "Entsperren..."
+        : "Bereit zum Entsperren";
+    const vaultDisplayName =
+      firstNonEmptyString(
+        vaultLoginUser?.name,
+        vaultLoginUser?.steamName,
+        vaultLoginUser?.steam_name,
+      ) || "Steam Account";
+    const vaultAvatarUrl = normalizeAvatarUrl(
+      firstNonEmptyString(
+        vaultLoginUser?.animatedAvatar,
+        vaultLoginUser?.animated_avatar,
+        vaultLoginUser?.avatar,
+        vaultLoginUser?.steam_avatar,
+        vaultLoginUser?.steamAvatar,
+      ),
+    );
 
     return (
       <CurrencyProvider>
@@ -223,33 +305,26 @@ export default function App() {
                 </div>
                 <div>
                   <p className="text-base font-semibold">Welcome to CS Investor Hub</p>
-                  <p className="text-xs text-muted-foreground">Sichere zuerst lokale Secrets, dann folgt der Steam-Login.</p>
+                  <p className="text-xs text-muted-foreground">Mit App-Passwort anmelden und direkt ins Dashboard.</p>
                 </div>
               </div>
 
-              <div className="mb-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 p-3 text-xs text-cyan-100">
-                Optional: Falls dein Betriebssystem PIN/Biometrie unterstuetzt, wird der lokale Schutz zusaetzlich gehaertet.
-                Ohne diese Optionen funktioniert der App-Schutz weiterhin ueber dein App-Passwort.
-              </div>
-
-              <div className="mb-4 space-y-2 text-sm text-muted-foreground">
-                <p>Secure Steam OpenID authentication</p>
-                <p>Import your CS2 inventory automatically</p>
-                <p>Track prices and portfolio value</p>
-                <p>Local-first: Your data stays on your device</p>
-              </div>
-
-              <div className="mb-4 rounded-md border border-border/70 bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-                <p className="font-medium text-foreground">Datenschutz & Steam API</p>
-                <p className="mt-1">
-                  Wir koennen ueber die Steam API nur oeffentlich sichtbare Profil- und Inventarinfos lesen.
-                </p>
-                <p>
-                  Kein Zugriff auf Steam-Passwort, Trades, Kauf/Verkauf oder andere Account-Aktionen.
-                </p>
-                <p>
-                  Diese App ist nicht offiziell von Valve/Steam betrieben oder unterstuetzt.
-                </p>
+              <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/15 bg-white/5 p-3">
+                {vaultAvatarUrl ? (
+                  <img
+                    src={vaultAvatarUrl}
+                    alt={vaultDisplayName}
+                    className="h-12 w-12 rounded-full object-cover ring-2 ring-primary/30"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary ring-2 ring-primary/30">
+                    {vaultDisplayName.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{vaultDisplayName}</p>
+                  <p className="text-xs text-muted-foreground">Steam verbunden</p>
+                </div>
               </div>
 
               {requiresSetup ? (
@@ -298,20 +373,24 @@ export default function App() {
                 </div>
               )}
 
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{vaultLoginProgressLabel}</span>
+                  <span>{vaultLoginProgressPercent}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                  <div
+                    className="h-full rounded-full bg-cyan-300 transition-[width] duration-300"
+                    style={{ width: `${vaultLoginProgressPercent}%` }}
+                  />
+                </div>
+              </div>
+
               {vaultError ? (
                 <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
                   {vaultError}
                 </div>
               ) : null}
-
-              <Button
-                type="button"
-                className="mt-4 w-full bg-[#1b2838] text-white hover:bg-[#2a475e]"
-                disabled
-                title="Nach dem Entsperren verfuegbar"
-              >
-                Sign in with Steam (nach Entsperren)
-              </Button>
             </div>
           </main>
         </div>

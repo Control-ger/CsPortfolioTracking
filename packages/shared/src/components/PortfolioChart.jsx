@@ -250,14 +250,16 @@ export const PortfolioChart = ({
 
     return visibleHistory.map((entry) => {
       const providedGrowthPercent = Number(entry?.growthPercent);
-      const growthPercent = Number.isFinite(providedGrowthPercent)
-        ? providedGrowthPercent
-        : hasValidBaseValue
-          ? ((entry.wert - baseValue) / baseValue) * 100
+      const growthPercent = hasValidBaseValue
+        ? ((entry.wert - baseValue) / baseValue) * 100
+        : Number.isFinite(providedGrowthPercent)
+          ? providedGrowthPercent
           : 0;
       const invested = Number.isFinite(Number(entry?.invested))
         ? Number(entry.invested)
-        : deriveInvestedFromGrowth(entry.wert, growthPercent);
+        : hasValidBaseValue
+          ? baseValue
+          : deriveInvestedFromGrowth(entry.wert, growthPercent);
       const profitEuro = Number.isFinite(invested) ? entry.wert - invested : null;
 
       return {
@@ -300,22 +302,9 @@ export const PortfolioChart = ({
     }
 
     const firstValue = chartData[0].wert;
-    const lastEntry = chartData[chartData.length - 1];
-    const lastValue = lastEntry.wert;
+    const lastValue = chartData[chartData.length - 1].wert;
     const periodDeltaValue = lastValue - firstValue;
     const periodDeltaPercent = firstValue > 0 ? (periodDeltaValue / firstValue) * 100 : 0;
-    const lastGrowthPercent = Number(lastEntry?.growthPercent);
-    const lastProfitEuro = Number(lastEntry?.profitEuro);
-
-    if (!showAbsolute && Number.isFinite(lastGrowthPercent)) {
-      const isPositive = lastGrowthPercent >= 0;
-      return {
-        lineColor: isPositive ? "#22c55e" : "#ef4444",
-        deltaValue: Number.isFinite(lastProfitEuro) ? lastProfitEuro : periodDeltaValue,
-        deltaPercent: lastGrowthPercent,
-        isPositive,
-      };
-    }
 
     const isPositive = periodDeltaValue >= 0;
 
@@ -325,7 +314,7 @@ export const PortfolioChart = ({
       deltaPercent: periodDeltaPercent,
       isPositive,
     };
-  }, [chartData, showAbsolute]);
+  }, [chartData]);
 
   const chartConfig = useMemo(
     () => ({
@@ -617,7 +606,7 @@ export const PortfolioChart = ({
         ) : (
           <>
             <div className="flex items-center gap-2 leading-none font-semibold">
-              {trendStats.isPositive ? "Gewinn" : "Verlust"}: {formatSignedCurrency(trendStats.deltaValue)} (
+              Performance: {formatSignedCurrency(trendStats.deltaValue)} (
               {formatSignedPercent(trendStats.deltaPercent)})
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             </div>

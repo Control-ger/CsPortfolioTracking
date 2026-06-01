@@ -43,6 +43,44 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
   const hasBuyOrder =
     Number(item?.buyOrderCount || 0) > 0 &&
     Number(item?.buyOrderBestPriceUsd || 0) > 0;
+  const buyOrderRows = Array.isArray(item?.buyOrderRows) ? item.buyOrderRows : [];
+  const toPositivePrice = (value) => {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null;
+  };
+  const historyValues = (Array.isArray(item?.priceHistory) ? item.priceHistory : [])
+    .map((entry) => {
+      const rawPrice =
+        entry?.wert ??
+        entry?.priceEur ??
+        entry?.price_eur ??
+        entry?.price ??
+        entry?.value;
+      return toPositivePrice(rawPrice);
+    })
+    .filter((value) => value !== null);
+  const fallbackCurrentPrice =
+    historyValues.length > 0 ? historyValues[historyValues.length - 1] : null;
+  const fallbackLastPrice =
+    historyValues.length > 1 ? historyValues[historyValues.length - 2] : null;
+  const fallbackHighestPrice =
+    historyValues.length > 0 ? Math.max(...historyValues) : null;
+  const fallbackLowestPrice =
+    historyValues.length > 0 ? Math.min(...historyValues) : null;
+  const fallbackAvgPrice = historyValues.length > 0
+    ? historyValues.reduce((sum, value) => sum + value, 0) / historyValues.length
+    : null;
+
+  const currentPrice = toPositivePrice(item?.currentPrice) ?? fallbackCurrentPrice;
+  const lastPrice = toPositivePrice(item?.lastPrice) ?? fallbackLastPrice;
+  const highestPrice = toPositivePrice(item?.highestPrice) ?? fallbackHighestPrice;
+  const lowestPrice = toPositivePrice(item?.lowestPrice) ?? fallbackLowestPrice;
+  const avgPrice = toPositivePrice(item?.avgPrice) ?? fallbackAvgPrice;
+  const hasExtendedStats =
+    lastPrice !== null ||
+    highestPrice !== null ||
+    lowestPrice !== null ||
+    avgPrice !== null;
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="md" className="md:hidden">
@@ -68,7 +106,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
             <div>
               <p className="text-xs uppercase text-muted-foreground">Aktueller Preis</p>
               <p className="text-lg font-bold">
-                {item.currentPrice !== null ? formatCurrencyPrice(item.currentPrice) : "N/A"}
+                {currentPrice !== null ? formatCurrencyPrice(currentPrice) : "N/A"}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -89,49 +127,53 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2">
-            <p className="text-xs uppercase text-muted-foreground">Aktuell</p>
-            <p className="text-sm font-semibold">{formatCurrencyPrice(item.currentPrice)}</p>
-          </div>
+        {hasExtendedStats ? (
+          <div className="grid grid-cols-2 gap-3">
+            {currentPrice !== null ? (
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2">
+                <p className="text-xs uppercase text-muted-foreground">Aktuell</p>
+                <p className="text-sm font-semibold">{formatCurrencyPrice(currentPrice)}</p>
+              </div>
+            ) : null}
 
-          {item.lastPrice !== null && (
+            {lastPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Letzter Preis</p>
-              <p className="text-sm font-semibold">{formatCurrencyPrice(item.lastPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(lastPrice)}</p>
             </div>
-          )}
+            ) : null}
 
-          {item.highestPrice !== null && (
+            {highestPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Hoechst</p>
-              <p className="text-sm font-semibold">{formatCurrencyPrice(item.highestPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(highestPrice)}</p>
             </div>
-          )}
+            ) : null}
 
-          {item.lowestPrice !== null && (
+            {lowestPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Tiefst</p>
-              <p className="text-sm font-semibold">{formatCurrencyPrice(item.lowestPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(lowestPrice)}</p>
             </div>
-          )}
+            ) : null}
 
-          {item.avgPrice !== null && (
+            {avgPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
               <p className="text-xs uppercase text-muted-foreground">Durchschnitt</p>
-              <p className="text-sm font-semibold">{formatCurrencyPrice(item.avgPrice)}</p>
+              <p className="text-sm font-semibold">{formatCurrencyPrice(avgPrice)}</p>
             </div>
-          )}
+            ) : null}
 
-          {item.highestPrice !== null || item.lowestPrice !== null ? (
-            <div className="col-span-2 rounded-xl border border-border/70 bg-card/65 p-2">
-              <p className="text-xs uppercase text-muted-foreground">Preis-Spanne</p>
-              <p className="text-sm font-semibold">
-                {formatCurrencyPrice(item.lowestPrice)} - {formatCurrencyPrice(item.highestPrice)}
-              </p>
-            </div>
-          ) : null}
-        </div>
+            {highestPrice !== null && lowestPrice !== null ? (
+              <div className="col-span-2 rounded-xl border border-border/70 bg-card/65 p-2">
+                <p className="text-xs uppercase text-muted-foreground">Preis-Spanne</p>
+                <p className="text-sm font-semibold">
+                  {formatCurrencyPrice(lowestPrice)} - {formatCurrencyPrice(highestPrice)}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {Array.isArray(item.priceHistory) && item.priceHistory.length > 0 ? (
           <div className="rounded-2xl border border-border/75 bg-card/65 p-3">
@@ -164,6 +206,50 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
             />
           </div>
         ) : null}
+
+        <div className="rounded-2xl border border-border/75 bg-card/65 p-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Buyorders (CSFloat)</h3>
+            {buyOrderRows.length > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {buyOrderRows.reduce((sum, row) => sum + Number(row.orders || 0), 0)} Orders,{" "}
+                {buyOrderRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0)} Menge
+              </span>
+            ) : null}
+          </div>
+
+          {buyOrderRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Keine passenden Buyorders fuer dieses Item gefunden.
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-border/60">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/30 text-left text-muted-foreground">
+                  <tr>
+                    <th className="px-2.5 py-2 font-medium">Preis</th>
+                    <th className="px-2.5 py-2 font-medium">Orders</th>
+                    <th className="px-2.5 py-2 font-medium">Menge</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {buyOrderRows.slice(0, 12).map((row, index) => (
+                    <tr key={`${row.priceUsd}-${index}`} className="border-t border-border/50">
+                      <td className="px-2.5 py-2 text-sky-300">
+                        {formatCurrencyPrice(Number(row.priceUsd), {
+                          useUsd: true,
+                          buyPriceUsd: Number(row.priceUsd),
+                        })}
+                      </td>
+                      <td className="px-2.5 py-2">{Number(row.orders || 0)}</td>
+                      <td className="px-2.5 py-2">{Number(row.quantity || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         {item.updateAge !== undefined && (
           <div className="text-center text-xs text-muted-foreground">

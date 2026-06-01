@@ -43,6 +43,7 @@ import {
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
   fetchCS2Inventory,
+  fetchCsFloatBuyOrdersData,
   fetchWatchlistData,
   getPortfolioPreferences,
   getCurrentUser,
@@ -181,6 +182,80 @@ function resolveWatchlistChangePercent(item) {
 
 function normalizeSearchText(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function normalizeBuyOrderNameKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeBuyOrderNameKeyFuzzy(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\bstattrak(?:â„¢)?\b/gi, "")
+    .replace(/\bsouvenir\b/gi, "")
+    .replace(/[â˜…]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveBuyOrderSummaryForItem(item, summaryRows = []) {
+  const rows = Array.isArray(summaryRows) ? summaryRows : [];
+  if (!item || rows.length === 0) {
+    return null;
+  }
+
+  const summaryByName = new Map();
+  rows.forEach((row) => {
+    const exactKey = normalizeBuyOrderNameKey(row?.marketHashName);
+    const fuzzyKey = normalizeBuyOrderNameKeyFuzzy(row?.marketHashName);
+    if (!exactKey && !fuzzyKey) {
+      return;
+    }
+    if (exactKey) {
+      summaryByName.set(exactKey, row);
+    }
+    if (fuzzyKey) {
+      summaryByName.set(fuzzyKey, row);
+    }
+  });
+
+  const rawName = item?.marketHashName || item?.name;
+  const key = normalizeBuyOrderNameKey(rawName);
+  const fuzzyKey = normalizeBuyOrderNameKeyFuzzy(rawName);
+  let summary = key ? summaryByName.get(key) : null;
+
+  if (!summary && fuzzyKey) {
+    summary = summaryByName.get(fuzzyKey) || null;
+  }
+
+  if (!summary && fuzzyKey) {
+    summary = rows.find((row) => {
+      const rowKey = normalizeBuyOrderNameKeyFuzzy(row?.marketHashName);
+      return rowKey && (rowKey.includes(fuzzyKey) || fuzzyKey.includes(rowKey));
+    }) || null;
+  }
+
+  return summary || null;
+}
+
+function withBuyOrderFields(item, summaryRows = []) {
+  if (!item || item.__detailKind === "group" || item.__detailKind === "group-cluster") {
+    return item;
+  }
+
+  const summary = resolveBuyOrderSummaryForItem(item, summaryRows);
+  const buyOrderCount = Number(summary?.orders || 0);
+  const buyOrderQuantity = Number(summary?.quantity || 0);
+  const buyOrderBestPriceUsd = Number(summary?.bestPriceUsd || 0);
+
+  return {
+    ...item,
+    hasBuyOrder: buyOrderCount > 0 && buyOrderBestPriceUsd > 0,
+    buyOrderCount: buyOrderCount > 0 ? buyOrderCount : 0,
+    buyOrderQuantity: buyOrderQuantity > 0 ? buyOrderQuantity : 0,
+    buyOrderBestPriceUsd: buyOrderBestPriceUsd > 0 ? buyOrderBestPriceUsd : null,
+  };
 }
 
 function deriveCsUpdateImpact(item) {
@@ -795,6 +870,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
   const [selectedItemHistoryLoading, setSelectedItemHistoryLoading] = useState(false);
+  const [inventoryBuyOrderSummary, setInventoryBuyOrderSummary] = useState([]);
   const initialVisitedTab = runtimeTabs.includes(resolvedInitialTab) ? resolvedInitialTab : runtimeTabs[0];
   const [activeTab, setActiveTab] = useState(initialVisitedTab);
   const [visitedTabs, setVisitedTabs] = useState(() => new Set([initialVisitedTab]));
@@ -1494,6 +1570,49 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     return resolveLiveClusterItem(selectedItem, enrichedInvestments);
   }, [selectedItem, enrichedInvestments]);
+
+  const selectedItemWithLiveAndBuyOrders = useMemo(
+    () => withBuyOrderFields(selectedItemWithLive, inventoryBuyOrderSummary),
+    [selectedItemWithLive, inventoryBuyOrderSummary],
+  );
+
+  useEffect(() => {
+    if (!isDesktopRuntime || activeTab !== "inventory") {
+      return;
+    }
+
+    let isCancelled = false;
+    const loadInventoryBuyOrders = async () => {
+      try {
+        const buyOrderResponse = await fetchCsFloatBuyOrdersData();
+        let nextSummary = Array.isArray(buyOrderResponse?.data?.summaryByMarketHashName)
+          ? buyOrderResponse.data.summaryByMarketHashName
+          : [];
+
+        if (nextSummary.length === 0) {
+          const liveResponse = await fetchCsFloatBuyOrdersData({
+            syncNow: true,
+            limit: 200,
+            maxPages: 8,
+          });
+          nextSummary = Array.isArray(liveResponse?.data?.summaryByMarketHashName)
+            ? liveResponse.data.summaryByMarketHashName
+            : [];
+        }
+
+        if (!isCancelled) {
+          setInventoryBuyOrderSummary(nextSummary);
+        }
+      } catch (buyOrderError) {
+        console.warn("[inventory] CSFloat buyorders unavailable", buyOrderError);
+      }
+    };
+
+    void loadInventoryBuyOrders();
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTab, isDesktopRuntime]);
 
   useEffect(() => {
     const loadItemHistory = async () => {
@@ -2404,7 +2523,36 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const staleItems = Number(stats.staleLiveItemsCount || 0);
   const fallbackRangeDeltaPercent = Number(chartTrendData?.deltaPercent);
   const fallbackRangeDeltaValue = Number(chartTrendData?.deltaValue);
-  const headerPortfolioValue = hoveredChartData?.wert ?? (stats.totalValue || 0);
+  const latestHistoryValue = useMemo(() => {
+    if (!Array.isArray(portfolioHistory) || portfolioHistory.length === 0) {
+      return null;
+    }
+
+    for (let index = portfolioHistory.length - 1; index >= 0; index -= 1) {
+      const entry = portfolioHistory[index];
+      const value = Number(
+        entry?.wert ??
+          entry?.value ??
+          entry?.priceEur ??
+          entry?.price_eur ??
+          entry?.price ??
+          0,
+      );
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+
+    return null;
+  }, [portfolioHistory]);
+  const statsTotalValue = Number(stats.totalValue);
+  const portfolioTotalValueForDisplay =
+    Number.isFinite(statsTotalValue) && statsTotalValue > 0
+      ? statsTotalValue
+      : Number.isFinite(latestHistoryValue)
+        ? Number(latestHistoryValue)
+        : 0;
+  const headerPortfolioValue = hoveredChartData?.wert ?? portfolioTotalValueForDisplay;
   const headerPortfolioPercent = hoveredChartData?.growthPercent ?? (
     Number.isFinite(fallbackRangeDeltaPercent) ? fallbackRangeDeltaPercent : (stats.totalRoiPercent || 0)
   );
@@ -2460,9 +2608,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     navigate(`/cs-updates?item=${encodeURIComponent(latestId)}`);
   }, [latestCsUpdate?.id, markLatestCsUpdateSeen, navigate]);
-  const portfolioValueLabel = formatPrice(stats.totalValue || 0, {
+  const portfolioValueLabel = formatPrice(portfolioTotalValueForDisplay, {
     useUsd: true,
-    buyPriceUsd: stats.totalValue || 0,
+    buyPriceUsd: portfolioTotalValueForDisplay,
   });
   const formatUsdPrice = useCallback(
     (value, decimals = 2) =>
@@ -4900,7 +5048,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                 ) : (
                   <PortfolioCompositionChart
                     data={compositionData}
-                    totalValueOverride={stats.totalValue || 0}
+                    totalValueOverride={portfolioTotalValueForDisplay}
                     totalValueLabel={portfolioValueLabel}
                   />
                 )}
@@ -4964,15 +5112,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
             <div className="hidden md:col-span-1 md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
               <ItemDetailPanel
-                item={selectedItemWithLive || selectedItem}
+                item={selectedItemWithLiveAndBuyOrders || selectedItem}
                 history={selectedItemHistory}
                 historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
                 onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
                 canToggleExclude={
                   isDesktopRuntime &&
-                  selectedItemWithLive?.__detailKind !== "group" &&
-                  selectedItemWithLive?.__detailKind !== "group-cluster"
+                  selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&
+                  selectedItemWithLiveAndBuyOrders?.__detailKind !== "group-cluster"
                 }
               />
             </div>
@@ -4981,12 +5129,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               modal.type === "itemDetail" ? (() => {
                 const liveModalItem =
                   resolveLiveClusterItem(modal?.data?.item, enrichedInvestments) || modal?.data?.item || null;
+                const modalItemWithBuyOrders = withBuyOrderFields(liveModalItem, inventoryBuyOrderSummary);
                 return (
                   <ItemDetailsModal
                     key={modal.id}
                     isOpen={true}
                     onClose={() => closeModal(modal.id)}
-                    item={liveModalItem}
+                    item={modalItemWithBuyOrders}
                     history={selectedItemHistory}
                     historyLoading={selectedItemHistoryLoading}
                     onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}

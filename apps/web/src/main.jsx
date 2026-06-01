@@ -34,27 +34,48 @@ function isChunkLoadErrorMessage(message) {
     || normalized.includes("error loading dynamically imported module")
     || normalized.includes("loading module from")
     || normalized.includes("dynamically imported module")
+    || normalized.includes("ns_error_corrupted_content")
+    || normalized.includes("mime")
+    || normalized.includes("blocked because of a disallowed mime type")
+    || (normalized.includes("/assets/") && normalized.includes(".js"))
   );
+}
+
+function attemptChunkRecovery(message, preventDefault) {
+  if (!isChunkLoadErrorMessage(message)) {
+    return false;
+  }
+
+  const attempted = window.sessionStorage.getItem(CHUNK_RECOVERY_KEY) === "1";
+  if (!attempted) {
+    if (typeof preventDefault === "function") {
+      preventDefault();
+    }
+    window.sessionStorage.setItem(CHUNK_RECOVERY_KEY, "1");
+    window.location.reload();
+    return true;
+  }
+
+  // Nach einem Recovery-Versuch geben wir den Fehler normal durch,
+  // damit kein potenzieller Reload-Loop entsteht.
+  window.sessionStorage.removeItem(CHUNK_RECOVERY_KEY);
+  return false;
 }
 
 if (typeof window !== "undefined") {
   window.addEventListener("vite:preloadError", (event) => {
     const message = getChunkLoadErrorMessage(event?.payload);
-    if (!isChunkLoadErrorMessage(message)) {
-      return;
-    }
+    attemptChunkRecovery(message, () => event.preventDefault());
+  });
 
-    const attempted = window.sessionStorage.getItem(CHUNK_RECOVERY_KEY) === "1";
-    if (!attempted) {
-      event.preventDefault();
-      window.sessionStorage.setItem(CHUNK_RECOVERY_KEY, "1");
-      window.location.reload();
-      return;
-    }
+  window.addEventListener("unhandledrejection", (event) => {
+    const message = getChunkLoadErrorMessage(event?.reason);
+    attemptChunkRecovery(message, () => event.preventDefault());
+  });
 
-    // Nach einem Recovery-Versuch geben wir den Fehler normal durch,
-    // damit kein potenzieller Reload-Loop entsteht.
-    window.sessionStorage.removeItem(CHUNK_RECOVERY_KEY);
+  window.addEventListener("error", (event) => {
+    const message = getChunkLoadErrorMessage(event?.error || event?.message);
+    attemptChunkRecovery(message, () => event.preventDefault());
   });
 }
 

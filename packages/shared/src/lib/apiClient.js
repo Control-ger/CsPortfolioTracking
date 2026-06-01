@@ -1319,7 +1319,24 @@ export async function fetchSkinBaronApiKeyStatus() {
     };
   }
 
-  return requestWithMeta("/api/v1/settings/skinbaron-api-key");
+  try {
+    return await requestWithMeta("/api/v1/settings/skinbaron-api-key");
+  } catch (error) {
+    if (Number(error?.status) === 404) {
+      return {
+        data: {
+          configured: false,
+          sessionCookieConfigured: false,
+          importReady: false,
+        },
+        meta: {
+          source: "web-fallback",
+          endpointUnavailable: true,
+        },
+      };
+    }
+    throw error;
+  }
 }
 
 export async function updateSkinBaronApiKey(apiKeyOrEncryptedKey) {

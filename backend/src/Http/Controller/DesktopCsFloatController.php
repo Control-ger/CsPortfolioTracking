@@ -119,22 +119,34 @@ final class DesktopCsFloatController
         $pageStats = [];
         $errors = [];
         $source = 'buy-orders';
+        $buyOrdersPageBase = 0;
 
-        for ($page = 0; $page < $maxPages; $page++) {
-            $response = $this->tradeClient->fetchBuyOrdersPage($limit, $page);
-            if (!empty($response['error'])) {
-                $errors[] = $response['error'];
-                break;
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $orders = [];
+            $pageStats = [];
+            $errors = [];
+            $buyOrdersPageBase = $attempt === 0 ? 0 : 1;
+
+            for ($page = 0; $page < $maxPages; $page++) {
+                $response = $this->tradeClient->fetchBuyOrdersPage($limit, $page + $buyOrdersPageBase);
+                if (!empty($response['error'])) {
+                    $errors[] = $response['error'];
+                    break;
+                }
+
+                $pageOrders = is_array($response['orders'] ?? null) ? $response['orders'] : [];
+                $pageStats[] = [
+                    'page' => $page + $buyOrdersPageBase,
+                    'count' => count($pageOrders),
+                ];
+                $orders = array_merge($orders, $pageOrders);
+
+                if (count($pageOrders) < $limit) {
+                    break;
+                }
             }
 
-            $pageOrders = is_array($response['orders'] ?? null) ? $response['orders'] : [];
-            $pageStats[] = [
-                'page' => $page,
-                'count' => count($pageOrders),
-            ];
-            $orders = array_merge($orders, $pageOrders);
-
-            if (count($pageOrders) < $limit) {
+            if ($orders !== [] || $errors !== [] || $attempt > 0) {
                 break;
             }
         }
@@ -255,6 +267,7 @@ final class DesktopCsFloatController
                 'requested' => [
                     'limit' => $limit,
                     'maxPages' => $maxPages,
+                    'buyOrdersPageBase' => $buyOrdersPageBase,
                 ],
                 'pagesFetched' => count($pageStats),
                 'pageStats' => $pageStats,
@@ -346,10 +359,13 @@ final class DesktopCsFloatController
         $marketHashName = $this->readString($payload, ['item', 'market_hash_name'])
             ?? $this->readString($payload, ['item', 'marketHashName'])
             ?? $this->readString($payload, ['item', 'name'])
+            ?? $this->readString($payload, ['expression'])
+            ?? $this->readString($payload, ['order', 'expression'])
+            ?? $this->readString($payload, ['order_expression'])
             ?? $this->readString($payload, ['market_hash_name'])
             ?? $this->readString($payload, ['marketHashName'])
             ?? $this->readString($payload, ['name'])
-            ?? $this->findFirstStringByKey($payload, ['market_hash_name', 'marketHashName', 'item_name', 'name']);
+            ?? $this->findFirstStringByKey($payload, ['market_hash_name', 'marketHashName', 'item_name', 'name', 'expression', 'order_expression']);
         if ($marketHashName === null || $marketHashName === '') {
             return null;
         }
@@ -405,9 +421,9 @@ final class DesktopCsFloatController
                 ['order', 'offer_price'],
             ] as $path
         ) {
-            $value = $this->readPath($payload, $path);
-            if (is_numeric($value)) {
-                return $this->normalizeCsFloatUsdAmount((float) $value);
+            $numericValue = $this->readNumericPath($payload, $path);
+            if ($numericValue !== null) {
+                return $this->normalizeCsFloatUsdAmount($numericValue);
             }
         }
 
@@ -545,9 +561,9 @@ final class DesktopCsFloatController
                 ['auction', 'price', 'value'],
             ] as $path
         ) {
-            $value = $this->readPath($trade, $path);
-            if (is_numeric($value)) {
-                return $this->normalizeCsFloatUsdAmount((float) $value);
+            $numericValue = $this->readNumericPath($trade, $path);
+            if ($numericValue !== null) {
+                return $this->normalizeCsFloatUsdAmount($numericValue);
             }
         }
 
@@ -580,6 +596,30 @@ final class DesktopCsFloatController
         }
 
         return round($amount, 4);
+    }
+
+    private function readNumericPath(array $data, array $path): ?float
+    {
+        $value = $this->readPath($data, $path);
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $raw = trim($value);
+        if ($raw === '') {
+            return null;
+        }
+
+        $normalized = str_replace(',', '.', $raw);
+        if (preg_match('/-?\d+(?:\.\d+)?/', $normalized, $matches) !== 1) {
+            return null;
+        }
+
+        return is_numeric($matches[0]) ? (float) $matches[0] : null;
     }
 
     private function readImageUrl(array $trade): ?string

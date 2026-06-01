@@ -671,3 +671,12 @@ Updated: 2026-06-01
 Change: Desktop-Sidecar Upstream-Proxy fuer geschuetzte Server-Routen gehaertet
 - `backend/desktop/index.php` erweitert die Upstream-URL-Kandidaten um zusaetzliche `index.php`/`route=` Varianten, damit unterschiedliche Server-Frontcontroller-Pfade robuster aufloesen.
 - `upstreamHint` erkennt Cloudflare-Access-Login-Antworten jetzt explizit als Access-Thema (`UPSTREAM_ACCESS_DENIED`) statt irrefuehrend als generisches 404-Route-Problem.
+
+---
+
+Updated: 2026-06-01
+Change: CSFloat Buyorders Watchlist-Detail erweitert + Sidecar-Mapping gehaertet
+- `backend/src/Http/Controller/DesktopCsFloatController.php` erweitert Buyorder-Mapping fuer `expression`-basierte Payloads, robustes Preis-Parsing und prueft `buy-orders` Paging sowohl zero-based als auch one-based.
+- `backend/src/Infrastructure/External/CsFloatTradeClient.php` liest verschachtelte Collections (`data.buy_orders`/`data.orders`) stabil aus.
+- `packages/shared/src/components/Watchlist.jsx` zeigt Buyorders item-spezifisch im Detailpanel als Mini-Tabelle (Preis/Orders/Menge), entfernt die globale Buyorder-Karte und blendet eine kompakte Debugzeile fuer Quell-/Paging-Diagnose ein.
+- `packages/shared/src/components/WatchlistItemModal.jsx` zeigt dieselbe Buyorder-Mini-Tabelle auch mobil.
