@@ -250,16 +250,14 @@ export const PortfolioChart = ({
 
     return visibleHistory.map((entry) => {
       const providedGrowthPercent = Number(entry?.growthPercent);
-      const growthPercent = hasValidBaseValue
-        ? ((entry.wert - baseValue) / baseValue) * 100
-        : Number.isFinite(providedGrowthPercent)
-          ? providedGrowthPercent
+      const growthPercent = Number.isFinite(providedGrowthPercent)
+        ? providedGrowthPercent
+        : hasValidBaseValue
+          ? ((entry.wert - baseValue) / baseValue) * 100
           : 0;
       const invested = Number.isFinite(Number(entry?.invested))
         ? Number(entry.invested)
-        : hasValidBaseValue
-          ? baseValue
-          : deriveInvestedFromGrowth(entry.wert, growthPercent);
+        : deriveInvestedFromGrowth(entry.wert, growthPercent);
       const profitEuro = Number.isFinite(invested) ? entry.wert - invested : null;
 
       return {
@@ -304,7 +302,16 @@ export const PortfolioChart = ({
     const firstValue = chartData[0].wert;
     const lastValue = chartData[chartData.length - 1].wert;
     const periodDeltaValue = lastValue - firstValue;
-    const periodDeltaPercent = firstValue > 0 ? (periodDeltaValue / firstValue) * 100 : 0;
+    const firstGrowthPercent = Number(chartData[0]?.growthPercent);
+    const lastGrowthPercent = Number(chartData[chartData.length - 1]?.growthPercent);
+    const periodDeltaPercent =
+      !showAbsolute &&
+      Number.isFinite(firstGrowthPercent) &&
+      Number.isFinite(lastGrowthPercent)
+        ? lastGrowthPercent - firstGrowthPercent
+        : firstValue > 0
+          ? (periodDeltaValue / firstValue) * 100
+          : 0;
 
     const isPositive = periodDeltaValue >= 0;
 
@@ -314,7 +321,7 @@ export const PortfolioChart = ({
       deltaPercent: periodDeltaPercent,
       isPositive,
     };
-  }, [chartData]);
+  }, [chartData, showAbsolute]);
 
   const chartConfig = useMemo(
     () => ({

@@ -985,6 +985,97 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
   const portfolioChartCardRef = useRef(null);
   const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
+  const scopedPortfolioHistory = useMemo(() => {
+    if (!Array.isArray(portfolioHistory) || portfolioHistory.length === 0) {
+      return [];
+    }
+
+    const normalizedScope = String(metricsScope || "investments").toLowerCase();
+    if (normalizedScope !== "all") {
+      return portfolioHistory;
+    }
+
+    const totalValueAll = Number(stats.totalValue || 0);
+    if (!Number.isFinite(totalValueAll) || totalValueAll <= 0) {
+      return portfolioHistory;
+    }
+
+    let latestHistoryValue = null;
+    let latestHistoryInvested = null;
+    for (let index = portfolioHistory.length - 1; index >= 0; index -= 1) {
+      const entry = portfolioHistory[index];
+      const value = Number(
+        entry?.wert ?? entry?.value ?? entry?.priceEur ?? entry?.price_eur ?? entry?.price ?? 0,
+      );
+      if (!Number.isFinite(value) || value <= 0) {
+        continue;
+      }
+
+      latestHistoryValue = value;
+      const invested = Number(
+        entry?.invested ??
+          entry?.investedValue ??
+          entry?.invested_value ??
+          entry?.totalInvested ??
+          entry?.total_invested ??
+          0,
+      );
+      latestHistoryInvested = Number.isFinite(invested) && invested > 0 ? invested : null;
+      break;
+    }
+
+    if (!Number.isFinite(latestHistoryValue) || latestHistoryValue <= 0) {
+      return portfolioHistory;
+    }
+
+    const valueDeltaRatio = Math.abs(totalValueAll - latestHistoryValue) / latestHistoryValue;
+    if (valueDeltaRatio <= 0.03) {
+      return portfolioHistory;
+    }
+
+    const totalInvestedAll = Number(stats.totalInvested || 0);
+    const valueScaleFactor = totalValueAll / latestHistoryValue;
+    const investedScaleFactor =
+      Number.isFinite(totalInvestedAll) &&
+      totalInvestedAll > 0 &&
+      Number.isFinite(latestHistoryInvested) &&
+      latestHistoryInvested > 0
+        ? totalInvestedAll / latestHistoryInvested
+        : valueScaleFactor;
+
+    if (!Number.isFinite(valueScaleFactor) || valueScaleFactor <= 0) {
+      return portfolioHistory;
+    }
+
+    return portfolioHistory.map((entry) => {
+      const value = Number(
+        entry?.wert ?? entry?.value ?? entry?.priceEur ?? entry?.price_eur ?? entry?.price ?? 0,
+      );
+      const invested = Number(
+        entry?.invested ??
+          entry?.investedValue ??
+          entry?.invested_value ??
+          entry?.totalInvested ??
+          entry?.total_invested ??
+          0,
+      );
+      const scaledValue = Number.isFinite(value) ? value * valueScaleFactor : value;
+      const scaledInvested = Number.isFinite(invested) ? invested * investedScaleFactor : invested;
+      const scaledGrowthPercent =
+        Number.isFinite(scaledInvested) && scaledInvested > 0
+          ? ((scaledValue - scaledInvested) / scaledInvested) * 100
+          : 0;
+
+      return {
+        ...entry,
+        wert: Number.isFinite(scaledValue) ? scaledValue : entry?.wert,
+        value: Number.isFinite(scaledValue) ? scaledValue : entry?.value,
+        invested: Number.isFinite(scaledInvested) ? scaledInvested : entry?.invested,
+        investedValue: Number.isFinite(scaledInvested) ? scaledInvested : entry?.investedValue,
+        growthPercent: scaledGrowthPercent,
+      };
+    });
+  }, [metricsScope, portfolioHistory, stats.totalInvested, stats.totalValue]);
 
   // Keyboard shortcuts for tab navigation and search
   useKeyboard({
@@ -2508,19 +2599,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
       window.removeEventListener("resize", updateMeasuredHeight);
     };
-  }, [activeTab, portfolioHistory.length, portfolioLoading]);
+  }, [activeTab, portfolioLoading, scopedPortfolioHistory.length]);
 
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
   const fallbackRangeDeltaPercent = Number(chartTrendData?.deltaPercent);
   const fallbackRangeDeltaValue = Number(chartTrendData?.deltaValue);
-  const latestHistoryValue = useMemo(() => {
-    if (!Array.isArray(portfolioHistory) || portfolioHistory.length === 0) {
+  const latestHistorySnapshot = useMemo(() => {
+    if (!Array.isArray(scopedPortfolioHistory) || scopedPortfolioHistory.length === 0) {
       return null;
     }
 
-    for (let index = portfolioHistory.length - 1; index >= 0; index -= 1) {
-      const entry = portfolioHistory[index];
+    for (let index = scopedPortfolioHistory.length - 1; index >= 0; index -= 1) {
+      const entry = scopedPortfolioHistory[index];
       const value = Number(
         entry?.wert ??
           entry?.value ??
@@ -2530,32 +2621,74 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           0,
       );
       if (Number.isFinite(value) && value > 0) {
-        return value;
+        const invested = Number(
+          entry?.invested ??
+            entry?.investedValue ??
+            entry?.invested_value ??
+            entry?.totalInvested ??
+            entry?.total_invested ??
+            0,
+        );
+        const growthPercent = Number(
+          entry?.growthPercent ??
+            entry?.growth_percent ??
+            entry?.percentChange ??
+            entry?.percent_change,
+        );
+        const profitEuro = Number.isFinite(invested) ? value - invested : null;
+        return {
+          value,
+          invested: Number.isFinite(invested) ? invested : null,
+          growthPercent: Number.isFinite(growthPercent) ? growthPercent : null,
+          profitEuro: Number.isFinite(profitEuro) ? profitEuro : null,
+        };
       }
     }
 
     return null;
-  }, [portfolioHistory]);
+  }, [scopedPortfolioHistory]);
   const statsTotalValue = Number(stats.totalValue);
+  const hasStatsTotalValue = Number.isFinite(statsTotalValue) && statsTotalValue > 0;
+  const historyValue = Number(latestHistorySnapshot?.value);
+  const hasHistoryValue = Number.isFinite(historyValue) && historyValue > 0;
+  const shouldPreferHistorySummary = !hasStatsTotalValue && hasHistoryValue;
+  const historyProfitEuro = Number(latestHistorySnapshot?.profitEuro);
+  const historyGrowthPercent = Number(latestHistorySnapshot?.growthPercent);
+  const hasHistoryProfitEuro = Number.isFinite(historyProfitEuro);
+  const hasHistoryGrowthPercent = Number.isFinite(historyGrowthPercent);
   const portfolioTotalValueForDisplay =
-    Number.isFinite(statsTotalValue) && statsTotalValue > 0
+    hasStatsTotalValue
       ? statsTotalValue
-      : Number.isFinite(latestHistoryValue)
-        ? Number(latestHistoryValue)
+      : hasHistoryValue
+        ? historyValue
         : 0;
   const headerPortfolioValue = hoveredChartData?.wert ?? portfolioTotalValueForDisplay;
-  const headerPortfolioPercent = hoveredChartData?.growthPercent ?? (
-    Number.isFinite(fallbackRangeDeltaPercent) ? fallbackRangeDeltaPercent : (stats.totalRoiPercent || 0)
-  );
-  const hoveredProfitEuro = Number(hoveredChartData?.profitEuro);
   const statsProfitEuro = Number(stats.totalProfitEuro);
   const statsRoiPercent = Number(stats.totalRoiPercent);
-  const defaultProfitEuro = Number.isFinite(statsProfitEuro)
-    ? statsProfitEuro
-    : (Number.isFinite(fallbackRangeDeltaValue) ? fallbackRangeDeltaValue : 0);
-  const defaultProfitPercent = Number.isFinite(statsRoiPercent)
-    ? statsRoiPercent
-    : (Number.isFinite(fallbackRangeDeltaPercent) ? fallbackRangeDeltaPercent : 0);
+  const hasStatsProfitEuro = Number.isFinite(statsProfitEuro);
+  const hasStatsRoiPercent = Number.isFinite(statsRoiPercent);
+  const hasRangeDeltaPercent = Number.isFinite(fallbackRangeDeltaPercent);
+  const hasRangeDeltaValue = Number.isFinite(fallbackRangeDeltaValue);
+  const defaultProfitEuro = shouldPreferHistorySummary && hasHistoryProfitEuro
+    ? historyProfitEuro
+    : hasStatsTotalValue && hasStatsProfitEuro
+      ? statsProfitEuro
+      : hasRangeDeltaValue
+        ? fallbackRangeDeltaValue
+        : hasStatsProfitEuro
+          ? statsProfitEuro
+          : 0;
+  const defaultProfitPercent = shouldPreferHistorySummary && hasHistoryGrowthPercent
+    ? historyGrowthPercent
+    : hasStatsTotalValue && hasStatsRoiPercent
+      ? statsRoiPercent
+      : hasRangeDeltaPercent
+        ? fallbackRangeDeltaPercent
+        : hasStatsRoiPercent
+          ? statsRoiPercent
+          : 0;
+  const headerPortfolioPercent = hoveredChartData?.growthPercent ?? defaultProfitPercent;
+  const hoveredProfitEuro = Number(hoveredChartData?.profitEuro);
   const headerProfitEuro = hoveredChartData
     ? Number.isFinite(hoveredProfitEuro)
       ? hoveredProfitEuro
@@ -2564,7 +2697,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const headerProfitPositive = headerProfitEuro >= 0;
   const headerPortfolioPositive = hoveredChartData
     ? headerProfitPositive
-    : (Number.isFinite(statsProfitEuro) ? statsProfitEuro >= 0 : Boolean(stats.isPositive));
+    : shouldPreferHistorySummary
+      ? headerProfitPositive
+      : (hasStatsProfitEuro ? statsProfitEuro >= 0 : Boolean(stats.isPositive));
   const csUpdateBannerVisibleHoursRaw = Number(csUpdatesMeta?.bannerVisibleHours);
   const csUpdateBannerVisibleHours = Number.isFinite(csUpdateBannerVisibleHoursRaw)
     ? Math.max(1, csUpdateBannerVisibleHoursRaw)
@@ -2628,6 +2763,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const headerProfitPercent = hoveredChartData
     ? Number(headerPortfolioPercent || 0)
     : defaultProfitPercent;
+  const headerProfitSubLabel = hoveredChartData?.date
+    ? formatDateSafe(hoveredChartData.date)
+    : shouldPreferHistorySummary || (hasStatsTotalValue && hasStatsRoiPercent)
+      ? "ROI gesamt"
+      : `ROI ${String(chartTrendData?.rangeLabel || "90T")}`;
   const managementClusters = buildManagementClusters(managementInvestments);
   const managementInvestmentById = new Map(
     managementInvestments.map((item) => [String(item.id), item]),
@@ -4764,11 +4904,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               <StatCard
                 title="Gesamt Zuwachs"
                 value={`${headerProfitEuro >= 0 ? "+" : "-"}${formatPrice(Math.abs(headerProfitEuro))}`}
-                subValue={`${headerProfitPercent >= 0 ? "+" : ""}${headerProfitPercent.toFixed(2)}%${
-                  hoveredChartData?.date
-                    ? ` | ${formatDateSafe(hoveredChartData.date)}`
-                    : ` | ROI ${String(chartTrendData?.rangeLabel || "90T")}`
-                }`}
+                subValue={`${headerProfitPercent >= 0 ? "+" : ""}${headerProfitPercent.toFixed(2)}% | ${headerProfitSubLabel}`}
                 isPositive={headerProfitPositive}
               />
               <StatCard title="Items im Bestand" value={`${stats.totalQuantity} Stueck`} />
@@ -4798,7 +4934,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               <div className="min-w-0">
                 <PortfolioChart
                   cardRef={portfolioChartCardRef}
-                  history={portfolioHistory}
+                  history={scopedPortfolioHistory}
                   isLoading={portfolioLoading}
                   onHoverChange={setHoveredChartData}
                   onTrendChange={setChartTrendData}
