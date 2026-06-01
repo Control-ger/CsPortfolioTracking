@@ -1255,6 +1255,20 @@ export async function updateCurrencyPreference(currency) {
   });
 }
 
+export async function fetchPortfolioGroupsSetting() {
+  return requestWithMeta("/api/v1/settings/portfolio-groups");
+}
+
+export async function updatePortfolioGroupsSetting(groups = []) {
+  return requestWithMeta("/api/v1/settings/portfolio-groups", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      groups: Array.isArray(groups) ? groups : [],
+    }),
+  });
+}
+
 export async function fetchCsFloatApiKeyStatus() {
   const desktopSecrets = getDesktopSecrets();
   if (desktopSecrets?.getCsFloatApiKeyStatus) {

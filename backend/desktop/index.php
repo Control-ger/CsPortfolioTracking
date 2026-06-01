@@ -287,18 +287,26 @@ $buildUpstreamCandidates = static function (string $baseUrl, string $endpointPat
     $lower = strtolower($base);
 
     $candidates = [];
+    $endpointRoute = '?route=' . rawurlencode($endpoint);
+
+    // Keep direct-path candidates first.
+    $candidates[] = $base . $endpoint;
+    $candidates[] = $base . $endpointRoute;
+    $candidates[] = $base . '/index.php' . $endpoint;
+    $candidates[] = $base . '/index.php' . $endpointRoute;
+    $candidates[] = $base . '/api/index.php' . $endpoint;
+    $candidates[] = $base . '/api/index.php' . $endpointRoute;
+
     if (str_ends_with($lower, '/api/index.php')) {
-        $candidates[] = $base . $endpoint;
-        $candidates[] = substr($base, 0, -strlen('/api/index.php')) . $endpoint;
-        $candidates[] = $base . '?route=' . rawurlencode($endpoint);
+        $root = substr($base, 0, -strlen('/api/index.php'));
+        $candidates[] = $root . $endpoint;
+        $candidates[] = $root . '/index.php' . $endpoint;
+        $candidates[] = $root . '/index.php' . $endpointRoute;
     } elseif (str_ends_with($lower, '/api')) {
-        $candidates[] = $base . '/index.php' . $endpoint;
-        $candidates[] = $base . '/index.php?route=' . rawurlencode($endpoint);
-        $candidates[] = substr($base, 0, -strlen('/api')) . $endpoint;
-    } else {
-        $candidates[] = $base . '/api/index.php' . $endpoint;
-        $candidates[] = $base . '/api/index.php?route=' . rawurlencode($endpoint);
-        $candidates[] = $base . $endpoint;
+        $root = substr($base, 0, -strlen('/api'));
+        $candidates[] = $root . $endpoint;
+        $candidates[] = $root . '/index.php' . $endpoint;
+        $candidates[] = $root . '/index.php' . $endpointRoute;
     }
 
     $deduped = [];
@@ -498,6 +506,24 @@ $summarizeProxyIssue = static function (array $attempts, string $endpointPath = 
         if (!is_array($attempt)) {
             continue;
         }
+        $bodyPreview = strtolower((string) ($attempt['bodyPreview'] ?? ''));
+        if (
+            $bodyPreview !== ''
+            && (str_contains($bodyPreview, 'cloudflare access')
+                || str_contains($bodyPreview, '/cdn-cgi/access/login')
+                || str_contains($bodyPreview, 'cloudflareaccess.com'))
+        ) {
+            return $withContext([
+                'code' => 'UPSTREAM_ACCESS_DENIED',
+                'message' => 'Upstream requires Cloudflare Access authentication for this request.',
+            ]);
+        }
+    }
+
+    foreach ($attempts as $attempt) {
+        if (!is_array($attempt)) {
+            continue;
+        }
         $status = (int) ($attempt['httpCode'] ?? 0);
         if (in_array($status, [301, 302, 307, 308], true)) {
             return $withContext([
@@ -640,6 +666,101 @@ $router->register('PUT', '/api/v1/settings/currency', static function (Request $
     JsonResponseFactory::error(
         'SETTINGS_SAVE_FAILED',
         'Currency-Preference konnte nicht zum Server gespeichert werden.',
+        [],
+        502
+    );
+});
+
+$router->register('GET', '/api/v1/settings/portfolio-groups', static function () use ($proxyUpstreamGet): void {
+    $proxied = $proxyUpstreamGet('/api/v1/settings/portfolio-groups');
+    if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($proxied['data'] ?? null)
+                ? $proxied['data']
+                : ['userId' => 1, 'groups' => [], 'updatedAt' => null, 'source' => 'upstream'],
+            array_merge($proxied['meta'] ?? [], ['source' => 'upstream'])
+        );
+        return;
+    }
+
+    JsonResponseFactory::success(
+        [
+            'userId' => 1,
+            'groups' => [],
+            'updatedAt' => null,
+            'source' => 'desktop-defaults',
+        ],
+        [
+            'source' => 'desktop-local-fallback',
+            'proxyAttempts' => $proxied['attempts'] ?? [],
+        ]
+    );
+});
+
+$router->register('PUT', '/api/v1/settings/portfolio-groups', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+    $baseUrl = $resolveUpstreamApiBase();
+    $groups = $request->body['groups'] ?? [];
+    if (!is_array($groups)) {
+        JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', 'groups muss ein Array sein.', [], 400);
+        return;
+    }
+
+    if ($baseUrl === '') {
+        JsonResponseFactory::success(
+            [
+                'userId' => 1,
+                'groups' => $groups,
+                'updatedAt' => gmdate('Y-m-d H:i:s'),
+                'source' => 'desktop-local-fallback',
+            ],
+            ['source' => 'desktop-local-fallback']
+        );
+        return;
+    }
+
+    $payloadJson = json_encode(['groups' => $groups], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($payloadJson)) {
+        JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', 'Ungueltiger Payload.', [], 400);
+        return;
+    }
+
+    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/settings/portfolio-groups') as $candidate) {
+        $ch = curl_init($candidate);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($response) || trim($response) === '') {
+            continue;
+        }
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            JsonResponseFactory::success(
+                is_array($decoded['data'] ?? null)
+                    ? $decoded['data']
+                    : ['userId' => 1, 'groups' => $groups, 'updatedAt' => gmdate('Y-m-d H:i:s')],
+                array_merge(is_array($decoded['meta'] ?? null) ? $decoded['meta'] : [], ['source' => 'upstream'])
+            );
+            return;
+        }
+    }
+
+    JsonResponseFactory::error(
+        'SETTINGS_SAVE_FAILED',
+        'Portfolio-Gruppen konnten nicht zum Server gespeichert werden.',
         [],
         502
     );

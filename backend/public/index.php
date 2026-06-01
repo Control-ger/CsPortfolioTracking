@@ -39,6 +39,7 @@ use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\UserCurrencyPreferenceRepository;
+use App\Infrastructure\Persistence\Repository\UserPortfolioGroupsRepository;
 use App\Infrastructure\Persistence\Repository\UserPriceSourcePreferenceRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
@@ -647,6 +648,7 @@ try {
     $syncStatusRepository = new SyncStatusRepository($pdo);
     $userFeeSettingsRepository = new UserFeeSettingsRepository($pdo);
     $userCurrencyPreferenceRepository = new UserCurrencyPreferenceRepository($pdo);
+    $userPortfolioGroupsRepository = new UserPortfolioGroupsRepository($pdo);
     $userPriceSourcePreferenceRepository = new UserPriceSourcePreferenceRepository($pdo);
     $userRepository = new UserRepository($pdo);
     $userRepository->ensureDefaultUser();
@@ -697,7 +699,8 @@ try {
     $settingsController = new SettingsController(
         $feeSettingsService,
         $pricingService,
-        $userCurrencyPreferenceRepository
+        $userCurrencyPreferenceRepository,
+        $userPortfolioGroupsRepository
     );
 
     $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService);
@@ -742,6 +745,8 @@ try {
     $router->register('PUT', '/api/v1/settings/price-source', [$settingsController, 'updatePriceSourcePreference']);
     $router->register('GET', '/api/v1/settings/currency', [$settingsController, 'getCurrencyPreference']);
     $router->register('PUT', '/api/v1/settings/currency', [$settingsController, 'updateCurrencyPreference']);
+    $router->register('GET', '/api/v1/settings/portfolio-groups', [$settingsController, 'getPortfolioGroups']);
+    $router->register('PUT', '/api/v1/settings/portfolio-groups', [$settingsController, 'updatePortfolioGroups']);
     $router->register('GET', '/api/v1/settings/csfloat-api-key', [$settingsController, 'getCsFloatApiKeyStatus']);
     $router->register('POST', '/api/v1/settings/csfloat-api-key', [$settingsController, 'updateCsFloatApiKey']);
     $router->register('GET', '/api/v1/exchange-rate', [$exchangeRateController, 'getRates']);

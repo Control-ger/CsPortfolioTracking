@@ -656,3 +656,18 @@ Change: `items` Katalog auf cron-only Schreibpfad gehaertet
 - `backend/src/Infrastructure/Persistence/Repository/ItemRepository.php` erzwingt jetzt einen Write-Guard: `items`-Mutationen sind nur in CLI-Prozessen mit `ITEMS_CATALOG_WRITE_SCOPE=cron` erlaubt.
 - `backend/sync-prices.php` setzt diesen Scope explizit fuer den stündlichen Katalog-/Preis-Cronlauf.
 - Sync-/Interactive-Flows (`SyncService`, `PricingService`, Watchlist-/CSFloat-Importpfade) erzeugen keine neuen `items` mehr und behandeln fehlende Katalogeintraege kontrolliert als unresolved/skip statt DB-Insert.
+
+---
+
+Updated: 2026-06-01
+Change: Portfolio-Gruppen serverseitig synchronisiert (Web + Desktop)
+- Neue zentrale Backend-Komponente: `backend/src/Infrastructure/Persistence/Repository/UserPortfolioGroupsRepository.php`.
+- Neue API-Routen: `GET /api/v1/settings/portfolio-groups`, `PUT /api/v1/settings/portfolio-groups` (Server + Desktop-Sidecar-Proxy/Fallback).
+- `packages/shared/src/pages/PortfolioPage.jsx` laedt Gruppen jetzt primaer ueber Settings-API, faellt lokal zurueck und migriert bestehende lokale Gruppen bei leerem Remote-Stand automatisch auf den Server.
+
+---
+
+Updated: 2026-06-01
+Change: Desktop-Sidecar Upstream-Proxy fuer geschuetzte Server-Routen gehaertet
+- `backend/desktop/index.php` erweitert die Upstream-URL-Kandidaten um zusaetzliche `index.php`/`route=` Varianten, damit unterschiedliche Server-Frontcontroller-Pfade robuster aufloesen.
+- `upstreamHint` erkennt Cloudflare-Access-Login-Antworten jetzt explizit als Access-Thema (`UPSTREAM_ACCESS_DENIED`) statt irrefuehrend als generisches 404-Route-Problem.

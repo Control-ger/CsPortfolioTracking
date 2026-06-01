@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-05-31
+Last updated: 2026-06-01
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -62,6 +62,7 @@ This document tracks:
 - Owns pricing ingestion/read flows.
 - Owns CS-updates ingest and web push.
 - Owns user currency preference persistence (`GET/PUT /api/v1/settings/currency`) and anonymized aggregate popularity stats (`currency_usage_stats`).
+- Owns portfolio group preference persistence (`GET/PUT /api/v1/settings/portfolio-groups`) for cross-runtime group availability.
 - Enforces `items` catalog ownership: only the CLI price-catalog cron path may mutate `items`; request/interactive sync flows are read-only against `items`.
 
 ### 3.4 WS gateway runtime
@@ -115,6 +116,8 @@ From `apps/web/src/App.jsx`:
 - SkinBaron desktop browser-connect and Purchases web requests now consistently use `/en/profile/purchases` referer + `Accept-Language: en-US` to avoid accidental German-localized import payloads.
 - `CurrencyContext` persists selected display currency server-side via settings API and still keeps local fallback in `localStorage`.
 - Currency popularity ranking in Settings is sourced from anonymized server aggregates (no user identifiers in `currency_usage_stats`).
+- Portfolio groups are loaded from server settings with local fallback; existing local-only groups are auto-migrated to server when the remote payload is empty.
+- Desktop sidecar upstream proxy now tries additional `index.php` + `?route=` candidate patterns and classifies Cloudflare Access login HTML as access denial hints instead of route-not-found noise.
 - Search-to-watchlist add checks in `PortfolioPage`/`ItemSearch` use watchlist entries only (not inventory/investment presence), so web runtime can add watchlist items independently.
 - `ItemSearch` mobile controls use larger touch targets (>=44px) for pagination/actions to improve finger usability.
 - Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.

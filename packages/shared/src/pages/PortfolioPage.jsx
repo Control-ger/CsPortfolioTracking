@@ -34,8 +34,10 @@ import { usePortfolio } from "@shared/hooks";
 import { usePortfolioComposition } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
+  fetchPortfolioGroupsSetting,
   fetchPortfolioInvestmentHistory,
   searchWatchlistItems,
+  updatePortfolioGroupsSetting,
   updateInvestmentBucket,
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
@@ -1034,10 +1036,30 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setPortfolioGroupsLoading(true);
       try {
         const stored = await readLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: [] });
+        const localGroups = normalizePortfolioGroups(stored);
+
+        let remoteGroups = [];
+        try {
+          const remoteResponse = await fetchPortfolioGroupsSetting();
+          remoteGroups = normalizePortfolioGroups(remoteResponse?.data?.groups || []);
+        } catch (remoteLoadError) {
+          console.warn("Failed to load remote portfolio groups", remoteLoadError);
+        }
+
+        const nextGroups = remoteGroups.length > 0 ? remoteGroups : localGroups;
+        if (remoteGroups.length === 0 && localGroups.length > 0) {
+          try {
+            await updatePortfolioGroupsSetting(localGroups);
+          } catch (migrationError) {
+            console.warn("Failed to migrate local portfolio groups to server", migrationError);
+          }
+        }
+
+        await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: nextGroups });
         if (cancelled) {
           return;
         }
-        setPortfolioGroups(normalizePortfolioGroups(stored));
+        setPortfolioGroups(nextGroups);
         setPortfolioGroupError("");
       } catch (groupLoadError) {
         if (cancelled) {
@@ -1548,7 +1570,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     const normalizedGroups = normalizePortfolioGroups(nextGroups);
     setPortfolioGroups(normalizedGroups);
     await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: normalizedGroups });
-    return normalizedGroups;
+    try {
+      const remoteResponse = await updatePortfolioGroupsSetting(normalizedGroups);
+      const remoteGroups = normalizePortfolioGroups(remoteResponse?.data?.groups || normalizedGroups);
+      setPortfolioGroups(remoteGroups);
+      await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: remoteGroups });
+      return remoteGroups;
+    } catch (groupSyncError) {
+      console.warn("Failed to sync portfolio groups to server", groupSyncError);
+      return normalizedGroups;
+    }
   }, []);
 
   const handleManageGroupsOpen = useCallback(() => {
