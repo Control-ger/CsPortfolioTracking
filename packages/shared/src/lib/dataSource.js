@@ -706,11 +706,32 @@ async function fetchDesktopPortfolioData(options = {}) {
     const upstreamRows = Array.isArray(upstreamRowsResponse?.data)
       ? upstreamRowsResponse.data
       : [];
+    const upstreamMeta = upstreamRowsResponse?.meta || {};
+    const upstreamSource = String(upstreamMeta?.source || "").trim().toLowerCase();
     if (upstreamRows.length > 0) {
       rows = enrichDesktopRowsWithUpstreamLiveData(rows, upstreamRows);
       meta = {
         ...meta,
         livePricingSource: "upstream",
+      };
+    } else if (upstreamSource === "desktop-local-fallback") {
+      const upstreamHint = upstreamMeta?.upstreamHint || {};
+      const hintCode = String(upstreamHint?.code || "UPSTREAM_UNAVAILABLE");
+      const hintMessage = String(
+        upstreamHint?.message || "Upstream-Portfolio konnte nicht geladen werden. Lokale Daten ohne Livepreise aktiv.",
+      );
+      const nextWarnings = Array.isArray(meta.warnings) ? [...meta.warnings] : [];
+      nextWarnings.push({
+        code: hintCode,
+        message: hintMessage,
+        statusCode: Number(Array.isArray(upstreamHint?.attemptStatuses) ? upstreamHint.attemptStatuses[0] : 0) || undefined,
+      });
+      meta = {
+        ...meta,
+        livePricingSource: "upstream-fallback",
+        warnings: nextWarnings,
+        upstreamHint,
+        proxyAttempts: Array.isArray(upstreamMeta?.proxyAttempts) ? upstreamMeta.proxyAttempts : [],
       };
     }
   } catch (error) {

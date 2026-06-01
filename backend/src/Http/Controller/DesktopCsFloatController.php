@@ -112,7 +112,7 @@ final class DesktopCsFloatController
 
     public function buyOrders(Request $request): void
     {
-        $limit = $this->readInt($request, 'limit', 200, 1, 500);
+        $limit = $this->readInt($request, 'limit', 500, 1, 500);
         $maxPages = $this->readInt($request, 'maxPages', 8, 1, 20);
 
         $orders = [];

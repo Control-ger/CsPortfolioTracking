@@ -688,3 +688,12 @@ Change: Secret-Vault Unlock-Screen auf Welcome-Gradient-Shell vereinheitlicht
 - `apps/web/src/App.jsx` nutzt fuer den Desktop Secret-Vault-Guard jetzt dieselbe `steam-startup-shell` wie der Welcome-/Onboarding-Flow.
 - Die Unlock/Setup-Karte uebernimmt die avatarbasierte Steam-Palette (`--steam-shell-color-a` bis `--steam-shell-color-d`) als dynamische Hintergrundquelle inkl. Fallback, statt eines separaten statischen Gate-Screens.
 - Sicherheitsverhalten bleibt unveraendert: Route-Mount bleibt blockiert bis Vault konfiguriert/entsperrt ist; Unlock/Set-Password IPC-Flows bleiben gleich.
+
+---
+
+Updated: 2026-06-01
+Change: Portfolio-KPI/Chart Scope-Konsistenz + CSFloat Buyorder-Diagnose gehaertet
+- `packages/shared/src/pages/PortfolioPage.jsx` nutzt fuer Header-KPIs und `PortfolioChart` jetzt konsistente scope-bezogene History-Daten (`investments` vs `all`) und vermeidet Mixed-Source-Fallbacks bei `Gesamt Zuwachs`.
+- `packages/shared/src/components/PortfolioChart.jsx` priorisiert gelieferte `growthPercent`-Werte aus der Historie und berechnet Delta-Prozente in der Prozentansicht konsistent zum sichtbaren Verlauf.
+- `backend/src/Http/Controller/DesktopCsFloatController.php` erhoeht den Default fuer `buy-orders`-Reads auf `limit=500`; `backend/src/Infrastructure/External/CsFloatTradeClient.php` fragt Buyorders explizit mit `order=desc` ab.
+- `packages/shared/src/lib/dataSource.js` und `packages/shared/src/components/Watchlist.jsx` machen Desktop-Upstream-Fallbacks + erste Fehlercodes/Status in der Buyorder-Diagnose sichtbarer.

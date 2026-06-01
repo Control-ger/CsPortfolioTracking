@@ -286,6 +286,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
             rawOrders: nextBuyOrderOrders.length,
             summaryItems: nextBuyOrderSummary.length,
             errorCount: Array.isArray(buyOrderMeta?.errors) ? buyOrderMeta.errors.length : 0,
+            firstErrorCode: String(buyOrderMeta?.errors?.[0]?.code || ""),
+            firstErrorStatus: Number(buyOrderMeta?.errors?.[0]?.statusCode || 0),
           };
 
           if (nextBuyOrderSummary.length === 0 || nextBuyOrderOrders.length === 0) {
@@ -309,6 +311,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
               rawOrders: nextBuyOrderOrders.length,
               summaryItems: nextBuyOrderSummary.length,
               errorCount: Array.isArray(liveMeta?.errors) ? liveMeta.errors.length : 0,
+              firstErrorCode: String(liveMeta?.errors?.[0]?.code || ""),
+              firstErrorStatus: Number(liveMeta?.errors?.[0]?.statusCode || 0),
             };
           }
         } catch (buyOrderError) {
@@ -321,6 +325,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
             rawOrders: 0,
             summaryItems: 0,
             errorCount: 1,
+            firstErrorCode: "WATCHLIST_BUYORDER_FETCH_FAILED",
+            firstErrorStatus: 0,
           };
         }
       }
@@ -369,6 +375,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
             rawOrders: 0,
             summaryItems: 0,
             errorCount: 1,
+            firstErrorCode: "WATCHLIST_SYNC_FALLBACK",
+            firstErrorStatus: 0,
           });
           watchlistViewSnapshot = {
             loaded: true,
@@ -383,6 +391,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
               rawOrders: 0,
               summaryItems: 0,
               errorCount: 1,
+              firstErrorCode: "WATCHLIST_SYNC_FALLBACK",
+              firstErrorStatus: 0,
             },
             warnings: [
               {
@@ -419,6 +429,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         rawOrders: 0,
         summaryItems: 0,
         errorCount: 1,
+        firstErrorCode: "WATCHLIST_SYNC_ERROR",
+        firstErrorStatus: 0,
       });
       setWarnings([]);
     } finally {
@@ -699,7 +711,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     )}
                     {isDesktopRuntime && buyOrderDebug ? (
                       <p className="mt-3 font-mono text-[10px] text-muted-foreground">
-                        Debug: client={buyOrderDebug.clientSource || "-"} | upstream={buyOrderDebug.upstreamSource || "-"} | pages={Number(buyOrderDebug.pagesFetched || 0)} | raw={Number(buyOrderDebug.rawOrders || 0)} | summary={Number(buyOrderDebug.summaryItems || 0)} | cache={buyOrderDebug.fromCache ? "yes" : "no"} | errors={Number(buyOrderDebug.errorCount || 0)}
+                        Debug: client={buyOrderDebug.clientSource || "-"} | upstream={buyOrderDebug.upstreamSource || "-"} | pages={Number(buyOrderDebug.pagesFetched || 0)} | raw={Number(buyOrderDebug.rawOrders || 0)} | summary={Number(buyOrderDebug.summaryItems || 0)} | cache={buyOrderDebug.fromCache ? "yes" : "no"} | errors={Number(buyOrderDebug.errorCount || 0)} | firstError={buyOrderDebug.firstErrorCode || "-"}({Number(buyOrderDebug.firstErrorStatus || 0) || "-"})
                       </p>
                     ) : null}
                   </div>
