@@ -6,6 +6,7 @@ import { CurrencyProvider } from "@shared/contexts";
 import { BottomNavigation, DesktopSidebarRail, Titlebar } from "@shared/components";
 import { Button } from "@shared/components/ui/button";
 import { Input } from "@shared/components/ui/input";
+import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
 import { PortfolioPage } from "@shared/pages";
 import { handleWebAuthCallback } from "@shared/lib/auth.js";
 import { startDesktopAutoSync } from "@shared/lib/desktopSync.js";
@@ -14,6 +15,13 @@ const SettingsPage = lazy(() =>
   import("@shared/pages/SettingsPage.jsx").then((module) => ({ default: module.SettingsPage })),
 );
 const CsUpdatesPage = lazy(() => import("@shared/pages/CsUpdatesPage.jsx"));
+
+const DEFAULT_STEAM_SHELL_PALETTE = Object.freeze({
+  colorA: "hsla(212, 62%, 52%, 0.24)",
+  colorB: "hsla(188, 55%, 52%, 0.18)",
+  colorC: "hsla(39, 48%, 52%, 0.14)",
+  colorD: "hsla(32, 42%, 46%, 0.14)",
+});
 
 function firstNonEmptyString(...values) {
   for (const value of values) {
@@ -58,6 +66,7 @@ export default function App() {
   const [setupPasswordConfirm, setSetupPasswordConfirm] = useState("");
   const [vaultActionRunning, setVaultActionRunning] = useState(false);
   const [vaultLoginUser, setVaultLoginUser] = useState(null);
+  const [vaultShellPalette, setVaultShellPalette] = useState(DEFAULT_STEAM_SHELL_PALETTE);
   const [updaterStatus, setUpdaterStatus] = useState({
     state: "idle",
     version: null,
@@ -103,6 +112,7 @@ export default function App() {
   }, [shouldUseVaultGate]);
 
   const isVaultUnlocked = !shouldUseVaultGate || (vaultStatus?.configured === true && vaultStatus?.unlocked === true);
+  const showVaultGate = shouldUseVaultGate && (vaultLoading || !vaultStatus || !isVaultUnlocked);
 
   useEffect(() => {
     void refreshVaultStatus();
@@ -215,6 +225,38 @@ export default function App() {
     };
   }, [shouldUseVaultGate]);
 
+  useEffect(() => {
+    if (!shouldUseVaultGate) {
+      setVaultShellPalette(DEFAULT_STEAM_SHELL_PALETTE);
+      return;
+    }
+
+    let cancelled = false;
+    const derivePalette = async () => {
+      try {
+        const derived = await deriveSteamPaletteFromUser(vaultLoginUser || null);
+        if (cancelled) {
+          return;
+        }
+        setVaultShellPalette({
+          colorA: derived?.colorA || DEFAULT_STEAM_SHELL_PALETTE.colorA,
+          colorB: derived?.colorB || DEFAULT_STEAM_SHELL_PALETTE.colorB,
+          colorC: derived?.colorC || DEFAULT_STEAM_SHELL_PALETTE.colorC,
+          colorD: derived?.colorD || derived?.colorB || DEFAULT_STEAM_SHELL_PALETTE.colorD,
+        });
+      } catch {
+        if (!cancelled) {
+          setVaultShellPalette(DEFAULT_STEAM_SHELL_PALETTE);
+        }
+      }
+    };
+
+    void derivePalette();
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldUseVaultGate, vaultLoginUser]);
+
   if (isProcessingAuthCallback) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
@@ -267,7 +309,7 @@ export default function App() {
     }
   };
 
-  if (shouldUseVaultGate && (vaultLoading || !vaultStatus || !isVaultUnlocked)) {
+  if (showVaultGate) {
     const requiresSetup = vaultStatus?.configured !== true;
     const minPasswordLength = Number(vaultStatus?.minPasswordLength || 16);
     const vaultLoginStep = requiresSetup ? 1 : vaultActionRunning ? 3 : 2;
@@ -292,20 +334,29 @@ export default function App() {
         vaultLoginUser?.steamAvatar,
       ),
     );
+    const vaultShellStyle = {
+      "--steam-shell-color-a": vaultShellPalette.colorA,
+      "--steam-shell-color-b": vaultShellPalette.colorB,
+      "--steam-shell-color-c": vaultShellPalette.colorC,
+      "--steam-shell-color-d": vaultShellPalette.colorD,
+    };
 
     return (
       <CurrencyProvider>
-        <div className={`flex flex-col ${isElectron ? "h-full overflow-hidden" : "min-h-screen"} bg-background text-foreground`}>
+        <div
+          className={`steam-startup-shell flex flex-col ${isElectron ? "h-full overflow-hidden" : "min-h-screen"} text-foreground`}
+          style={vaultShellStyle}
+        >
           {isElectron && <Titlebar />}
-          <main className="flex flex-1 items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-2xl border border-border/80 bg-card/95 p-5 shadow-xl backdrop-blur">
+          <main className="flex flex-1 items-center justify-center overflow-auto p-4">
+            <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-slate-950/58 p-5 text-slate-100 shadow-2xl backdrop-blur-xl">
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-slate-100">
                   <Lock className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="text-base font-semibold">Welcome to CS Investor Hub</p>
-                  <p className="text-xs text-muted-foreground">Mit App-Passwort anmelden und direkt ins Dashboard.</p>
+                  <p className="text-xs text-slate-300">Mit App-Passwort anmelden und direkt ins Dashboard.</p>
                 </div>
               </div>
 
@@ -317,13 +368,13 @@ export default function App() {
                     className="h-12 w-12 rounded-full object-cover ring-2 ring-primary/30"
                   />
                 ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary ring-2 ring-primary/30">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-slate-100 ring-2 ring-cyan-300/30">
                     {vaultDisplayName.slice(0, 2).toUpperCase()}
                   </div>
                 )}
                 <div>
-                  <p className="text-sm font-semibold text-foreground">{vaultDisplayName}</p>
-                  <p className="text-xs text-muted-foreground">Steam verbunden</p>
+                  <p className="text-sm font-semibold text-slate-100">{vaultDisplayName}</p>
+                  <p className="text-xs text-slate-300">Steam verbunden</p>
                 </div>
               </div>
 
@@ -336,6 +387,7 @@ export default function App() {
                     onChange={(event) => setSetupPassword(event.target.value)}
                     placeholder={`Mindestens ${minPasswordLength} Zeichen`}
                     disabled={vaultActionRunning}
+                    className="border-white/15 bg-white/5 text-slate-100 placeholder:text-slate-400"
                   />
                   <Input
                     type="password"
@@ -343,11 +395,16 @@ export default function App() {
                     onChange={(event) => setSetupPasswordConfirm(event.target.value)}
                     placeholder="Passwort bestaetigen"
                     disabled={vaultActionRunning}
+                    className="border-white/15 bg-white/5 text-slate-100 placeholder:text-slate-400"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-slate-300">
                     Empfehlung: Lange Passphrase mit Gross-/Kleinbuchstaben, Zahlen und Sonderzeichen.
                   </p>
-                  <Button className="w-full" onClick={() => void handleSetVaultPassword()} disabled={vaultActionRunning}>
+                  <Button
+                    className="w-full bg-white/95 text-slate-950 hover:bg-white"
+                    onClick={() => void handleSetVaultPassword()}
+                    disabled={vaultActionRunning}
+                  >
                     {vaultActionRunning ? "Speichert..." : "App-Passwort setzen"}
                   </Button>
                 </div>
@@ -360,6 +417,7 @@ export default function App() {
                     onChange={(event) => setUnlockPassword(event.target.value)}
                     placeholder="App-Passwort"
                     disabled={vaultActionRunning}
+                    className="border-white/15 bg-white/5 text-slate-100 placeholder:text-slate-400"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -367,27 +425,31 @@ export default function App() {
                       }
                     }}
                   />
-                  <Button className="w-full" onClick={() => void handleUnlockVault()} disabled={vaultActionRunning}>
+                  <Button
+                    className="w-full bg-white/95 text-slate-950 hover:bg-white"
+                    onClick={() => void handleUnlockVault()}
+                    disabled={vaultActionRunning}
+                  >
                     {vaultActionRunning ? "Entsperrt..." : "Entsperren"}
                   </Button>
                 </div>
               )}
 
               <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center justify-between text-xs text-slate-300">
                   <span>{vaultLoginProgressLabel}</span>
                   <span>{vaultLoginProgressPercent}%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
                   <div
-                    className="h-full rounded-full bg-cyan-300 transition-[width] duration-300"
+                    className={`h-full rounded-full bg-cyan-300 transition-[width] duration-300 ${vaultActionRunning ? "steam-progress-pulse" : ""}`}
                     style={{ width: `${vaultLoginProgressPercent}%` }}
                   />
                 </div>
               </div>
 
               {vaultError ? (
-                <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                <div className="mt-3 rounded-md border border-red-400/40 bg-red-500/15 p-2 text-xs text-red-100">
                   {vaultError}
                 </div>
               ) : null}

@@ -875,7 +875,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [activeTab, setActiveTab] = useState(initialVisitedTab);
   const [visitedTabs, setVisitedTabs] = useState(() => new Set([initialVisitedTab]));
   const [watchlistFocusTarget, setWatchlistFocusTarget] = useState(null);
-  const [inventoryGroupFocusId, setInventoryGroupFocusId] = useState("");
+  const [, setInventoryGroupFocusId] = useState("");
   const [isCsFloatSyncOpen, setIsCsFloatSyncOpen] = useState(false);
   const [isSkinBaronSyncOpen, setIsSkinBaronSyncOpen] = useState(false);
   const [hoveredChartData, setHoveredChartData] = useState(null);
@@ -1700,15 +1700,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       return normalizedGroups;
     }
   }, []);
-
-  const handleManageGroupsOpen = useCallback(() => {
-    if (isDesktopRuntime) {
-      setManagementSection("groups");
-      handleTabSelect("management");
-      return;
-    }
-    handleTabSelect("overview");
-  }, [handleTabSelect, isDesktopRuntime]);
 
   const resetPortfolioGroupEditor = useCallback(() => {
     setPortfolioGroupEditorId("");
@@ -2557,14 +2548,23 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     Number.isFinite(fallbackRangeDeltaPercent) ? fallbackRangeDeltaPercent : (stats.totalRoiPercent || 0)
   );
   const hoveredProfitEuro = Number(hoveredChartData?.profitEuro);
+  const statsProfitEuro = Number(stats.totalProfitEuro);
+  const statsRoiPercent = Number(stats.totalRoiPercent);
+  const defaultProfitEuro = Number.isFinite(statsProfitEuro)
+    ? statsProfitEuro
+    : (Number.isFinite(fallbackRangeDeltaValue) ? fallbackRangeDeltaValue : 0);
+  const defaultProfitPercent = Number.isFinite(statsRoiPercent)
+    ? statsRoiPercent
+    : (Number.isFinite(fallbackRangeDeltaPercent) ? fallbackRangeDeltaPercent : 0);
   const headerProfitEuro = hoveredChartData
     ? Number.isFinite(hoveredProfitEuro)
       ? hoveredProfitEuro
       : (headerPortfolioValue || 0) - Number(stats.totalInvested || 0)
-    : Number.isFinite(fallbackRangeDeltaValue)
-      ? fallbackRangeDeltaValue
-      : Number(stats.totalProfitEuro || 0);
-  const headerPortfolioPositive = hoveredChartData ? headerProfitEuro >= 0 : Boolean(stats.isPositive);
+    : defaultProfitEuro;
+  const headerProfitPositive = headerProfitEuro >= 0;
+  const headerPortfolioPositive = hoveredChartData
+    ? headerProfitPositive
+    : (Number.isFinite(statsProfitEuro) ? statsProfitEuro >= 0 : Boolean(stats.isPositive));
   const csUpdateBannerVisibleHoursRaw = Number(csUpdatesMeta?.bannerVisibleHours);
   const csUpdateBannerVisibleHours = Number.isFinite(csUpdateBannerVisibleHoursRaw)
     ? Math.max(1, csUpdateBannerVisibleHoursRaw)
@@ -2627,9 +2627,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   });
   const headerProfitPercent = hoveredChartData
     ? Number(headerPortfolioPercent || 0)
-    : Number.isFinite(fallbackRangeDeltaPercent)
-      ? fallbackRangeDeltaPercent
-      : Number(stats.totalRoiPercent || 0);
+    : defaultProfitPercent;
   const managementClusters = buildManagementClusters(managementInvestments);
   const managementInvestmentById = new Map(
     managementInvestments.map((item) => [String(item.id), item]),
@@ -4771,7 +4769,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     ? ` | ${formatDateSafe(hoveredChartData.date)}`
                     : ` | ROI ${String(chartTrendData?.rangeLabel || "90T")}`
                 }`}
-                isPositive={headerPortfolioPositive}
+                isPositive={headerProfitPositive}
               />
               <StatCard title="Items im Bestand" value={`${stats.totalQuantity} Stueck`} />
               <Card>

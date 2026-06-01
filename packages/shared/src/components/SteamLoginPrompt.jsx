@@ -355,6 +355,8 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     total: 1,
     completed: 0,
     currentStep: "",
+    steps: [],
+    activeStepIndex: -1,
     inProgress: false,
     done: false,
   });
@@ -517,48 +519,82 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     const hasSteamId = Boolean(currentUser?.steamId);
     const steps = hasSteamId
       ? [
-          "Steam-Profil pruefen",
-          "Steam-Inventar laden",
-          "Items lokal importieren",
-          "Dashboard-Daten laden",
+          "Sitzung validieren",
+          "Steam-Verknuepfung pruefen",
+          "Steam-Inventar abrufen",
+          "Marketable Items filtern",
+          "Import vorbereiten",
+          "Investments lokal aktualisieren",
+          "Portfolio-Positionen laden",
+          "Portfolio-Historie laden",
+          "Kennzahlen berechnen",
+          "Dashboard finalisieren",
         ]
-      : ["Profil pruefen", "Dashboard-Daten laden"];
+      : [
+          "Sitzung validieren",
+          "Portfolio-Positionen laden",
+          "Portfolio-Historie laden",
+          "Kennzahlen berechnen",
+          "Dashboard finalisieren",
+        ];
     let completed = 0;
 
-    const startStep = (stepLabel) => {
+    const setProgressState = ({ currentStep = "", activeStepIndex = -1, inProgress = true, done = false }) => {
       setSetupProgress({
         total: steps.length,
         completed,
-        currentStep: stepLabel,
+        currentStep,
+        steps,
+        activeStepIndex,
+        inProgress,
+        done,
+      });
+    };
+
+    const startStep = (stepIndex) => {
+      setProgressState({
+        currentStep: steps[stepIndex] || "",
+        activeStepIndex: stepIndex,
         inProgress: true,
         done: false,
       });
     };
-    const finishStep = (nextStepLabel = "") => {
+
+    const finishStep = (nextStepIndex = null) => {
       completed += 1;
-      setSetupProgress({
-        total: steps.length,
-        completed,
-        currentStep: nextStepLabel,
-        inProgress: true,
+      const hasNext = Number.isInteger(nextStepIndex) && nextStepIndex >= 0 && nextStepIndex < steps.length;
+      setProgressState({
+        currentStep: hasNext ? steps[nextStepIndex] : "",
+        activeStepIndex: hasNext ? nextStepIndex : -1,
+        inProgress: hasNext,
         done: false,
       });
     };
 
     setIsDashboardReady(false);
-    startStep(steps[0]);
-    finishStep(steps[1] || "");
+    startStep(0);
+    finishStep(1);
 
     if (hasSteamId) {
-      startStep(steps[1]);
-      const inventoryResult = await fetchCS2Inventory(currentUser.steamId);
-      finishStep(steps[2]);
+      startStep(1);
+      finishStep(2);
 
-      startStep(steps[2]);
+      startStep(2);
+      const inventoryResult = await fetchCS2Inventory(currentUser.steamId);
+      finishStep(3);
+
+      startStep(3);
       if (inventoryResult.success && inventoryResult.items?.length > 0) {
         const marketableItems = inventoryResult.items.filter((item) => item.marketable);
+        finishStep(4);
+
+        startStep(4);
+        const importCandidates = marketableItems.map((item) => ({ ...item }));
+        finishStep(5);
+
+        startStep(5);
         if (marketableItems.length > 0) {
-          const importResult = await importInventoryAsInvestments(marketableItems, currentUser.id);
+          const importResult = await importInventoryAsInvestments(importCandidates, currentUser.id);
           setSyncInfo(
             `Steam Sync: ${importResult.imported || 0} neu, ${importResult.updated || 0} aktualisiert, ${importResult.missingMarked || 0} als fehlend markiert, ${importResult.matchesSuggested || 0} Matching-Vorschlaege.`,
           );
@@ -568,20 +604,40 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       } else if (!inventoryResult.success) {
         throw new Error(inventoryResult.error || "Steam inventory request failed");
       } else {
+        finishStep(4);
+        startStep(4);
+        finishStep(5);
+        startStep(5);
         setSyncInfo("Steam Sync: Inventar ist leer.");
       }
-      finishStep(steps[3]);
+      finishStep(6);
     }
 
-    const dashboardStep = hasSteamId ? steps[3] : steps[1];
-    startStep(dashboardStep);
-    await fetchPortfolioData({ scope: "investments", rowScope: "investments" });
-    finishStep("");
+    const dashboardStartIndex = hasSteamId ? 6 : 1;
+    startStep(dashboardStartIndex);
+    const portfolioData = await fetchPortfolioData({ scope: "investments", rowScope: "investments" });
+    finishStep(dashboardStartIndex + 1);
+
+    startStep(dashboardStartIndex + 1);
+    const historyPoints = Array.isArray(portfolioData?.history) ? portfolioData.history.length : 0;
+    finishStep(dashboardStartIndex + 2);
+
+    startStep(dashboardStartIndex + 2);
+    const positionCount = Array.isArray(portfolioData?.rows?.data) ? portfolioData.rows.data.length : 0;
+    if (!hasSteamId) {
+      setSyncInfo(`Portfolio geladen: ${positionCount} Positionen, ${historyPoints} Historienpunkte.`);
+    }
+    finishStep(dashboardStartIndex + 3);
+
+    startStep(dashboardStartIndex + 3);
+    finishStep();
 
     setSetupProgress({
       total: steps.length,
       completed,
       currentStep: "Bereit",
+      steps,
+      activeStepIndex: -1,
       inProgress: false,
       done: true,
     });
@@ -705,6 +761,30 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
               Schritt {Math.min(setupProgress.completed, setupProgress.total)} von {setupProgress.total}
             </p>
           </div>
+
+          {Array.isArray(setupProgress.steps) && setupProgress.steps.length > 0 ? (
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <div className="space-y-1.5">
+                {setupProgress.steps.map((stepLabel, index) => {
+                  const isCompleted = index < setupProgress.completed;
+                  const isActive = setupProgress.inProgress && index === setupProgress.activeStepIndex;
+                  const marker = isCompleted ? "✓" : isActive ? "..." : "•";
+                  const textClassName = isCompleted
+                    ? "text-emerald-200"
+                    : isActive
+                      ? "text-cyan-200"
+                      : "text-slate-400";
+
+                  return (
+                    <div key={`${stepLabel}-${index}`} className={`flex items-center gap-2 text-[11px] ${textClassName}`}>
+                      <span className="w-3 text-center">{marker}</span>
+                      <span>{stepLabel}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {syncInfo ? (
             <div className="rounded-md border border-emerald-300/35 bg-emerald-500/15 p-2 text-xs text-emerald-200">

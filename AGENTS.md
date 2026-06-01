@@ -680,3 +680,11 @@ Change: CSFloat Buyorders Watchlist-Detail erweitert + Sidecar-Mapping gehaertet
 - `backend/src/Infrastructure/External/CsFloatTradeClient.php` liest verschachtelte Collections (`data.buy_orders`/`data.orders`) stabil aus.
 - `packages/shared/src/components/Watchlist.jsx` zeigt Buyorders item-spezifisch im Detailpanel als Mini-Tabelle (Preis/Orders/Menge), entfernt die globale Buyorder-Karte und blendet eine kompakte Debugzeile fuer Quell-/Paging-Diagnose ein.
 - `packages/shared/src/components/WatchlistItemModal.jsx` zeigt dieselbe Buyorder-Mini-Tabelle auch mobil.
+
+---
+
+Updated: 2026-06-01
+Change: Secret-Vault Unlock-Screen auf Welcome-Gradient-Shell vereinheitlicht
+- `apps/web/src/App.jsx` nutzt fuer den Desktop Secret-Vault-Guard jetzt dieselbe `steam-startup-shell` wie der Welcome-/Onboarding-Flow.
+- Die Unlock/Setup-Karte uebernimmt die avatarbasierte Steam-Palette (`--steam-shell-color-a` bis `--steam-shell-color-d`) als dynamische Hintergrundquelle inkl. Fallback, statt eines separaten statischen Gate-Screens.
+- Sicherheitsverhalten bleibt unveraendert: Route-Mount bleibt blockiert bis Vault konfiguriert/entsperrt ist; Unlock/Set-Password IPC-Flows bleiben gleich.
