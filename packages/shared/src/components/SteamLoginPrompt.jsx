@@ -355,11 +355,12 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     total: 1,
     completed: 0,
     currentStep: "",
-    steps: [],
-    activeStepIndex: -1,
+    targetPercent: 0,
     inProgress: false,
     done: false,
   });
+  const [visualProgressPercent, setVisualProgressPercent] = useState(0);
+  const [progressDots, setProgressDots] = useState("");
   const onLoginSuccessRef = useRef(onLoginSuccess);
   const preparationStateRef = useRef({
     key: "",
@@ -370,6 +371,46 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
   useEffect(() => {
     onLoginSuccessRef.current = onLoginSuccess;
   }, [onLoginSuccess]);
+
+  useEffect(() => {
+    if (!setupProgress.inProgress) {
+      setProgressDots("");
+      return;
+    }
+
+    const frames = ["", ".", "..", "..."];
+    let frameIndex = 0;
+    const intervalId = window.setInterval(() => {
+      frameIndex = (frameIndex + 1) % frames.length;
+      setProgressDots(frames[frameIndex]);
+    }, 320);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [setupProgress.inProgress, setupProgress.currentStep]);
+
+  useEffect(() => {
+    const target = clamp(Math.round(Number(setupProgress.targetPercent || 0)), 0, 100);
+    const intervalId = window.setInterval(() => {
+      setVisualProgressPercent((current) => {
+        if (current === target) {
+          return current;
+        }
+        const delta = target - current;
+        const step = Math.abs(delta) >= 8 ? 3 : Math.abs(delta) >= 4 ? 2 : 1;
+        const next = current + Math.sign(delta) * step;
+        if ((delta > 0 && next > target) || (delta < 0 && next < target)) {
+          return target;
+        }
+        return next;
+      });
+    }, 26);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [setupProgress.targetPercent]);
 
   useEffect(() => {
     if (!user) {
@@ -493,6 +534,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       ...current,
       inProgress: false,
       done: true,
+      targetPercent: current.targetPercent > 0 ? current.targetPercent : 100,
     }));
     preparationStateRef.current = {
       ...preparationStateRef.current,
@@ -519,42 +561,47 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     const hasSteamId = Boolean(currentUser?.steamId);
     const steps = hasSteamId
       ? [
-          "Sitzung validieren",
-          "Steam-Verknuepfung pruefen",
-          "Steam-Inventar abrufen",
-          "Marketable Items filtern",
-          "Import vorbereiten",
-          "Investments lokal aktualisieren",
-          "Portfolio-Positionen laden",
-          "Portfolio-Historie laden",
-          "Kennzahlen berechnen",
-          "Dashboard finalisieren",
+          { label: "Steam-Verbindung pruefen", percent: 8 },
+          { label: "Steam-Inventar abrufen", percent: 22 },
+          { label: "Inventarantwort verarbeiten", percent: 34 },
+          { label: "Marketable Items filtern", percent: 44 },
+          { label: "Import-Payload vorbereiten", percent: 56 },
+          { label: "Investments lokal synchronisieren", percent: 70 },
+          { label: "Portfolio-Positionen laden", percent: 80 },
+          { label: "Portfolio-Historie laden", percent: 88 },
+          { label: "Kennzahlen aufbereiten", percent: 95 },
+          { label: "Dashboard finalisieren", percent: 100 },
         ]
       : [
-          "Sitzung validieren",
-          "Portfolio-Positionen laden",
-          "Portfolio-Historie laden",
-          "Kennzahlen berechnen",
-          "Dashboard finalisieren",
+          { label: "Anmeldung pruefen", percent: 12 },
+          { label: "Portfolio-Positionen laden", percent: 52 },
+          { label: "Portfolio-Historie laden", percent: 76 },
+          { label: "Kennzahlen aufbereiten", percent: 92 },
+          { label: "Dashboard finalisieren", percent: 100 },
         ];
     let completed = 0;
 
-    const setProgressState = ({ currentStep = "", activeStepIndex = -1, inProgress = true, done = false }) => {
+    const setProgressState = ({
+      currentStep = "",
+      targetPercent = 0,
+      inProgress = true,
+      done = false,
+    }) => {
       setSetupProgress({
         total: steps.length,
         completed,
         currentStep,
-        steps,
-        activeStepIndex,
+        targetPercent,
         inProgress,
         done,
       });
     };
 
     const startStep = (stepIndex) => {
+      const step = steps[stepIndex] || null;
       setProgressState({
-        currentStep: steps[stepIndex] || "",
-        activeStepIndex: stepIndex,
+        currentStep: step?.label || "",
+        targetPercent: step?.percent || 0,
         inProgress: true,
         done: false,
       });
@@ -563,28 +610,29 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     const finishStep = (nextStepIndex = null) => {
       completed += 1;
       const hasNext = Number.isInteger(nextStepIndex) && nextStepIndex >= 0 && nextStepIndex < steps.length;
+      const nextStep = hasNext ? steps[nextStepIndex] : null;
       setProgressState({
-        currentStep: hasNext ? steps[nextStepIndex] : "",
-        activeStepIndex: hasNext ? nextStepIndex : -1,
+        currentStep: hasNext ? nextStep?.label || "" : "",
+        targetPercent: hasNext ? nextStep?.percent || 0 : 100,
         inProgress: hasNext,
         done: false,
       });
     };
 
     setIsDashboardReady(false);
+    setVisualProgressPercent(0);
     startStep(0);
     finishStep(1);
 
     if (hasSteamId) {
       startStep(1);
+      const inventoryResult = await fetchCS2Inventory(currentUser.steamId);
       finishStep(2);
 
       startStep(2);
-      const inventoryResult = await fetchCS2Inventory(currentUser.steamId);
-      finishStep(3);
-
-      startStep(3);
       if (inventoryResult.success && inventoryResult.items?.length > 0) {
+        finishStep(3);
+        startStep(3);
         const marketableItems = inventoryResult.items.filter((item) => item.marketable);
         finishStep(4);
 
@@ -604,6 +652,8 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       } else if (!inventoryResult.success) {
         throw new Error(inventoryResult.error || "Steam inventory request failed");
       } else {
+        finishStep(3);
+        startStep(3);
         finishStep(4);
         startStep(4);
         finishStep(5);
@@ -636,8 +686,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       total: steps.length,
       completed,
       currentStep: "Bereit",
-      steps,
-      activeStepIndex: -1,
+      targetPercent: 100,
       inProgress: false,
       done: true,
     });
@@ -701,10 +750,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
   };
 
   if (user) {
-    const progressPercent =
-      setupProgress.total > 0
-        ? Math.max(0, Math.min(100, Math.round((setupProgress.completed / setupProgress.total) * 100)))
-        : 0;
+    const progressPercent = clamp(Math.round(visualProgressPercent), 0, 100);
     const { preferredAvatarUrl, staticAvatarUrl } = resolveAvatarUrls(user);
     const avatarIsVideo = isVideoAvatarUrl(preferredAvatarUrl);
 
@@ -746,7 +792,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-300">
-              <span>{setupProgress.currentStep || "Vorbereitung"}</span>
+              <span>{`${setupProgress.currentStep || "Vorbereitung"}${setupProgress.inProgress ? progressDots : ""}`}</span>
               <span>{progressPercent}%</span>
             </div>
             <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/20">
@@ -761,30 +807,6 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
               Schritt {Math.min(setupProgress.completed, setupProgress.total)} von {setupProgress.total}
             </p>
           </div>
-
-          {Array.isArray(setupProgress.steps) && setupProgress.steps.length > 0 ? (
-            <div className="rounded-md border border-white/10 bg-white/5 p-2">
-              <div className="space-y-1.5">
-                {setupProgress.steps.map((stepLabel, index) => {
-                  const isCompleted = index < setupProgress.completed;
-                  const isActive = setupProgress.inProgress && index === setupProgress.activeStepIndex;
-                  const marker = isCompleted ? "✓" : isActive ? "..." : "•";
-                  const textClassName = isCompleted
-                    ? "text-emerald-200"
-                    : isActive
-                      ? "text-cyan-200"
-                      : "text-slate-400";
-
-                  return (
-                    <div key={`${stepLabel}-${index}`} className={`flex items-center gap-2 text-[11px] ${textClassName}`}>
-                      <span className="w-3 text-center">{marker}</span>
-                      <span>{stepLabel}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
 
           {syncInfo ? (
             <div className="rounded-md border border-emerald-300/35 bg-emerald-500/15 p-2 text-xs text-emerald-200">

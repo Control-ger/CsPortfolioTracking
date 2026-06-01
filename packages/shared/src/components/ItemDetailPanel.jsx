@@ -26,11 +26,15 @@ function LayeredPreview({ visuals = [], fallbackLabel = "Group" }) {
         </div>
       ) : null}
       {items.map((entry, index) => {
-        const offsetClass = index === 0 ? "left-0 top-0 z-20" : "left-5 top-0 z-10 sm:left-8";
+        const offsetClass =
+          index === 0
+            ? "left-0 top-0 z-20 rotate-[-3deg]"
+            : "left-5 top-[0.05rem] z-10 rotate-[4deg] sm:left-8";
+        const cardToneClass = index === 0 ? "bg-muted/20 shadow-sm" : "bg-card/95 shadow-md";
         return (
           <div
             key={entry?.id || `${entry?.name || fallbackLabel}-${index}`}
-            className={`absolute ${offsetClass} flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1 sm:h-24 sm:w-24`}
+            className={`absolute ${offsetClass} flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-border/80 ${cardToneClass} p-1 transition-transform sm:h-24 sm:w-24`}
           >
             {entry?.imageUrl ? (
               <img

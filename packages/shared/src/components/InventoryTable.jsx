@@ -25,11 +25,15 @@ function LayeredGroupIcon({ visuals = [], fallbackLabel }) {
         </div>
       ) : null}
       {items.map((item, index) => {
-        const offsetClass = index === 0 ? "left-0 top-0 z-20" : "left-4 top-0 z-10";
+        const offsetClass =
+          index === 0
+            ? "left-0 top-0 z-20 rotate-[-3deg]"
+            : "left-[1.05rem] top-[0.1rem] z-10 rotate-[4deg]";
+        const cardToneClass = index === 0 ? "bg-card/95 shadow-sm" : "bg-card shadow-md";
         return (
           <div
             key={item.id || `${item.name}-${index}`}
-            className={`absolute ${offsetClass} flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-card/85 p-1`}
+            className={`absolute ${offsetClass} flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border/80 ${cardToneClass} p-1 transition-transform`}
           >
             {item.imageUrl ? (
               <img
