@@ -554,6 +554,89 @@ function buildPortfolioComposition(rows = []) {
     }));
 }
 
+export function buildPortfolioCompositionFromRows(rows = [], options = {}) {
+  const scopedRows = filterRowsByScope(
+    Array.isArray(rows) ? rows : [],
+    options.scope,
+  );
+  return buildPortfolioComposition(scopedRows.map(enforceCsfloatOnlyRow));
+}
+
+function buildPortfolioHistoryFromSnapshots(snapshots = []) {
+  return (Array.isArray(snapshots) ? snapshots : []).map((snapshot) => {
+    const investedValue = Number(snapshot.investedValue || 0);
+    const totalValue = Number(snapshot.wert || 0);
+    return {
+      date: snapshot.date,
+      wert: totalValue,
+      invested: investedValue,
+      growthPercent: investedValue > 0 ? ((totalValue - investedValue) / investedValue) * 100 : 0,
+    };
+  });
+}
+
+async function buildDesktopPortfolioLocalSnapshot(options = {}) {
+  const localStore = getDesktopLocalStore();
+  const [rawRowsResult, snapshotsResult] = await Promise.all([
+    localStore.listInvestments(options.userId),
+    localStore.listPortfolioSnapshots(options.userId, 365),
+  ]);
+  const rawRows = unwrapLocalStoreResult(
+    rawRowsResult,
+    "local-store-list-investments",
+  );
+  const snapshots = unwrapLocalStoreResult(
+    snapshotsResult,
+    "local-store-list-portfolio-snapshots",
+  );
+  const displayScope = options.rowScope || "all";
+  const scopedRows = filterRowsByScope(rawRows, displayScope);
+  const activeRows = scopedRows.filter((row) => !isExcludedRow(row));
+  const rows = clusterDesktopInvestments(activeRows).map(enforceCsfloatOnlyRow);
+  const meta = {
+    source: "desktop-local",
+    rawInvestmentCount: rawRows.length,
+    scopedInvestmentCount: scopedRows.length,
+    warnings: [],
+  };
+  let history = buildPortfolioHistoryFromSnapshots(snapshots);
+
+  if (history.length === 0 && rows.length > 0) {
+    const summary = calculatePortfolioSummary(rows);
+    history = [
+      {
+        date: new Date().toISOString(),
+        wert: Number(summary.totalValue || 0),
+        invested: Number(summary.totalInvested || 0),
+        growthPercent: Number(summary.totalRoiPercent || 0),
+      },
+    ];
+  }
+
+  const nextMeta = rows.length === 0
+    ? {
+        ...meta,
+        emptyReason: "no-items-imported",
+        message: "Import items from your CS2 inventory to get started",
+      }
+    : meta;
+
+  return {
+    rows: {
+      data: rows,
+      meta: nextMeta,
+    },
+    summary: {
+      data: calculatePortfolioSummary(filterRowsByScope(rows, options.scope)),
+      meta: {
+        ...nextMeta,
+        scope: String(options.scope || "investments"),
+      },
+    },
+    history,
+  };
+}
+
 function getWatchlistGroupKey(item) {
   const numericItemId = Number(item?.itemId ?? item?.item_id ?? 0);
   if (Number.isFinite(numericItemId) && numericItemId > 0) {
@@ -676,124 +759,95 @@ function enrichDesktopWatchlistWithUpstreamMetrics(localItems = [], upstreamItem
 }
 
 async function fetchDesktopPortfolioData(options = {}) {
-  try {
-    await runDesktopSyncNowIfDue();
-  } catch (error) {
+  const localSnapshot = await buildDesktopPortfolioLocalSnapshot(options);
+  if (options.localOnly) {
+    return localSnapshot;
+  }
+
+  void runDesktopSyncNowIfDue().catch((error) => {
     console.warn("[desktop-sync] portfolio sync failed", error);
-  }
-
-  const localStore = getDesktopLocalStore();
-  const rawRows = unwrapLocalStoreResult(
-    await localStore.listInvestments(options.userId),
-    "local-store-list-investments",
-  );
-  const displayScope = options.rowScope || "all";
-  const scopedRows = filterRowsByScope(rawRows, displayScope);
-  const activeRows = scopedRows.filter((row) => !isExcludedRow(row));
-  let rows = clusterDesktopInvestments(activeRows);
-  let meta = {
-    source: "desktop-local",
-    rawInvestmentCount: rawRows.length,
-    scopedInvestmentCount: scopedRows.length,
-    warnings: [],
-  };
-
-  try {
-    const upstreamRowsResponse = await fetchApiPortfolioInvestments({
-      signal: options.signal,
-      scope: options.rowScope || options.scope,
-    });
-    const upstreamRows = Array.isArray(upstreamRowsResponse?.data)
-      ? upstreamRowsResponse.data
-      : [];
-    const upstreamMeta = upstreamRowsResponse?.meta || {};
-    const upstreamSource = String(upstreamMeta?.source || "").trim().toLowerCase();
-    if (upstreamRows.length > 0) {
-      rows = enrichDesktopRowsWithUpstreamLiveData(rows, upstreamRows);
-      meta = {
-        ...meta,
-        livePricingSource: "upstream",
-      };
-    } else if (upstreamSource === "desktop-local-fallback") {
-      const upstreamHint = upstreamMeta?.upstreamHint || {};
-      const hintCode = String(upstreamHint?.code || "UPSTREAM_UNAVAILABLE");
-      const hintMessage = String(
-        upstreamHint?.message || "Upstream-Portfolio konnte nicht geladen werden. Lokale Daten ohne Livepreise aktiv.",
-      );
-      const nextWarnings = Array.isArray(meta.warnings) ? [...meta.warnings] : [];
-      nextWarnings.push({
-        code: hintCode,
-        message: hintMessage,
-        statusCode: Number(Array.isArray(upstreamHint?.attemptStatuses) ? upstreamHint.attemptStatuses[0] : 0) || undefined,
-      });
-      meta = {
-        ...meta,
-        livePricingSource: "upstream-fallback",
-        warnings: nextWarnings,
-        upstreamHint,
-        proxyAttempts: Array.isArray(upstreamMeta?.proxyAttempts) ? upstreamMeta.proxyAttempts : [],
-      };
-    }
-  } catch (error) {
-    if (!isAbortLikeError(error)) {
-      console.warn("[desktop-live-pricing] upstream investments unavailable", error);
-    }
-  }
-
-  rows = rows.map(enforceCsfloatOnlyRow);
-
-  // No server seeding - user must import from CS2 inventory first
-  // Empty local DB means user hasn't imported items yet
-  if (rows.length === 0) {
-    meta.emptyReason = "no-items-imported";
-    meta.message = "Import items from your CS2 inventory to get started";
-  }
-
-  const snapshots = unwrapLocalStoreResult(
-    await localStore.listPortfolioSnapshots(options.userId, 365),
-    "local-store-list-portfolio-snapshots",
-  );
-  let history = (Array.isArray(snapshots) ? snapshots : []).map((snapshot) => {
-    const investedValue = Number(snapshot.investedValue || 0);
-    const totalValue = Number(snapshot.wert || 0);
-    return {
-      date: snapshot.date,
-      wert: totalValue,
-      invested: investedValue,
-      growthPercent: investedValue > 0 ? ((totalValue - investedValue) / investedValue) * 100 : 0,
-    };
   });
 
-  if (history.length <= 1) {
+  let rows = Array.isArray(localSnapshot?.rows?.data) ? localSnapshot.rows.data : [];
+  let meta = {
+    ...(localSnapshot?.rows?.meta || {}),
+  };
+  let history = Array.isArray(localSnapshot?.history) ? localSnapshot.history : [];
+
+  const upstreamRowsPromise = (async () => {
     try {
-      const upstreamHistory = await fetchApiPortfolioHistory({
+      return await fetchApiPortfolioInvestments({
         signal: options.signal,
-        scope: options.scope,
+        scope: options.rowScope || options.scope,
       });
-      if (Array.isArray(upstreamHistory) && upstreamHistory.length > history.length) {
-        history = upstreamHistory;
-        meta = {
-          ...meta,
-          historySource: "upstream",
-        };
-      }
     } catch (error) {
       if (!isAbortLikeError(error)) {
-        console.warn("[desktop-history] upstream portfolio history unavailable", error);
+        console.warn("[desktop-live-pricing] upstream investments unavailable", error);
       }
+      return null;
     }
+  })();
+
+  const upstreamHistoryPromise = history.length <= 1
+    ? (async () => {
+        try {
+          return await fetchApiPortfolioHistory({
+            signal: options.signal,
+            scope: options.scope,
+          });
+        } catch (error) {
+          if (!isAbortLikeError(error)) {
+            console.warn("[desktop-history] upstream portfolio history unavailable", error);
+          }
+          return null;
+        }
+      })()
+    : Promise.resolve(null);
+
+  const [upstreamRowsResponse, upstreamHistory] = await Promise.all([
+    upstreamRowsPromise,
+    upstreamHistoryPromise,
+  ]);
+
+  const upstreamRows = Array.isArray(upstreamRowsResponse?.data)
+    ? upstreamRowsResponse.data
+    : [];
+  const upstreamMeta = upstreamRowsResponse?.meta || {};
+  const upstreamSource = String(upstreamMeta?.source || "").trim().toLowerCase();
+
+  if (upstreamRows.length > 0) {
+    rows = enrichDesktopRowsWithUpstreamLiveData(rows, upstreamRows).map(enforceCsfloatOnlyRow);
+    meta = {
+      ...meta,
+      livePricingSource: "upstream",
+    };
+  } else if (upstreamSource === "desktop-local-fallback") {
+    const upstreamHint = upstreamMeta?.upstreamHint || {};
+    const hintCode = String(upstreamHint?.code || "UPSTREAM_UNAVAILABLE");
+    const hintMessage = String(
+      upstreamHint?.message || "Upstream-Portfolio konnte nicht geladen werden. Lokale Daten ohne Livepreise aktiv.",
+    );
+    const nextWarnings = Array.isArray(meta.warnings) ? [...meta.warnings] : [];
+    nextWarnings.push({
+      code: hintCode,
+      message: hintMessage,
+      statusCode: Number(Array.isArray(upstreamHint?.attemptStatuses) ? upstreamHint.attemptStatuses[0] : 0) || undefined,
+    });
+    meta = {
+      ...meta,
+      livePricingSource: "upstream-fallback",
+      warnings: nextWarnings,
+      upstreamHint,
+      proxyAttempts: Array.isArray(upstreamMeta?.proxyAttempts) ? upstreamMeta.proxyAttempts : [],
+    };
   }
 
-  if (history.length === 0 && rows.length > 0) {
-    const summary = calculatePortfolioSummary(rows);
-    history = [
-      {
-        date: new Date().toISOString(),
-        wert: Number(summary.totalValue || 0),
-        invested: Number(summary.totalInvested || 0),
-        growthPercent: Number(summary.totalRoiPercent || 0),
-      },
-    ];
+  if (Array.isArray(upstreamHistory) && upstreamHistory.length > history.length) {
+    history = upstreamHistory;
+    meta = {
+      ...meta,
+      historySource: "upstream",
+    };
   }
 
   return {
@@ -950,10 +1004,12 @@ export async function fetchWatchlistData(options = {}) {
     return fetchApiWatchlist(options);
   }
 
-  try {
-    await runDesktopSyncNowIfDue();
-  } catch (error) {
-    console.warn("[desktop-sync] watchlist sync failed", error);
+  if (options.skipDesktopSync !== true) {
+    try {
+      await runDesktopSyncNowIfDue();
+    } catch (error) {
+      console.warn("[desktop-sync] watchlist sync failed", error);
+    }
   }
 
   let items = unwrapLocalStoreResult(

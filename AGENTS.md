@@ -697,3 +697,14 @@ Change: Portfolio-KPI/Chart Scope-Konsistenz + CSFloat Buyorder-Diagnose gehaert
 - `packages/shared/src/components/PortfolioChart.jsx` priorisiert gelieferte `growthPercent`-Werte aus der Historie und berechnet Delta-Prozente in der Prozentansicht konsistent zum sichtbaren Verlauf.
 - `backend/src/Http/Controller/DesktopCsFloatController.php` erhoeht den Default fuer `buy-orders`-Reads auf `limit=500`; `backend/src/Infrastructure/External/CsFloatTradeClient.php` fragt Buyorders explizit mit `order=desc` ab.
 - `packages/shared/src/lib/dataSource.js` und `packages/shared/src/components/Watchlist.jsx` machen Desktop-Upstream-Fallbacks + erste Fehlercodes/Status in der Buyorder-Diagnose sichtbarer.
+
+---
+
+Updated: 2026-06-02
+Change: Dashboard-Portfolio-Load local-first beschleunigt
+- `packages/shared/src/lib/dataSource.js` hydriert Desktop-Portfolio-Daten jetzt zuerst aus lokaler SQLite + lokalen Snapshots und startet Sync/Upstream-Refresh nur noch im Hintergrund.
+- Read-only Watchlist-Preloads koennen in `packages/shared/src/lib/dataSource.js` den Desktop-Sync explizit ueberspringen (`skipDesktopSync`), damit Dashboard/Search keine unnoetigen Sync-Blocker im First Paint ausloesen.
+- `packages/shared/src/hooks/usePortfolio.jsx` staged bei kaltem Desktop-Start einen sofortigen Local-Snapshot, bevor Live-Daten nachgeladen werden.
+- `packages/shared/src/pages/PortfolioPage.jsx` nutzt fuer die Portfolio-Zusammensetzung die bereits geladenen Portfolio-Rows statt eines zusaetzlichen Composition-Fetches.
+- `packages/shared/src/pages/PortfolioPage.jsx` verschiebt Nebenloads fuer Management, Gruppen, Search-Watchlist und Dashboard-Mover auf den wirklich aktiven Tab/Overlay; Watchlist-Mover laden zusaetzlich idle-scheduled und cache-first.
+- Der automatische Desktop-Steam-Sync startet erst nach dem ersten Portfolio-Load und wird dann idle-scheduled ausgefuehrt, damit Initial-Render und First Paint nicht mehr gegen Inventory-Import konkurrieren.

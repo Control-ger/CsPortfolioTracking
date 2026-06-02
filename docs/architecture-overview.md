@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-01
+Last updated: 2026-06-02
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -133,6 +133,11 @@ From `apps/web/src/App.jsx`:
 - Search observability includes `domain.watchlist.search.*` events and a debug aggregation endpoint `GET /api/v1/debug/watchlist-search-stats` (server + desktop sidecar proxy).
 - Frontend stale handling calls `POST /api/v1/portfolio/prices/refresh-stale` (cooldown 120s) to refresh stale portfolio prices in background.
 - Portfolio fetch path uses two backend requests (`investments`, `history`) and computes summary client-side from rows.
+- Desktop portfolio/dashboard hydrates first from local SQLite investments + local snapshots, then refreshes sync/upstream live pricing/history in background without blocking the first paint.
+- Overview composition now reuses the already loaded portfolio rows instead of triggering a separate composition fetch path.
+- Non-overview dashboard tabs (`inventory`, `watchlist`, `search`) and sync modals are lazy-loaded so their UI code does not block the initial overview bundle.
+- Ancillary portfolio side-loads (management rows, group settings, search watchlist preload, watchlist movers) are deferred until the related tab or overlay is active; overview mover data is additionally idle-scheduled and cache-first.
+- Desktop auto Steam inventory sync is deferred until the first portfolio load has finished and then scheduled during browser idle, so it no longer competes with the initial dashboard paint.
 - For `metricsScope=all`, frontend normalizes history/KPI fallback inputs against the active summary values when the newest history snapshot diverges significantly, so `Gesamt Zuwachs` and chart stay scope-consistent.
 - CSFloat rate-limit handling uses a circuit-breaker file backoff and respects upstream `Retry-After` when present.
 

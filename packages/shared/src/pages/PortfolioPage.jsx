@@ -1,13 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Newspaper, Package, Search, TrendingDown, TrendingUp } from "lucide-react";
 
 import { useModal } from "@shared/contexts";
-import { InventoryTable } from "@shared/components";
-import { ItemDetailsModal } from "@shared/components";
-import { ItemDetailPanel } from "@shared/components";
-import { CsFloatTradeSyncModal } from "@shared/components";
-import { SkinBaronSalesSyncModal } from "@shared/components";
 import { PortfolioChart } from "@shared/components";
 import { PortfolioCompositionChart } from "@shared/components";
 import { PortfolioHeaderCard } from "@shared/components";
@@ -15,8 +10,6 @@ import { StatCard } from "@shared/components";
 import { SteamLoginPrompt } from "@shared/components";
 import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
-import { Watchlist } from "@shared/components";
-import { ItemSearch } from "@shared/components";
 import { Badge } from "@shared/components";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components";
 import { Button } from "@shared/components";
@@ -31,7 +24,6 @@ import {
 import { Skeleton } from "@shared/components";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@shared/components";
 import { usePortfolio } from "@shared/hooks";
-import { usePortfolioComposition } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
   fetchPortfolioGroupsSetting,
@@ -42,6 +34,7 @@ import {
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
+  buildPortfolioCompositionFromRows,
   fetchCS2Inventory,
   fetchCsFloatBuyOrdersData,
   fetchWatchlistData,
@@ -71,6 +64,42 @@ import {
   normalizePortfolioGroups,
   summarizeManagementClusterAssignment,
 } from "@shared/lib/portfolioGroups.js";
+
+const InventoryTable = lazy(() =>
+  import("../components/InventoryTable.jsx").then((module) => ({
+    default: module.InventoryTable,
+  })),
+);
+const ItemDetailsModal = lazy(() =>
+  import("../components/ItemDetailsModal.jsx").then((module) => ({
+    default: module.ItemDetailsModal,
+  })),
+);
+const ItemDetailPanel = lazy(() =>
+  import("../components/ItemDetailPanel.jsx").then((module) => ({
+    default: module.ItemDetailPanel,
+  })),
+);
+const CsFloatTradeSyncModal = lazy(() =>
+  import("../components/CsFloatTradeSyncModal.jsx").then((module) => ({
+    default: module.CsFloatTradeSyncModal,
+  })),
+);
+const SkinBaronSalesSyncModal = lazy(() =>
+  import("../components/SkinBaronSalesSyncModal.jsx").then((module) => ({
+    default: module.SkinBaronSalesSyncModal,
+  })),
+);
+const Watchlist = lazy(() =>
+  import("../components/Watchlist.jsx").then((module) => ({
+    default: module.Watchlist,
+  })),
+);
+const ItemSearch = lazy(() =>
+  import("../components/ItemSearch.jsx").then((module) => ({
+    default: module.ItemSearch,
+  })),
+);
 
 function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -861,11 +890,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     isLoading: csUpdatesLoading,
   } = useCsUpdatesFeed();
   const [compositionRefreshToken, setCompositionRefreshToken] = useState(0);
-  const {
-    data: compositionData,
-    loading: compositionLoading,
-    error: compositionError,
-  } = usePortfolioComposition(compositionRefreshToken, { scope: metricsScope });
+  const compositionData = useMemo(
+    () => buildPortfolioCompositionFromRows(enrichedInvestments, { scope: metricsScope }),
+    [enrichedInvestments, metricsScope],
+  );
+  const compositionLoading = portfolioLoading && enrichedInvestments.length === 0;
+  const compositionError = !compositionLoading && enrichedInvestments.length === 0 ? error : "";
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
@@ -985,6 +1015,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
   const portfolioChartCardRef = useRef(null);
   const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
+  const shouldPrepareInventoryData = activeTab === "inventory";
+  const shouldPrepareManagementData =
+    isDesktopRuntime && activeTab === "management";
+  const shouldLoadPortfolioGroups =
+    shouldPrepareInventoryData || shouldPrepareManagementData || globalSearchOpen;
+  const shouldLoadGlobalSearchWatchlist =
+    globalSearchOpen || activeTab === "search";
   const scopedPortfolioHistory = useMemo(() => {
     if (!Array.isArray(portfolioHistory) || portfolioHistory.length === 0) {
       return [];
@@ -1200,6 +1237,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     let cancelled = false;
 
     const loadPortfolioGroups = async () => {
+      if (!shouldLoadPortfolioGroups) {
+        return;
+      }
       setPortfolioGroupsLoading(true);
       try {
         const stored = await readLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: [] });
@@ -1246,7 +1286,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [shouldLoadPortfolioGroups]);
 
   useEffect(() => {
     if (!isDesktopRuntime || typeof document === "undefined") {
@@ -1290,9 +1330,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   useEffect(() => {
     const loadManagementInvestments = async () => {
-      const isDesktopLocal =
-        typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
-      if (!isDesktopLocal) {
+      if (!shouldPrepareManagementData && !shouldPrepareInventoryData) {
+        return;
+      }
+      if (!isDesktopRuntime) {
         setManagementInvestments([]);
         return;
       }
@@ -1320,7 +1361,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
 
     void loadManagementInvestments();
-  }, [compositionRefreshToken]);
+  }, [compositionRefreshToken, isDesktopRuntime, shouldPrepareInventoryData, shouldPrepareManagementData]);
 
   useEffect(() => {
     if (managementSection !== "create") {
@@ -1622,18 +1663,56 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   }, []);
 
   useEffect(() => {
-    const runAutoSteamSync = async () => {
-      const isDesktopLocal =
-        typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
-      if (!isDesktopLocal || authRequired || autoSyncStartedRef.current || !autoSyncEnabled) {
+    const isDesktopLocal =
+      typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
+    if (
+      !isDesktopLocal ||
+      authRequired ||
+      autoSyncStartedRef.current ||
+      !autoSyncEnabled ||
+      portfolioLoading
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId = null;
+    let idleId = null;
+
+    const trigger = async () => {
+      if (cancelled || autoSyncStartedRef.current) {
         return;
       }
       autoSyncStartedRef.current = true;
       await runSteamSync({ manual: false });
     };
 
-    void runAutoSteamSync();
-  }, [authRequired, autoSyncEnabled, runSteamSync]);
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(() => {
+        void trigger();
+      }, { timeout: 3000 });
+    } else if (typeof window !== "undefined") {
+      timeoutId = window.setTimeout(() => {
+        void trigger();
+      }, 1200);
+    } else {
+      void trigger();
+    }
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null && typeof window !== "undefined") {
+        window.clearTimeout(timeoutId);
+      }
+      if (
+        idleId !== null &&
+        typeof window !== "undefined" &&
+        typeof window.cancelIdleCallback === "function"
+      ) {
+        window.cancelIdleCallback(idleId);
+      }
+    };
+  }, [authRequired, autoSyncEnabled, portfolioLoading, runSteamSync]);
 
   const handleExcludeChange = async (itemId, excluded) => {
     if (excluded) {
@@ -2020,7 +2099,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   const loadGlobalSearchWatchlistItems = useCallback(async () => {
     try {
-      const response = await fetchWatchlistData({ syncLive: false });
+      const response = await fetchWatchlistData({
+        syncLive: false,
+        skipDesktopSync: true,
+      });
       setGlobalSearchWatchlistItems(Array.isArray(response?.data) ? response.data : []);
     } catch (watchlistError) {
       console.warn("Failed to preload watchlist for global search", watchlistError);
@@ -2030,12 +2112,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   const loadDashboardWatchlistItems = useCallback(async () => {
     try {
-      const response = await fetchWatchlistData({ syncLive: true });
+      const response = await fetchWatchlistData({
+        syncLive: false,
+        skipDesktopSync: true,
+      });
       setDashboardWatchlistItems(Array.isArray(response?.data) ? response.data : []);
     } catch (watchlistError) {
       console.warn("Failed to load dashboard watchlist movers", watchlistError);
       try {
-        const fallbackResponse = await fetchWatchlistData({ syncLive: false });
+        const fallbackResponse = await fetchWatchlistData({
+          syncLive: false,
+          skipDesktopSync: true,
+        });
         setDashboardWatchlistItems(Array.isArray(fallbackResponse?.data) ? fallbackResponse.data : []);
       } catch {
         setDashboardWatchlistItems([]);
@@ -2044,12 +2132,54 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   }, []);
 
   useEffect(() => {
+    if (!shouldLoadGlobalSearchWatchlist) {
+      return;
+    }
     void loadGlobalSearchWatchlistItems();
-  }, [compositionRefreshToken, loadGlobalSearchWatchlistItems]);
+  }, [compositionRefreshToken, loadGlobalSearchWatchlistItems, shouldLoadGlobalSearchWatchlist]);
 
   useEffect(() => {
-    void loadDashboardWatchlistItems();
-  }, [compositionRefreshToken, loadDashboardWatchlistItems]);
+    if (activeTab !== "overview" || portfolioLoading) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId = null;
+    let idleId = null;
+
+    const scheduleLoad = () => {
+      if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+        idleId = window.requestIdleCallback(() => {
+          if (!cancelled) {
+            void loadDashboardWatchlistItems();
+          }
+        }, { timeout: 1500 });
+        return;
+      }
+
+      timeoutId = window.setTimeout(() => {
+        if (!cancelled) {
+          void loadDashboardWatchlistItems();
+        }
+      }, 250);
+    };
+
+    scheduleLoad();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null && typeof window !== "undefined") {
+        window.clearTimeout(timeoutId);
+      }
+      if (
+        idleId !== null &&
+        typeof window !== "undefined" &&
+        typeof window.cancelIdleCallback === "function"
+      ) {
+        window.cancelIdleCallback(idleId);
+      }
+    };
+  }, [activeTab, compositionRefreshToken, loadDashboardWatchlistItems, portfolioLoading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4935,7 +5065,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                 <PortfolioChart
                   cardRef={portfolioChartCardRef}
                   history={scopedPortfolioHistory}
-                  isLoading={portfolioLoading}
+                  isLoading={portfolioLoading && scopedPortfolioHistory.length === 0}
                   onHoverChange={setHoveredChartData}
                   onTrendChange={setChartTrendData}
                   metricsScope={metricsScope}
@@ -5226,37 +5356,49 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </div>
 
             <div className="overflow-x-auto md:col-span-1 sm:rounded-2xl sm:border sm:border-border/70 sm:bg-card/65">
-              <InventoryTable
-                investments={inventoryTabItems}
-                groups={portfolioGroupSummaries}
-                onSelectItem={(item) => {
-                  setSelectedItem(item);
-                  if (window.innerWidth < BREAKPOINTS.MOBILE) {
-                    openModal("itemDetail", { item });
-                  }
-                }}
-                onSelectGroup={(group) => {
-                  setSelectedItem(buildGroupDetailSelection(group));
-                }}
-                onSelectCluster={(group, cluster) => {
-                  setSelectedItem(buildGroupClusterDetailSelection(group, cluster));
-                }}
-              />
+              <Suspense
+                fallback={
+                  <div className="space-y-3 p-4">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                }
+              >
+                <InventoryTable
+                  investments={inventoryTabItems}
+                  groups={portfolioGroupSummaries}
+                  onSelectItem={(item) => {
+                    setSelectedItem(item);
+                    if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                      openModal("itemDetail", { item });
+                    }
+                  }}
+                  onSelectGroup={(group) => {
+                    setSelectedItem(buildGroupDetailSelection(group));
+                  }}
+                  onSelectCluster={(group, cluster) => {
+                    setSelectedItem(buildGroupClusterDetailSelection(group, cluster));
+                  }}
+                />
+              </Suspense>
             </div>
 
             <div className="hidden md:col-span-1 md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-              <ItemDetailPanel
-                item={selectedItemWithLiveAndBuyOrders || selectedItem}
-                history={selectedItemHistory}
-                historyLoading={selectedItemHistoryLoading}
-                onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
-                onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                canToggleExclude={
-                  isDesktopRuntime &&
-                  selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&
-                  selectedItemWithLiveAndBuyOrders?.__detailKind !== "group-cluster"
-                }
-              />
+              <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-2xl" />}>
+                <ItemDetailPanel
+                  item={selectedItemWithLiveAndBuyOrders || selectedItem}
+                  history={selectedItemHistory}
+                  historyLoading={selectedItemHistoryLoading}
+                  onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
+                  onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
+                  canToggleExclude={
+                    isDesktopRuntime &&
+                    selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&
+                    selectedItemWithLiveAndBuyOrders?.__detailKind !== "group-cluster"
+                  }
+                />
+              </Suspense>
             </div>
 
             {modals.map((modal) =>
@@ -5265,40 +5407,61 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   resolveLiveClusterItem(modal?.data?.item, enrichedInvestments) || modal?.data?.item || null;
                 const modalItemWithBuyOrders = withBuyOrderFields(liveModalItem, inventoryBuyOrderSummary);
                 return (
-                  <ItemDetailsModal
-                    key={modal.id}
-                    isOpen={true}
-                    onClose={() => closeModal(modal.id)}
-                    item={modalItemWithBuyOrders}
-                    history={selectedItemHistory}
-                    historyLoading={selectedItemHistoryLoading}
-                    onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
-                    onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                    canToggleExclude={isDesktopRuntime}
-                  />
+                  <Suspense key={modal.id} fallback={null}>
+                    <ItemDetailsModal
+                      isOpen={true}
+                      onClose={() => closeModal(modal.id)}
+                      item={modalItemWithBuyOrders}
+                      history={selectedItemHistory}
+                      historyLoading={selectedItemHistoryLoading}
+                      onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
+                      onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
+                      canToggleExclude={isDesktopRuntime}
+                    />
+                  </Suspense>
                 );
               })() : null,
             )}
           </TabsContent>
 
           <TabsContent value="watchlist" forceMount={visitedTabs.has("watchlist")} className="space-y-4 sm:space-y-6">
-            <Watchlist
-              focusTarget={watchlistFocusTarget}
-              onWarningsChange={handleWatchlistWarningsChange}
-            />
+            <Suspense
+              fallback={
+                <div className="space-y-3">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              }
+            >
+              <Watchlist
+                focusTarget={watchlistFocusTarget}
+                onWarningsChange={handleWatchlistWarningsChange}
+              />
+            </Suspense>
           </TabsContent>
           <TabsContent value="search" forceMount={visitedTabs.has("search")} className="space-y-4 sm:space-y-6">
-            <ItemSearch
-              onAddToWatchlist={loadGlobalSearchWatchlistItems}
-              existingItems={globalSearchWatchlistItems.map((entry) => ({ name: entry?.name || entry?.marketHashName || "" }))}
-              onWarningsChange={(nextWarnings = []) => {
-                handleUiWarningsChange("search-browser", "Produktsuche", nextWarnings);
-              }}
-              initialSearchTerm={searchPageInitialTerm}
-              submittedTerm={searchPageInitialTerm}
-              showSearchInput={false}
-              autoFocus={false}
-            />
+            <Suspense
+              fallback={
+                <div className="space-y-3">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              }
+            >
+              <ItemSearch
+                onAddToWatchlist={loadGlobalSearchWatchlistItems}
+                existingItems={globalSearchWatchlistItems.map((entry) => ({ name: entry?.name || entry?.marketHashName || "" }))}
+                onWarningsChange={(nextWarnings = []) => {
+                  handleUiWarningsChange("search-browser", "Produktsuche", nextWarnings);
+                }}
+                initialSearchTerm={searchPageInitialTerm}
+                submittedTerm={searchPageInitialTerm}
+                showSearchInput={false}
+                autoFocus={false}
+              />
+            </Suspense>
           </TabsContent>
           {isDesktopRuntime ? (
           <TabsContent value="management" forceMount={visitedTabs.has("management")} className="space-y-4 sm:space-y-6">
@@ -6891,40 +7054,48 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           </div>
         ) : null}
 
-        <CsFloatTradeSyncModal
-          isOpen={isCsFloatSyncOpen}
-          onClose={() => setIsCsFloatSyncOpen(false)}
-          onSynced={async () => {
-            await refreshPortfolio();
-            setCompositionRefreshToken((current) => current + 1);
-            const shouldAdvanceJourney =
-              Boolean(journeyState?.startedAt) &&
-              !journeyState?.skipped &&
-              !journeyState?.completedAt;
-            const nextState = {
-              ...journeyState,
-              csfloatImportCompletedAt: new Date().toISOString(),
-              csfloatImportSkippedAt: null,
-              currentStepId: shouldAdvanceJourney ? "matching" : journeyState?.currentStepId,
-            };
-            setJourneyState(nextState);
-            await writeJourneyState(nextState);
-            setActiveTab("management");
-            setManagementSection("matching");
-            setIsCsFloatSyncOpen(false);
-          }}
-        />
-        <SkinBaronSalesSyncModal
-          isOpen={isSkinBaronSyncOpen}
-          onClose={() => setIsSkinBaronSyncOpen(false)}
-          onSynced={async () => {
-            await refreshPortfolio();
-            setCompositionRefreshToken((current) => current + 1);
-            setActiveTab("management");
-            setManagementSection("matching");
-            setIsSkinBaronSyncOpen(false);
-          }}
-        />
+        {isCsFloatSyncOpen ? (
+          <Suspense fallback={null}>
+            <CsFloatTradeSyncModal
+              isOpen={isCsFloatSyncOpen}
+              onClose={() => setIsCsFloatSyncOpen(false)}
+              onSynced={async () => {
+                await refreshPortfolio();
+                setCompositionRefreshToken((current) => current + 1);
+                const shouldAdvanceJourney =
+                  Boolean(journeyState?.startedAt) &&
+                  !journeyState?.skipped &&
+                  !journeyState?.completedAt;
+                const nextState = {
+                  ...journeyState,
+                  csfloatImportCompletedAt: new Date().toISOString(),
+                  csfloatImportSkippedAt: null,
+                  currentStepId: shouldAdvanceJourney ? "matching" : journeyState?.currentStepId,
+                };
+                setJourneyState(nextState);
+                await writeJourneyState(nextState);
+                setActiveTab("management");
+                setManagementSection("matching");
+                setIsCsFloatSyncOpen(false);
+              }}
+            />
+          </Suspense>
+        ) : null}
+        {isSkinBaronSyncOpen ? (
+          <Suspense fallback={null}>
+            <SkinBaronSalesSyncModal
+              isOpen={isSkinBaronSyncOpen}
+              onClose={() => setIsSkinBaronSyncOpen(false)}
+              onSynced={async () => {
+                await refreshPortfolio();
+                setCompositionRefreshToken((current) => current + 1);
+                setActiveTab("management");
+                setManagementSection("matching");
+                setIsSkinBaronSyncOpen(false);
+              }}
+            />
+          </Suspense>
+        ) : null}
       </div>
     </div>
   );

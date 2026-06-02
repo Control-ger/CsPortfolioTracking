@@ -59,6 +59,13 @@ function mergeWarnings(...warningGroups) {
   return Array.from(warningsByKey.values());
 }
 
+function hasDesktopLocalStore() {
+  return (
+    typeof window !== "undefined" &&
+    Boolean(window.electronAPI?.localStore)
+  );
+}
+
 export function usePortfolio(options = {}) {
   const abortControllerRef = useRef(null);
   const initialLoadKeyRef = useRef("");
@@ -103,57 +110,79 @@ export function usePortfolio(options = {}) {
     setIsLoading(false);
   }, [cacheKey]);
 
-  const loadData = useCallback(async ({ showLoading = true } = {}) => {
+  const applyPortfolioPayload = useCallback((payload) => {
+    const { rows: rowsResponse, summary: summaryResponse, history, requiresAuth } = payload || {};
+    const nextWarnings = mergeWarnings(
+      rowsResponse?.meta?.warnings || [],
+      summaryResponse?.meta?.warnings || []
+    );
+
+    setAuthRequired(requiresAuth || false);
+    setInvestments(rowsResponse?.data || []);
+    setStats(summaryResponse?.data || {});
+    setPortfolioHistory(history || []);
+    setWarnings(nextWarnings);
+    setError("");
+
+    portfolioViewCache.set(cacheKey, {
+      investments: rowsResponse?.data || [],
+      authRequired: requiresAuth || false,
+      stats: summaryResponse?.data || {},
+      portfolioHistory: history || [],
+      warnings: nextWarnings,
+      updatedAt: Date.now(),
+    });
+  }, [cacheKey]);
+
+  const loadData = useCallback(async ({ showLoading = true, preferImmediateLocal = false } = {}) => {
     // Abort previous request if still pending
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
+    let localSnapshotApplied = false;
 
     if (showLoading) {
       setIsLoading(true);
     }
     try {
-      const { rows: rowsResponse, summary: summaryResponse, history, requiresAuth } =
-        await fetchPortfolioData({
+      if (preferImmediateLocal && hasDesktopLocalStore()) {
+        const localSnapshot = await fetchPortfolioData({
           signal,
           scope: options.scope,
           rowScope: options.rowScope,
+          localOnly: true,
         });
+
+        if (signal.aborted) return;
+
+        applyPortfolioPayload(localSnapshot);
+        localSnapshotApplied = true;
+        setIsLoading(false);
+      }
+
+      const payload = await fetchPortfolioData({
+        signal,
+        scope: options.scope,
+        rowScope: options.rowScope,
+      });
 
       // Don't update state if request was aborted
       if (signal.aborted) return;
 
-      // Update auth state from data source
-      setAuthRequired(requiresAuth || false);
-      setInvestments(rowsResponse?.data || []);
-      setStats(summaryResponse?.data || {});
-      setPortfolioHistory(history || []);
-      const nextWarnings = mergeWarnings(
-        rowsResponse?.meta?.warnings || [],
-        summaryResponse?.meta?.warnings || []
-      );
-      setWarnings(nextWarnings);
-      setError("");
-
-      portfolioViewCache.set(cacheKey, {
-        investments: rowsResponse?.data || [],
-        authRequired: requiresAuth || false,
-        stats: summaryResponse?.data || {},
-        portfolioHistory: history || [],
-        warnings: nextWarnings,
-        updatedAt: Date.now(),
-      });
+      applyPortfolioPayload(payload);
     } catch (err) {
       // Don't update state for abort errors
       if (err.name === 'AbortError') return;
       setError(err.message || "Fehler beim Laden der Portfolio-Daten.");
-      setWarnings([]);
+      if (!localSnapshotApplied) {
+        setWarnings([]);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [cacheKey, options.rowScope, options.scope]);
+  }, [applyPortfolioPayload, options.rowScope, options.scope]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -185,7 +214,10 @@ export function usePortfolio(options = {}) {
     }
     initialLoadKeyRef.current = cacheKey;
     const hasSnapshot = getValidPortfolioSnapshot(cacheKey) !== null;
-    void Promise.resolve().then(() => loadData({ showLoading: !hasSnapshot }));
+    void Promise.resolve().then(() => loadData({
+      showLoading: !hasSnapshot,
+      preferImmediateLocal: !hasSnapshot,
+    }));
   }, [cacheKey, loadData]);
 
   return {
