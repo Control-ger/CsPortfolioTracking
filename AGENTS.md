@@ -708,3 +708,12 @@ Change: Dashboard-Portfolio-Load local-first beschleunigt
 - `packages/shared/src/pages/PortfolioPage.jsx` nutzt fuer die Portfolio-Zusammensetzung die bereits geladenen Portfolio-Rows statt eines zusaetzlichen Composition-Fetches.
 - `packages/shared/src/pages/PortfolioPage.jsx` verschiebt Nebenloads fuer Management, Gruppen, Search-Watchlist und Dashboard-Mover auf den wirklich aktiven Tab/Overlay; Watchlist-Mover laden zusaetzlich idle-scheduled und cache-first.
 - Der automatische Desktop-Steam-Sync startet erst nach dem ersten Portfolio-Load und wird dann idle-scheduled ausgefuehrt, damit Initial-Render und First Paint nicht mehr gegen Inventory-Import konkurrieren.
+
+---
+
+Updated: 2026-06-03
+Change: Dashboard-Regressionsfix nach local-first Performance-Release
+- `packages/shared/src/lib/dataSource.js` wartet beim finalen Desktop-Portfolio-Live-Refresh wieder auf Desktop-Sync, bevor Upstream-Livepreise/-Historie gelesen werden; der lokale Sofort-Snapshot bleibt nur First-Paint und wird nicht in den 120s View-Cache geschrieben.
+- `packages/shared/src/pages/PortfolioPage.jsx` nutzt fuer die Portfolio-Zusammensetzung wieder den dedizierten Composition-Pfad, damit lokale Rows ohne Livefelder den Donut nicht auf 0 Assets/keine CSFloat-Werte reduzieren.
+- Dashboard-Watchlist-Mover bleiben idle-scheduled, laden aber wieder mit `syncLive=true` und erhalten eine Hoehenkappe fuer stabile Overview-Optik.
+- `backend/src/Infrastructure/External/CsFloatTradeClient.php` sendet fuer CSFloat Buyorders keine zusaetzliche `order=desc` Query mehr; `DesktopCsFloatController` faellt bei temporaeren Buyorder-Upstreamfehlern (429/500/503) auf Trades zurueck.

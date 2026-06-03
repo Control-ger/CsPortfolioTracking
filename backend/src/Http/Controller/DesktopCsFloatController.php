@@ -351,7 +351,17 @@ final class DesktopCsFloatController
 
         $first = is_array($errors[0] ?? null) ? $errors[0] : [];
         $code = strtoupper(trim((string) ($first['code'] ?? '')));
-        return in_array($code, ['CSFLOAT_NOT_FOUND', 'CSFLOAT_METHOD_NOT_ALLOWED'], true);
+        return in_array(
+            $code,
+            [
+                'CSFLOAT_NOT_FOUND',
+                'CSFLOAT_METHOD_NOT_ALLOWED',
+                'CSFLOAT_TOO_MANY_REQUESTS',
+                'CSFLOAT_INTERNAL_SERVER_ERROR',
+                'CSFLOAT_SERVICE_UNAVAILABLE',
+            ],
+            true
+        );
     }
 
     private function mapBuyOrderRow(array $payload): ?array

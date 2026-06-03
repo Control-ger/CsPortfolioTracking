@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-02
+Last updated: 2026-06-03
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -105,6 +105,7 @@ From `apps/web/src/App.jsx`:
 - Item-type filter `other` includes rows with missing/empty `item_type`/`type`, so legacy catalog entries are not silently dropped.
 - Watchlist Buyorder enrichment is cache-backed and only refreshed during explicit CSFloat sync execution (not on every watchlist view load).
 - If no local CSFloat buyorder cache snapshot exists, desktop watchlist triggers one live fetch and persists the snapshot; subsequent reads stay cache-first.
+- If CSFloat `buy-orders` returns a temporary upstream failure such as 429/500/503, the desktop sidecar falls back to the trades endpoint before reporting no buyorders.
 - Desktop watchlist detail renders Buyorders directly item-scoped under the price-history panel (mini table: price/orders/quantity) instead of a global buyorder summary card.
 - Desktop watchlist detail exposes a compact debug line (client source, upstream source, pages fetched, raw rows, summary rows, cache/error indicators plus first upstream error code/status) to diagnose CSFloat buyorder mismatches quickly.
 - If desktop sidecar proxy returns a `syncLive` fallback payload without upstream metrics/history, desktop watchlist performs one follow-up upstream read with `syncLive=false` to preserve visible price history/change metrics.
@@ -133,10 +134,10 @@ From `apps/web/src/App.jsx`:
 - Search observability includes `domain.watchlist.search.*` events and a debug aggregation endpoint `GET /api/v1/debug/watchlist-search-stats` (server + desktop sidecar proxy).
 - Frontend stale handling calls `POST /api/v1/portfolio/prices/refresh-stale` (cooldown 120s) to refresh stale portfolio prices in background.
 - Portfolio fetch path uses two backend requests (`investments`, `history`) and computes summary client-side from rows.
-- Desktop portfolio/dashboard hydrates first from local SQLite investments + local snapshots, then refreshes sync/upstream live pricing/history in background without blocking the first paint.
-- Overview composition now reuses the already loaded portfolio rows instead of triggering a separate composition fetch path.
+- Desktop portfolio/dashboard hydrates first from local SQLite investments + local snapshots, but that local-only payload is not written into the 120s view cache; the follow-up live refresh waits for desktop sync before reading upstream pricing/history.
+- Overview composition uses the dedicated composition data path so local-first rows without live CSFloat fields do not collapse the donut chart to an empty visualization.
 - Non-overview dashboard tabs (`inventory`, `watchlist`, `search`) and sync modals are lazy-loaded so their UI code does not block the initial overview bundle.
-- Ancillary portfolio side-loads (management rows, group settings, search watchlist preload, watchlist movers) are deferred until the related tab or overlay is active; overview mover data is additionally idle-scheduled and cache-first.
+- Ancillary portfolio side-loads (management rows, group settings, search watchlist preload, watchlist movers) are deferred until the related tab or overlay is active; overview mover data is idle-scheduled but still performs a live watchlist sync with a read-only fallback.
 - Desktop auto Steam inventory sync is deferred until the first portfolio load has finished and then scheduled during browser idle, so it no longer competes with the initial dashboard paint.
 - For `metricsScope=all`, frontend normalizes history/KPI fallback inputs against the active summary values when the newest history snapshot diverges significantly, so `Gesamt Zuwachs` and chart stay scope-consistent.
 - CSFloat rate-limit handling uses a circuit-breaker file backoff and respects upstream `Retry-After` when present.

@@ -58,7 +58,6 @@ final class CsFloatTradeClient
         $query = http_build_query([
             'limit' => $limit,
             'page' => $page,
-            'order' => 'desc',
         ]);
         $url = 'https://csfloat.com/api/v1/me/buy-orders' . ($query !== '' ? '?' . $query : '');
         $result = $this->requestCollectionEndpoint(

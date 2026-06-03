@@ -23,7 +23,7 @@ import {
 } from "@shared/components";
 import { Skeleton } from "@shared/components";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@shared/components";
-import { usePortfolio } from "@shared/hooks";
+import { usePortfolio, usePortfolioComposition } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
   fetchPortfolioGroupsSetting,
@@ -34,7 +34,6 @@ import {
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
-  buildPortfolioCompositionFromRows,
   fetchCS2Inventory,
   fetchCsFloatBuyOrdersData,
   fetchWatchlistData,
@@ -46,6 +45,7 @@ import {
   createWatchlistItemData,
   fetchCsFloatApiKeyStatus,
   fetchSkinBaronApiKeyStatus,
+  refreshPortfolioStalePricesData,
   updateCsFloatApiKey,
   toggleExcludeInvestment,
   updatePortfolioPreferences,
@@ -100,6 +100,9 @@ const ItemSearch = lazy(() =>
     default: module.ItemSearch,
   })),
 );
+
+const STALE_PRICE_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
+const STALE_PRICE_REFRESH_THRESHOLD_SECONDS = 90 * 60;
 
 function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -890,12 +893,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     isLoading: csUpdatesLoading,
   } = useCsUpdatesFeed();
   const [compositionRefreshToken, setCompositionRefreshToken] = useState(0);
-  const compositionData = useMemo(
-    () => buildPortfolioCompositionFromRows(enrichedInvestments, { scope: metricsScope }),
-    [enrichedInvestments, metricsScope],
-  );
-  const compositionLoading = portfolioLoading && enrichedInvestments.length === 0;
-  const compositionError = !compositionLoading && enrichedInvestments.length === 0 ? error : "";
+  const {
+    data: compositionData,
+    loading: compositionLoading,
+    error: compositionError,
+  } = usePortfolioComposition(compositionRefreshToken, { scope: metricsScope });
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
@@ -1015,6 +1017,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
   const portfolioChartCardRef = useRef(null);
   const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
+  const stalePriceRefreshRef = useRef({ key: "", at: 0 });
   const shouldPrepareInventoryData = activeTab === "inventory";
   const shouldPrepareManagementData =
     isDesktopRuntime && activeTab === "management";
@@ -2113,8 +2116,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const loadDashboardWatchlistItems = useCallback(async () => {
     try {
       const response = await fetchWatchlistData({
-        syncLive: false,
-        skipDesktopSync: true,
+        syncLive: true,
       });
       setDashboardWatchlistItems(Array.isArray(response?.data) ? response.data : []);
     } catch (watchlistError) {
@@ -2122,7 +2124,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       try {
         const fallbackResponse = await fetchWatchlistData({
           syncLive: false,
-          skipDesktopSync: true,
         });
         setDashboardWatchlistItems(Array.isArray(fallbackResponse?.data) ? fallbackResponse.data : []);
       } catch {
@@ -2733,6 +2734,92 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   const liveItems = Number(stats.liveItemsCount || 0);
   const staleItems = Number(stats.staleLiveItemsCount || 0);
+  const watchlistMoverPanelHeight = Number.isFinite(Number(watchlistMoverCardHeight))
+    ? Math.min(Math.max(Number(watchlistMoverCardHeight), 340), 560)
+    : null;
+
+  useEffect(() => {
+    if (activeTab !== "overview" || authRequired || portfolioLoading) {
+      return undefined;
+    }
+
+    const oldestAgeSeconds = Number(stats.oldestDataAgeSeconds);
+    const hasOldLivePrices =
+      liveItems > 0 &&
+      Number.isFinite(oldestAgeSeconds) &&
+      oldestAgeSeconds > STALE_PRICE_REFRESH_THRESHOLD_SECONDS;
+    const shouldRefresh = liveItems > 0 && (staleItems > 0 || hasOldLivePrices);
+    if (!shouldRefresh) {
+      return undefined;
+    }
+
+    const now = Date.now();
+    const lastRefresh = stalePriceRefreshRef.current || { key: "", at: 0 };
+    if (now - Number(lastRefresh.at || 0) < STALE_PRICE_REFRESH_COOLDOWN_MS) {
+      return undefined;
+    }
+
+    const refreshKey = `${metricsScope}:${staleItems}:${Math.floor(oldestAgeSeconds / 60)}`;
+    stalePriceRefreshRef.current = { key: refreshKey, at: now };
+
+    let cancelled = false;
+    let timeoutId = null;
+    let idleId = null;
+
+    const runRefresh = async () => {
+      try {
+        const response = await refreshPortfolioStalePricesData({
+          scope: metricsScope,
+          limit: 200,
+        });
+        const payload = response?.data || response || {};
+        const requested = Number(payload.requested ?? payload.staleItemsFound ?? 0);
+        const updated = Number(payload.updated ?? 0);
+        if (!cancelled && (requested > 0 || updated > 0)) {
+          await refreshPortfolio({ showLoading: false });
+          setCompositionRefreshToken((current) => current + 1);
+        }
+      } catch (refreshError) {
+        console.warn("[portfolio-prices] stale refresh failed", refreshError);
+      }
+    };
+
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(() => {
+        void runRefresh();
+      }, { timeout: 4000 });
+    } else if (typeof window !== "undefined") {
+      timeoutId = window.setTimeout(() => {
+        void runRefresh();
+      }, 1500);
+    } else {
+      void runRefresh();
+    }
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null && typeof window !== "undefined") {
+        window.clearTimeout(timeoutId);
+      }
+      if (
+        idleId !== null &&
+        typeof window !== "undefined" &&
+        typeof window.cancelIdleCallback === "function"
+      ) {
+        window.cancelIdleCallback(idleId);
+      }
+    };
+  }, [
+    activeTab,
+    authRequired,
+    liveItems,
+    metricsScope,
+    portfolioLoading,
+    refreshPortfolio,
+    staleItems,
+    stats.oldestDataAgeSeconds,
+  ]);
+
   const fallbackRangeDeltaPercent = Number(chartTrendData?.deltaPercent);
   const fallbackRangeDeltaValue = Number(chartTrendData?.deltaValue);
   const latestHistorySnapshot = useMemo(() => {
@@ -5078,7 +5165,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </div>
               <Card
                 className="flex min-h-[340px] flex-col border-border/70 bg-card/70 lg:min-h-0 lg:overflow-hidden"
-                style={watchlistMoverCardHeight ? { height: `${watchlistMoverCardHeight}px` } : undefined}
+                style={watchlistMoverPanelHeight ? { height: `${watchlistMoverPanelHeight}px` } : undefined}
               >
                 <CardHeader className="space-y-2 pb-3">
                   <div className="flex items-center justify-between gap-2">

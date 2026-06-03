@@ -759,14 +759,17 @@ function enrichDesktopWatchlistWithUpstreamMetrics(localItems = [], upstreamItem
 }
 
 async function fetchDesktopPortfolioData(options = {}) {
-  const localSnapshot = await buildDesktopPortfolioLocalSnapshot(options);
   if (options.localOnly) {
-    return localSnapshot;
+    return buildDesktopPortfolioLocalSnapshot(options);
   }
 
-  void runDesktopSyncNowIfDue().catch((error) => {
+  try {
+    await runDesktopSyncNowIfDue();
+  } catch (error) {
     console.warn("[desktop-sync] portfolio sync failed", error);
-  });
+  }
+
+  const localSnapshot = await buildDesktopPortfolioLocalSnapshot(options);
 
   let rows = Array.isArray(localSnapshot?.rows?.data) ? localSnapshot.rows.data : [];
   let meta = {

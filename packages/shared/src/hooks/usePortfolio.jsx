@@ -110,7 +110,7 @@ export function usePortfolio(options = {}) {
     setIsLoading(false);
   }, [cacheKey]);
 
-  const applyPortfolioPayload = useCallback((payload) => {
+  const applyPortfolioPayload = useCallback((payload, { cachePayload = true } = {}) => {
     const { rows: rowsResponse, summary: summaryResponse, history, requiresAuth } = payload || {};
     const nextWarnings = mergeWarnings(
       rowsResponse?.meta?.warnings || [],
@@ -124,14 +124,16 @@ export function usePortfolio(options = {}) {
     setWarnings(nextWarnings);
     setError("");
 
-    portfolioViewCache.set(cacheKey, {
-      investments: rowsResponse?.data || [],
-      authRequired: requiresAuth || false,
-      stats: summaryResponse?.data || {},
-      portfolioHistory: history || [],
-      warnings: nextWarnings,
-      updatedAt: Date.now(),
-    });
+    if (cachePayload) {
+      portfolioViewCache.set(cacheKey, {
+        investments: rowsResponse?.data || [],
+        authRequired: requiresAuth || false,
+        stats: summaryResponse?.data || {},
+        portfolioHistory: history || [],
+        warnings: nextWarnings,
+        updatedAt: Date.now(),
+      });
+    }
   }, [cacheKey]);
 
   const loadData = useCallback(async ({ showLoading = true, preferImmediateLocal = false } = {}) => {
@@ -157,7 +159,7 @@ export function usePortfolio(options = {}) {
 
         if (signal.aborted) return;
 
-        applyPortfolioPayload(localSnapshot);
+        applyPortfolioPayload(localSnapshot, { cachePayload: false });
         localSnapshotApplied = true;
         setIsLoading(false);
       }
