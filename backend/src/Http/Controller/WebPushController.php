@@ -5,15 +5,18 @@ namespace App\Http\Controller;
 
 use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
 use App\Application\Service\WebPushService;
+use App\Http\Auth\RequestUserScopeResolver;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Http\UserScopeAuthorizationException;
 use Throwable;
 
 final class WebPushController
 {
     public function __construct(
         private readonly WebPushSubscriptionRepository $repository,
-        private readonly WebPushService $webPushService
+        private readonly WebPushService $webPushService,
+        private readonly ?RequestUserScopeResolver $userScopeResolver = null
     ) {
     }
 
@@ -57,6 +60,13 @@ final class WebPushController
                 'subscribed' => true,
                 'configured' => $this->webPushService->isConfigured(),
             ]);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error(
+                $exception->getErrorCode(),
+                $exception->getMessage(),
+                $exception->getDetails(),
+                $exception->getStatusCode()
+            );
         } catch (Throwable $exception) {
             JsonResponseFactory::error(
                 'WEB_PUSH_SUBSCRIBE_FAILED',
@@ -84,6 +94,13 @@ final class WebPushController
 
             $this->repository->deactivateByEndpoint($endpoint, $userId);
             JsonResponseFactory::success(['unsubscribed' => true]);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error(
+                $exception->getErrorCode(),
+                $exception->getMessage(),
+                $exception->getDetails(),
+                $exception->getStatusCode()
+            );
         } catch (Throwable $exception) {
             JsonResponseFactory::error(
                 'WEB_PUSH_UNSUBSCRIBE_FAILED',
@@ -96,6 +113,10 @@ final class WebPushController
 
     private function resolveUserId(Request $request): int
     {
+        if ($this->userScopeResolver !== null) {
+            return $this->userScopeResolver->resolve($request);
+        }
+
         $candidate = $request->query['userId']
             ?? $request->body['userId']
             ?? 1;
@@ -108,4 +129,3 @@ final class WebPushController
         return $userId;
     }
 }
-

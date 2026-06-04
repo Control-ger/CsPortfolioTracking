@@ -39,7 +39,7 @@ if ($desktopOrigin !== '') {
     header('Vary: Origin');
 }
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Request-Id, X-Desktop-Sidecar-Secret');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Request-Id, X-Desktop-Sidecar-Secret');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
@@ -320,7 +320,7 @@ $buildUpstreamCandidates = static function (string $baseUrl, string $endpointPat
     return array_values($deduped);
 };
 
-$proxyUpstreamGet = static function (string $endpointPath, array $query = []) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): ?array {
+$proxyUpstreamGet = static function (string $endpointPath, array $query = [], array $forwardHeaders = []) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): ?array {
     $baseUrl = $resolveUpstreamApiBase();
     if ($baseUrl === '') {
         return null;
@@ -334,11 +334,17 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = []) us
         true
     );
 
-    $executeRequest = static function (string $url, bool $insecureTls = false) use ($upstreamCookieHeader, $upstreamCaBundlePath): array {
+    $executeRequest = static function (string $url, bool $insecureTls = false) use ($upstreamCookieHeader, $upstreamCaBundlePath, $forwardHeaders): array {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 8);
         $headers = ['Accept: application/json'];
+        foreach ($forwardHeaders as $headerLine) {
+            $trimmed = trim((string) $headerLine);
+            if ($trimmed !== '') {
+                $headers[] = $trimmed;
+            }
+        }
         if ($upstreamCookieHeader !== '') {
             $headers[] = 'Cookie: ' . $upstreamCookieHeader;
         }
@@ -568,8 +574,23 @@ $copyUserScopeQuery = static function (Request $request, array $query = []): arr
     return $query;
 };
 
-$router->register('GET', '/api/v1/settings/price-source', static function () use ($proxyUpstreamGet): void {
-    $proxied = $proxyUpstreamGet('/api/v1/settings/price-source');
+$resolveUpstreamAuthHeaders = static function (Request $request): array {
+    $headers = [];
+    foreach (['authorization', 'x-auth-token'] as $headerKey) {
+        $value = trim((string) ($request->headers[$headerKey] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+
+        $normalizedName = $headerKey === 'authorization' ? 'Authorization' : 'X-Auth-Token';
+        $headers[] = $normalizedName . ': ' . $value;
+    }
+
+    return $headers;
+};
+
+$router->register('GET', '/api/v1/settings/price-source', static function (Request $request) use ($proxyUpstreamGet, $resolveUpstreamAuthHeaders): void {
+    $proxied = $proxyUpstreamGet('/api/v1/settings/price-source', [], $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             is_array($proxied['data'] ?? null) ? $proxied['data'] : ['mode' => 'auto'],
@@ -592,8 +613,8 @@ $router->register('GET', '/api/v1/settings/price-source', static function () use
     );
 });
 
-$router->register('GET', '/api/v1/settings/currency', static function () use ($proxyUpstreamGet): void {
-    $proxied = $proxyUpstreamGet('/api/v1/settings/currency');
+$router->register('GET', '/api/v1/settings/currency', static function (Request $request) use ($proxyUpstreamGet, $resolveUpstreamAuthHeaders): void {
+    $proxied = $proxyUpstreamGet('/api/v1/settings/currency', [], $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             is_array($proxied['data'] ?? null) ? $proxied['data'] : ['currency' => 'EUR', 'popularCurrencies' => []],
@@ -617,7 +638,7 @@ $router->register('GET', '/api/v1/settings/currency', static function () use ($p
     );
 });
 
-$router->register('PUT', '/api/v1/settings/currency', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+$router->register('PUT', '/api/v1/settings/currency', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
     $baseUrl = $resolveUpstreamApiBase();
     $currencyRaw = strtoupper(trim((string) ($request->body['currency'] ?? 'EUR')));
     $currency = preg_match('/^[A-Z]{3}$/', $currencyRaw) === 1 ? $currencyRaw : 'EUR';
@@ -648,7 +669,11 @@ $router->register('PUT', '/api/v1/settings/currency', static function (Request $
         curl_setopt($ch, CURLOPT_TIMEOUT, 8);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt(
+            $ch,
+            CURLOPT_HTTPHEADER,
+            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+        );
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
 
@@ -682,8 +707,8 @@ $router->register('PUT', '/api/v1/settings/currency', static function (Request $
     );
 });
 
-$router->register('GET', '/api/v1/settings/portfolio-groups', static function () use ($proxyUpstreamGet): void {
-    $proxied = $proxyUpstreamGet('/api/v1/settings/portfolio-groups');
+$router->register('GET', '/api/v1/settings/portfolio-groups', static function (Request $request) use ($proxyUpstreamGet, $resolveUpstreamAuthHeaders): void {
+    $proxied = $proxyUpstreamGet('/api/v1/settings/portfolio-groups', [], $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             is_array($proxied['data'] ?? null)
@@ -708,7 +733,7 @@ $router->register('GET', '/api/v1/settings/portfolio-groups', static function ()
     );
 });
 
-$router->register('PUT', '/api/v1/settings/portfolio-groups', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+$router->register('PUT', '/api/v1/settings/portfolio-groups', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
     $baseUrl = $resolveUpstreamApiBase();
     $groups = $request->body['groups'] ?? [];
     if (!is_array($groups)) {
@@ -741,7 +766,11 @@ $router->register('PUT', '/api/v1/settings/portfolio-groups', static function (R
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt(
+            $ch,
+            CURLOPT_HTTPHEADER,
+            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+        );
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
 
@@ -777,7 +806,7 @@ $router->register('PUT', '/api/v1/settings/portfolio-groups', static function (R
     );
 });
 
-$router->register('PUT', '/api/v1/settings/price-source', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+$router->register('PUT', '/api/v1/settings/price-source', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
     $baseUrl = $resolveUpstreamApiBase();
     $mode = strtolower(trim((string) ($request->body['mode'] ?? 'auto')));
     if (!in_array($mode, ['auto', 'csfloat', 'steam'], true)) {
@@ -809,7 +838,11 @@ $router->register('PUT', '/api/v1/settings/price-source', static function (Reque
         curl_setopt($ch, CURLOPT_TIMEOUT, 8);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt(
+            $ch,
+            CURLOPT_HTTPHEADER,
+            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+        );
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
 
@@ -843,12 +876,12 @@ $router->register('PUT', '/api/v1/settings/price-source', static function (Reque
     );
 });
 
-$router->register('GET', '/api/v1/portfolio/history', static function (Request $request) use ($proxyUpstreamGet, $copyUserScopeQuery): void {
+$router->register('GET', '/api/v1/portfolio/history', static function (Request $request) use ($proxyUpstreamGet, $copyUserScopeQuery, $resolveUpstreamAuthHeaders): void {
     $query = $copyUserScopeQuery($request);
     if (isset($request->query['scope'])) {
         $query['scope'] = (string) $request->query['scope'];
     }
-    $proxied = $proxyUpstreamGet('/api/v1/portfolio/history', $query);
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/history', $query, $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             $proxied['data'],
@@ -863,12 +896,12 @@ $router->register('GET', '/api/v1/portfolio/history', static function (Request $
     ]);
 });
 
-$router->register('GET', '/api/v1/portfolio/investments', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery): void {
+$router->register('GET', '/api/v1/portfolio/investments', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery, $resolveUpstreamAuthHeaders): void {
     $query = $copyUserScopeQuery($request);
     if (isset($request->query['scope'])) {
         $query['scope'] = (string) $request->query['scope'];
     }
-    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments', $query);
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments', $query, $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             $proxied['data'],
@@ -884,7 +917,7 @@ $router->register('GET', '/api/v1/portfolio/investments', static function (Reque
     ]);
 });
 
-$router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+$router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
     $baseUrl = $resolveUpstreamApiBase();
     if ($baseUrl === '') {
         JsonResponseFactory::success(
@@ -922,7 +955,11 @@ $router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static funct
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        $headers = array_merge(
+            ['Accept: application/json', 'Content-Type: application/json'],
+            $resolveUpstreamAuthHeaders($request)
+        );
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
         $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
@@ -974,7 +1011,7 @@ $router->register('GET', '/api/v1/exchange-rate', static function () use ($proxy
     ], ['source' => 'desktop-fallback']);
 });
 
-$router->register('GET', '/api/v1/watchlist/search', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery): void {
+$router->register('GET', '/api/v1/watchlist/search', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery, $resolveUpstreamAuthHeaders): void {
     $query = $copyUserScopeQuery($request, [
         'query' => $request->query['query'] ?? '',
         'limit' => $request->query['limit'] ?? 6,
@@ -987,7 +1024,7 @@ $router->register('GET', '/api/v1/watchlist/search', static function (Request $r
         }
     }
 
-    $proxied = $proxyUpstreamGet('/api/v1/watchlist/search', $query);
+    $proxied = $proxyUpstreamGet('/api/v1/watchlist/search', $query, $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success($proxied['data'], array_merge($proxied['meta'] ?? [], ['source' => 'upstream']));
         return;
@@ -1006,13 +1043,13 @@ $router->register('GET', '/api/v1/watchlist/search', static function (Request $r
     ]);
 });
 
-$router->register('GET', '/api/v1/watchlist', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery): void {
+$router->register('GET', '/api/v1/watchlist', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery, $resolveUpstreamAuthHeaders): void {
     $query = $copyUserScopeQuery($request);
     if (isset($request->query['syncLive'])) {
         $query['syncLive'] = (string) $request->query['syncLive'];
     }
 
-    $proxied = $proxyUpstreamGet('/api/v1/watchlist', $query);
+    $proxied = $proxyUpstreamGet('/api/v1/watchlist', $query, $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success(
             is_array($proxied['data'] ?? null) ? $proxied['data'] : [],
@@ -1065,7 +1102,7 @@ $router->register('GET', '/api/v1/cs-updates', static function (Request $request
     );
 });
 
-$router->register('GET', '/api/v1/portfolio/investments/{key}/history', static function (Request $request, string $itemId) use ($proxyUpstreamGet, $copyUserScopeQuery): void {
+$router->register('GET', '/api/v1/portfolio/investments/{key}/history', static function (Request $request, string $itemId) use ($proxyUpstreamGet, $copyUserScopeQuery, $resolveUpstreamAuthHeaders): void {
     if ($itemId === '') {
         JsonResponseFactory::error('ITEM_ID_REQUIRED', 'Item-ID erforderlich.', [], 400);
         return;
@@ -1076,7 +1113,7 @@ $router->register('GET', '/api/v1/portfolio/investments/{key}/history', static f
         $query['itemName'] = (string) $request->query['itemName'];
     }
 
-    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments/' . rawurlencode($itemId) . '/history', $query);
+    $proxied = $proxyUpstreamGet('/api/v1/portfolio/investments/' . rawurlencode($itemId) . '/history', $query, $resolveUpstreamAuthHeaders($request));
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
         JsonResponseFactory::success($proxied['data'], array_merge($proxied['meta'] ?? [], ['source' => 'upstream']));
         return;
@@ -1090,7 +1127,7 @@ $router->register('GET', '/api/v1/portfolio/investments/{key}/history', static f
     ]);
 });
 
-$router->register('GET', '/api/v1/items/{id}/price-history', static function (Request $request, int $itemId) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
+$router->register('GET', '/api/v1/items/{id}/price-history', static function (Request $request, int $itemId) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery, $resolveUpstreamAuthHeaders): void {
     if ($itemId <= 0) {
         JsonResponseFactory::error('ITEM_ID_REQUIRED', 'Item-ID erforderlich.', [], 400);
         return;
@@ -1102,7 +1139,10 @@ $router->register('GET', '/api/v1/items/{id}/price-history', static function (Re
     }
     $itemName = trim((string) ($request->query['itemName'] ?? ''));
 
-    $proxied = $proxyUpstreamGet('/api/v1/items/' . $itemId . '/price-history', $query);
+    $authHeaders = $resolveUpstreamAuthHeaders($request);
+    $scopeQuery = $copyUserScopeQuery($request);
+
+    $proxied = $proxyUpstreamGet('/api/v1/items/' . $itemId . '/price-history', $query, $authHeaders);
     if (
         $proxied !== null
         && ($proxied['ok'] ?? false) === true
@@ -1116,8 +1156,8 @@ $router->register('GET', '/api/v1/items/{id}/price-history', static function (Re
     if ($itemName !== '') {
         $normalizedName = mb_strtolower($itemName);
 
-        $resolveFromPortfolioInvestments = static function (string $targetName) use ($proxyUpstreamGet): int {
-            $portfolio = $proxyUpstreamGet('/api/v1/portfolio/investments');
+        $resolveFromPortfolioInvestments = static function (string $targetName) use ($proxyUpstreamGet, $authHeaders, $scopeQuery): int {
+            $portfolio = $proxyUpstreamGet('/api/v1/portfolio/investments', $scopeQuery, $authHeaders);
             if ($portfolio === null || ($portfolio['ok'] ?? false) !== true || !is_array($portfolio['data'] ?? null)) {
                 return 0;
             }
@@ -1149,7 +1189,7 @@ $router->register('GET', '/api/v1/items/{id}/price-history', static function (Re
 
         $resolvedItemId = $resolveFromPortfolioInvestments($normalizedName);
         if ($resolvedItemId > 0) {
-            $retry = $proxyUpstreamGet('/api/v1/items/' . $resolvedItemId . '/price-history', $query);
+            $retry = $proxyUpstreamGet('/api/v1/items/' . $resolvedItemId . '/price-history', $query, $authHeaders);
             if ($retry !== null && ($retry['ok'] ?? false) === true) {
                 JsonResponseFactory::success($retry['data'], array_merge($retry['meta'] ?? [], [
                     'source' => 'upstream-portfolio-name-resolved',
@@ -1159,7 +1199,11 @@ $router->register('GET', '/api/v1/items/{id}/price-history', static function (Re
             }
         }
 
-        $search = $proxyUpstreamGet('/api/v1/watchlist/search', ['query' => $itemName, 'limit' => 10, 'page' => 1]);
+        $search = $proxyUpstreamGet(
+            '/api/v1/watchlist/search',
+            array_merge($scopeQuery, ['query' => $itemName, 'limit' => 10, 'page' => 1]),
+            $authHeaders
+        );
         if ($search !== null && ($search['ok'] ?? false) === true) {
             $items = $search['data']['items'] ?? [];
             if (is_array($items)) {
@@ -1207,7 +1251,7 @@ $router->register('GET', '/api/v1/items/{id}/price-history', static function (Re
     ]);
 });
 
-$router->register('POST', '/api/v1/watchlist/batch', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): void {
+$router->register('POST', '/api/v1/watchlist/batch', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
     $baseUrl = $resolveUpstreamApiBase();
     if ($baseUrl === '') {
         JsonResponseFactory::error('UPSTREAM_NOT_CONFIGURED', 'Server URL nicht konfiguriert.', [], 503);
@@ -1226,7 +1270,11 @@ $router->register('POST', '/api/v1/watchlist/batch', static function (Request $r
         curl_setopt($ch, CURLOPT_TIMEOUT, 8);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt(
+            $ch,
+            CURLOPT_HTTPHEADER,
+            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+        );
         $response = curl_exec($ch);
         $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);

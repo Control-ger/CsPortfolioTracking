@@ -2,7 +2,7 @@ import {
   errorToContext,
   sendFrontendTelemetryEvent,
 } from "./frontendTelemetry";
-import { getCurrentUser } from "./auth.js";
+import { getCurrentUser, getSession } from "./auth.js";
 import { runDesktopSyncNowIfDue } from "./desktopSync.js";
 import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
@@ -183,6 +183,15 @@ async function requestPayload(path, options = {}) {
   const cacheKey = getCacheKey(path, method);
   let apiBase = await resolveApiBase();
   const requestHeaders = new Headers(options?.headers || {});
+  try {
+    const session = await getSession();
+    const token = String(session?.token || "").trim();
+    if (token !== "" && !requestHeaders.has("Authorization")) {
+      requestHeaders.set("Authorization", `Bearer ${token}`);
+    }
+  } catch (sessionError) {
+    console.warn("[apiClient] failed to resolve session token for request", sessionError);
+  }
   const isDesktopSidecarBase = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/i.test(apiBase);
   if (
     isDesktopSidecarBase &&

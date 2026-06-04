@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Http\Auth\RequestUserScopeResolver;
 use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\SyncService;
-use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Http\UserScopeAuthorizationException;
 use App\Shared\Logger;
 use InvalidArgumentException;
 use RuntimeException;
@@ -20,7 +21,7 @@ final class WatchlistController
         private readonly WatchlistService $watchlistService,
         private readonly SyncService $syncService,
         private readonly ?ScalingShadowReadService $scalingShadowReadService = null,
-        private readonly ?UserRepository $userRepository = null
+        private readonly ?RequestUserScopeResolver $userScopeResolver = null
     )
     {
     }
@@ -49,6 +50,8 @@ final class WatchlistController
                 $items,
                 $meta
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -77,6 +80,8 @@ final class WatchlistController
                 $results,
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -119,6 +124,8 @@ final class WatchlistController
                 ['warnings' => $this->watchlistService->consumePricingWarnings()],
                 201
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (RuntimeException $exception) {
             Logger::event(
                 'warning',
@@ -159,6 +166,8 @@ final class WatchlistController
             }
             $this->syncService->deleteServerEntity($userId, 'watchlist_items', (string) $id);
             JsonResponseFactory::success(['deleted' => true], statusCode: 200);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -178,6 +187,8 @@ final class WatchlistController
                 $this->watchlistService->refreshPrices($this->resolveUserId($request)),
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -192,6 +203,10 @@ final class WatchlistController
 
     private function resolveUserId(Request $request): int
     {
+        if ($this->userScopeResolver !== null) {
+            return $this->userScopeResolver->resolve($request);
+        }
+
         foreach (['x-user-id', 'user-id'] as $header) {
             if (isset($request->headers[$header]) && is_numeric($request->headers[$header])) {
                 return max(1, (int) $request->headers[$header]);
@@ -207,39 +222,7 @@ final class WatchlistController
             }
         }
 
-        foreach (['steamId', 'steam_id'] as $key) {
-            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
-            if ($steamId !== null && $this->userRepository !== null) {
-                return $this->userRepository->findOrCreateBySteamId($steamId);
-            }
-        }
-
-        foreach (['userId', 'user_id'] as $key) {
-            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
-            if ($steamId !== null && $this->userRepository !== null) {
-                return $this->userRepository->findOrCreateBySteamId($steamId);
-            }
-        }
-
         return 1;
-    }
-
-    private function normalizeSteamId(mixed $value): ?string
-    {
-        $raw = trim((string) ($value ?? ''));
-        if ($raw === '') {
-            return null;
-        }
-
-        if (preg_match('/^steam-([1-9]\d{10,})$/i', $raw, $matches) === 1) {
-            return $matches[1];
-        }
-
-        if (preg_match('/^[1-9]\d{10,}$/', $raw) === 1) {
-            return $raw;
-        }
-
-        return null;
     }
 
     public function createBatch(Request $request): void
@@ -279,6 +262,8 @@ final class WatchlistController
                 ['warnings' => $this->watchlistService->consumePricingWarnings()],
                 200
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',

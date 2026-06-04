@@ -7,10 +7,12 @@ use App\Application\Service\EncryptionService;
 use App\Application\Service\EnvSettingsService;
 use App\Application\Service\FeeSettingsService;
 use App\Application\Service\PricingService;
+use App\Http\Auth\RequestUserScopeResolver;
 use App\Infrastructure\Persistence\Repository\UserCurrencyPreferenceRepository;
 use App\Infrastructure\Persistence\Repository\UserPortfolioGroupsRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Http\UserScopeAuthorizationException;
 use App\Shared\Logger;
 use InvalidArgumentException;
 use RuntimeException;
@@ -26,6 +28,7 @@ final class SettingsController
         private readonly PricingService $pricingService,
         private readonly UserCurrencyPreferenceRepository $userCurrencyPreferenceRepository,
         private readonly UserPortfolioGroupsRepository $userPortfolioGroupsRepository,
+        private readonly ?RequestUserScopeResolver $userScopeResolver = null,
         string $projectRootPath = __DIR__ . '/../../../'
     ) {
         $encryptionKey = getenv('ENCRYPTION_KEY') ?: $_ENV['ENCRYPTION_KEY'] ?? '';
@@ -40,6 +43,8 @@ final class SettingsController
     {
         try {
             JsonResponseFactory::success($this->feeSettingsService->getSettings($this->resolveUserId($request)));
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -66,6 +71,8 @@ final class SettingsController
                 ['statusCode' => 400, 'exception' => $exception]
             );
             JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', $exception->getMessage(), [], 400);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -160,6 +167,8 @@ final class SettingsController
         try {
             $userId = $this->resolveUserId($request);
             JsonResponseFactory::success($this->pricingService->getPriceModePreference($userId));
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -188,6 +197,8 @@ final class SettingsController
                 ['statusCode' => 400, 'exception' => $exception]
             );
             JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', $exception->getMessage(), [], 400);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -213,6 +224,8 @@ final class SettingsController
                     'popularCurrencies' => $popular,
                 ]
             ));
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -248,6 +261,8 @@ final class SettingsController
                 ['statusCode' => 400, 'exception' => $exception]
             );
             JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', $exception->getMessage(), [], 400);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -266,6 +281,8 @@ final class SettingsController
             $userId = $this->resolveUserId($request);
             $groups = $this->userPortfolioGroupsRepository->getByUserId($userId);
             JsonResponseFactory::success($groups);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -298,6 +315,8 @@ final class SettingsController
                 ['statusCode' => 400, 'exception' => $exception]
             );
             JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', $exception->getMessage(), [], 400);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -312,6 +331,10 @@ final class SettingsController
 
     private function resolveUserId(Request $request): int
     {
+        if ($this->userScopeResolver !== null) {
+            return $this->userScopeResolver->resolve($request);
+        }
+
         foreach (['x-user-id', 'user-id'] as $header) {
             if (isset($request->headers[$header]) && is_numeric($request->headers[$header])) {
                 return max(1, (int) $request->headers[$header]);
