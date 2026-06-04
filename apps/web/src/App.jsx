@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { Lock } from "lucide-react";
+import { Lock, UserRound } from "lucide-react";
 
 import { CurrencyProvider } from "@shared/contexts";
 import { BottomNavigation, DesktopSidebarRail, Titlebar } from "@shared/components";
@@ -53,6 +53,21 @@ function normalizeAvatarUrl(url) {
     return `https://${trimmed.slice("http://".length)}`;
   }
   return trimmed;
+}
+
+function resolveSteamIdFromUser(user) {
+  const directSteamId = firstNonEmptyString(user?.steamId, user?.steam_id);
+  if (directSteamId) {
+    return directSteamId;
+  }
+
+  const rawId = firstNonEmptyString(user?.id, user?.userId, user?.user_id);
+  if (rawId?.startsWith("steam-")) {
+    const candidate = rawId.slice("steam-".length).trim();
+    return candidate || null;
+  }
+
+  return null;
 }
 
 export default function App() {
@@ -319,21 +334,26 @@ export default function App() {
       : vaultActionRunning
         ? "Entsperren..."
         : "Bereit zum Entsperren";
+    const hasVaultSteamUser = Boolean(resolveSteamIdFromUser(vaultLoginUser));
     const vaultDisplayName =
-      firstNonEmptyString(
-        vaultLoginUser?.name,
-        vaultLoginUser?.steamName,
-        vaultLoginUser?.steam_name,
-      ) || "Steam Account";
-    const vaultAvatarUrl = normalizeAvatarUrl(
-      firstNonEmptyString(
-        vaultLoginUser?.animatedAvatar,
-        vaultLoginUser?.animated_avatar,
-        vaultLoginUser?.avatar,
-        vaultLoginUser?.steam_avatar,
-        vaultLoginUser?.steamAvatar,
-      ),
-    );
+      hasVaultSteamUser
+        ? firstNonEmptyString(
+            vaultLoginUser?.name,
+            vaultLoginUser?.steamName,
+            vaultLoginUser?.steam_name,
+          ) || "Steam Account"
+        : "Steam Account";
+    const vaultAvatarUrl = hasVaultSteamUser
+      ? normalizeAvatarUrl(
+          firstNonEmptyString(
+            vaultLoginUser?.animatedAvatar,
+            vaultLoginUser?.animated_avatar,
+            vaultLoginUser?.avatar,
+            vaultLoginUser?.steam_avatar,
+            vaultLoginUser?.steamAvatar,
+          ),
+        )
+      : null;
     const vaultShellStyle = {
       "--steam-shell-color-a": vaultShellPalette.colorA,
       "--steam-shell-color-b": vaultShellPalette.colorB,
@@ -367,14 +387,20 @@ export default function App() {
                     alt={vaultDisplayName}
                     className="h-12 w-12 rounded-full object-cover ring-2 ring-primary/30"
                   />
-                ) : (
+                ) : hasVaultSteamUser ? (
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-slate-100 ring-2 ring-cyan-300/30">
                     {vaultDisplayName.slice(0, 2).toUpperCase()}
+                  </div>
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-slate-300 ring-2 ring-white/15">
+                    <UserRound className="h-5 w-5" />
                   </div>
                 )}
                 <div>
                   <p className="text-sm font-semibold text-slate-100">{vaultDisplayName}</p>
-                  <p className="text-xs text-slate-300">Steam verbunden</p>
+                  <p className="text-xs text-slate-300">
+                    {hasVaultSteamUser ? "Steam verbunden" : "Noch nicht verbunden"}
+                  </p>
                 </div>
               </div>
 

@@ -3899,6 +3899,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       </div>
     </>
   );
+  const csFloatKeySkipped = Boolean(journeyState?.csfloatKeySkippedAt);
   const journeySteps = [
     {
       id: "server",
@@ -3912,13 +3913,17 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     },
     {
       id: "csfloat_key",
-      label: "CSFloat API Key hinterlegt",
-      done: hasCsFloatKey,
+      label: hasCsFloatKey
+        ? "CSFloat API Key hinterlegt"
+        : csFloatKeySkipped
+          ? "CSFloat ohne Key uebersprungen"
+          : "CSFloat API Key entschieden",
+      done: hasCsFloatKey || csFloatKeySkipped,
     },
     {
       id: "csfloat_import",
       label: "CSFloat-Import entschieden",
-      done: Boolean(journeyState?.csfloatImportCompletedAt || journeyState?.csfloatImportSkippedAt),
+      done: Boolean(journeyState?.csfloatImportCompletedAt || journeyState?.csfloatImportSkippedAt || csFloatKeySkipped),
     },
     {
       id: "push_notifications",
@@ -4025,8 +4030,24 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     await handleGoToJourneyStep(resolvePreviousJourneyStepId(activeJourneyStepId));
   };
+  const handleMarkCsFloatKeySkipped = async () => {
+    const now = new Date().toISOString();
+    await updateJourneyState({
+      csfloatKeySkippedAt: now,
+      csfloatImportSkippedAt: journeyState?.csfloatImportSkippedAt || now,
+      currentStepId: resolveNextJourneyStepId("csfloat_import"),
+    });
+    setJourneyApiKey("");
+    setJourneyApiKeyError("");
+    setJourneyApiKeySuccess("CSFloat wurde uebersprungen. Du kannst spaeter in den Einstellungen einen Key hinterlegen.");
+    setJourneyApiKeyHelper("");
+  };
   const handleGoNextJourneyStep = async () => {
     if (!journeyStarted || activeJourneyStepId === "intro") {
+      return;
+    }
+    if (activeJourneyStepId === "csfloat_key" && !hasCsFloatKey) {
+      await handleMarkCsFloatKeySkipped();
       return;
     }
     if (activeJourneyStepId === "push_notifications" && !journeyState?.pushPreferenceSetAt) {
@@ -4132,6 +4153,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       if (keyConnected) {
         await updateJourneyState({
           csfloatKeySavedAt: new Date().toISOString(),
+          csfloatKeySkippedAt: null,
           currentStepId: resolveNextJourneyStepId("csfloat_key"),
         });
       }
@@ -4327,7 +4349,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         {showSetupJourney ? (
-          <Card className="relative overflow-hidden border-white/15 bg-slate-950/58 text-slate-100 shadow-2xl backdrop-blur-xl">
+          <Card className="steam-journey-card relative overflow-hidden border-white/15 bg-slate-950/58 text-slate-100 shadow-2xl backdrop-blur-xl">
             <CardHeader className="space-y-2 pb-3">
               <CardTitle className="text-2xl tracking-tight text-slate-50">
                 Setup Journey{journeyUserName ? ` fuer ${journeyUserName}` : ""}
@@ -4653,6 +4675,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             onClick={() => void handleRefreshCsFloatStatus()}
                           >
                             Status aktualisieren
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-cyan-100 hover:bg-white/10 hover:text-white"
+                            onClick={() => void handleMarkCsFloatKeySkipped()}
+                          >
+                            Ohne CSFloat weiter
                           </Button>
                         </div>
                       </div>
@@ -7187,4 +7217,3 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     </div>
   );
 }
-

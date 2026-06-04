@@ -253,6 +253,13 @@
   overflow: hidden;
   min-height: 100vh;
   width: 100%;
+  background:
+    radial-gradient(circle at 18% 10%, color-mix(in oklab, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.24)) 28%, transparent), transparent 42%),
+    radial-gradient(circle at 86% 18%, color-mix(in oklab, var(--steam-shell-color-d, hsla(32, 42%, 46%, 0.14)) 22%, transparent), transparent 48%),
+    linear-gradient(180deg, color-mix(in oklab, var(--color-background) 96%, white 4%), var(--color-background));
+}
+
+.dark .steam-startup-shell {
   background: #02050b;
 }
 
@@ -275,8 +282,12 @@
     radial-gradient(circle at 74% 70%, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.18)), transparent 58%),
     radial-gradient(circle at 58% 18%, var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.14)), transparent 54%);
   filter: blur(48px) saturate(1.05);
-  opacity: 0.82;
+  opacity: 0.42;
   animation: steamBackdropDrift 22s ease-in-out infinite;
+}
+
+.dark .steam-startup-shell::before {
+  opacity: 0.82;
 }
 
 .steam-startup-shell::after {
@@ -290,8 +301,12 @@
     radial-gradient(circle at 82% 30%, var(--steam-shell-color-d, hsla(32, 42%, 46%, 0.14)), transparent 58%),
     radial-gradient(circle at 44% 42%, var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.12)), transparent 62%);
   filter: blur(56px) saturate(1.02);
-  opacity: 0.72;
+  opacity: 0.32;
   animation: steamAuraFloatB 26s ease-in-out infinite;
+}
+
+.dark .steam-startup-shell::after {
+  opacity: 0.72;
 }
 
 .steam-startup-shell > * {
@@ -301,6 +316,99 @@
 
 .steam-progress-pulse {
   animation: steamProgressPulse 1.4s ease-in-out infinite;
+}
+
+:root:not(.dark) .steam-journey-card {
+  border-color: color-mix(in oklab, var(--color-border) 84%, transparent);
+  background:
+    radial-gradient(circle at 12% 8%, color-mix(in oklab, var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.24)) 14%, transparent), transparent 48%),
+    radial-gradient(circle at 86% 22%, color-mix(in oklab, var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.18)) 12%, transparent), transparent 48%),
+    color-mix(in oklab, var(--color-card) 94%, transparent);
+  color: var(--color-foreground);
+  box-shadow: none;
+}
+
+:root:not(.dark) .steam-journey-card :is(
+  .text-slate-50,
+  .text-slate-100,
+  .text-slate-200,
+  .text-cyan-100,
+  .text-cyan-100\/90,
+  .text-amber-100,
+  .text-emerald-200,
+  .text-red-200
+) {
+  color: var(--color-foreground) !important;
+}
+
+:root:not(.dark) .steam-journey-card :is(
+  .text-slate-300,
+  .text-slate-400,
+  .text-cyan-200,
+  .text-amber-200,
+  .text-amber-200\/90
+) {
+  color: var(--color-muted-foreground) !important;
+}
+
+:root:not(.dark) .steam-journey-card :is(
+  .bg-white\/5,
+  .bg-white\/10,
+  .bg-white\/15,
+  .bg-white\/20,
+  .bg-slate-900\/35,
+  .bg-slate-900\/40,
+  .bg-slate-900\/50,
+  .bg-slate-900\/65,
+  .bg-cyan-400\/10,
+  .bg-cyan-500\/10,
+  .bg-amber-500\/10,
+  .bg-emerald-500\/10,
+  .bg-emerald-500\/15,
+  .bg-red-500\/10
+) {
+  background-color: color-mix(in oklab, var(--color-card) 84%, var(--color-background) 16%) !important;
+}
+
+:root:not(.dark) .steam-journey-card :is(
+  .border-white\/10,
+  .border-white\/15,
+  .border-white\/20,
+  .border-white\/30,
+  .border-cyan-300\/25,
+  .border-cyan-300\/30,
+  .border-cyan-300\/35,
+  .border-amber-300\/35,
+  .border-emerald-300\/35,
+  .border-emerald-300\/40,
+  .border-red-300\/35
+) {
+  border-color: color-mix(in oklab, var(--color-border) 88%, transparent) !important;
+}
+
+:root:not(.dark) .steam-journey-card input,
+:root:not(.dark) .steam-journey-card select {
+  background-color: color-mix(in oklab, var(--color-card) 88%, var(--color-background) 12%) !important;
+  border-color: color-mix(in oklab, var(--color-border) 92%, transparent) !important;
+  color: var(--color-foreground) !important;
+}
+
+:root:not(.dark) .steam-journey-card input::placeholder {
+  color: color-mix(in oklab, var(--color-muted-foreground) 82%, transparent) !important;
+}
+
+:root:not(.dark) .steam-journey-card .bg-cyan-300 {
+  background-color: color-mix(in oklab, var(--steam-shell-color-a, hsl(188 75% 58%)) 72%, var(--color-primary) 28%) !important;
+}
+
+:root:not(.dark) .steam-journey-card button:is(.bg-slate-100, .bg-white\/95) {
+  background-color: var(--color-primary) !important;
+  color: var(--color-primary-foreground) !important;
+}
+
+:root:not(.dark) .steam-journey-card button:is(.bg-slate-900\/35) {
+  background-color: transparent !important;
+  color: var(--color-foreground) !important;
 }
 
 @keyframes journeyStepEnter {
@@ -326,4 +434,3 @@
     animation: none;
   }
 }
-
