@@ -5,6 +5,8 @@ import { randomUUID } from "crypto";
 
 const SCHEMA_VERSION = 4;
 const CANONICAL_LOCAL_USER_ID = "1";
+const STEAM_ID_PATTERN = /^[1-9]\d{10,}$/;
+const DESKTOP_STEAM_USER_ID_PATTERN = /^steam-([1-9]\d{10,})$/i;
 
 function nowIso() {
   return new Date().toISOString();
@@ -128,8 +130,17 @@ function normalizeLocalUserId(value, fallback = CANONICAL_LOCAL_USER_ID) {
   }
 
   const lower = raw.toLowerCase();
-  if (lower === "local" || lower.startsWith("steam-")) {
+  if (lower === "local") {
     return fallbackId;
+  }
+
+  const steamPrefixedMatch = raw.match(DESKTOP_STEAM_USER_ID_PATTERN);
+  if (steamPrefixedMatch) {
+    return `steam-${steamPrefixedMatch[1]}`;
+  }
+
+  if (STEAM_ID_PATTERN.test(raw)) {
+    return `steam-${raw}`;
   }
 
   if (/^[1-9]\d*$/.test(raw) && raw.length <= 10) {
@@ -301,7 +312,7 @@ function runMigrations(db) {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
   ).run(String(SCHEMA_VERSION), nowIso());
 
-  const legacyUserWhere = "user_id IS NULL OR TRIM(user_id) = '' OR lower(user_id) = 'local' OR lower(user_id) LIKE 'steam-%'";
+  const legacyUserWhere = "user_id IS NULL OR TRIM(user_id) = '' OR lower(user_id) = 'local'";
   db.exec(`
     UPDATE investments SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
     UPDATE watchlist_items SET user_id = '${CANONICAL_LOCAL_USER_ID}' WHERE ${legacyUserWhere};
@@ -315,8 +326,7 @@ function runMigrations(db) {
     .prepare(
       `SELECT key, value
        FROM meta
-       WHERE key LIKE 'portfolio_pref:local:%'
-          OR key LIKE 'portfolio_pref:steam-%:%'`,
+       WHERE key LIKE 'portfolio_pref:local:%'`,
     )
     .all();
   const now = nowIso();
@@ -1515,12 +1525,17 @@ export function createLocalStore(userDataPath) {
 
     deleteInvestment(id) {
       const updatedAt = nowIso();
+      const existing = this.getInvestment(id);
       db.prepare(
         `UPDATE investments
          SET deleted = 1, dirty = 1, revision = revision + 1, updated_at = ?
          WHERE id = ?`,
       ).run(updatedAt, String(id));
-      appendOperation("delete", "investment", String(id), { id, updatedAt });
+      appendOperation("delete", "investment", String(id), {
+        id,
+        userId: normalizeLocalUserId(existing?.userId),
+        updatedAt,
+      });
       return true;
     },
 
@@ -1664,12 +1679,17 @@ export function createLocalStore(userDataPath) {
 
     deleteWatchlistItem(id) {
       const updatedAt = nowIso();
+      const existing = this.getWatchlistItem(id);
       db.prepare(
         `UPDATE watchlist_items
          SET deleted = 1, dirty = 1, revision = revision + 1, updated_at = ?
          WHERE id = ?`,
       ).run(updatedAt, String(id));
-      appendOperation("delete", "watchlist_item", String(id), { id, updatedAt });
+      appendOperation("delete", "watchlist_item", String(id), {
+        id,
+        userId: normalizeLocalUserId(existing?.userId),
+        updatedAt,
+      });
       return true;
     },
 

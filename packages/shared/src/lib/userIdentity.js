@@ -1,4 +1,6 @@
 const MAX_INT32 = 2_147_483_647;
+const STEAM_ID_PATTERN = /^[1-9]\d{10,}$/;
+const DESKTOP_STEAM_USER_ID_PATTERN = /^steam-([1-9]\d{10,})$/i;
 
 function parsePositiveUserId(candidate) {
   const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
@@ -16,6 +18,20 @@ function parsePositiveUserId(candidate) {
 
 export function normalizeDesktopLocalUserId(candidate, fallback = "1") {
   const fallbackId = String(fallback || "1").trim() || "1";
+  const raw = candidate === null || candidate === undefined ? "" : String(candidate).trim();
+  if (!raw) {
+    return fallbackId;
+  }
+
+  const steamPrefixedMatch = raw.match(DESKTOP_STEAM_USER_ID_PATTERN);
+  if (steamPrefixedMatch) {
+    return `steam-${steamPrefixedMatch[1]}`;
+  }
+
+  if (STEAM_ID_PATTERN.test(raw)) {
+    return `steam-${raw}`;
+  }
+
   const parsed = parsePositiveUserId(candidate);
   if (parsed === null) {
     return fallbackId;
@@ -24,7 +40,9 @@ export function normalizeDesktopLocalUserId(candidate, fallback = "1") {
 }
 
 export function resolveDesktopLocalUserId(user, fallback = 1) {
-  const candidate = user?.userId ?? user?.id ?? fallback;
+  const candidate = user?.steamId
+    ? `steam-${user.steamId}`
+    : user?.localUserId ?? user?.userId ?? user?.id ?? fallback;
   return normalizeDesktopLocalUserId(candidate, String(fallback || 1));
 }
 
@@ -44,19 +62,15 @@ export function parseDesktopSyncUserId(user, fallback = 1) {
   }
 
   // Legacy desktop sessions may carry Steam IDs as large numeric "id" values.
-  // Sync is still keyed to the default numeric user scope.
+  // Those are not valid server user IDs and must be resolved server-side by steamId.
   const numericCandidateRaw = String(user?.id || user?.userId || "").trim();
-  if (/^[1-9]\d{10,}$/.test(numericCandidateRaw)) {
-    const normalizedFallback = parsePositiveUserId(fallback);
-    return normalizedFallback ?? 1;
+  if (STEAM_ID_PATTERN.test(numericCandidateRaw)) {
+    return null;
   }
 
   const fallbackRaw = String(user?.id || user?.userId || "").trim().toLowerCase();
   if (fallbackRaw.startsWith("steam-") || String(user?.steamId || "").trim() !== "") {
-    // Desktop auth sessions can use "steam-<steamId>" identifiers.
-    // Sync endpoints still expect a positive integer userId (legacy/default scope).
-    const normalizedFallback = parsePositiveUserId(fallback);
-    return normalizedFallback ?? 1;
+    return null;
   }
 
   return null;

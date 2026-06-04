@@ -717,3 +717,12 @@ Change: Dashboard-Regressionsfix nach local-first Performance-Release
 - `packages/shared/src/pages/PortfolioPage.jsx` nutzt fuer die Portfolio-Zusammensetzung wieder den dedizierten Composition-Pfad, damit lokale Rows ohne Livefelder den Donut nicht auf 0 Assets/keine CSFloat-Werte reduzieren.
 - Dashboard-Watchlist-Mover bleiben idle-scheduled, laden aber wieder mit `syncLive=true` und erhalten eine Hoehenkappe fuer stabile Overview-Optik.
 - `backend/src/Infrastructure/External/CsFloatTradeClient.php` sendet fuer CSFloat Buyorders keine zusaetzliche `order=desc` Query mehr; `DesktopCsFloatController` faellt bei temporaeren Buyorder-Upstreamfehlern (429/500/503) auf Trades zurueck.
+
+---
+
+Updated: 2026-06-04
+Change: Steam-Account User-Scope fuer Desktop/Web getrennt
+- Desktop local-store User-Scope nutzt fuer neue Steam-Logins `steam-<steamId>` statt Legacy-Fallback `1`; bestehende Legacy-Daten unter `1` werden nicht automatisch umgezogen.
+- Desktop-Sync filtert Pending-Operations nach lokalem User-Scope, fuehrt Pulls in den aktiven lokalen Steam-Scope aus und speichert Sync-Cursor pro User/SteamID.
+- Server-Sync, Portfolio- und Watchlist-Controller koennen `steamId` zu einem numerischen Server-User aufloesen, damit Desktop ohne vorhandene Server-ID nicht mehr als User `1` synchronisieren muss.
+- Portfolio-/API-Caches sind user-spezifisch, damit Accountwechsel keine 120s View-/Offline-Fallback-Daten eines anderen Steam-Accounts anzeigen.

@@ -277,9 +277,9 @@ final class WatchlistService
         ];
     }
 
-    public function deleteItem(int $id): bool
+    public function deleteItem(int $id, int $userId = 1): bool
     {
-        $deleted = $this->watchlistRepository->deleteById($id);
+        $deleted = $this->watchlistRepository->deleteById($id, $userId);
         Logger::event(
             'info',
             'domain',
@@ -287,6 +287,7 @@ final class WatchlistService
             'Watchlist item deleted',
             [
                 'itemId' => $id,
+                'userId' => $userId,
                 'deleted' => $deleted,
             ]
         );

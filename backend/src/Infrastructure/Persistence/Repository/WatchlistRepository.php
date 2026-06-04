@@ -105,13 +105,15 @@ final class WatchlistRepository
         }
     }
 
-    public function deleteById(int $id): bool
+    public function deleteById(int $id, ?int $userId = null): bool
     {
-        $sql = 'DELETE FROM watchlist WHERE id = ?';
+        $sql = $userId !== null
+            ? 'DELETE FROM watchlist WHERE user_id = ? AND id = ?'
+            : 'DELETE FROM watchlist WHERE id = ?';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$id]);
+            $stmt->execute($userId !== null ? [$userId, $id] : [$id]);
             return $stmt->rowCount() > 0;
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -119,7 +121,7 @@ final class WatchlistRepository
                 __FUNCTION__,
                 $sql,
                 $exception,
-                ['id' => $id]
+                ['id' => $id, 'userId' => $userId]
             );
             throw $exception;
         }

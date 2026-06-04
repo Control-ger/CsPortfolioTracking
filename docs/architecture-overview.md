@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -43,6 +43,7 @@ This document tracks:
 - Sidecar secret is mandatory for desktop renderer/API traffic; only `GET /api/v1/auth/steam/callback` is public to allow the external Steam OpenID browser redirect.
 - Renderer never reads SQLite directly.
 - Renderer uses `window.electronAPI.localStore` for local persistence.
+- Desktop local user scope is Steam-account specific (`steam-<steamId>`). New desktop reads/writes must not normalize Steam accounts back to legacy user `1`.
 - Steam/CSFloat import triggers originate in desktop runtime; desktop may call sidecar/upstream endpoints for execution.
 - Desktop sidecar exposes CSFloat import endpoints and a desktop-local buyorder read endpoint (`GET /api/v1/csfloat/buy-orders`) for watchlist enrichment.
 - Desktop sidecar exposes SkinBaron preview endpoints (`POST /api/v1/portfolio/sync/skinbaron/preview`) for desktop-local import.
@@ -59,6 +60,7 @@ This document tracks:
 ### 3.3 Server runtime
 
 - Owns sync API (`/api/v1/sync/pull`, `/api/v1/sync/push`).
+- Sync/portfolio/watchlist endpoints can resolve `steamId` to the server's numeric `users.id`; desktop clients may send Steam identity when no server numeric user id is present.
 - Owns pricing ingestion/read flows.
 - Owns CS-updates ingest and web push.
 - Owns user currency preference persistence (`GET/PUT /api/v1/settings/currency`) and anonymized aggregate popularity stats (`currency_usage_stats`).
@@ -99,6 +101,7 @@ From `apps/web/src/App.jsx`:
 - In Electron, the desktop rail sidebar is mounted once in `App.jsx`; pages can opt out of local sidebar shells via `useExternalDesktopSidebarShell`.
 - Frontend color gradients must use the shared avatar-derived Steam palette variables (`--steam-shell-color-a` ... `--steam-shell-color-d`), with static values allowed only as fallback when avatar data is unavailable.
 - `usePortfolio` uses in-memory snapshots with TTL `120s`.
+- `usePortfolio` and API offline fallback caches are user-scoped so account switches cannot reuse another Steam account's portfolio payload.
 - `usePortfolio` initial API load is keyed by `cacheKey` (not by snapshot object identity) to prevent self-triggered fetch loops.
 - `Watchlist` uses in-memory snapshots with TTL `120s`.
 - Watchlist candidate search is DB-first (`items` catalog), with Steam market lookup only as fallback when local search returns zero matches.

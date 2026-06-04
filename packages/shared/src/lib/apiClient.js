@@ -71,7 +71,8 @@ function getCacheKey(path, method) {
     return null;
   }
 
-  return GET_CACHE_KEYS.find((entry) => entry.pattern.test(path))?.key || null;
+  const matchedKey = GET_CACHE_KEYS.find((entry) => entry.pattern.test(path))?.key || null;
+  return matchedKey ? `${matchedKey}:${path}` : null;
 }
 
 function isRecoverableHttpStatus(status) {
@@ -112,6 +113,58 @@ function buildPath(path, query = {}) {
 
   const queryString = params.toString();
   return queryString ? `${path}?${queryString}` : path;
+}
+
+function resolveSteamIdFromUser(user) {
+  const idCandidates = [
+    user?.steamId,
+    user?.steam_id,
+    String(user?.id || "").startsWith("steam-") ? String(user.id).slice("steam-".length) : null,
+    String(user?.userId || "").startsWith("steam-") ? String(user.userId).slice("steam-".length) : null,
+  ];
+
+  for (const candidate of idCandidates) {
+    const value = String(candidate || "").trim();
+    if (/^[1-9]\d{10,}$/.test(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+async function resolveCurrentUserQuery(options = {}) {
+  const explicitUserId = options.userId ?? options.user_id;
+  if (explicitUserId !== undefined && explicitUserId !== null && String(explicitUserId).trim() !== "") {
+    const explicitRaw = String(explicitUserId).trim();
+    if (/^[1-9]\d{0,9}$/.test(explicitRaw)) {
+      return { userId: explicitRaw };
+    }
+    if (/^steam-[1-9]\d{10,}$/i.test(explicitRaw)) {
+      return { steamId: explicitRaw.slice("steam-".length) };
+    }
+    if (/^[1-9]\d{10,}$/.test(explicitRaw)) {
+      return { steamId: explicitRaw };
+    }
+  }
+
+  try {
+    const currentUser = await getCurrentUser();
+    const userId = currentUser?.userId ?? currentUser?.id;
+    const rawUserId = String(userId || "").trim();
+    if (/^[1-9]\d{0,9}$/.test(rawUserId)) {
+      return { userId: rawUserId };
+    }
+
+    const steamId = resolveSteamIdFromUser(currentUser);
+    if (steamId) {
+      return { steamId };
+    }
+  } catch (error) {
+    console.warn("[apiClient] failed to resolve current user for request scope", error);
+  }
+
+  return {};
 }
 
 function buildApiError(path, response, payload, apiBase = API_BASE) {
@@ -762,7 +815,9 @@ async function applyDesktopSkinBaronPreviewDeduplication(previewResponse) {
 }
 
 export async function fetchPortfolioInvestments(options = {}) {
+  const userQuery = await resolveCurrentUserQuery(options);
   return requestWithMeta(buildPath("/api/v1/portfolio/investments", {
+    ...userQuery,
     scope: options.scope,
   }), {
     signal: options.signal,
@@ -770,15 +825,19 @@ export async function fetchPortfolioInvestments(options = {}) {
 }
 
 export async function fetchPortfolioInvestmentHistory(id, options = {}) {
+  const userQuery = await resolveCurrentUserQuery(options);
   return request(
     buildPath(`/api/v1/portfolio/investments/${id}/history`, {
+      ...userQuery,
       itemName: options.itemName,
     }),
   );
 }
 
 export async function fetchItemPriceHistory(itemId, options = {}) {
+  const userQuery = await resolveCurrentUserQuery(options);
   return request(buildPath(`/api/v1/items/${itemId}/price-history`, {
+    ...userQuery,
     fromDate: options.fromDate,
     itemName: options.itemName,
   }), {
@@ -787,7 +846,9 @@ export async function fetchItemPriceHistory(itemId, options = {}) {
 }
 
 export async function fetchPortfolioSummary(options = {}) {
+  const userQuery = await resolveCurrentUserQuery(options);
   return requestWithMeta(buildPath("/api/v1/portfolio/summary", {
+    ...userQuery,
     scope: options.scope,
   }), {
     signal: options.signal,
@@ -795,7 +856,9 @@ export async function fetchPortfolioSummary(options = {}) {
 }
 
 export async function fetchPortfolioHistory(options = {}) {
+  const userQuery = await resolveCurrentUserQuery(options);
   return request(buildPath("/api/v1/portfolio/history", {
+    ...userQuery,
     scope: options.scope,
   }), {
     signal: options.signal,
@@ -803,7 +866,9 @@ export async function fetchPortfolioHistory(options = {}) {
 }
 
 export async function fetchPortfolioComposition(options = {}) {
+  const userQuery = await resolveCurrentUserQuery(options);
   return request(buildPath("/api/v1/portfolio/composition", {
+    ...userQuery,
     scope: options.scope,
   }));
 }
@@ -817,10 +882,12 @@ export async function refreshPortfolioStalePrices(options = {}) {
     ? Math.max(1, Math.min(Math.trunc(rawLimit), 2000))
     : 200;
 
+  const userQuery = await resolveCurrentUserQuery(options);
+
   return requestWithMeta("/api/v1/portfolio/prices/refresh-stale", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scope, limit }),
+    body: JSON.stringify({ ...userQuery, scope, limit }),
     signal: options.signal,
   });
 }
@@ -830,10 +897,11 @@ export async function fetchExchangeRate() {
 }
 
 export async function savePortfolioDailyValue(totalValue) {
+  const userQuery = await resolveCurrentUserQuery();
   return request("/api/v1/portfolio/daily-value", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ totalValue }),
+    body: JSON.stringify({ ...userQuery, totalValue }),
   });
 }
 
@@ -1136,8 +1204,10 @@ export async function executeSkinBaronTradeSync(payload = {}) {
 }
 
 export async function fetchWatchlist(options = {}) {
+  const userQuery = await resolveCurrentUserQuery(options);
   return requestWithMeta(
     buildPath("/api/v1/watchlist", {
+      ...userQuery,
       syncLive: options.syncLive ? 1 : undefined,
     }),
   );
@@ -1160,23 +1230,26 @@ export async function fetchCsFloatBuyOrders(options = {}) {
 }
 
 export async function createWatchlistItem(name, type = "skin") {
+  const userQuery = await resolveCurrentUserQuery();
   return request("/api/v1/watchlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, type }),
+    body: JSON.stringify({ ...userQuery, name, type }),
   });
 }
 
 export async function createWatchlistItemsBatch(items = []) {
+  const userQuery = await resolveCurrentUserQuery();
   return request("/api/v1/watchlist/batch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ ...userQuery, items }),
   });
 }
 
 export async function deleteWatchlistItem(id) {
-  return request(`/api/v1/watchlist/${id}`, { method: "DELETE" });
+  const userQuery = await resolveCurrentUserQuery();
+  return request(buildPath(`/api/v1/watchlist/${id}`, userQuery), { method: "DELETE" });
 }
 
 export async function searchWatchlistItems(
@@ -1185,8 +1258,10 @@ export async function searchWatchlistItems(
   limit = 6,
   page = 1,
 ) {
+  const userQuery = await resolveCurrentUserQuery();
   return requestWithMeta(
     buildPath("/api/v1/watchlist/search", {
+      ...userQuery,
       query,
       itemType: filters.itemType,
       wear: filters.wear,
@@ -1456,10 +1531,11 @@ export async function toggleExcludeInvestment(id, exclude, sourceInvestmentIds =
     };
   }
 
+  const userQuery = await resolveCurrentUserQuery();
   return requestWithMeta(`/api/v1/portfolio/investments/${id}/exclude`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ exclude }),
+    body: JSON.stringify({ ...userQuery, exclude }),
   });
 }
 
@@ -1575,10 +1651,11 @@ export async function updateInvestmentBucket(id, bucket, sourceInvestmentIds = [
     };
   }
 
+  const userQuery = await resolveCurrentUserQuery();
   return requestWithMeta(`/api/v1/portfolio/investments/${id}/bucket`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ bucket: normalizedBucket }),
+    body: JSON.stringify({ ...userQuery, bucket: normalizedBucket }),
   });
 }
 
@@ -1666,10 +1743,12 @@ export async function updateInvestmentOverpay(
     };
   }
 
+  const userQuery = await resolveCurrentUserQuery();
   return requestWithMeta(`/api/v1/portfolio/investments/${id}/overpay`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      ...userQuery,
       overpayEnabled: normalizedOverpayEnabled,
       overpayFloorEur: normalizedFloor,
       overpayNote: normalizedNote || null,

@@ -6,6 +6,7 @@ namespace App\Http\Controller;
 use App\Application\Service\PortfolioService;
 use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\SyncService;
+use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Logger;
@@ -16,7 +17,8 @@ final class PortfolioController
     public function __construct(
         private readonly PortfolioService $portfolioService,
         private readonly SyncService $syncService,
-        private readonly ?ScalingShadowReadService $scalingShadowReadService = null
+        private readonly ?ScalingShadowReadService $scalingShadowReadService = null,
+        private readonly ?UserRepository $userRepository = null
     ) {
     }
 
@@ -451,7 +453,39 @@ final class PortfolioController
             }
         }
 
+        foreach (['steamId', 'steam_id'] as $key) {
+            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
+            if ($steamId !== null && $this->userRepository !== null) {
+                return $this->userRepository->findOrCreateBySteamId($steamId);
+            }
+        }
+
+        foreach (['userId', 'user_id'] as $key) {
+            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
+            if ($steamId !== null && $this->userRepository !== null) {
+                return $this->userRepository->findOrCreateBySteamId($steamId);
+            }
+        }
+
         return 1;
+    }
+
+    private function normalizeSteamId(mixed $value): ?string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^steam-([1-9]\d{10,})$/i', $raw, $matches) === 1) {
+            return $matches[1];
+        }
+
+        if (preg_match('/^[1-9]\d{10,}$/', $raw) === 1) {
+            return $raw;
+        }
+
+        return null;
     }
 
     private function resolveScope(Request $request): string

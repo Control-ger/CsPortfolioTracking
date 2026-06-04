@@ -6,6 +6,7 @@ namespace App\Http\Controller;
 use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\SyncService;
+use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
 use App\Shared\Logger;
@@ -18,7 +19,8 @@ final class WatchlistController
     public function __construct(
         private readonly WatchlistService $watchlistService,
         private readonly SyncService $syncService,
-        private readonly ?ScalingShadowReadService $scalingShadowReadService = null
+        private readonly ?ScalingShadowReadService $scalingShadowReadService = null,
+        private readonly ?UserRepository $userRepository = null
     )
     {
     }
@@ -151,7 +153,7 @@ final class WatchlistController
     {
         try {
             $userId = $this->resolveUserId($request);
-            if (!$this->watchlistService->deleteItem($id)) {
+            if (!$this->watchlistService->deleteItem($id, $userId)) {
                 JsonResponseFactory::error('WATCHLIST_NOT_FOUND', 'Item nicht gefunden.', [], 404);
                 return;
             }
@@ -205,7 +207,39 @@ final class WatchlistController
             }
         }
 
+        foreach (['steamId', 'steam_id'] as $key) {
+            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
+            if ($steamId !== null && $this->userRepository !== null) {
+                return $this->userRepository->findOrCreateBySteamId($steamId);
+            }
+        }
+
+        foreach (['userId', 'user_id'] as $key) {
+            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
+            if ($steamId !== null && $this->userRepository !== null) {
+                return $this->userRepository->findOrCreateBySteamId($steamId);
+            }
+        }
+
         return 1;
+    }
+
+    private function normalizeSteamId(mixed $value): ?string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^steam-([1-9]\d{10,})$/i', $raw, $matches) === 1) {
+            return $matches[1];
+        }
+
+        if (preg_match('/^[1-9]\d{10,}$/', $raw) === 1) {
+            return $raw;
+        }
+
+        return null;
     }
 
     public function createBatch(Request $request): void

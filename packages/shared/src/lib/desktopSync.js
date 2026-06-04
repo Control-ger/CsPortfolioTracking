@@ -2,9 +2,13 @@ import { getSession, validateSession } from "./auth.js";
 import { get as cacheGet, set as cacheSet } from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
-import { parseDesktopSyncUserId } from "./userIdentity.js";
+import {
+  normalizeDesktopLocalUserId,
+  parseDesktopSyncUserId,
+  resolveDesktopLocalUserId,
+} from "./userIdentity.js";
 
-const SYNC_CURSOR_CACHE_KEY = "desktop-sync:last-pull-at";
+const SYNC_CURSOR_CACHE_KEY_PREFIX = "desktop-sync:last-pull-at";
 const SYNC_MIN_INTERVAL_MS = 30_000;
 const DEFAULT_PULL_LIMIT = 500;
 const AUTO_SYNC_INTERVAL_MS = 60_000;
@@ -278,6 +282,57 @@ function unwrapApiData(payload) {
   return payload?.data && typeof payload.data === "object" ? payload.data : payload;
 }
 
+function resolveSteamIdFromUser(user) {
+  const candidates = [
+    user?.steamId,
+    user?.steam_id,
+    String(user?.id || "").startsWith("steam-") ? String(user.id).slice("steam-".length) : null,
+    String(user?.userId || "").startsWith("steam-") ? String(user.userId).slice("steam-".length) : null,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (/^[1-9]\d{10,}$/.test(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function buildSyncIdentityPayload(syncUserId, steamId) {
+  const payload = {};
+  if (Number.isInteger(syncUserId) && syncUserId > 0) {
+    payload.userId = syncUserId;
+  }
+  if (steamId) {
+    payload.steamId = steamId;
+  }
+  return payload;
+}
+
+function getSyncCursorCacheKey(syncUserId, steamId, localUserId) {
+  if (Number.isInteger(syncUserId) && syncUserId > 0) {
+    return `${SYNC_CURSOR_CACHE_KEY_PREFIX}:user:${syncUserId}`;
+  }
+  if (steamId) {
+    return `${SYNC_CURSOR_CACHE_KEY_PREFIX}:steam:${steamId}`;
+  }
+  return `${SYNC_CURSOR_CACHE_KEY_PREFIX}:local:${localUserId || "1"}`;
+}
+
+function operationBelongsToLocalUser(operation, localUserId) {
+  const payload = operation && typeof operation.payload === "object" && operation.payload !== null
+    ? operation.payload
+    : {};
+  const rawUserId = payload.userId ?? payload.user_id;
+  if (rawUserId === null || rawUserId === undefined || String(rawUserId).trim() === "") {
+    return String(localUserId) === "1";
+  }
+
+  return normalizeDesktopLocalUserId(rawUserId, "1") === String(localUserId);
+}
+
 function withSafetyWindow(timestamp) {
   const parsed = Date.parse(String(timestamp || ""));
   if (!Number.isFinite(parsed)) {
@@ -430,7 +485,7 @@ function shouldDropRejectedOperation(operation, rejected) {
   return false;
 }
 
-async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
+async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localStore, localUserId) {
   const pending = unwrapLocalStoreResult(
     await localStore.listPendingOperations(200),
     "local-store-list-pending-operations",
@@ -441,6 +496,9 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
 
   const mapped = [];
   for (const operation of pending) {
+    if (!operationBelongsToLocalUser(operation, localUserId)) {
+      continue;
+    }
     const base = mapOperationToSyncChange(operation);
     if (!base) {
       continue;
@@ -461,7 +519,7 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      userId,
+      ...buildSyncIdentityPayload(syncIdentity.userId, syncIdentity.steamId),
       changes: mapped.map((operation) => ({
         op: operation.op,
         table: operation.table,
@@ -546,7 +604,7 @@ async function pushPendingOperations(serverBaseUrl, userId, token, localStore) {
   }
 }
 
-async function applyPulledChanges(changes, localStore, userId) {
+async function applyPulledChanges(changes, localStore, localUserId) {
   if (!Array.isArray(changes) || changes.length === 0) {
     return;
   }
@@ -580,7 +638,7 @@ async function applyPulledChanges(changes, localStore, userId) {
     const normalized = {
       ...payload,
       id,
-      userId: payload.userId || userId,
+      userId: localUserId,
       revision: Number(change.serverRevision || payload.revision || 1),
       updatedAt: change.updatedAt || payload.updatedAt || new Date().toISOString(),
     };
@@ -594,13 +652,13 @@ async function applyPulledChanges(changes, localStore, userId) {
 
   if (investmentUpserts.length > 0) {
     unwrapLocalStoreResult(
-      await localStore.importInvestments(investmentUpserts, userId),
+      await localStore.importInvestments(investmentUpserts, localUserId),
       "local-store-import-investments",
     );
   }
   if (watchlistUpserts.length > 0) {
     unwrapLocalStoreResult(
-      await localStore.importWatchlist(watchlistUpserts, userId),
+      await localStore.importWatchlist(watchlistUpserts, localUserId),
       "local-store-import-watchlist",
     );
   }
@@ -619,12 +677,20 @@ async function applyPulledChanges(changes, localStore, userId) {
   }
 }
 
-async function pullServerChanges(serverBaseUrl, userId, token, localStore) {
-  const lastPulledAt = (await cacheGet(SYNC_CURSOR_CACHE_KEY)) || "1970-01-01T00:00:00.000Z";
+async function pullServerChanges(serverBaseUrl, syncIdentity, token, localStore, localUserId) {
+  const cursorCacheKey = getSyncCursorCacheKey(
+    syncIdentity.userId,
+    syncIdentity.steamId,
+    localUserId,
+  );
+  const lastPulledAt = (await cacheGet(cursorCacheKey)) || "1970-01-01T00:00:00.000Z";
   const queryParams = new URLSearchParams({
-    userId: String(userId),
     since: withSafetyWindow(lastPulledAt),
     limit: String(DEFAULT_PULL_LIMIT),
+  });
+  const identityPayload = buildSyncIdentityPayload(syncIdentity.userId, syncIdentity.steamId);
+  Object.entries(identityPayload).forEach(([key, value]) => {
+    queryParams.set(key, String(value));
   });
 
   const response = await fetchSyncEndpointWithFallback(
@@ -646,7 +712,7 @@ async function pullServerChanges(serverBaseUrl, userId, token, localStore) {
 
   const data = unwrapApiData(await response.json());
   const changes = Array.isArray(data?.changes) ? data.changes : [];
-  await applyPulledChanges(changes, localStore, userId);
+  await applyPulledChanges(changes, localStore, localUserId);
 
   const newestChangeTs = changes
     .map((change) => String(change?.updatedAt || ""))
@@ -654,7 +720,7 @@ async function pullServerChanges(serverBaseUrl, userId, token, localStore) {
     .sort()
     .at(-1);
   const nextCursor = String(newestChangeTs || data?.serverTime || new Date().toISOString());
-  await cacheSet(SYNC_CURSOR_CACHE_KEY, nextCursor);
+  await cacheSet(cursorCacheKey, nextCursor);
 }
 
 export async function runDesktopSyncNowIfDue(options = {}) {
@@ -687,17 +753,21 @@ export async function runDesktopSyncNowIfDue(options = {}) {
       }
 
       const serverBaseUrl = normalizeServerBaseUrl(config.serverUrl);
-      let userId = parseDesktopSyncUserId(session.user);
-      if (userId === null) {
+      const localUserId = resolveDesktopLocalUserId(session.user, 1);
+      let syncUserId = parseDesktopSyncUserId(session.user);
+      let steamId = resolveSteamIdFromUser(session.user);
+      if (syncUserId === null && steamId === null) {
         const validated = await validateSession(session.token);
-        userId = parseDesktopSyncUserId(validated?.user);
+        syncUserId = parseDesktopSyncUserId(validated?.user);
+        steamId = resolveSteamIdFromUser(validated?.user);
       }
-      if (userId === null) {
+      if (syncUserId === null && steamId === null) {
         return { skipped: true, reason: "no-valid-session-user-id" };
       }
       const localStore = window.electronAPI.localStore;
-      await pushPendingOperations(serverBaseUrl, userId, session.token, localStore);
-      await pullServerChanges(serverBaseUrl, userId, session.token, localStore);
+      const syncIdentity = { userId: syncUserId, steamId };
+      await pushPendingOperations(serverBaseUrl, syncIdentity, session.token, localStore, localUserId);
+      await pullServerChanges(serverBaseUrl, syncIdentity, session.token, localStore, localUserId);
 
       lastSyncAtMs = Date.now();
       return { skipped: false, reason: "ok" };

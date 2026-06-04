@@ -703,13 +703,13 @@ try {
         $userPortfolioGroupsRepository
     );
 
-    $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService);
-    $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService);
+    $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService, $userRepository);
+    $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService, $userRepository);
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);
     $frontendTelemetryController = new FrontendTelemetryController();
     $syncStatusController = new SyncStatusController($syncStatusRepository);
-    $syncController = new SyncController($syncService);
+    $syncController = new SyncController($syncService, $userRepository);
     $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
     $exchangeRateController = new ExchangeRateController(new ExchangeRateClient());
     $csUpdatesController = new CsUpdatesController(new CsUpdatesFeedRepository($pdo));

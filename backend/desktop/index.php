@@ -557,6 +557,17 @@ $summarizeProxyIssue = static function (array $attempts, string $endpointPath = 
     ]);
 };
 
+$copyUserScopeQuery = static function (Request $request, array $query = []): array {
+    foreach (['userId', 'user_id', 'steamId', 'steam_id'] as $key) {
+        $value = trim((string) ($request->query[$key] ?? ''));
+        if ($value !== '') {
+            $query[$key] = $value;
+        }
+    }
+
+    return $query;
+};
+
 $router->register('GET', '/api/v1/settings/price-source', static function () use ($proxyUpstreamGet): void {
     $proxied = $proxyUpstreamGet('/api/v1/settings/price-source');
     if ($proxied !== null && ($proxied['ok'] ?? false) === true) {
@@ -832,8 +843,8 @@ $router->register('PUT', '/api/v1/settings/price-source', static function (Reque
     );
 });
 
-$router->register('GET', '/api/v1/portfolio/history', static function (Request $request) use ($proxyUpstreamGet): void {
-    $query = [];
+$router->register('GET', '/api/v1/portfolio/history', static function (Request $request) use ($proxyUpstreamGet, $copyUserScopeQuery): void {
+    $query = $copyUserScopeQuery($request);
     if (isset($request->query['scope'])) {
         $query['scope'] = (string) $request->query['scope'];
     }
@@ -852,8 +863,8 @@ $router->register('GET', '/api/v1/portfolio/history', static function (Request $
     ]);
 });
 
-$router->register('GET', '/api/v1/portfolio/investments', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
-    $query = [];
+$router->register('GET', '/api/v1/portfolio/investments', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery): void {
+    $query = $copyUserScopeQuery($request);
     if (isset($request->query['scope'])) {
         $query['scope'] = (string) $request->query['scope'];
     }
@@ -893,6 +904,8 @@ $router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static funct
     $limit = max(1, min((int) ($request->body['limit'] ?? 200), 2000));
     $payload = json_encode(
         [
+            'userId' => $request->body['userId'] ?? null,
+            'steamId' => $request->body['steamId'] ?? null,
             'scope' => $scope,
             'limit' => $limit,
         ],
@@ -961,12 +974,12 @@ $router->register('GET', '/api/v1/exchange-rate', static function () use ($proxy
     ], ['source' => 'desktop-fallback']);
 });
 
-$router->register('GET', '/api/v1/watchlist/search', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
-    $query = [
+$router->register('GET', '/api/v1/watchlist/search', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery): void {
+    $query = $copyUserScopeQuery($request, [
         'query' => $request->query['query'] ?? '',
         'limit' => $request->query['limit'] ?? 6,
         'page' => $request->query['page'] ?? 1,
-    ];
+    ]);
     foreach (['itemType', 'wear', 'sortBy'] as $optional) {
         $value = trim((string) ($request->query[$optional] ?? ''));
         if ($value !== '') {
@@ -993,8 +1006,8 @@ $router->register('GET', '/api/v1/watchlist/search', static function (Request $r
     ]);
 });
 
-$router->register('GET', '/api/v1/watchlist', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue): void {
-    $query = [];
+$router->register('GET', '/api/v1/watchlist', static function (Request $request) use ($proxyUpstreamGet, $summarizeProxyIssue, $copyUserScopeQuery): void {
+    $query = $copyUserScopeQuery($request);
     if (isset($request->query['syncLive'])) {
         $query['syncLive'] = (string) $request->query['syncLive'];
     }
@@ -1052,13 +1065,13 @@ $router->register('GET', '/api/v1/cs-updates', static function (Request $request
     );
 });
 
-$router->register('GET', '/api/v1/portfolio/investments/{key}/history', static function (Request $request, string $itemId) use ($proxyUpstreamGet): void {
+$router->register('GET', '/api/v1/portfolio/investments/{key}/history', static function (Request $request, string $itemId) use ($proxyUpstreamGet, $copyUserScopeQuery): void {
     if ($itemId === '') {
         JsonResponseFactory::error('ITEM_ID_REQUIRED', 'Item-ID erforderlich.', [], 400);
         return;
     }
 
-    $query = [];
+    $query = $copyUserScopeQuery($request);
     if (isset($request->query['itemName'])) {
         $query['itemName'] = (string) $request->query['itemName'];
     }

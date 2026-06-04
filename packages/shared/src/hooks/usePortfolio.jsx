@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchPortfolioData } from "@shared/lib/dataSource.js";
+import { getCurrentUser } from "@shared/lib/auth.js";
 
 const portfolioViewCache = new Map();
 const PORTFOLIO_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -7,7 +8,25 @@ const PORTFOLIO_CACHE_TTL_MS = 2 * 60 * 1000;
 function resolveCacheKey(options = {}) {
   const scope = String(options.scope || "default");
   const rowScope = String(options.rowScope || "default");
-  return `${scope}::${rowScope}`;
+  const user = String(options.userCacheSegment || "user:resolving");
+  return `${user}::${scope}::${rowScope}`;
+}
+
+function resolveUserCacheSegment(user) {
+  const steamId = String(user?.steamId || user?.steam_id || "").trim();
+  if (/^[1-9]\d{10,}$/.test(steamId)) {
+    return `steam:${steamId}`;
+  }
+
+  const id = String(user?.id || user?.userId || "").trim();
+  if (/^steam-[1-9]\d{10,}$/i.test(id)) {
+    return `steam:${id.slice("steam-".length)}`;
+  }
+  if (/^[1-9]\d*$/.test(id)) {
+    return `user:${id}`;
+  }
+
+  return "user:none";
 }
 
 function getValidPortfolioSnapshot(cacheKey) {
@@ -69,7 +88,8 @@ function hasDesktopLocalStore() {
 export function usePortfolio(options = {}) {
   const abortControllerRef = useRef(null);
   const initialLoadKeyRef = useRef("");
-  const cacheKey = resolveCacheKey(options);
+  const [userCacheSegment, setUserCacheSegment] = useState("user:resolving");
+  const cacheKey = resolveCacheKey({ ...options, userCacheSegment });
 
   const [investments, setInvestments] = useState([]);
   const [authRequired, setAuthRequired] = useState(true); // Default to auth required until checked
@@ -96,6 +116,30 @@ export function usePortfolio(options = {}) {
   const [warnings, setWarnings] = useState([]);
 
   useEffect(() => {
+    let isActive = true;
+
+    getCurrentUser()
+      .then((user) => {
+        if (isActive) {
+          setUserCacheSegment(resolveUserCacheSegment(user));
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setUserCacheSegment("user:none");
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (userCacheSegment === "user:resolving") {
+      return;
+    }
+
     const snapshot = getValidPortfolioSnapshot(cacheKey);
     if (!snapshot) {
       return;
@@ -108,9 +152,9 @@ export function usePortfolio(options = {}) {
     setWarnings(snapshot.warnings || []);
     setError("");
     setIsLoading(false);
-  }, [cacheKey]);
+  }, [cacheKey, userCacheSegment]);
 
-  const applyPortfolioPayload = useCallback((payload, { cachePayload = true } = {}) => {
+  const applyPortfolioPayload = useCallback((payload, { cachePayload = true, targetCacheKey = cacheKey } = {}) => {
     const { rows: rowsResponse, summary: summaryResponse, history, requiresAuth } = payload || {};
     const nextWarnings = mergeWarnings(
       rowsResponse?.meta?.warnings || [],
@@ -125,7 +169,7 @@ export function usePortfolio(options = {}) {
     setError("");
 
     if (cachePayload) {
-      portfolioViewCache.set(cacheKey, {
+      portfolioViewCache.set(targetCacheKey, {
         investments: rowsResponse?.data || [],
         authRequired: requiresAuth || false,
         stats: summaryResponse?.data || {},
@@ -149,6 +193,17 @@ export function usePortfolio(options = {}) {
       setIsLoading(true);
     }
     try {
+      const activeUser = await getCurrentUser().catch(() => null);
+      const activeUserCacheSegment = resolveUserCacheSegment(activeUser);
+      const activeCacheKey = resolveCacheKey({
+        scope: options.scope,
+        rowScope: options.rowScope,
+        userCacheSegment: activeUserCacheSegment,
+      });
+      if (activeUserCacheSegment !== userCacheSegment) {
+        setUserCacheSegment(activeUserCacheSegment);
+      }
+
       if (preferImmediateLocal && hasDesktopLocalStore()) {
         const localSnapshot = await fetchPortfolioData({
           signal,
@@ -159,7 +214,10 @@ export function usePortfolio(options = {}) {
 
         if (signal.aborted) return;
 
-        applyPortfolioPayload(localSnapshot, { cachePayload: false });
+        applyPortfolioPayload(localSnapshot, {
+          cachePayload: false,
+          targetCacheKey: activeCacheKey,
+        });
         localSnapshotApplied = true;
         setIsLoading(false);
       }
@@ -173,7 +231,7 @@ export function usePortfolio(options = {}) {
       // Don't update state if request was aborted
       if (signal.aborted) return;
 
-      applyPortfolioPayload(payload);
+      applyPortfolioPayload(payload, { targetCacheKey: activeCacheKey });
     } catch (err) {
       // Don't update state for abort errors
       if (err.name === 'AbortError') return;
@@ -184,7 +242,7 @@ export function usePortfolio(options = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [applyPortfolioPayload, options.rowScope, options.scope]);
+  }, [applyPortfolioPayload, options.rowScope, options.scope, userCacheSegment]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -211,6 +269,10 @@ export function usePortfolio(options = {}) {
   }, [cacheKey]);
 
   useEffect(() => {
+    if (userCacheSegment === "user:resolving") {
+      return;
+    }
+
     if (initialLoadKeyRef.current === cacheKey) {
       return;
     }
@@ -220,7 +282,7 @@ export function usePortfolio(options = {}) {
       showLoading: !hasSnapshot,
       preferImmediateLocal: !hasSnapshot,
     }));
-  }, [cacheKey, loadData]);
+  }, [cacheKey, loadData, userCacheSegment]);
 
   return {
     enrichedInvestments: investments,
