@@ -300,16 +300,14 @@ export const ItemSearch = ({
     if (isSearching) {
       return (
         <tbody>
-          {[1, 2, 3, 4].map((row) => (
-            <tr key={`loading-${row}`} className="border-t border-border/70">
-              <td colSpan={5} className="px-3 py-4 text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-2">
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                  Suche laeuft...
-                </span>
-              </td>
-            </tr>
-          ))}
+          <tr className="border-t border-border/70">
+            <td colSpan={5} className="px-3 py-4 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-2">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                Suche laeuft...
+              </span>
+            </td>
+          </tr>
         </tbody>
       );
     }
