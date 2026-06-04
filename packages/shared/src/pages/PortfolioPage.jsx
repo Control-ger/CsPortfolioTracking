@@ -4235,7 +4235,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           ? "lg:h-full lg:min-h-0 lg:overflow-hidden"
           : ""
       } ${
-        showSetupJourney && useExternalDesktopSidebarShell ? "lg:-ml-6" : ""
+        showSetupJourney && useExternalDesktopSidebarShell ? "lg:-ml-6 lg:w-[calc(100%+1.5rem)]" : ""
       } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         showSetupJourney ? "steam-startup-shell" : "bg-background"
       }`}
