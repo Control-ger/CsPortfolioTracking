@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-04
+Last updated: 2026-06-07
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -44,6 +44,7 @@ This document tracks:
 - Renderer never reads SQLite directly.
 - Renderer uses `window.electronAPI.localStore` for local persistence.
 - Desktop local user scope is Steam-account specific (`steam-<steamId>`). New desktop reads/writes must not normalize Steam accounts back to legacy user `1`.
+- Existing legacy local rows under user `1` are merged into the active Steam-local user on first local-store access, including investments, watchlist, inventory state, notifications, portfolio preferences, and pending operation payload user scopes.
 - Steam/CSFloat import triggers originate in desktop runtime; desktop may call sidecar/upstream endpoints for execution.
 - Desktop sidecar exposes CSFloat import endpoints and a desktop-local buyorder read endpoint (`GET /api/v1/csfloat/buy-orders`) for watchlist enrichment.
 - Desktop sidecar exposes SkinBaron preview endpoints (`POST /api/v1/portfolio/sync/skinbaron/preview`) for desktop-local import.

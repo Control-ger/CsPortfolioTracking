@@ -737,3 +737,11 @@ Change: Session-gebundene User-Scope-Autorisierung gehaertet
 - Neuer Resolver `backend/src/Http/Auth/RequestUserScopeResolver.php` bindet explizite `userId`/`steamId` an die authentifizierte Steam-Session und liefert bei Abweichungen `401/403`.
 - User-gebundene Server-Controller fuer Portfolio, Watchlist, Sync, Settings, WebPush, SyncStatus und CSFloat-Sync nutzen jetzt denselben Scope-Resolver statt ungepruefter Request-Scopes.
 - `backend/desktop/index.php` reicht `Authorization`/`X-Auth-Token` bei user-gebundenen Upstream-Proxies weiter, damit Desktop-Sidecar und Server dieselbe Session-Scope-Pruefung sehen.
+
+---
+
+Updated: 2026-06-07
+Change: Desktop Legacy-User-Daten automatisch in Steam-User-Scope gemerged
+- `apps/desktop/src/localStore/index.js` merged bestehende lokale Legacy-Daten unter `user_id = "1"` beim ersten Zugriff in den aktiven `steam-<steamId>`-Scope.
+- Der Merge umfasst Investments, Watchlist, Portfolio-Snapshots, Steam-Inventory-State, Steam/CSFloat-Matches, Notifications, Portfolio-Preferences und Pending-Operation-Payloads.
+- Ziel: Updates auf den Steam-spezifischen Desktop-User-Scope duerfen vorhandene lokale Portfolio-/Investment-Daten nicht leer erscheinen lassen.

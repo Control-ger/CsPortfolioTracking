@@ -46,7 +46,7 @@ export function resolveDesktopLocalUserId(user, fallback = 1) {
   return normalizeDesktopLocalUserId(candidate, String(fallback || 1));
 }
 
-export function parseDesktopSyncUserId(user, fallback = 1) {
+export function parseDesktopSyncUserId(user) {
   const candidates = [
     user?.userId,
     user?.localUserId,

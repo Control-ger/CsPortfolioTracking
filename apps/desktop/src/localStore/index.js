@@ -967,6 +967,153 @@ export function createLocalStore(userDataPath) {
     });
   });
 
+  function legacyRowsExist() {
+    const investmentCount = db
+      .prepare("SELECT COUNT(*) AS count FROM investments WHERE user_id = ?")
+      .get(CANONICAL_LOCAL_USER_ID).count;
+    const watchlistCount = db
+      .prepare("SELECT COUNT(*) AS count FROM watchlist_items WHERE user_id = ?")
+      .get(CANONICAL_LOCAL_USER_ID).count;
+    const inventoryStateCount = db
+      .prepare("SELECT COUNT(*) AS count FROM steam_inventory_state WHERE user_id = ?")
+      .get(CANONICAL_LOCAL_USER_ID).count;
+
+    return Number(investmentCount || 0) + Number(watchlistCount || 0) + Number(inventoryStateCount || 0) > 0;
+  }
+
+  function rewritePendingOperationsUserId(fromUserId, toUserId) {
+    const rows = db
+      .prepare(
+        `SELECT id, payload
+         FROM operations_log
+         WHERE applied_at IS NULL`,
+      )
+      .all();
+    const update = db.prepare("UPDATE operations_log SET payload = ? WHERE id = ?");
+
+    rows.forEach((row) => {
+      const payload = deserialize(row.payload, {});
+      const payloadUserId = normalizeLocalUserId(payload.userId ?? payload.user_id);
+      if (payloadUserId !== fromUserId) {
+        return;
+      }
+
+      const nextPayload = {
+        ...payload,
+        userId: toUserId,
+      };
+      if (Object.prototype.hasOwnProperty.call(nextPayload, "user_id")) {
+        nextPayload.user_id = toUserId;
+      }
+
+      update.run(serialize(nextPayload), row.id);
+    });
+  }
+
+  const migrateLegacyUserRowsToSteamUser = db.transaction((targetUserId) => {
+    const normalizedTargetUserId = normalizeLocalUserId(targetUserId);
+    if (!DESKTOP_STEAM_USER_ID_PATTERN.test(normalizedTargetUserId)) {
+      return { migrated: false, reason: "target-not-steam-user" };
+    }
+    if (!legacyRowsExist()) {
+      return { migrated: false, reason: "no-legacy-rows" };
+    }
+    const counts = {};
+
+    [
+      "investments",
+      "watchlist_items",
+      "steam_inventory_state",
+      "sync_notifications",
+    ].forEach((table) => {
+      const beforeCount = db
+        .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE user_id = ?`)
+        .get(CANONICAL_LOCAL_USER_ID).count;
+      db.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id = ?`)
+        .run(normalizedTargetUserId, CANONICAL_LOCAL_USER_ID);
+      counts[table] = Number(beforeCount || 0);
+    });
+
+    const snapshotCount = db
+      .prepare("SELECT COUNT(*) AS count FROM portfolio_snapshots WHERE user_id = ?")
+      .get(CANONICAL_LOCAL_USER_ID).count;
+    db.prepare(
+      `UPDATE portfolio_snapshots
+       SET user_id = ?
+       WHERE user_id = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM portfolio_snapshots target
+           WHERE target.user_id = ?
+             AND target.captured_at = portfolio_snapshots.captured_at
+         )`,
+    ).run(normalizedTargetUserId, CANONICAL_LOCAL_USER_ID, normalizedTargetUserId);
+    db.prepare("DELETE FROM portfolio_snapshots WHERE user_id = ?")
+      .run(CANONICAL_LOCAL_USER_ID);
+    counts.portfolio_snapshots = Number(snapshotCount || 0);
+
+    const matchCount = db
+      .prepare("SELECT COUNT(*) AS count FROM steam_csfloat_matches WHERE user_id = ?")
+      .get(CANONICAL_LOCAL_USER_ID).count;
+    db.prepare(
+      `UPDATE steam_csfloat_matches
+       SET user_id = ?
+       WHERE user_id = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM steam_csfloat_matches target
+           WHERE target.user_id = ?
+             AND target.steam_asset_id = steam_csfloat_matches.steam_asset_id
+             AND target.csfloat_investment_id = steam_csfloat_matches.csfloat_investment_id
+         )`,
+    ).run(normalizedTargetUserId, CANONICAL_LOCAL_USER_ID, normalizedTargetUserId);
+    db.prepare("DELETE FROM steam_csfloat_matches WHERE user_id = ?")
+      .run(CANONICAL_LOCAL_USER_ID);
+    counts.steam_csfloat_matches = Number(matchCount || 0);
+
+    const legacyPrefix = `portfolio_pref:${CANONICAL_LOCAL_USER_ID}:`;
+    const targetPrefix = `portfolio_pref:${normalizedTargetUserId}:`;
+    const now = nowIso();
+    const upsertMeta = db.prepare(
+      `INSERT INTO meta (key, value, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    );
+    const deleteMeta = db.prepare("DELETE FROM meta WHERE key = ?");
+    db
+      .prepare(
+        `SELECT key, value
+         FROM meta
+         WHERE key LIKE ?`,
+      )
+      .all(`${legacyPrefix}%`)
+      .forEach((row) => {
+        const preferenceKey = String(row.key || "").slice(legacyPrefix.length);
+        if (!preferenceKey) {
+          return;
+        }
+        upsertMeta.run(`${targetPrefix}${preferenceKey}`, String(row.value || ""), now);
+        deleteMeta.run(row.key);
+      });
+
+    rewritePendingOperationsUserId(CANONICAL_LOCAL_USER_ID, normalizedTargetUserId);
+
+    return {
+      migrated: true,
+      fromUserId: CANONICAL_LOCAL_USER_ID,
+      toUserId: normalizedTargetUserId,
+      counts,
+    };
+  });
+
+  function maybeMigrateLegacyUserRows(userId) {
+    const normalizedUserId = normalizeLocalUserId(userId);
+    if (!DESKTOP_STEAM_USER_ID_PATTERN.test(normalizedUserId)) {
+      return { migrated: false, reason: "not-steam-user" };
+    }
+    return migrateLegacyUserRowsToSteamUser(normalizedUserId);
+  }
+
   return {
     getInfo() {
       return {
@@ -985,6 +1132,7 @@ export function createLocalStore(userDataPath) {
     },
 
     listInvestments(userId = CANONICAL_LOCAL_USER_ID) {
+      maybeMigrateLegacyUserRows(userId);
       return db
         .prepare(
           `SELECT * FROM investments
@@ -997,6 +1145,7 @@ export function createLocalStore(userDataPath) {
 
     syncSteamInventory(items = [], userId = CANONICAL_LOCAL_USER_ID) {
       const normalizedUserId = normalizeLocalUserId(userId);
+      maybeMigrateLegacyUserRows(normalizedUserId);
       const now = nowIso();
       const preferences = this.getPortfolioPreferences(normalizedUserId);
       const steamDefaultBucket = normalizeBucket(
@@ -1476,6 +1625,7 @@ export function createLocalStore(userDataPath) {
 
     getPortfolioPreferences(userId = CANONICAL_LOCAL_USER_ID) {
       const normalizedUserId = normalizeLocalUserId(userId);
+      maybeMigrateLegacyUserRows(normalizedUserId);
       const prefix = `portfolio_pref:${normalizedUserId}:`;
       const rows = db
         .prepare(
@@ -1500,6 +1650,7 @@ export function createLocalStore(userDataPath) {
 
     updatePortfolioPreferences(userId = CANONICAL_LOCAL_USER_ID, patch = {}) {
       const normalizedUserId = normalizeLocalUserId(userId);
+      maybeMigrateLegacyUserRows(normalizedUserId);
       const current = this.getPortfolioPreferences(normalizedUserId);
       const next = normalizePortfolioPreferences({
         ...current,
@@ -1550,6 +1701,7 @@ export function createLocalStore(userDataPath) {
     },
 
     listWatchlistItems(userId = CANONICAL_LOCAL_USER_ID) {
+      maybeMigrateLegacyUserRows(userId);
       return db
         .prepare(
           `SELECT * FROM watchlist_items
@@ -1561,6 +1713,7 @@ export function createLocalStore(userDataPath) {
     },
 
     listPortfolioSnapshots(userId = CANONICAL_LOCAL_USER_ID, limit = 365) {
+      maybeMigrateLegacyUserRows(userId);
       return db
         .prepare(
           `SELECT * FROM portfolio_snapshots
@@ -1799,6 +1952,7 @@ export function createLocalStore(userDataPath) {
 
     listSteamCsfloatMatches(userId = CANONICAL_LOCAL_USER_ID, status = null, limit = 200) {
       const normalizedUserId = normalizeLocalUserId(userId);
+      maybeMigrateLegacyUserRows(normalizedUserId);
       if (status) {
         return db
           .prepare(
@@ -1878,6 +2032,7 @@ export function createLocalStore(userDataPath) {
 
     listNotifications(userId = CANONICAL_LOCAL_USER_ID, options = {}) {
       const normalizedUserId = normalizeLocalUserId(userId);
+      maybeMigrateLegacyUserRows(normalizedUserId);
       const limit = Number(options?.limit || 20);
       const unreadOnly = Boolean(options?.unreadOnly);
 
