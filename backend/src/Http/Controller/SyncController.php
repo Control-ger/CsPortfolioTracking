@@ -3,17 +3,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Http\Auth\RequestUserScopeResolver;
 use App\Application\Service\SyncService;
-use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Http\UserScopeAuthorizationException;
 use Throwable;
 
 final class SyncController
 {
     public function __construct(
         private readonly SyncService $syncService,
-        private readonly ?UserRepository $userRepository = null
+        private readonly ?RequestUserScopeResolver $userScopeResolver = null
     ) {
     }
 
@@ -26,6 +27,13 @@ final class SyncController
 
             $data = $this->syncService->pull($userId, $since, $limit);
             JsonResponseFactory::success($data);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error(
+                $exception->getErrorCode(),
+                $exception->getMessage(),
+                $exception->getDetails(),
+                $exception->getStatusCode()
+            );
         } catch (\InvalidArgumentException $validationError) {
             JsonResponseFactory::error(
                 'SYNC_PULL_INVALID_REQUEST',
@@ -61,6 +69,13 @@ final class SyncController
 
             $result = $this->syncService->push($userId, $changes);
             JsonResponseFactory::success($result);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error(
+                $exception->getErrorCode(),
+                $exception->getMessage(),
+                $exception->getDetails(),
+                $exception->getStatusCode()
+            );
         } catch (\InvalidArgumentException $validationError) {
             JsonResponseFactory::error(
                 'SYNC_PUSH_INVALID_REQUEST',
@@ -80,6 +95,10 @@ final class SyncController
 
     private function resolveUserId(Request $request): int
     {
+        if ($this->userScopeResolver !== null) {
+            return $this->userScopeResolver->resolve($request);
+        }
+
         $candidate = $request->query['userId']
             ?? $request->body['userId']
             ?? null;
@@ -93,35 +112,10 @@ final class SyncController
             return $userId;
         }
 
-        $steamId = $this->resolveSteamId($request, $candidate);
-        if ($steamId !== null && $this->userRepository !== null) {
-            return $this->userRepository->findOrCreateBySteamId($steamId);
-        }
-
         if ($candidate !== null && trim((string) $candidate) !== '') {
-            throw new \InvalidArgumentException('Invalid userId. Expected positive integer or steamId.');
+            throw new \InvalidArgumentException('Invalid userId. Expected positive integer.');
         }
 
         return 1;
-    }
-
-    private function resolveSteamId(Request $request, mixed $candidate): ?string
-    {
-        foreach ([$request->query['steamId'] ?? null, $request->body['steamId'] ?? null, $candidate] as $value) {
-            $raw = trim((string) ($value ?? ''));
-            if ($raw === '') {
-                continue;
-            }
-
-            if (preg_match('/^steam-([1-9]\d{10,})$/i', $raw, $matches) === 1) {
-                return $matches[1];
-            }
-
-            if (preg_match('/^[1-9]\d{10,}$/', $raw) === 1) {
-                return $raw;
-            }
-        }
-
-        return null;
     }
 }

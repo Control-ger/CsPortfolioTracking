@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Application\Service\CsFloatTradeSyncService;
+use App\Http\Auth\RequestUserScopeResolver;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Http\UserScopeAuthorizationException;
 use App\Shared\Logger;
 use Throwable;
 
@@ -14,7 +16,8 @@ final class CsFloatSyncController
 {
     public function __construct(
         private readonly CsFloatTradeSyncService $syncService,
-        private readonly SyncStatusRepository $syncStatusRepository
+        private readonly SyncStatusRepository $syncStatusRepository,
+        private readonly ?RequestUserScopeResolver $userScopeResolver = null
     ) {
     }
 
@@ -51,6 +54,8 @@ final class CsFloatSyncController
             );
 
             JsonResponseFactory::success($result);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -127,6 +132,8 @@ final class CsFloatSyncController
             );
 
             JsonResponseFactory::success($result, [], 201);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -173,6 +180,10 @@ final class CsFloatSyncController
 
     private function resolveUserId(Request $request): int
     {
+        if ($this->userScopeResolver !== null) {
+            return $this->userScopeResolver->resolve($request);
+        }
+
         foreach (['x-user-id', 'user-id'] as $header) {
             if (isset($request->headers[$header]) && is_numeric($request->headers[$header])) {
                 return max(1, (int) $request->headers[$header]);

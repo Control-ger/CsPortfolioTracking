@@ -107,6 +107,8 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 - Der CSFloat API Key bleibt lokal — er kommt nie auf den Server und nie in den Web-Build.
 - Web/PWA fragt Preise beim Server ab, nicht direkt bei CSFloat.
 - Desktop bezieht Preise über den lokalen PHP-Sidecar; dieser nutzt die serverseitige Preislogik bzw. die Backend-Preisdaten.
+- Explizite User-Scopes (`userId`, `steamId`) duerfen serverseitig nur akzeptiert werden, wenn sie zur authentifizierten Session passen; ungepruefte Fremd-Scopes sind unzulaessig.
+- Desktop-Sidecar-Proxies muessen Auth-Header fuer user-gebundene Upstream-Requests weiterreichen, damit Session-Scope-Pruefungen serverseitig wirksam bleiben.
 - 
 ### Drei Datenschichten
 
@@ -136,6 +138,7 @@ Erledigte Phasen werden als DONE markiert — nicht gelöscht, nicht neu erstell
 - `users` ist Steam-orientiert (`steam_id`, `steam_name`, `steam_avatar`, `last_login_at`).
 - Default-User wird aktuell ueber `UserRepository::ensureDefaultUser()` abgesichert.
 - Steam OpenID Login/Callback + Session-Validierung ist implementiert; weiterer Ausbaupunkt bleibt die Haertung/Produktiv-Session-Strategie.
+- Session-validierte Requests sind die massgebliche Autorisierung fuer user-gebundene Portfolio-, Watchlist-, Sync-, Settings-, WebPush- und SyncStatus-Endpunkte.
 
 ## Aenderungs-Workflow fuer Agents
 
@@ -726,3 +729,19 @@ Change: Steam-Account User-Scope fuer Desktop/Web getrennt
 - Desktop-Sync filtert Pending-Operations nach lokalem User-Scope, fuehrt Pulls in den aktiven lokalen Steam-Scope aus und speichert Sync-Cursor pro User/SteamID.
 - Server-Sync, Portfolio- und Watchlist-Controller koennen `steamId` zu einem numerischen Server-User aufloesen, damit Desktop ohne vorhandene Server-ID nicht mehr als User `1` synchronisieren muss.
 - Portfolio-/API-Caches sind user-spezifisch, damit Accountwechsel keine 120s View-/Offline-Fallback-Daten eines anderen Steam-Accounts anzeigen.
+
+---
+
+Updated: 2026-06-04
+Change: Session-gebundene User-Scope-Autorisierung gehaertet
+- Neuer Resolver `backend/src/Http/Auth/RequestUserScopeResolver.php` bindet explizite `userId`/`steamId` an die authentifizierte Steam-Session und liefert bei Abweichungen `401/403`.
+- User-gebundene Server-Controller fuer Portfolio, Watchlist, Sync, Settings, WebPush, SyncStatus und CSFloat-Sync nutzen jetzt denselben Scope-Resolver statt ungepruefter Request-Scopes.
+- `backend/desktop/index.php` reicht `Authorization`/`X-Auth-Token` bei user-gebundenen Upstream-Proxies weiter, damit Desktop-Sidecar und Server dieselbe Session-Scope-Pruefung sehen.
+
+---
+
+Updated: 2026-06-07
+Change: Desktop Legacy-User-Daten automatisch in Steam-User-Scope gemerged
+- `apps/desktop/src/localStore/index.js` merged bestehende lokale Legacy-Daten unter `user_id = "1"` beim ersten Zugriff in den aktiven `steam-<steamId>`-Scope.
+- Der Merge umfasst Investments, Watchlist, Portfolio-Snapshots, Steam-Inventory-State, Steam/CSFloat-Matches, Notifications, Portfolio-Preferences und Pending-Operation-Payloads.
+- Ziel: Updates auf den Steam-spezifischen Desktop-User-Scope duerfen vorhandene lokale Portfolio-/Investment-Daten nicht leer erscheinen lassen.

@@ -12,6 +12,7 @@ use App\Application\Service\WebPushService;
 use App\Application\Service\SyncService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
+use App\Http\Auth\RequestUserScopeResolver;
 use App\Http\Controller\CsFloatSyncController;
 use App\Http\Controller\CsUpdatesController;
 use App\Http\Controller\DebugController;
@@ -696,31 +697,35 @@ try {
     );
     $scalingShadowReadService = new ScalingShadowReadService($pdo);
     $syncService = new SyncService($pdo);
+
+    $steamAuthController = new SteamAuthController($pdo, $userRepository);
+    $userScopeResolver = new RequestUserScopeResolver($userRepository, $steamAuthController);
+
     $settingsController = new SettingsController(
         $feeSettingsService,
         $pricingService,
         $userCurrencyPreferenceRepository,
-        $userPortfolioGroupsRepository
+        $userPortfolioGroupsRepository,
+        $userScopeResolver
     );
 
-    $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService, $userRepository);
-    $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService, $userRepository);
+    $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService, $userScopeResolver);
+    $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService, $userScopeResolver);
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);
     $frontendTelemetryController = new FrontendTelemetryController();
-    $syncStatusController = new SyncStatusController($syncStatusRepository);
-    $syncController = new SyncController($syncService, $userRepository);
-    $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository);
+    $syncStatusController = new SyncStatusController($syncStatusRepository, $userScopeResolver);
+    $syncController = new SyncController($syncService, $userScopeResolver);
+    $csFloatSyncController = new CsFloatSyncController($csFloatTradeSyncService, $syncStatusRepository, $userScopeResolver);
     $exchangeRateController = new ExchangeRateController(new ExchangeRateClient());
     $csUpdatesController = new CsUpdatesController(new CsUpdatesFeedRepository($pdo));
     $webPushSubscriptionRepository = new WebPushSubscriptionRepository($pdo);
     $webPushSubscriptionRepository->ensureTable();
     $webPushController = new WebPushController(
         $webPushSubscriptionRepository,
-        WebPushService::fromEnv()
+        WebPushService::fromEnv(),
+        $userScopeResolver
     );
-    $steamAuthController = new SteamAuthController($pdo, $userRepository);
-
     $router = new Router();
     $router->register('GET', '/api/v1/portfolio/investments', [$portfolioController, 'investments']);
     $router->register('GET', '/api/v1/portfolio/investments/{id}/history', [$portfolioController, 'investmentHistory']);

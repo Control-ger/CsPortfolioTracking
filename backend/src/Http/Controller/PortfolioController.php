@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Http\Auth\RequestUserScopeResolver;
 use App\Application\Service\PortfolioService;
 use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\SyncService;
-use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Http\UserScopeAuthorizationException;
 use App\Shared\Logger;
 use Throwable;
 
@@ -18,7 +19,7 @@ final class PortfolioController
         private readonly PortfolioService $portfolioService,
         private readonly SyncService $syncService,
         private readonly ?ScalingShadowReadService $scalingShadowReadService = null,
-        private readonly ?UserRepository $userRepository = null
+        private readonly ?RequestUserScopeResolver $userScopeResolver = null
     ) {
     }
 
@@ -36,6 +37,8 @@ final class PortfolioController
                     'readPath' => $this->primaryScalingReadEnabled() ? 'scaling_primary' : 'legacy',
                 ]
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -124,6 +127,8 @@ final class PortfolioController
                 $summary,
                 $meta
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -140,6 +145,8 @@ final class PortfolioController
     {
         try {
             JsonResponseFactory::success($this->portfolioService->getHistory($this->resolveUserId($request)));
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -156,6 +163,8 @@ final class PortfolioController
     {
         try {
             JsonResponseFactory::success($this->portfolioService->getInvestmentHistory($this->resolveUserId($request), $id));
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -178,6 +187,8 @@ final class PortfolioController
             // userId currently unused, but keep resolution consistent with other endpoints.
             $this->resolveUserId($request);
             JsonResponseFactory::success($this->portfolioService->getItemPriceHistory($id, $fromDate));
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -200,6 +211,8 @@ final class PortfolioController
                 ['warnings' => $this->portfolioService->consumePricingWarnings()],
                 200
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -220,6 +233,8 @@ final class PortfolioController
                 $this->portfolioService->getComposition($this->resolveUserId($request), $scope),
                 ['scope' => $scope]
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -245,6 +260,8 @@ final class PortfolioController
                 ['warnings' => $this->portfolioService->consumePricingWarnings()],
                 200
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -297,6 +314,8 @@ final class PortfolioController
                 [],
                 200
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -350,6 +369,8 @@ final class PortfolioController
                 [],
                 200
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -424,6 +445,8 @@ final class PortfolioController
                 [],
                 200
             );
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
             Logger::event(
                 'error',
@@ -438,6 +461,10 @@ final class PortfolioController
 
     private function resolveUserId(Request $request): int
     {
+        if ($this->userScopeResolver !== null) {
+            return $this->userScopeResolver->resolve($request);
+        }
+
         foreach (['x-user-id', 'user-id'] as $header) {
             if (isset($request->headers[$header]) && is_numeric($request->headers[$header])) {
                 return max(1, (int) $request->headers[$header]);
@@ -453,39 +480,7 @@ final class PortfolioController
             }
         }
 
-        foreach (['steamId', 'steam_id'] as $key) {
-            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
-            if ($steamId !== null && $this->userRepository !== null) {
-                return $this->userRepository->findOrCreateBySteamId($steamId);
-            }
-        }
-
-        foreach (['userId', 'user_id'] as $key) {
-            $steamId = $this->normalizeSteamId($request->body[$key] ?? $request->query[$key] ?? null);
-            if ($steamId !== null && $this->userRepository !== null) {
-                return $this->userRepository->findOrCreateBySteamId($steamId);
-            }
-        }
-
         return 1;
-    }
-
-    private function normalizeSteamId(mixed $value): ?string
-    {
-        $raw = trim((string) ($value ?? ''));
-        if ($raw === '') {
-            return null;
-        }
-
-        if (preg_match('/^steam-([1-9]\d{10,})$/i', $raw, $matches) === 1) {
-            return $matches[1];
-        }
-
-        if (preg_match('/^[1-9]\d{10,}$/', $raw) === 1) {
-            return $raw;
-        }
-
-        return null;
     }
 
     private function resolveScope(Request $request): string
