@@ -17,6 +17,16 @@ export function useKeyboard(handlers = {}, isActive = true) {
 
   const handleKeyDown = useCallback((event) => {
     if (!isActive) return;
+    if (event.defaultPrevented) return;
+
+    const target = event.target;
+    const isTypingTarget = target instanceof Element && Boolean(
+      target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'),
+    );
+
+    if (isTypingTarget && !(event.ctrlKey || event.metaKey) && event.key !== KEYBOARD.ESCAPE) {
+      return;
+    }
 
     // Handle Escape key
     if (event.key === KEYBOARD.ESCAPE && onEscape) {

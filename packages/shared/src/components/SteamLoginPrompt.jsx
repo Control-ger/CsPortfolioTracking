@@ -755,7 +755,10 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     const avatarIsVideo = isVideoAvatarUrl(preferredAvatarUrl);
 
     return (
-      <Card className="relative mx-auto w-full max-w-lg overflow-hidden border-white/15 bg-slate-950/58 text-slate-100 shadow-2xl backdrop-blur-xl">
+      <Card
+        className="relative mx-auto w-full max-w-lg overflow-hidden border-white/15 bg-slate-950/58 text-slate-100 shadow-2xl backdrop-blur-xl"
+        data-keyboard-scope="page"
+      >
         <CardHeader className="relative z-10 pb-3">
           <CardTitle className="text-2xl tracking-tight text-slate-50">Willkommen, {user.name}!</CardTitle>
           <CardDescription className="text-sm leading-relaxed text-slate-300">
@@ -819,6 +822,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
             className="w-full bg-white/95 text-slate-950 hover:bg-white"
             disabled={!isDashboardReady}
             onClick={() => onLoginSuccessRef.current?.(user)}
+            data-keyboard-default
           >
             {isDashboardReady ? "Zum Dashboard" : "Daten werden geladen..."}
           </Button>
@@ -828,7 +832,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
   }
 
   return (
-    <Card className="mx-auto w-full max-w-md">
+    <Card className="mx-auto w-full max-w-md" data-keyboard-scope="page">
       <CardHeader className="text-center">
         <CardTitle>Welcome to CS Investor Hub</CardTitle>
         <CardDescription>
@@ -850,9 +854,11 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         </div>
 
         <Button
+          type="button"
           onClick={handleSteamLogin}
           disabled={isLoading}
           className="w-full bg-[#1b2838] text-white hover:bg-[#2a475e]"
+          data-keyboard-default
         >
           {isLoading ? (
             <span className="flex items-center gap-2">

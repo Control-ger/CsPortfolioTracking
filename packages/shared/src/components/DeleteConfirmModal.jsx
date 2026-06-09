@@ -12,11 +12,21 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={!isDeleting ? onClose : undefined} />
-      <div ref={modalRef} className="relative w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
+      <div
+        ref={modalRef}
+        className="relative w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg"
+        role="dialog"
+        aria-modal="true"
+        data-keyboard-scope="modal"
+        tabIndex={-1}
+      >
         <button
+          type="button"
           onClick={!isDeleting ? onClose : undefined}
           className="absolute right-3 top-3 p-1 text-muted-foreground hover:text-foreground"
           disabled={isDeleting}
+          data-keyboard-cancel
+          aria-label="Schliessen"
         >
           <X className="h-4 w-4" />
         </button>
@@ -38,6 +48,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
               onClick={onConfirm}
               disabled={isDeleting}
               className="flex-1"
+              data-keyboard-default
             >
               {isDeleting ? "Wird entfernt..." : "Ja, entfernen"}
             </Button>
@@ -46,6 +57,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
               onClick={onClose}
               disabled={isDeleting}
               className="flex-1"
+              data-keyboard-cancel
             >
               Abbrechen
             </Button>

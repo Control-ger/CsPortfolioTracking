@@ -6840,6 +6840,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             <div
               className="mx-auto mt-4 flex h-[calc(100vh-2rem)] w-[min(1080px,96vw)] flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-none dark:rounded-2xl dark:bg-card/96 dark:shadow-[0_22px_60px_rgba(0,0,0,0.55)]"
               onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Globale Suche"
+              data-keyboard-scope="modal"
+              tabIndex={-1}
             >
               <div className="border-b border-border/70 px-4 py-3 sm:px-5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -6864,6 +6869,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     size="sm"
                     variant="outline"
                     onClick={() => setGlobalSearchOpen(false)}
+                    data-keyboard-cancel
                   >
                     Schliessen
                   </Button>

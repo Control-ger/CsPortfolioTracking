@@ -53,6 +53,8 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md', class
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        data-keyboard-scope="modal"
+        tabIndex={-1}
       >
         {!isFullscreen ? (
           <div className="flex justify-center pt-2 sm:hidden">
@@ -66,9 +68,11 @@ export function BaseModal({ isOpen, onClose, title, children, size = 'md', class
             {title}
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="ml-2 shrink-0 rounded-lg p-1 transition-colors hover:bg-accent/75"
             aria-label="Close"
+            data-keyboard-cancel
           >
             <svg
               className="w-5 h-5"

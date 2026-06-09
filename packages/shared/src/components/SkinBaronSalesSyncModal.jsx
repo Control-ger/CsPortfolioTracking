@@ -244,7 +244,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
             <Button type="button" variant="outline" onClick={loadPreview} disabled={loadingPreview || executing}>
               Preview neu laden
             </Button>
-            <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !previewConfirmed}>
+            <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !previewConfirmed} data-keyboard-default>
               {executing ? "Import laeuft..." : "Import starten"}
             </Button>
           </div>

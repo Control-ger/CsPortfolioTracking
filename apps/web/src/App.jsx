@@ -8,6 +8,7 @@ import { Button } from "@shared/components/ui/button";
 import { Input } from "@shared/components/ui/input";
 import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
 import { PortfolioPage } from "@shared/pages";
+import { useGlobalKeyboardNavigation } from "@shared/hooks";
 import { handleWebAuthCallback } from "@shared/lib/auth.js";
 import { startDesktopAutoSync } from "@shared/lib/desktopSync.js";
 
@@ -97,6 +98,7 @@ export default function App() {
     return hash.includes("token=") || window.location.pathname === "/auth/callback";
   });
   const shouldUseVaultGate = isElectron && desktopRuntime;
+  useGlobalKeyboardNavigation(true);
 
   const refreshVaultStatus = useMemo(() => {
     return async ({ quiet = false } = {}) => {
@@ -369,7 +371,10 @@ export default function App() {
         >
           {isElectron && <Titlebar />}
           <main className="flex flex-1 items-center justify-center overflow-auto p-4">
-            <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-slate-950/58 p-5 text-slate-100 shadow-2xl backdrop-blur-xl">
+            <div
+              className="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-slate-950/58 p-5 text-slate-100 shadow-2xl backdrop-blur-xl"
+              data-keyboard-scope="page"
+            >
               <div className="mb-4 flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-slate-100">
                   <Lock className="h-5 w-5" />
@@ -405,7 +410,13 @@ export default function App() {
               </div>
 
               {requiresSetup ? (
-                <div className="space-y-3">
+                <form
+                  className="space-y-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleSetVaultPassword();
+                  }}
+                >
                   <p className="text-sm font-medium">App-Passwort erstellen</p>
                   <Input
                     type="password"
@@ -427,15 +438,22 @@ export default function App() {
                     Empfehlung: Lange Passphrase mit Gross-/Kleinbuchstaben, Zahlen und Sonderzeichen.
                   </p>
                   <Button
+                    type="submit"
                     className="w-full bg-white/95 text-slate-950 hover:bg-white"
-                    onClick={() => void handleSetVaultPassword()}
                     disabled={vaultActionRunning}
+                    data-keyboard-default
                   >
                     {vaultActionRunning ? "Speichert..." : "App-Passwort setzen"}
                   </Button>
-                </div>
+                </form>
               ) : (
-                <div className="space-y-3">
+                <form
+                  className="space-y-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleUnlockVault();
+                  }}
+                >
                   <p className="text-sm font-medium">App entsperren</p>
                   <Input
                     type="password"
@@ -444,21 +462,16 @@ export default function App() {
                     placeholder="App-Passwort"
                     disabled={vaultActionRunning}
                     className="border-white/15 bg-white/5 text-slate-100 placeholder:text-slate-400"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void handleUnlockVault();
-                      }
-                    }}
                   />
                   <Button
+                    type="submit"
                     className="w-full bg-white/95 text-slate-950 hover:bg-white"
-                    onClick={() => void handleUnlockVault()}
                     disabled={vaultActionRunning}
+                    data-keyboard-default
                   >
                     {vaultActionRunning ? "Entsperrt..." : "Entsperren"}
                   </Button>
-                </div>
+                </form>
               )}
 
               <div className="mt-4 space-y-2">
