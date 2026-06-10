@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Skeleton } from "./Skeleton.jsx";
+import { Skeleton } from "./ui/skeleton.jsx";
 
 const Watchlist = lazy(() =>
   import("./Watchlist.jsx").then((module) => ({

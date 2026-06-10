@@ -6,7 +6,7 @@ import { PortfolioHeaderCard } from "./PortfolioHeaderCard.jsx";
 import { StatCard } from "./StatCard.jsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./Card.jsx";
 import { Badge } from "./Badge.jsx";
-import { Skeleton } from "./Skeleton.jsx";
+import { Skeleton } from "./ui/skeleton.jsx";
 import { Button } from "./Button.jsx";
 import { useCurrency } from "../contexts/CurrencyContext.js";
 import {
