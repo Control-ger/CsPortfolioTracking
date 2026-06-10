@@ -14,6 +14,15 @@ $backendRoot = dirname(__DIR__);
 
 require_once $backendRoot . '/src/bootstrap.php';
 
+// ── Route Registry Note ────────────────────────────────────────────────
+// The server front controller (public/index.php) uses registerServerApiRoutes()
+// from backend/src/routes.php for shared route definitions.
+// This desktop sidecar keeps inline proxy-style route registrations below
+// because each handler proxies to the upstream server rather than calling
+// controller methods directly. When adding new API routes, update both
+// backend/src/routes.php AND add the corresponding proxy route here.
+// ──────────────────────────────────────────────────────────────────────
+
 $desktopOrigin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
 $isDesktopOriginAllowed = static function (string $origin): bool {
     if ($origin === '' || strtolower($origin) === 'null') {

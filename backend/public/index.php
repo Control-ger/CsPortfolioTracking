@@ -1,12 +1,14 @@
-<?php
+  <?php
 declare(strict_types=1);
 
 use App\Application\Service\PortfolioService;
 use App\Application\Service\FeeSettingsService;
+use App\Application\Service\CsFloatTradeNormalizer;
 use App\Application\Service\CsFloatTradeSyncService;
 use App\Application\Service\PricingService;
 use App\Application\Service\RequestRateLimiter;
 use App\Application\Service\ScalingShadowReadService;
+use App\Application\Service\WatchlistSearchService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\WebPushService;
 use App\Application\Service\SyncService;
@@ -663,23 +665,36 @@ try {
     (new AuthStateRepository($pdo))->ensureTable();
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
 
+    $steamMarketClient = new SteamMarketClient();
+    $marketItemClassifier = new MarketItemClassifier();
     $pricingService = new PricingService(
         new CsFloatClient(),
         new ExchangeRateClient(),
-        new SteamMarketClient(),
-        new MarketItemClassifier(),
+        $steamMarketClient,
+        $marketItemClassifier,
         $itemRepository,
         $exchangeRateRepository,
         $itemLiveCacheRepository,
         $userPriceSourcePreferenceRepository
     );
+    $watchlistSearchService = new WatchlistSearchService(
+        $pricingService,
+        $steamMarketClient,
+        $marketItemClassifier,
+        $itemRepository,
+        $exchangeRateRepository,
+        $itemLiveCacheRepository,
+        $userPriceSourcePreferenceRepository
+    );
+    $csFloatTradeNormalizer = new CsFloatTradeNormalizer($pricingService);
     $csFloatTradeSyncService = new CsFloatTradeSyncService(
         new CsFloatTradeClient(),
         $itemRepository,
         $investmentRepository,
-        $pricingService,
-        new MarketItemClassifier()
+        $marketItemClassifier,
+        $csFloatTradeNormalizer
     );
+    $feeCalculationService = new FeeCalculationService();
     $portfolioService = new PortfolioService(
         $investmentRepository,
         $exchangeRateRepository,
@@ -687,16 +702,19 @@ try {
         $portfolioHistoryRepository,
         $priceHistoryRepository,
         $pricingService,
-        $feeSettingsService
+        $feeSettingsService,
+        $feeCalculationService
     );
     $watchlistService = new WatchlistService(
         $watchlistRepository,
         $itemRepository,
         $priceHistoryRepository,
-        $pricingService
+        $pricingService,
+        $watchlistSearchService
     );
     $scalingShadowReadService = new ScalingShadowReadService($pdo);
-    $syncService = new SyncService($pdo);
+    $syncEntityService = new SyncEntityService($pdo);
+    $syncService = new SyncService($pdo, $syncEntityService);
 
     $steamAuthController = new SteamAuthController($pdo, $userRepository);
     $userScopeResolver = new RequestUserScopeResolver($userRepository, $steamAuthController);
@@ -727,139 +745,23 @@ try {
         $userScopeResolver
     );
     $router = new Router();
-    $router->register('GET', '/api/v1/portfolio/investments', [$portfolioController, 'investments']);
-    $router->register('GET', '/api/v1/portfolio/investments/{id}/history', [$portfolioController, 'investmentHistory']);
-    $router->register('GET', '/api/v1/items/{id}/price-history', [$portfolioController, 'itemPriceHistory']);
-    $router->register('PUT', '/api/v1/portfolio/investments/{id}/exclude', [$portfolioController, 'toggleExcludeInvestment']);
-    $router->register('PUT', '/api/v1/portfolio/investments/{id}/bucket', [$portfolioController, 'updateInvestmentBucket']);
-    $router->register('GET', '/api/v1/portfolio/summary', [$portfolioController, 'summary']);
-    $router->register('GET', '/api/v1/portfolio/history', [$portfolioController, 'history']);
-    $router->register('GET', '/api/v1/portfolio/composition', [$portfolioController, 'composition']);
-    $router->register('POST', '/api/v1/portfolio/prices/refresh-stale', [$portfolioController, 'refreshStalePrices']);
-    $router->register('PUT', '/api/v1/portfolio/daily-value', [$portfolioController, 'saveDailyValue']);
-    $router->register('POST', '/api/v1/portfolio/sync/csfloat/preview', [$csFloatSyncController, 'preview']);
-    $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatSyncController, 'execute']);
-    $router->register('GET', '/api/v1/portfolio/sync-status', [$syncStatusController, 'status']);
-    $router->register('GET', '/api/v1/portfolio/sync-history', [$syncStatusController, 'history']);
-    $router->register('GET', '/api/v1/portfolio/sync-stats', [$syncStatusController, 'stats']);
-    $router->register('GET', '/api/v1/sync/pull', [$syncController, 'pull']);
-    $router->register('POST', '/api/v1/sync/push', [$syncController, 'push']);
-    $router->register('GET', '/api/v1/settings/fees', [$settingsController, 'fees']);
-    $router->register('PUT', '/api/v1/settings/fees', [$settingsController, 'updateFees']);
-    $router->register('GET', '/api/v1/settings/price-source', [$settingsController, 'getPriceSourcePreference']);
-    $router->register('PUT', '/api/v1/settings/price-source', [$settingsController, 'updatePriceSourcePreference']);
-    $router->register('GET', '/api/v1/settings/currency', [$settingsController, 'getCurrencyPreference']);
-    $router->register('PUT', '/api/v1/settings/currency', [$settingsController, 'updateCurrencyPreference']);
-    $router->register('GET', '/api/v1/settings/portfolio-groups', [$settingsController, 'getPortfolioGroups']);
-    $router->register('PUT', '/api/v1/settings/portfolio-groups', [$settingsController, 'updatePortfolioGroups']);
-    $router->register('GET', '/api/v1/settings/csfloat-api-key', [$settingsController, 'getCsFloatApiKeyStatus']);
-    $router->register('POST', '/api/v1/settings/csfloat-api-key', [$settingsController, 'updateCsFloatApiKey']);
-    $router->register('GET', '/api/v1/exchange-rate', [$exchangeRateController, 'getRates']);
-    $router->register('GET', '/api/v1/cs-updates', [$csUpdatesController, 'list']);
-    $router->register('GET', '/api/v1/push/public-key', [$webPushController, 'publicKey']);
-    $router->register('POST', '/api/v1/push/subscribe', [$webPushController, 'subscribe']);
-    $router->register('POST', '/api/v1/push/unsubscribe', [$webPushController, 'unsubscribe']);
-
-    $router->register('GET', '/api/v1/watchlist', [$watchlistController, 'list']);
-    $router->register('GET', '/api/v1/watchlist/search', [$watchlistController, 'search']);
-    $router->register('POST', '/api/v1/watchlist', [$watchlistController, 'create']);
-    $router->register('POST', '/api/v1/watchlist/batch', [$watchlistController, 'createBatch']);
-    $router->register('DELETE', '/api/v1/watchlist/{id}', [$watchlistController, 'delete']);
-    $router->register('POST', '/api/v1/watchlist/prices/refresh', [$watchlistController, 'refresh']);
-
-    if (obs_debug_endpoints_enabled()) {
-        $router->register('GET', '/api/v1/debug/logs', [$debugController, 'logs']);
-        $router->register('GET', '/api/v1/debug/csfloat', [$debugController, 'csfloatDebug']);
-        $router->register('GET', '/api/v1/debug/watchlist-search-stats', [$debugController, 'watchlistSearchStats']);
-        $router->register('GET', '/api/v1/debug/cache/stats', function () use ($pdo) {
-            $cacheMaintenanceRepository = new CacheMaintenanceRepository($pdo);
-            JsonResponseFactory::success([
-                'cacheStats' => $cacheMaintenanceRepository->getCacheStatistics(),
-                'maintenanceLogs' => $cacheMaintenanceRepository->getMaintenanceLogs(20),
-                'maintenanceStats' => $cacheMaintenanceRepository->getMaintenanceStats(7),
-            ]);
-        });
-    }
-    $router->register('GET', '/api/v1/observability/events', [$observabilityController, 'events']);
-    $router->register('POST', '/api/v1/observability/frontend-events', [$frontendTelemetryController, 'ingest']);
-
-    // Steam Authentication Routes
-    $steamLoginHandler = function () use ($steamAuthController) {
-        $result = $steamAuthController->login($_GET, $_SERVER);
-        JsonResponseFactory::success($result, [], $result['success'] ? 200 : 400);
-    };
-    $router->register('POST', '/api/v1/auth/steam/login', $steamLoginHandler);
-    $router->register('GET', '/api/v1/auth/steam/login', $steamLoginHandler);
-    $router->register('GET', '/api/v1/auth/steam/callback', function () use ($steamAuthController) {
-        $result = $steamAuthController->callback($_GET, $_SERVER);
-        
-        if (!$result['success']) {
-            // Return error page for web clients
-            http_response_code(400);
-            header('Content-Type: text/html');
-            echo '<h1>Authentication Failed</h1><p>' . htmlspecialchars($result['error'] ?? 'Unknown error') . '</p>';
-            return;
-        }
-        
-        $redirectUrl = $result['redirectUrl'] ?? '';
-        $sessionToken = $result['sessionToken'] ?? '';
-        
-        // Determine if this is a desktop custom protocol URL or web URL
-        $isDesktopProtocol = preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $redirectUrl) === 1
-            && !preg_match('/^https?:\/\//i', $redirectUrl) === 1;
-        
-        $tokenFragment = '#token=' . rawurlencode($sessionToken);
-        if ($isDesktopProtocol) {
-            // Desktop: Redirect to custom protocol with token only
-            // User data is embedded in the encrypted session token
-            $callbackUrl = $redirectUrl . $tokenFragment;
-            header('Location: ' . $callbackUrl);
-            exit;
-        } else {
-            // Web: Redirect to web callback with token only
-            // Client will fetch user data via validateSession endpoint
-            $webCallbackUrl = $redirectUrl . $tokenFragment;
-            header('Location: ' . $webCallbackUrl);
-            exit;
-        }
-    });
-    $router->register('GET', '/api/v1/auth/steam/inventory', function () use ($steamAuthController) {
-        $steamId = $_GET['steamId'] ?? '';
-        if (!$steamId) {
-            JsonResponseFactory::error('MISSING_STEAM_ID', 'Steam ID required', [], 400);
-            return;
-        }
-        $result = $steamAuthController->getCS2Inventory($steamId);
-        JsonResponseFactory::success($result, [], $result['success'] ? 200 : 400);
-    });
-    $router->register('GET', '/api/v1/auth/session/validate', function () use ($steamAuthController) {
-        // Extract token from Authorization header
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
-
-        if (!$authHeader) {
-            JsonResponseFactory::error('MISSING_TOKEN', 'Session token required', [], 401);
-            return;
-        }
-
-        $sessionToken = str_replace('Bearer ', '', $authHeader);
-        $user = $steamAuthController->validateSession($sessionToken);
-        
-        if (!$user) {
-            JsonResponseFactory::error('INVALID_SESSION', 'Session expired or invalid', [], 401);
-            return;
-        }
-        
-        JsonResponseFactory::success([
-            'valid' => true,
-            'user' => [
-                'id' => $user['userId'],
-                'steamId' => $user['steamId'],
-                'name' => $user['name'] ?? null,
-                'avatar' => $user['avatar'] ?? null,
-                'animatedAvatar' => $user['animatedAvatar'] ?? null,
-            ]
-        ]);
-    });
+    require_once __DIR__ . '/../src/routes.php';
+    registerServerApiRoutes($router, [
+        'portfolio' => $portfolioController,
+        'csFloatSync' => $csFloatSyncController,
+        'syncStatus' => $syncStatusController,
+        'sync' => $syncController,
+        'settings' => $settingsController,
+        'exchangeRate' => $exchangeRateController,
+        'csUpdates' => $csUpdatesController,
+        'webPush' => $webPushController,
+        'watchlist' => $watchlistController,
+        'debug' => $debugController,
+        'observability' => $observabilityController,
+        'frontendTelemetry' => $frontendTelemetryController,
+        'steamAuth' => $steamAuthController,
+        'pdo' => $pdo,
+    ]);
 
     $router->dispatch($request);
 
