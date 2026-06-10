@@ -58,12 +58,30 @@ import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
   PORTFOLIO_GROUPS_STORAGE_KEY,
-  buildPortfolioGroupMembershipMap,
   buildPortfolioGroupSummaries,
   createPortfolioGroupDraft,
   normalizePortfolioGroups,
-  summarizeManagementClusterAssignment,
 } from "@shared/lib/portfolioGroups.js";
+import {
+  formatDateSafe,
+  resolveWatchlistChangePercent,
+  normalizeSearchText,
+  withBuyOrderFields,
+  deriveCsUpdateImpact,
+  getClusterUpdatedAt,
+  normalizeBucket,
+  resolveLiveClusterItem,
+  buildGroupDetailSelection,
+  buildGroupClusterDetailSelection,
+  getItemNameKey,
+} from "../lib/portfolioHelpers.js";
+import {
+  PortfolioOverviewSection,
+  PortfolioInventorySection,
+  PortfolioWatchlistSection,
+  PortfolioSearchSection,
+  PortfolioManagementSection,
+} from "@shared/components";
 
 const InventoryTable = lazy(() =>
   import("../components/InventoryTable.jsx").then((module) => ({
@@ -104,261 +122,6 @@ const ItemSearch = lazy(() =>
 const STALE_PRICE_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
 const STALE_PRICE_REFRESH_THRESHOLD_SECONDS = 90 * 60;
 
-function formatAge(seconds) {
-  if (typeof seconds !== "number" || Number.isNaN(seconds)) {
-    return "-";
-  }
-
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-
-  if (seconds < 3600) {
-    return `${Math.floor(seconds / 60)}m`;
-  }
-
-  if (seconds < 86400) {
-    return `${Math.floor(seconds / 3600)}h`;
-  }
-
-  return `${Math.floor(seconds / 86400)}d`;
-}
-
-function syncHealthBadgeClass(oldestAgeSeconds, liveItemsCount) {
-  if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
-    return "border-slate-500/35 bg-slate-500/12 text-slate-300";
-  }
-
-  if (!Number.isFinite(oldestAgeSeconds)) {
-    return "border-slate-500/35 bg-slate-500/12 text-slate-300";
-  }
-
-  if (oldestAgeSeconds <= 90 * 60) {
-    return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
-  }
-
-  if (oldestAgeSeconds <= 3 * 60 * 60) {
-    return "border-amber-400/35 bg-amber-500/12 text-amber-300";
-  }
-
-  return "border-red-400/35 bg-red-500/12 text-red-300";
-}
-
-function getClusterUpdatedAt(cluster) {
-  return cluster.positions.reduce((latest, position) => {
-    const timestamp = Date.parse(String(position.updatedAt || position.purchasedAt || ""));
-    if (!Number.isFinite(timestamp)) {
-      return latest;
-    }
-    return Math.max(latest, timestamp);
-  }, 0);
-}
-
-function syncHealthLabel(oldestAgeSeconds, liveItemsCount) {
-  if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
-    return "keine live quotes";
-  }
-
-  if (!Number.isFinite(oldestAgeSeconds)) {
-    return "status unbekannt";
-  }
-
-  if (oldestAgeSeconds <= 90 * 60) {
-    return "im plan";
-  }
-
-  if (oldestAgeSeconds <= 3 * 60 * 60) {
-    return "verzoegert";
-  }
-
-  return "nachlauf";
-}
-
-function formatRelativeHours(hours) {
-  if (!Number.isFinite(hours)) {
-    return "unbekannt";
-  }
-
-  if (hours < 1) {
-    return "<1h";
-  }
-
-  return `${Math.max(1, Math.round(hours))}h`;
-}
-
-function formatDateSafe(value) {
-  if (!value) {
-    return "-";
-  }
-  const timestamp = Date.parse(String(value));
-  if (!Number.isFinite(timestamp)) {
-    return String(value);
-  }
-  return new Date(timestamp).toLocaleDateString("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function resolveWatchlistChangePercent(item) {
-  const candidates = [item?.priceChangePercent, item?.changePercent, item?.roi];
-  for (const candidate of candidates) {
-    const numeric = Number(candidate);
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-  }
-  return null;
-}
-
-function normalizeSearchText(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function normalizeBuyOrderNameKey(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function normalizeBuyOrderNameKeyFuzzy(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/\bstattrak(?:â„¢)?\b/gi, "")
-    .replace(/\bsouvenir\b/gi, "")
-    .replace(/[â˜…]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function resolveBuyOrderSummaryForItem(item, summaryRows = []) {
-  const rows = Array.isArray(summaryRows) ? summaryRows : [];
-  if (!item || rows.length === 0) {
-    return null;
-  }
-
-  const summaryByName = new Map();
-  rows.forEach((row) => {
-    const exactKey = normalizeBuyOrderNameKey(row?.marketHashName);
-    const fuzzyKey = normalizeBuyOrderNameKeyFuzzy(row?.marketHashName);
-    if (!exactKey && !fuzzyKey) {
-      return;
-    }
-    if (exactKey) {
-      summaryByName.set(exactKey, row);
-    }
-    if (fuzzyKey) {
-      summaryByName.set(fuzzyKey, row);
-    }
-  });
-
-  const rawName = item?.marketHashName || item?.name;
-  const key = normalizeBuyOrderNameKey(rawName);
-  const fuzzyKey = normalizeBuyOrderNameKeyFuzzy(rawName);
-  let summary = key ? summaryByName.get(key) : null;
-
-  if (!summary && fuzzyKey) {
-    summary = summaryByName.get(fuzzyKey) || null;
-  }
-
-  if (!summary && fuzzyKey) {
-    summary = rows.find((row) => {
-      const rowKey = normalizeBuyOrderNameKeyFuzzy(row?.marketHashName);
-      return rowKey && (rowKey.includes(fuzzyKey) || fuzzyKey.includes(rowKey));
-    }) || null;
-  }
-
-  return summary || null;
-}
-
-function withBuyOrderFields(item, summaryRows = []) {
-  if (!item || item.__detailKind === "group" || item.__detailKind === "group-cluster") {
-    return item;
-  }
-
-  const summary = resolveBuyOrderSummaryForItem(item, summaryRows);
-  const buyOrderCount = Number(summary?.orders || 0);
-  const buyOrderQuantity = Number(summary?.quantity || 0);
-  const buyOrderBestPriceUsd = Number(summary?.bestPriceUsd || 0);
-
-  return {
-    ...item,
-    hasBuyOrder: buyOrderCount > 0 && buyOrderBestPriceUsd > 0,
-    buyOrderCount: buyOrderCount > 0 ? buyOrderCount : 0,
-    buyOrderQuantity: buyOrderQuantity > 0 ? buyOrderQuantity : 0,
-    buyOrderBestPriceUsd: buyOrderBestPriceUsd > 0 ? buyOrderBestPriceUsd : null,
-  };
-}
-
-function deriveCsUpdateImpact(item) {
-  if (!item || typeof item !== "object") {
-    return {
-      level: "unrated",
-      label: "KI Rating ausstehend",
-      actionLabel: "Noch keine Bewertung verfuegbar",
-      badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
-    };
-  }
-
-  const aiStatus = String(item.aiRatingStatus || "").toLowerCase();
-  const aiImpactLevel = String(item.aiImpactLevel || "").toLowerCase();
-  const aiAction = String(item.aiRecommendedAction || "").trim();
-
-  if (aiStatus === "pending") {
-    return {
-      level: "pending",
-      label: "KI Rating laeuft",
-      actionLabel: "Eilmeldung jetzt pruefen",
-      badgeClass: "border-cyan-500/30 bg-cyan-500/12 text-cyan-300",
-    };
-  }
-
-  if (aiStatus === "rated" && ["none", "low", "medium", "high"].includes(aiImpactLevel)) {
-    const aiMap = {
-      none: {
-        label: "Impact none",
-        actionLabel: "Kein akuter Handlungsbedarf",
-        badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
-      },
-      low: {
-        label: "Impact niedrig",
-        actionLabel: "Beobachten",
-        badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-      },
-      medium: {
-        label: "Impact mittel",
-        actionLabel: "Heute pruefen",
-        badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-300",
-      },
-      high: {
-        label: "Impact hoch",
-        actionLabel: "Schnell pruefen",
-        badgeClass: "border-red-500/35 bg-red-500/12 text-red-300",
-      },
-    };
-    const mapped = aiMap[aiImpactLevel];
-    return {
-      level: aiImpactLevel,
-      label: mapped.label,
-      actionLabel: aiAction !== "" ? aiAction : mapped.actionLabel,
-      badgeClass: mapped.badgeClass,
-    };
-  }
-  if (aiStatus === "failed") {
-    return {
-      level: "failed",
-      label: "KI Rating fehlgeschlagen",
-      actionLabel: "Manuell pruefen",
-      badgeClass: "border-red-500/30 bg-red-500/10 text-red-300",
-    };
-  }
-  return {
-    level: "unrated",
-    label: "KI Rating ausstehend",
-    actionLabel: "Noch keine Bewertung verfuegbar",
-    badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
-  };
-}
 
 function getCsUpdateBannerTone(level) {
   if (level === "high") {
@@ -491,19 +254,6 @@ function writeLastSeenCsUpdateId(value) {
   }
 }
 
-function normalizeBucket(value, fallback = "investment") {
-  const normalized = String(value || "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "inventory") {
-    return "inventory";
-  }
-  if (normalized === "investment") {
-    return "investment";
-  }
-  return fallback === "inventory" ? "inventory" : "investment";
-}
-
 function normalizeInvestmentId(value) {
   return String(value || "").trim();
 }
@@ -617,119 +367,6 @@ function getClusterKey(item) {
   return String(item?.marketHashName || item?.name || item?.itemName || item?.id || "")
     .trim()
     .toLowerCase();
-}
-
-function getItemNameKey(item) {
-  return String(item?.marketHashName || item?.name || item?.itemName || "")
-    .trim()
-    .toLowerCase();
-}
-
-function hasSourceIdOverlap(a = [], b = []) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || b.length === 0) {
-    return false;
-  }
-  const left = new Set(a.map((entry) => String(entry || "").trim()).filter(Boolean));
-  return b.some((entry) => left.has(String(entry || "").trim()));
-}
-
-function resolveLiveClusterItem(baseItem, rows = []) {
-  if (!baseItem || !Array.isArray(rows) || rows.length === 0) {
-    return null;
-  }
-
-  const exactMatch = rows.find((row) => row.id === baseItem.id);
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  const baseSourceIds = Array.isArray(baseItem.sourceInvestmentIds)
-    ? baseItem.sourceInvestmentIds
-    : [];
-  if (baseSourceIds.length > 0) {
-    const sourceMatch = rows.find((row) =>
-      hasSourceIdOverlap(baseSourceIds, Array.isArray(row?.sourceInvestmentIds) ? row.sourceInvestmentIds : []),
-    );
-    if (sourceMatch) {
-      return sourceMatch;
-    }
-  }
-
-  return null;
-}
-
-function buildGroupDetailSelection(group) {
-  const totalQuantity = Number(group?.totalQuantity || 0);
-  const weightedBuyUnitPrice = Number(group?.weightedBuyUnitPrice || 0);
-  const weightedCurrentUnitPrice = Number(group?.weightedCurrentUnitPrice || 0);
-  const totalValue = Number(group?.totalValue || 0);
-  const totalProfit = Number(group?.totalProfit || 0);
-  const roiPercent = Number(group?.roiPercent || 0);
-  const totalInvested = Number(group?.totalInvested || 0);
-
-  return {
-    id: `group-${group?.id || "unknown"}`,
-    itemId: 0,
-    item_id: 0,
-    __detailKind: "group",
-    name: group?.name || "Gruppe",
-    type: "gruppe",
-    imageUrl: Array.isArray(group?.topVisuals) ? group.topVisuals[0]?.imageUrl || null : null,
-    topVisuals: Array.isArray(group?.topVisuals) ? group.topVisuals : [],
-    quantity: totalQuantity,
-    bucket: "investment",
-    fundingMode: "wallet",
-    excluded: false,
-    isLive: Number.isFinite(weightedCurrentUnitPrice) && weightedCurrentUnitPrice > 0,
-    livePrice: weightedCurrentUnitPrice,
-    displayPrice: weightedCurrentUnitPrice,
-    buyPrice: weightedBuyUnitPrice,
-    breakEvenPrice: weightedBuyUnitPrice,
-    breakEvenPriceNet: weightedBuyUnitPrice,
-    currentValue: totalValue,
-    profitEuro: totalProfit,
-    roi: roiPercent,
-    isProfitPositive: Number.isFinite(totalProfit) ? totalProfit >= 0 : null,
-    costBasisTotal: totalInvested,
-    freshnessLabel: `${Number(group?.liveClusterCount || 0)}/${Number(group?.clusterCount || 0)} live`,
-    lastPriceUpdateAt: null,
-  };
-}
-
-function buildGroupClusterDetailSelection(group, cluster) {
-  const quantity = Number(cluster?.quantity || 0);
-  const currentUnitPrice = Number(cluster?.currentUnitPrice || 0);
-  const totalValue = Number(cluster?.totalValue || 0);
-  const totalInvested = Number(cluster?.totalInvested || 0);
-  const totalProfit = totalValue - totalInvested;
-  const roiPercent = Number(cluster?.roiPercent || 0);
-
-  return {
-    id: `group-cluster-${group?.id || "unknown"}-${cluster?.id || "unknown"}`,
-    itemId: 0,
-    item_id: 0,
-    __detailKind: "group-cluster",
-    name: cluster?.name || "Cluster",
-    type: "cluster",
-    imageUrl: cluster?.imageUrl || null,
-    quantity,
-    bucket: "investment",
-    fundingMode: "wallet",
-    excluded: false,
-    isLive: Boolean(cluster?.isLive) || currentUnitPrice > 0,
-    livePrice: currentUnitPrice,
-    displayPrice: currentUnitPrice,
-    buyPrice: Number(cluster?.buyUnitPrice || 0),
-    breakEvenPrice: Number(cluster?.buyUnitPrice || 0),
-    breakEvenPriceNet: Number(cluster?.buyUnitPrice || 0),
-    currentValue: totalValue,
-    profitEuro: totalProfit,
-    roi: roiPercent,
-    isProfitPositive: Number.isFinite(totalProfit) ? totalProfit >= 0 : null,
-    costBasisTotal: totalInvested,
-    freshnessLabel: cluster?.freshnessLabel || `${Number(cluster?.sharePercent || 0).toFixed(1)}% Anteil`,
-    lastPriceUpdateAt: null,
-  };
 }
 
 function buildManagementClusters(items = []) {
@@ -956,8 +593,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     bucket: "investment",
   });
   const [manualNameSuggestions, setManualNameSuggestions] = useState([]);
-  const [manualNameSuggestionsLoading, setManualNameSuggestionsLoading] = useState(false);
-  const [manualNameSuggestionsError, setManualNameSuggestionsError] = useState("");
+  const [_manualNameSuggestionsLoading, setManualNameSuggestionsLoading] = useState(false);
+  const [_manualNameSuggestionsError, setManualNameSuggestionsError] = useState("");
   const [manualSelectedSuggestion, setManualSelectedSuggestion] = useState(null);
   const [manualItemSaving, setManualItemSaving] = useState(false);
   const [syncNotification, setSyncNotification] = useState({
@@ -2066,13 +1703,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
   }, [persistPortfolioGroups, portfolioGroups]);
 
-  const toggleExpandedGroupManagementCluster = useCallback((clusterKey) => {
-    setExpandedGroupManagementClusters((current) => ({
-      ...current,
-      [clusterKey]: !current[clusterKey],
-    }));
-  }, []);
-
   const handleOpenPortfolioGroupInInventory = useCallback((groupId) => {
     const normalizedGroupId = String(groupId || "").trim();
     if (!normalizedGroupId) {
@@ -2989,14 +2619,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const managementInvestmentById = new Map(
     managementInvestments.map((item) => [String(item.id), item]),
   );
-  const portfolioGroupMembershipMap = useMemo(
-    () => buildPortfolioGroupMembershipMap(portfolioGroups),
-    [portfolioGroups],
-  );
-  const portfolioGroupsById = useMemo(
-    () => new Map(portfolioGroups.map((group) => [String(group.id), group])),
-    [portfolioGroups],
-  );
   const portfolioGroupSummaries = useMemo(
     () =>
       buildPortfolioGroupSummaries({
@@ -3010,27 +2632,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     () => new Map(portfolioGroupSummaries.map((group) => [String(group.id), group])),
     [portfolioGroupSummaries],
   );
-  const groupedInvestmentIds = useMemo(
-    () => new Set(Array.from(portfolioGroupMembershipMap.keys())),
-    [portfolioGroupMembershipMap],
-  );
-  const ungroupedInvestmentCount = managementInvestments.reduce((count, item) => {
-    const investmentId = normalizeInvestmentId(item?.id);
-    if (!investmentId || groupedInvestmentIds.has(investmentId)) {
-      return count;
-    }
-    return count + 1;
-  }, 0);
-  const managementGroupsByClusterKey = useMemo(() => {
-    const map = new Map();
-    managementClusters.forEach((cluster) => {
-      map.set(
-        cluster.key,
-        summarizeManagementClusterAssignment(cluster, portfolioGroupMembershipMap, portfolioGroupsById),
-      );
-    });
-    return map;
-  }, [managementClusters, portfolioGroupMembershipMap, portfolioGroupsById]);
   const managementSearchQuery = normalizeSearchText(managementSearchTerm);
   const filteredManagementClusters = (() => {
     let rows = [...managementClusters];
@@ -3087,31 +2688,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     return uniqueTypes;
   })();
   const portfolioGroupEditor = portfolioGroups.find((group) => group.id === portfolioGroupEditorId) || null;
-  const groupSearchQuery = normalizeSearchText(groupSearchTerm);
-  const filteredGroupManagementClusters = useMemo(() => {
-    let rows = [...managementClusters];
-
-    if (groupSearchQuery) {
-      rows = rows.filter((cluster) => {
-        const assignment = managementGroupsByClusterKey.get(cluster.key);
-        return (
-          normalizeSearchText(cluster.name).includes(groupSearchQuery) ||
-          normalizeSearchText(assignment?.assignedGroupName || "").includes(groupSearchQuery) ||
-          cluster.positions.some((position) =>
-            normalizeSearchText(position.externalTradeId).includes(groupSearchQuery),
-          )
-        );
-      });
-    }
-
-    rows.sort((left, right) => {
-      if (groupSortBy === "updated_desc") {
-        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, "de");
-      }
-      return left.name.localeCompare(right.name, "de");
-    });
-    return rows;
-  }, [groupSearchQuery, groupSortBy, managementClusters, managementGroupsByClusterKey]);
   const globalSearchGroupSuggestions = useMemo(() => {
     if (!globalSearchTermNormalized) {
       return [];
@@ -3144,10 +2720,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       .slice(0, 8);
   }, [globalSearchTermNormalized, portfolioGroupSummaryById, portfolioGroups]);
   const pendingMatchingRows = matchingRows.filter((row) => row.status === "suggested");
-  const matchedMatchingRows = matchingRows.filter((row) => {
-    const status = String(row?.status || "").toLowerCase();
-    return status === "manual_confirmed" || status === "auto_linked";
-  });
   const confirmedOrAutoMatchByCsfloatId = new Map();
   matchingRows.forEach((row) => {
     const status = String(row?.status || "").toLowerCase();
@@ -3346,13 +2918,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       text: "Starte manuell oder automatisch neue Imports, wenn sich dein Steam-Inventar geaendert hat.",
     },
   ];
-
-  const toggleClusterExpanded = (clusterId) => {
-    setExpandedClusters((current) => ({
-      ...current,
-      [clusterId]: !current[clusterId],
-    }));
-  };
 
   const handleManagementExcludeToggle = async (investmentId, exclude) => {
     await toggleExcludeInvestment(investmentId, exclude);
@@ -5060,1773 +4625,201 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </TabsList>
             </div>
 
-          <TabsContent value="overview" forceMount={visitedTabs.has("overview")} className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
-            {/* Mobile: PortfolioHeaderCard oben, Desktop: Alte Stats-Cards */}
-            <div className="sm:hidden">
-              <PortfolioHeaderCard
-                totalValue={headerPortfolioValue}
-                totalRoiPercent={headerPortfolioPercent}
-                isPositive={headerPortfolioPositive}
-                totalQuantity={stats.totalQuantity}
-                liveItemsCount={liveItems}
-                staleItemsCount={staleItems}
-                freshestDataAgeSeconds={stats.freshestDataAgeSeconds}
-                oldestDataAgeSeconds={stats.oldestDataAgeSeconds}
-              />
-            </div>
+          <PortfolioOverviewSection
+            forceMount={visitedTabs.has("overview")}
+            stats={stats}
+            portfolioLoading={portfolioLoading}
+            metricsScope={metricsScope}
+            portfolioPreferences={portfolioPreferences}
+            headerPortfolioValue={headerPortfolioValue}
+            headerPortfolioPercent={headerPortfolioPercent}
+            headerPortfolioPositive={headerPortfolioPositive}
+            headerPortfolioValueLabel={headerPortfolioValueLabel}
+            headerProfitEuro={headerProfitEuro}
+            headerProfitPercent={headerProfitPercent}
+            headerProfitSubLabel={headerProfitSubLabel}
+            headerProfitPositive={headerProfitPositive}
+            liveItems={liveItems}
+            staleItems={staleItems}
+            showCsUpdateBanner={showCsUpdateBanner}
+            latestCsUpdate={latestCsUpdate}
+            latestCsUpdateAgeHours={latestCsUpdateAgeHours}
+            latestCsUpdateImpact={latestCsUpdateImpact}
+            latestCsUpdateBannerTone={latestCsUpdateBannerTone}
+            latestCsUpdateAiModelLabel={latestCsUpdateAiModelLabel}
+            hasUnreadCsUpdate={hasUnreadCsUpdate}
+            handleOpenLatestCsUpdateFeed={handleOpenLatestCsUpdateFeed}
+            scopedPortfolioHistory={scopedPortfolioHistory}
+            portfolioChartCardRef={portfolioChartCardRef}
+            onChartHoverChange={setHoveredChartData}
+            onChartTrendChange={setChartTrendData}
+            handleMetricsScopeChange={handleMetricsScopeChange}
+            watchlistTopMovers={watchlistTopMovers}
+            watchlistMoverPanelHeight={watchlistMoverPanelHeight}
+            setWatchlistFocusTarget={setWatchlistFocusTarget}
+            handleTabSelect={handleTabSelect}
+            compositionData={compositionData}
+            compositionLoading={compositionLoading}
+            compositionError={compositionError}
+            portfolioTotalValueForDisplay={portfolioTotalValueForDisplay}
+            portfolioValueLabel={portfolioValueLabel}
+          />
 
-            {showCsUpdateBanner && latestCsUpdate ? (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={handleOpenLatestCsUpdateFeed}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    handleOpenLatestCsUpdateFeed();
-                  }
-                }}
-                className={`rounded-2xl border px-4 py-4 sm:px-5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${latestCsUpdateBannerTone.wrapper}`}
-              >
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${latestCsUpdateBannerTone.eyebrow}`}>
-                        CS Update Alert
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-foreground sm:text-base">
-                        Neues CS Update seit {formatRelativeHours(latestCsUpdateAgeHours)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className={latestCsUpdateImpact.badgeClass}>
-                        {latestCsUpdateImpact.label}
-                      </Badge>
-                      <Badge variant="outline" className="border-violet-400/30 bg-violet-500/10 text-violet-200">
-                        KI generiert
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className={`rounded-xl border p-3 ${latestCsUpdateBannerTone.panel}`}>
-                    <p className="line-clamp-2 text-sm font-semibold text-foreground">{latestCsUpdate.title}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      KI Aktion: <span className="text-foreground">{latestCsUpdateImpact.actionLabel}</span>
-                    </p>
-                    {latestCsUpdate?.aiReasoning ? (
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                        KI Begruendung: {latestCsUpdate.aiReasoning}
-                      </p>
-                    ) : null}
-                    {latestCsUpdateAiModelLabel ? (
-                      <p className="mt-1 text-[11px] text-muted-foreground">Modell: {latestCsUpdateAiModelLabel}</p>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {latestCsUpdate?.url ? (
-                      <Button asChild size="sm" onClick={(event) => event.stopPropagation()}>
-                        <a href={latestCsUpdate.url} target="_blank" rel="noreferrer">
-                          Original Update oeffnen
-                        </a>
-                      </Button>
-                    ) : null}
-                    {hasUnreadCsUpdate ? (
-                      <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-300">
-                        neu
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Desktop: Alte Stats-Cards */}
-            <div className="hidden sm:grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
-              <StatCard
-                title="Portfolio Wert (Live)"
-                value={headerPortfolioValueLabel}
-                isPositive={headerPortfolioPositive}
-              />
-              <StatCard
-                title="Gesamt Zuwachs"
-                value={`${headerProfitEuro >= 0 ? "+" : "-"}${formatPrice(Math.abs(headerProfitEuro))}`}
-                subValue={`${headerProfitPercent >= 0 ? "+" : ""}${headerProfitPercent.toFixed(2)}% | ${headerProfitSubLabel}`}
-                isPositive={headerProfitPositive}
-              />
-              <StatCard title="Items im Bestand" value={`${stats.totalQuantity} Stueck`} />
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-                    Price Sync
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="text-2xl font-bold">
-                    {formatAge(stats.freshestDataAgeSeconds)} zuletzt
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>
-                      Live Quotes: {liveItems} | Aeltestes Cache-Alter: {formatAge(stats.oldestDataAgeSeconds)}
-                    </span>
-                    <Badge variant="outline" className={syncHealthBadgeClass(Number(stats.oldestDataAgeSeconds), liveItems)}>
-                      {syncHealthLabel(Number(stats.oldestDataAgeSeconds), liveItems)}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
-              <div className="min-w-0">
-                <PortfolioChart
-                  cardRef={portfolioChartCardRef}
-                  history={scopedPortfolioHistory}
-                  isLoading={portfolioLoading && scopedPortfolioHistory.length === 0}
-                  onHoverChange={setHoveredChartData}
-                  onTrendChange={setChartTrendData}
-                  metricsScope={metricsScope}
-                  onMetricsScopeChange={
-                    portfolioPreferences.metricsDisplayMode === "toggle_mode"
-                      ? (nextScope) => void handleMetricsScopeChange(nextScope)
-                      : null
-                  }
-                />
-              </div>
-              <Card
-                className="flex min-h-[340px] flex-col border-border/70 bg-card/70 lg:min-h-0 lg:overflow-hidden"
-                style={watchlistMoverPanelHeight ? { height: `${watchlistMoverPanelHeight}px` } : undefined}
-              >
-                <CardHeader className="space-y-2 pb-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base">Watchlist Mover</CardTitle>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleTabSelect("watchlist")}
-                    >
-                      Zur Watchlist
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Basis: Watchlist 7-Tage-Verlauf. Bei wenigen Gewinnern/Verlierern werden weitere Mover gezeigt.
-                  </p>
-                </CardHeader>
-                <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  {watchlistTopMovers.hasAny ? (
-                    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
-                      {watchlistTopMovers.gainers.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
-                            <TrendingUp className="h-4 w-4" />
-                            Top Gewinner
-                          </div>
-                          <div className="space-y-2">
-                            {watchlistTopMovers.gainers.map((item) => {
-                              const currentPrice = Number(item?.currentPrice);
-                              const currentPriceUsd = Number(item?.currentPriceUsd);
-                              const hasUsdPrice = Number.isFinite(currentPriceUsd);
-                              const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
-                              const priceLabel = hasUsdPrice
-                                ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
-                                : hasCurrentPrice
-                                  ? formatPrice(currentPrice)
-                                  : null;
-                              const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
-                              return (
-                                <button
-                                  key={`gainer-${item.moverId}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setWatchlistFocusTarget({ id: item.id });
-                                    handleTabSelect("watchlist");
-                                  }}
-                                  className="flex w-full items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-transparent p-2 text-left transition-colors hover:bg-emerald-500/10"
-                                >
-                                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                                    <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
-                                      {imageUrl ? (
-                                        <img
-                                          src={imageUrl}
-                                          alt={item.name}
-                                          className="h-full w-full object-contain"
-                                          loading="lazy"
-                                          decoding="async"
-                                        />
-                                      ) : (
-                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
-                                      )}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="truncate text-xs font-semibold">{item.name}</p>
-                                      {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
-                                    </div>
-                                  </div>
-                                  <span className="text-xs font-semibold text-emerald-400">
-                                    +{item.changePercentValue.toFixed(2)}%
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Keine Gewinner im 7-Tage-Vergleich gefunden.</p>
-                      )}
-
-                      {watchlistTopMovers.losers.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-400">
-                            <TrendingDown className="h-4 w-4" />
-                            Top Verlierer
-                          </div>
-                          <div className="space-y-2">
-                            {watchlistTopMovers.losers.map((item) => {
-                              const currentPrice = Number(item?.currentPrice);
-                              const currentPriceUsd = Number(item?.currentPriceUsd);
-                              const hasUsdPrice = Number.isFinite(currentPriceUsd);
-                              const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
-                              const priceLabel = hasUsdPrice
-                                ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
-                                : hasCurrentPrice
-                                  ? formatPrice(currentPrice)
-                                  : null;
-                              const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
-                              return (
-                                <button
-                                  key={`loser-${item.moverId}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setWatchlistFocusTarget({ id: item.id });
-                                    handleTabSelect("watchlist");
-                                  }}
-                                  className="flex w-full items-center justify-between gap-2 rounded-md border border-red-400/30 bg-transparent p-2 text-left transition-colors hover:bg-red-500/10"
-                                >
-                                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                                    <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
-                                      {imageUrl ? (
-                                        <img
-                                          src={imageUrl}
-                                          alt={item.name}
-                                          className="h-full w-full object-contain"
-                                          loading="lazy"
-                                          decoding="async"
-                                        />
-                                      ) : (
-                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
-                                      )}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="truncate text-xs font-semibold">{item.name}</p>
-                                      {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
-                                    </div>
-                                  </div>
-                                  <span className="text-xs font-semibold text-red-400">
-                                    {item.changePercentValue.toFixed(2)}%
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {watchlistTopMovers.extras.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Weitere Mover
-                          </div>
-                          <div className="space-y-2">
-                            {watchlistTopMovers.extras.map((item) => {
-                              const currentPrice = Number(item?.currentPrice);
-                              const currentPriceUsd = Number(item?.currentPriceUsd);
-                              const hasUsdPrice = Number.isFinite(currentPriceUsd);
-                              const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
-                              const priceLabel = hasUsdPrice
-                                ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
-                                : hasCurrentPrice
-                                  ? formatPrice(currentPrice)
-                                  : null;
-                              const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
-                              const isPositive = item.changePercentValue >= 0;
-                              return (
-                                <button
-                                  key={`extra-${item.moverId}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setWatchlistFocusTarget({ id: item.id });
-                                    handleTabSelect("watchlist");
-                                  }}
-                                  className={`flex w-full items-center justify-between gap-2 rounded-md border bg-transparent p-2 text-left transition-colors ${
-                                    isPositive
-                                      ? "border-emerald-400/25 hover:bg-emerald-500/8"
-                                      : "border-red-400/25 hover:bg-red-500/8"
-                                  }`}
-                                >
-                                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                                    <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
-                                      {imageUrl ? (
-                                        <img
-                                          src={imageUrl}
-                                          alt={item.name}
-                                          className="h-full w-full object-cover"
-                                          loading="lazy"
-                                          decoding="async"
-                                        />
-                                      ) : (
-                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
-                                      )}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="truncate text-sm font-semibold">{item.name}</p>
-                                      {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
-                                    </div>
-                                  </div>
-                                  <span className={`text-xs font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
-                                    {item.changePercentValue >= 0 ? "+" : ""}{item.changePercentValue.toFixed(2)}%
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <p className="pt-1 text-[11px] text-muted-foreground">
-                        Datensaetze mit 7-Tage-Move: {watchlistTopMovers.sourceCount}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Keine eindeutigen Gewinner/Verlierer verfuegbar.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:gap-5">
-              <div className="sm:pt-1">
-                <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
-                {compositionLoading ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                      <div className="flex justify-center lg:col-span-2">
-                        <Skeleton className="h-55 w-full max-w-sm sm:h-80" />
-                      </div>
-                      <div className="space-y-2">
-                        {[1, 2, 3, 4].map((entry) => (
-                          <Skeleton key={entry} className="h-14 w-full" />
-                        ))}
-                      </div>
-                    </div>
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                ) : compositionError ? (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                    {compositionError}
-                  </div>
-                ) : (
-                  <PortfolioCompositionChart
-                    data={compositionData}
-                    totalValueOverride={portfolioTotalValueForDisplay}
-                    totalValueLabel={portfolioValueLabel}
-                  />
-                )}
-              </div>
-            </div>
-
-          </TabsContent>
-
-          <TabsContent value="inventory" forceMount={visitedTabs.has("inventory")} className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
-            {/*
-            
-                  Manueller CSFloat-Sync: zuerst Preview prüfen, dann Import starten.
-
-
-            */}
-            <div className="md:col-span-2 space-y-2">
-              <h3 className="text-base font-semibold">Ansicht</h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={inventoryScope === "investment" ? "default" : "outline"}
-                  onClick={() => setInventoryScope("investment")}
-                >
-                  Investments
-                </Button>
-                <Button
-                  size="sm"
-                  variant={inventoryScope === "inventory" ? "default" : "outline"}
-                  onClick={() => setInventoryScope("inventory")}
-                >
-                  Inventar
-                </Button>
-                <Button
-                  size="sm"
-                  variant={inventoryScope === "all" ? "default" : "outline"}
-                  onClick={() => setInventoryScope("all")}
-                >
-                  Alles
-                </Button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto md:col-span-1 sm:rounded-2xl sm:border sm:border-border/70 sm:bg-card/65">
-              <Suspense
-                fallback={
-                  <div className="space-y-3 p-4">
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-20 w-full" />
-                  </div>
-                }
-              >
-                <InventoryTable
-                  investments={inventoryTabItems}
-                  groups={portfolioGroupSummaries}
-                  onSelectItem={(item) => {
-                    setSelectedItem(item);
-                    if (window.innerWidth < BREAKPOINTS.MOBILE) {
-                      openModal("itemDetail", { item });
-                    }
-                  }}
-                  onSelectGroup={(group) => {
-                    setSelectedItem(buildGroupDetailSelection(group));
-                  }}
-                  onSelectCluster={(group, cluster) => {
-                    setSelectedItem(buildGroupClusterDetailSelection(group, cluster));
-                  }}
-                />
-              </Suspense>
-            </div>
-
-            <div className="hidden md:col-span-1 md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-              <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-2xl" />}>
-                <ItemDetailPanel
-                  item={selectedItemWithLiveAndBuyOrders || selectedItem}
-                  history={selectedItemHistory}
-                  historyLoading={selectedItemHistoryLoading}
-                  onExcludeChange={isDesktopRuntime ? handleExcludeChange : undefined}
-                  onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                  canToggleExclude={
-                    isDesktopRuntime &&
-                    selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&
-                    selectedItemWithLiveAndBuyOrders?.__detailKind !== "group-cluster"
-                  }
-                />
-              </Suspense>
-            </div>
-
-            {modals.map((modal) =>
-              modal.type === "itemDetail" ? (() => {
-                const liveModalItem =
-                  resolveLiveClusterItem(modal?.data?.item, enrichedInvestments) || modal?.data?.item || null;
-                const modalItemWithBuyOrders = withBuyOrderFields(liveModalItem, inventoryBuyOrderSummary);
-                return (
-                  <Suspense key={modal.id} fallback={null}>
-                    <ItemDetailsModal
-                      isOpen={true}
-                      onClose={() => closeModal(modal.id)}
-                      item={modalItemWithBuyOrders}
-                      history={selectedItemHistory}
-                      historyLoading={selectedItemHistoryLoading}
-                      onToggleExclude={isDesktopRuntime ? handleModalExcludeToggle : undefined}
-                      onBucketChange={isDesktopRuntime ? handleMoveItemBucket : undefined}
-                      canToggleExclude={isDesktopRuntime}
-                    />
-                  </Suspense>
-                );
-              })() : null,
-            )}
-          </TabsContent>
-
-          <TabsContent value="watchlist" forceMount={visitedTabs.has("watchlist")} className="space-y-4 sm:space-y-6">
-            <Suspense
-              fallback={
-                <div className="space-y-3">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-24 w-full" />
-                  <Skeleton className="h-24 w-full" />
-                </div>
+          <PortfolioInventorySection
+            forceMount={visitedTabs.has("inventory")}
+            inventoryScope={inventoryScope}
+            onInventoryScopeChange={setInventoryScope}
+            inventoryTabItems={inventoryTabItems}
+            portfolioGroupSummaries={portfolioGroupSummaries}
+            onSelectItem={(item) => {
+              setSelectedItem(item);
+              if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                openModal("itemDetail", { item });
               }
-            >
-              <Watchlist
-                focusTarget={watchlistFocusTarget}
-                onWarningsChange={handleWatchlistWarningsChange}
-              />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="search" forceMount={visitedTabs.has("search")} className="space-y-4 sm:space-y-6">
-            <Suspense
-              fallback={
-                <div className="space-y-3">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-24 w-full" />
-                  <Skeleton className="h-24 w-full" />
-                </div>
-              }
-            >
-              <ItemSearch
-                onAddToWatchlist={loadGlobalSearchWatchlistItems}
-                existingItems={globalSearchWatchlistItems.map((entry) => ({ name: entry?.name || entry?.marketHashName || "" }))}
-                onWarningsChange={(nextWarnings = []) => {
-                  handleUiWarningsChange("search-browser", "Produktsuche", nextWarnings);
-                }}
-                initialSearchTerm={searchPageInitialTerm}
-                submittedTerm={searchPageInitialTerm}
-                showSearchInput={false}
-                autoFocus={false}
-              />
-            </Suspense>
-          </TabsContent>
+            }}
+            onSelectGroup={(group) => {
+              setSelectedItem(buildGroupDetailSelection(group));
+            }}
+            onSelectCluster={(group, cluster) => {
+              setSelectedItem(buildGroupClusterDetailSelection(group, cluster));
+            }}
+            selectedItemWithLiveAndBuyOrders={selectedItemWithLiveAndBuyOrders}
+            selectedItem={selectedItem}
+            selectedItemHistory={selectedItemHistory}
+            selectedItemHistoryLoading={selectedItemHistoryLoading}
+            isDesktopRuntime={isDesktopRuntime}
+            onExcludeChange={handleExcludeChange}
+            onBucketChange={handleMoveItemBucket}
+            canToggleExclude={
+              isDesktopRuntime &&
+              selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&
+              selectedItemWithLiveAndBuyOrders?.__detailKind !== "group-cluster"
+            }
+            onModalExcludeToggle={handleModalExcludeToggle}
+            modals={modals}
+            onCloseModal={closeModal}
+            enrichedInvestments={enrichedInvestments}
+            inventoryBuyOrderSummary={inventoryBuyOrderSummary}
+          />
+
+          <PortfolioWatchlistSection
+            forceMount={visitedTabs.has("watchlist")}
+            watchlistFocusTarget={watchlistFocusTarget}
+            handleWatchlistWarningsChange={handleWatchlistWarningsChange}
+          />
+          <PortfolioSearchSection
+            forceMount={visitedTabs.has("search")}
+            loadGlobalSearchWatchlistItems={loadGlobalSearchWatchlistItems}
+            globalSearchWatchlistItems={globalSearchWatchlistItems}
+            handleUiWarningsChange={handleUiWarningsChange}
+            searchPageInitialTerm={searchPageInitialTerm}
+          />
           {isDesktopRuntime ? (
-          <TabsContent value="management" forceMount={visitedTabs.has("management")} className="space-y-4 sm:space-y-6">
-            {typeof window !== "undefined" && !window.electronAPI?.localStore ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cluster-Verwaltung nur im Desktop verfuegbar</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Diese Detailverwaltung arbeitet auf lokalen Positionen (inkl. excluded Status).
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-                <div className="space-y-4 rounded-lg border border-border/70 bg-background/35 p-4 sm:p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold tracking-tight">Inbox</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Aufgaben aus dem letzten Steam-Sync in einer Uebersicht.
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="h-7 px-3 text-xs">
-                      Auto-Sync: {autoSyncEnabled ? "An" : "Aus"}
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <div className="rounded-lg border border-border/70 bg-background/70 p-3">
-                      <p className="text-xs font-medium text-muted-foreground">Neue Steam-Items</p>
-                      <p className="mt-1 text-2xl font-semibold leading-none tracking-tight">
-                        {syncNotification.newItemsCount}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-border/70 bg-background/70 p-3">
-                      <p className="text-xs font-medium text-muted-foreground">Matching offen</p>
-                      <p className="mt-1 text-2xl font-semibold leading-none tracking-tight">
-                        {matchingSuggestedCount}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-border/70 bg-background/70 p-3">
-                      <p className="text-xs font-medium text-muted-foreground">Ohne Einkaufspreis</p>
-                      <p className="mt-1 text-2xl font-semibold leading-none tracking-tight">
-                        {priceMissingCount}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="default"
-                      disabled={isSteamSyncing}
-                      onClick={() => void runSteamSync({ manual: true })}
-                    >
-                      {isSteamSyncing ? "Sync laeuft..." : "Steam Sync starten"}
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => void handleToggleAutoSync()}>
-                      Auto-Sync umschalten
-                    </Button>
-                    {hasCsFloatKey ? (
-                      <Button size="sm" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
-                        CSFloat Sync
-                      </Button>
-                    ) : null}
-                    {hasSkinBaronImportReady ? (
-                      <Button size="sm" variant="outline" onClick={() => setIsSkinBaronSyncOpen(true)}>
-                        SkinBaron Sync
-                      </Button>
-                    ) : null}
-                  </div>
-                  {!hasCsFloatKey && !hasSkinBaronImportReady ? (
-                    <p className="text-xs text-muted-foreground">
-                      Kein CSFloat-Key bzw. kein gueltiger SkinBaron Session-Zugriff hinterlegt. Import-Buttons erscheinen automatisch nach Setup.
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant={managementSection === "matching" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setManagementSection("matching")}
-                    >
-                      Matching
-                    </Button>
-                    <Button
-                      variant={managementSection === "prices" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setManagementSection("prices")}
-                    >
-                      Preise
-                    </Button>
-                    <Button
-                      variant={managementSection === "exclude" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setManagementSection("exclude")}
-                    >
-                      Exclude
-                    </Button>
-                    <Button
-                      variant={managementSection === "groups" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setManagementSection("groups")}
-                    >
-                      Gruppen
-                    </Button>
-                    <Button
-                      variant={managementSection === "create" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setManagementSection("create")}
-                    >
-                      Hinzufuegen
-                    </Button>
-                  </div>
-
-                  <TooltipProvider delayDuration={140}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {managementQuickHints.map((hint) => (
-                        <Tooltip key={hint.id}>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
-                            >
-                              <Info className="h-3.5 w-3.5" />
-                              <span>{hint.title}</span>
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
-                            {hint.text}
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
-                  </TooltipProvider>
-
-                  {steamSyncError ? (
-                    <p className="text-xs text-destructive">{steamSyncError}</p>
-                  ) : null}
-                  <p className="text-[11px] text-muted-foreground">
-                    Datenabruf erfolgt nur lokal fuer deinen Account. Auto-Sync laeuft maximal alle 30 Minuten
-                    pro App-Instanz und kann jederzeit deaktiviert werden.
-                  </p>
-                </div>
-
-                {managementError ? (
-                  <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                    {managementError}
-                  </div>
-                ) : null}
-
-                {managementSection === "prices" ? (
-                  <Card className="overflow-hidden">
-                    <CardHeader className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <CardTitle>Preise setzen</CardTitle>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary">{filteredPriceItems.length} sichtbar</Badge>
-                          {matchedSteamInventoryItemsCount > 0 ? (
-                            <Badge variant="outline">{matchedSteamInventoryItemsCount} gematcht ausgeblendet</Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Nur nicht gematchte Steam-Inventory-Items koennen hier einen Einkaufspreis erhalten.
-                      </p>
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                        <label className="relative block">
-                          <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <input
-                            type="text"
-                            value={priceSearchTerm}
-                            onChange={(event) => setPriceSearchTerm(event.target.value)}
-                            placeholder="Nach Item suchen..."
-                            className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
-                          />
-                        </label>
-                        <select
-                          value={priceSortBy}
-                          onChange={(event) => setPriceSortBy(event.target.value)}
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                          <option value="name_asc">Sortierung: Name A-Z</option>
-                          <option value="name_desc">Sortierung: Name Z-A</option>
-                          <option value="price_desc">Sortierung: Preis absteigend</option>
-                          <option value="price_asc">Sortierung: Preis aufsteigend</option>
-                          <option value="qty_desc">Sortierung: Menge absteigend</option>
-                        </select>
-                        <label className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={priceMissingOnly}
-                            onChange={(event) => setPriceMissingOnly(event.target.checked)}
-                            className="h-4 w-4 rounded border-input"
-                          />
-                          Nur ohne Preis ({priceMissingCount})
-                        </label>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {rawSteamInventoryItems.length === 0 ? (
-                        steamInventoryItemsAll.length > 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            Alle Steam-Inventory-Items sind bereits gematcht. Keine manuellen Preise noetig.
-                          </p>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            Noch keine Steam-Inventory-Items vorhanden.
-                          </p>
-                        )
-                      ) : filteredPriceItems.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          Kein Item passt zu Suche/Filter.
-                        </p>
-                      ) : (
-                        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-                          {filteredPriceItems.map((item) => {
-                            const currentPrice = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
-                            const nameKey = getItemNameKey(item);
-                            const suggestion = suggestedPriceByNameKey.get(nameKey) || null;
-                            const suggestedPrice = Number(suggestion?.value ?? 0);
-                            const hasSuggestion = Number.isFinite(suggestedPrice) && suggestedPrice > 0;
-                            const draftValue = priceDrafts[item.id] ?? String(currentPrice > 0 ? currentPrice : "");
-                            const itemImageUrl = String(item.imageUrl || item.iconUrl || "").trim() || null;
-                            const bucket = normalizeBucket(item.bucket, "inventory");
-                            const quantity = Math.max(1, Number(item.quantity || 1));
-
-                            return (
-                              <div key={item.id} className="rounded-md border p-2 sm:p-3">
-                                <div className="flex flex-wrap items-center gap-3">
-                                  <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted/30 p-1">
-                                    {itemImageUrl ? (
-                                      <img
-                                        src={itemImageUrl}
-                                        alt={item.name}
-                                        className="h-full w-full object-contain"
-                                        loading="lazy"
-                                        decoding="async"
-                                      />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                        N/A
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-semibold">{item.name}</p>
-                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                      <span>{quantity}x</span>
-                                      <span>|</span>
-                                      <span>{bucket === "inventory" ? "Inventar" : "Investment"}</span>
-                                      <span>|</span>
-                                      <span>Aktuell: {currentPrice > 0 ? `${currentPrice.toFixed(2)} USD` : "kein Preis gesetzt"}</span>
-                                    </div>
-                                    {hasSuggestion ? (
-                                      <p className="mt-1 text-[11px] text-muted-foreground">
-                                        Vorschlag: {suggestedPrice.toFixed(2)} USD ({String(suggestion?.source || "live")})
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={draftValue}
-                                      onChange={(event) => handlePriceDraftChange(item.id, event.target.value)}
-                                      className="h-9 w-28 rounded-md border border-input bg-background px-2 text-sm"
-                                      placeholder={hasSuggestion ? `${suggestedPrice.toFixed(2)} USD` : "USD"}
-                                    />
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={savingPriceItemId === item.id}
-                                      onClick={() => void handleSaveSteamItemPrice(item)}
-                                    >
-                                      {savingPriceItemId === item.id ? "Speichert..." : "Speichern"}
-                                    </Button>
-                                    {hasSuggestion ? (
-                                      <Button
-                                        size="sm"
-                                        variant="default"
-                                        disabled={savingPriceItemId === item.id}
-                                        onClick={() => void handleAcceptSuggestedPrice(item, suggestedPrice)}
-                                      >
-                                        Vorschlag annehmen
-                                      </Button>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ) : null}
-
-                {managementSection === "groups" ? (
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-                    <Card className="overflow-hidden">
-                      <CardHeader className="space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <CardTitle>Investment Gruppen</CardTitle>
-                          <Badge variant="secondary">{portfolioGroups.length} Gruppen</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Gruppen sind nur ein Anzeige-Layer. Cluster und Positionen darunter bleiben fachlich unveraendert.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button size="sm" onClick={() => handleStartCreatePortfolioGroup()}>
-                            Neue Gruppe hinzufuegen
-                          </Button>
-                          {portfolioGroupEditor ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => resetPortfolioGroupEditor()}
-                            >
-                              Bearbeitung verlassen
-                            </Button>
-                          ) : null}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="space-y-3 rounded-xl border border-border/70 bg-background/40 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-semibold">
-                              {portfolioGroupEditor ? "Gruppe bearbeiten" : "Neue Gruppe"}
-                            </p>
-                            {portfolioGroupEditor ? (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => resetPortfolioGroupEditor()}
-                              >
-                                Reset
-                              </Button>
-                            ) : null}
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground">Name</label>
-                            <input
-                              type="text"
-                              value={portfolioGroupDraft.name}
-                              onChange={(event) =>
-                                handlePortfolioGroupDraftChange("name", event.target.value)
-                              }
-                              placeholder="z. B. Souvenir Mix Antwerp"
-                              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground">These / Notiz</label>
-                            <textarea
-                              value={portfolioGroupDraft.thesis}
-                              onChange={(event) =>
-                                handlePortfolioGroupDraftChange("thesis", event.target.value)
-                              }
-                              placeholder="Optional: Warum gehoeren diese Cluster zusammen?"
-                              className="min-h-[92px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            />
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Button size="sm" onClick={() => void handleSavePortfolioGroup()}>
-                              {portfolioGroupEditor ? "Aenderungen speichern" : "Gruppe anlegen"}
-                            </Button>
-                            {portfolioGroupEditor ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void handleDeletePortfolioGroup(portfolioGroupEditor.id)}
-                              >
-                                Gruppe loeschen
-                              </Button>
-                            ) : null}
-                          </div>
-                          {portfolioGroupMessage ? (
-                            <p className="text-xs text-emerald-400">{portfolioGroupMessage}</p>
-                          ) : null}
-                          {portfolioGroupError ? (
-                            <p className="text-xs text-destructive">{portfolioGroupError}</p>
-                          ) : null}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-semibold">Bestehende Gruppen</p>
-                            <Badge variant="outline">{ungroupedInvestmentCount} Positionen ungruppiert</Badge>
-                          </div>
-                          {portfolioGroupsLoading ? (
-                            <div className="space-y-2">
-                              <Skeleton className="h-16 w-full" />
-                              <Skeleton className="h-16 w-full" />
-                            </div>
-                          ) : portfolioGroups.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                              Noch keine Gruppen angelegt.
-                            </p>
-                          ) : (
-                            <div className="space-y-2">
-                              {portfolioGroups.map((group) => {
-                                const summary = portfolioGroupSummaryById.get(String(group.id)) || null;
-                                const isActive = portfolioGroupEditorId === group.id;
-                                return (
-                                  <button
-                                    key={group.id}
-                                    type="button"
-                                    onClick={() => handleEditPortfolioGroup(group)}
-                                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                                      isActive
-                                        ? "border-primary/45 bg-primary/10"
-                                        : "border-border/70 bg-background/35 hover:bg-accent/35"
-                                    }`}
-                                  >
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-sm font-semibold">{group.name}</p>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                          {summary
-                                            ? `${summary.clusterCount} Cluster | ${summary.memberCount} Positionen`
-                                            : "Noch keine Positionen zugeordnet"}
-                                        </p>
-                                      </div>
-                                      <div className="text-right">
-                                        {summary ? (
-                                          <>
-                                            <p className="text-sm font-semibold">{formatUsdPrice(summary.totalValue)}</p>
-                                            <p className={`text-xs ${summary.totalProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                              {summary.roiPercent >= 0 ? "+" : ""}
-                                              {summary.roiPercent.toFixed(2)}%
-                                            </p>
-                                          </>
-                                        ) : (
-                                          <p className="text-xs text-muted-foreground">leer</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="overflow-hidden">
-                      <CardHeader className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <CardTitle>Cluster und Positionen zuweisen</CardTitle>
-                          {portfolioGroupEditor ? (
-                            <Badge variant="secondary">Aktiv: {portfolioGroupEditor.name}</Badge>
-                          ) : (
-                            <Badge variant="outline">Bitte links Gruppe waehlen</Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          "Cluster hinzufuegen" ist nur ein Shortcut. Intern werden die konkreten Positionen der Gruppe zugeordnet.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="relative block flex-1">
-                            <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                              type="text"
-                              value={groupSearchTerm}
-                              onChange={(event) => setGroupSearchTerm(event.target.value)}
-                              placeholder="Nach Cluster oder Gruppenname suchen..."
-                              className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
-                            />
-                          </label>
-                          <select
-                            value={groupSortBy}
-                            onChange={(event) => setGroupSortBy(event.target.value)}
-                            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                          >
-                            <option value="name_asc">Name (A-Z)</option>
-                            <option value="updated_desc">Neueste</option>
-                          </select>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {managementLoading ? (
-                          <div className="space-y-2">
-                            <Skeleton className="h-16 w-full" />
-                            <Skeleton className="h-16 w-full" />
-                            <Skeleton className="h-16 w-full" />
-                          </div>
-                        ) : filteredGroupManagementClusters.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            Kein Cluster passt zur Suche.
-                          </p>
-                        ) : (
-                          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
-                            {filteredGroupManagementClusters.map((cluster) => {
-                              const clusterAssignment = managementGroupsByClusterKey.get(cluster.key) || {
-                                assignmentState: "ungrouped",
-                                assignedGroupId: "",
-                                assignedGroupName: "",
-                                assignedCount: 0,
-                                totalCount: cluster.positions.length,
-                              };
-                              const clusterInvestmentIds = uniqueInvestmentIds(
-                                cluster.positions.map((position) => position.id),
-                              );
-                              const isExpanded = Boolean(expandedGroupManagementClusters[cluster.key]);
-                              const activeGroupAssignedCount = portfolioGroupEditor
-                                ? clusterInvestmentIds.filter(
-                                    (investmentId) =>
-                                      portfolioGroupMembershipMap.get(investmentId) === portfolioGroupEditor.id,
-                                  ).length
-                                : 0;
-                              const isAssignedToActiveGroup =
-                                portfolioGroupEditor && clusterAssignment.assignedGroupId === portfolioGroupEditor.id;
-                              const canAssignCluster = Boolean(portfolioGroupEditor) && !isAssignedToActiveGroup;
-                              const canRemoveCluster =
-                                Boolean(portfolioGroupEditor) && activeGroupAssignedCount > 0;
-
-                              return (
-                                <div key={cluster.id} className="rounded-xl border border-border/70 bg-background/30 p-3">
-                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                    <div className="flex min-w-0 items-center gap-3">
-                                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-border/70 bg-muted/25 p-1">
-                                        {cluster.imageUrl ? (
-                                          <img
-                                            src={cluster.imageUrl}
-                                            alt={cluster.name}
-                                            className="h-full w-full object-contain"
-                                            loading="lazy"
-                                            decoding="async"
-                                          />
-                                        ) : (
-                                          <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
-                                            N/A
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="truncate text-sm font-semibold">{cluster.name}</p>
-                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                          <span>{cluster.totalCount} Stk.</span>
-                                          <span>|</span>
-                                          <span>{cluster.positions.length} Positionen</span>
-                                          {getClusterUpdatedAt(cluster) > 0 ? (
-                                            <>
-                                              <span>|</span>
-                                              <span>{new Date(getClusterUpdatedAt(cluster)).toLocaleDateString("de-DE")}</span>
-                                            </>
-                                          ) : null}
-                                          {clusterAssignment.assignmentState === "grouped" ? (
-                                            <>
-                                              <span>|</span>
-                                              <span>Gruppe: {clusterAssignment.assignedGroupName}</span>
-                                            </>
-                                          ) : null}
-                                          {clusterAssignment.assignmentState === "partial" ? (
-                                            <>
-                                              <span>|</span>
-                                              <span>
-                                                Teilweise gruppiert ({clusterAssignment.assignedCount}/{clusterAssignment.totalCount})
-                                              </span>
-                                            </>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {clusterAssignment.assignmentState === "grouped" ? (
-                                        <Badge variant="secondary">Vollstaendig gruppiert</Badge>
-                                      ) : clusterAssignment.assignmentState === "partial" ? (
-                                        <Badge variant="outline">Teilweise gruppiert</Badge>
-                                      ) : (
-                                        <Badge variant="outline">Nicht gruppiert</Badge>
-                                      )}
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => toggleExpandedGroupManagementCluster(cluster.key)}
-                                      >
-                                        {isExpanded ? "Positionen ausblenden" : "Positionen anzeigen"}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={!canAssignCluster}
-                                        onClick={() =>
-                                          void handleAssignInvestmentIdsToGroup(
-                                            portfolioGroupEditor?.id,
-                                            clusterInvestmentIds,
-                                          )
-                                        }
-                                      >
-                                        Cluster hinzufuegen
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={!canRemoveCluster}
-                                        onClick={() =>
-                                          void handleRemoveInvestmentIdsFromGroup(
-                                            portfolioGroupEditor?.id,
-                                            clusterInvestmentIds,
-                                          )
-                                        }
-                                      >
-                                        Cluster entfernen
-                                      </Button>
-                                    </div>
-                                  </div>
-
-                                  {isExpanded ? (
-                                    <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
-                                      {cluster.positions.map((position) => {
-                                        const positionId = normalizeInvestmentId(position.id);
-                                        const assignedGroupId = portfolioGroupMembershipMap.get(positionId) || "";
-                                        const assignedGroupName = assignedGroupId
-                                          ? portfolioGroupsById.get(assignedGroupId)?.name || ""
-                                          : "";
-                                        const inActiveGroup =
-                                          Boolean(portfolioGroupEditor) && assignedGroupId === portfolioGroupEditor.id;
-                                        const canAssignPosition =
-                                          Boolean(portfolioGroupEditor) && !inActiveGroup;
-                                        const canRemovePosition =
-                                          Boolean(portfolioGroupEditor) && inActiveGroup;
-                                        const positionPrice = Number(position.buyPriceUsd || 0);
-
-                                        return (
-                                          <div
-                                            key={position.id}
-                                            className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card/55 p-3 md:flex-row md:items-center md:justify-between"
-                                          >
-                                            <div className="min-w-0">
-                                              <p className="truncate text-sm font-medium">{position.name}</p>
-                                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                                <span>{position.quantity} Stk.</span>
-                                                <span>|</span>
-                                                <span>{position.bucket === "inventory" ? "Inventar" : "Investment"}</span>
-                                                <span>|</span>
-                                                <span>{positionPrice > 0 ? `${positionPrice.toFixed(2)} USD Buy-in` : "ohne Buy-in"}</span>
-                                                {assignedGroupName ? (
-                                                  <>
-                                                    <span>|</span>
-                                                    <span>Gruppe: {assignedGroupName}</span>
-                                                  </>
-                                                ) : null}
-                                              </div>
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={!canAssignPosition}
-                                                onClick={() =>
-                                                  void handleAssignInvestmentIdsToGroup(
-                                                    portfolioGroupEditor?.id,
-                                                    [positionId],
-                                                  )
-                                                }
-                                              >
-                                                Position hinzufuegen
-                                              </Button>
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={!canRemovePosition}
-                                                onClick={() =>
-                                                  void handleRemoveInvestmentIdsFromGroup(
-                                                    portfolioGroupEditor?.id,
-                                                    [positionId],
-                                                  )
-                                                }
-                                              >
-                                                Entfernen
-                                              </Button>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                ) : null}
-
-                {managementSection === "create" ? (
-                  <Card className="overflow-hidden">
-                    <CardHeader>
-                      <CardTitle>Item manuell hinzufuegen</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Fuege Positionen direkt in der Verwaltung hinzu. Nutze am besten die Vorschlaege, damit Name, Typ und Bild sauber gematcht sind.
-                      </p>
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium text-muted-foreground">Item Name</label>
-                        <label className="relative block">
-                          <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <input
-                            type="text"
-                            value={manualItemDraft.name}
-                            onChange={(event) => handleManualItemDraftChange("name", event.target.value)}
-                            placeholder="Item Name (z. B. Karambit | Doppler)"
-                            className="h-10 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
-                          />
-                        </label>
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          {manualNameSuggestionsLoading ? (
-                            <span className="text-muted-foreground">Suche Vorschlaege...</span>
-                          ) : null}
-                          {manualSelectedSuggestion ? (
-                            <Badge variant="secondary">
-                              Match: {manualSelectedSuggestion.marketHashName || manualSelectedSuggestion.displayName}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">Tipp: Vorschlag anklicken, um Tippfehler zu vermeiden.</span>
-                          )}
-                        </div>
-                        {manualNameSuggestionsError ? (
-                          <p className="text-xs text-destructive">{manualNameSuggestionsError}</p>
-                        ) : null}
-                        {manualNameSuggestions.length > 0 ? (
-                          <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/70 p-2">
-                            {manualNameSuggestions.map((candidate, index) => {
-                              const candidateName = String(
-                                candidate.marketHashName || candidate.displayName || "Unbekanntes Item",
-                              ).trim();
-                              const candidateType = String(candidate.itemType || "").trim().toLowerCase() || "other";
-                              const candidateImageUrl = String(candidate.iconUrl || "").trim() || null;
-                              return (
-                                <button
-                                  key={String(candidate.id || `${candidateName}-${index}`)}
-                                  type="button"
-                                  onClick={() => handleManualSuggestionPick(candidate)}
-                                  className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left hover:border-border hover:bg-accent/40"
-                                >
-                                  <div className="h-10 w-10 overflow-hidden rounded-md border border-border/70 bg-muted/25">
-                                    {candidateImageUrl ? (
-                                      <img
-                                        src={candidateImageUrl}
-                                        alt={candidateName}
-                                        className="h-full w-full object-cover"
-                                        loading="lazy"
-                                        decoding="async"
-                                      />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                        N/A
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-semibold">{candidateName}</p>
-                                    <p className="text-[11px] text-muted-foreground">Typ: {candidateType}</p>
-                                  </div>
-                                  <span className="text-xs text-muted-foreground">Uebernehmen</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={manualItemDraft.buyPriceUsd}
-                          onChange={(event) => handleManualItemDraftChange("buyPriceUsd", event.target.value)}
-                          placeholder="Einkaufspreis USD"
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={manualItemDraft.quantity}
-                          onChange={(event) => handleManualItemDraftChange("quantity", event.target.value)}
-                          placeholder="Menge"
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        />
-                        <select
-                          value={manualItemDraft.platform}
-                          onChange={(event) => handleManualItemDraftChange("platform", event.target.value)}
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                          <option value="manual">Quelle: Manual</option>
-                          <option value="csfloat">Quelle: CSFloat</option>
-                          <option value="steam_inventory">Quelle: Steam Inventory</option>
-                          <option value="other">Quelle: Other</option>
-                        </select>
-                        <select
-                          value={manualItemDraft.bucket}
-                          onChange={(event) => handleManualItemDraftChange("bucket", event.target.value)}
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                          <option value="investment">Bucket: Investment</option>
-                          <option value="inventory">Bucket: Inventar</option>
-                        </select>
-                        <select
-                          value={manualItemDraft.fundingMode}
-                          onChange={(event) => handleManualItemDraftChange("fundingMode", event.target.value)}
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                          <option value="wallet_funded">Funding: Wallet</option>
-                          <option value="balance_funded">Funding: Balance</option>
-                        </select>
-                        <select
-                          value={manualItemDraft.type}
-                          onChange={(event) => handleManualItemDraftChange("type", event.target.value)}
-                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm md:col-span-2"
-                        >
-                          <option value="skin">Typ: Skin</option>
-                          <option value="case">Typ: Case</option>
-                          <option value="sticker">Typ: Sticker</option>
-                          <option value="agent">Typ: Agent</option>
-                          <option value="other">Typ: Other</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          disabled={manualItemSaving}
-                          onClick={() => void handleCreateManualInvestment()}
-                        >
-                          {manualItemSaving ? "Speichert..." : "Item anlegen"}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : null}
-
-                {managementSection === "exclude" && managementLoading ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                ) : null}
-
-                {managementSection === "exclude" && !managementLoading && filteredManagementClusters.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-6 text-sm text-muted-foreground">
-                      Keine Cluster fuer den gewaehlten Filter gefunden.
-                    </CardContent>
-                  </Card>
-                ) : null}
-
-                {managementSection === "exclude" ? (
-                  <>
-                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-                      <label className="relative block">
-                        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <input
-                          type="text"
-                          value={managementSearchTerm}
-                          onChange={(event) => setManagementSearchTerm(event.target.value)}
-                          placeholder="Suche nach Item oder Trade-ID..."
-                          className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
-                        />
-                      </label>
-                      <select
-                        value={managementTypeFilter}
-                        onChange={(event) => setManagementTypeFilter(event.target.value)}
-                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                      >
-                        <option value="all">Typ: Alle</option>
-                        {managementTypeOptions.map((type) => (
-                          <option key={type} value={type}>
-                            Typ: {type}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={managementBucketFilter}
-                        onChange={(event) => setManagementBucketFilter(event.target.value)}
-                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                      >
-                        <option value="all">Bucket: Alle</option>
-                        <option value="investment">Bucket: Investment</option>
-                        <option value="inventory">Bucket: Inventar</option>
-                      </select>
-                      <select
-                        value={managementSortBy}
-                        onChange={(event) => setManagementSortBy(event.target.value)}
-                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                      >
-                        <option value="name_asc">Sortierung: Name A-Z</option>
-                        <option value="name_desc">Sortierung: Name Z-A</option>
-                        <option value="qty_desc">Sortierung: Menge absteigend</option>
-                        <option value="qty_asc">Sortierung: Menge aufsteigend</option>
-                        <option value="updated_desc">Sortierung: Zuletzt aktualisiert</option>
-                      </select>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        variant={managementFilter === "all" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setManagementFilter("all")}
-                      >
-                        Alle
-                      </Button>
-                      <Button
-                        variant={managementFilter === "excluded" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setManagementFilter("excluded")}
-                      >
-                        Nur Excluded
-                      </Button>
-                      <Button
-                        variant={managementFilter === "active" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setManagementFilter("active")}
-                      >
-                        Nur Aktiv
-                      </Button>
-                      <Badge variant="secondary">{filteredManagementClusters.length} Cluster</Badge>
-                    </div>
-                  <div className="space-y-3">
-                    {filteredManagementClusters.map((cluster) => {
-                      const isExpanded = Boolean(expandedClusters[cluster.id]);
-                      const steamIdsInCluster = new Set(
-                        cluster.positions
-                          .filter((position) =>
-                            position.platform === "steam_inventory" ||
-                            Boolean(position.steamAssetId),
-                          )
-                          .map((position) => String(position.id)),
-                      );
-                      const visiblePositions = cluster.positions.filter((position) => {
-                        const positionId = String(position.id);
-                        const matchedSteamId = confirmedOrAutoMatchByCsfloatId.get(positionId);
-                        if (!matchedSteamId) {
-                          return true;
-                        }
-                        return !steamIdsInCluster.has(String(matchedSteamId));
-                      });
-                      const visibleExcludedCount = visiblePositions.filter((position) => position.excluded).length;
-                      const visibleActiveCount = Math.max(0, visiblePositions.length - visibleExcludedCount);
-                      return (
-                        <Card key={cluster.id}>
-                          <CardContent className="space-y-3 p-3 sm:p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-3">
-                                <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted/30 p-1">
-                                  {cluster.imageUrl ? (
-                                    <img
-                                      src={cluster.imageUrl}
-                                      alt={cluster.name}
-                                      className="h-full w-full object-contain"
-                                      loading="lazy"
-                                      decoding="async"
-                                    />
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                      N/A
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold">{cluster.name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {visiblePositions.length} Stueck | excluded: {visibleExcludedCount} | aktiv: {visibleActiveCount}
-                                    {visiblePositions.length !== cluster.positions.length
-                                      ? ` | ${cluster.positions.length - visiblePositions.length} gematchte Duplikate ausgeblendet`
-                                      : ""}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => toggleClusterExpanded(cluster.id)}
-                                >
-                                  {isExpanded ? "Positionen ausblenden" : "Positionen anzeigen"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => void handleManagementClusterToggle(cluster, true)}
-                                >
-                                  Cluster excluden
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => void handleManagementClusterToggle(cluster, false)}
-                                >
-                                  Cluster einschliessen
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => void handleManagementClusterBucketToggle(cluster, "investment")}
-                                >
-                                  Cluster zu Investments
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => void handleManagementClusterBucketToggle(cluster, "inventory")}
-                                >
-                                  Cluster zu Inventar
-                                </Button>
-                              </div>
-                            </div>
-
-                            {isExpanded ? (
-                              <div className="space-y-2 rounded-md border p-2 sm:p-3">
-                                {visiblePositions.map((position) => (
-                                  <div
-                                    key={position.id}
-                                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2"
-                                  >
-                                    <div className="min-w-0">
-                                      <p className="text-xs font-semibold">
-                                        {position.quantity}x @ {formatPrice(position.buyPriceUsd, {
-                                          useUsd: true,
-                                          buyPriceUsd: position.buyPriceUsd,
-                                        })}
-                                      </p>
-                                      <p className="truncate text-[11px] text-muted-foreground">
-                                        Trade ID: {position.externalTradeId || "-"} | Kauf: {position.purchasedAt || "-"}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="secondary">
-                                        {position.bucket === "inventory" ? "Inventar" : "Investment"}
-                                      </Badge>
-                                      <Badge variant={position.excluded ? "destructive" : "outline"}>
-                                        {position.excluded ? "excluded" : "aktiv"}
-                                      </Badge>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          void handleManagementExcludeToggle(
-                                            position.id,
-                                            !position.excluded,
-                                          )
-                                        }
-                                      >
-                                        {position.excluded ? "Einschliessen" : "Excluden"}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          void handleManagementBucketToggle(
-                                            position.id,
-                                            position.bucket === "inventory" ? "investment" : "inventory",
-                                          )
-                                        }
-                                      >
-                                        {position.bucket === "inventory" ? "Zu Investments" : "Zu Inventar"}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                  </>
-                ) : null}
-
-                {managementSection === "matching" ? (
-                <Card className="overflow-hidden">
-                  <CardHeader className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CardTitle>Steam &lt;-&gt; CSFloat Matching Queue</CardTitle>
-                      <div className="flex items-center gap-2">
-                        {showMatchedMatchingRows ? (
-                          <Badge variant="secondary">{filteredMatchingRows.length} sichtbar</Badge>
-                        ) : (
-                          <Badge variant="secondary">{filteredMatchingRows.length} offen</Badge>
-                        )}
-                        {showMatchedMatchingRows ? (
-                          <Badge variant="outline">Gematcht: {matchedMatchingRows.length}</Badge>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                      <label className="relative block">
-                        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <input
-                          type="text"
-                          value={matchingSearchTerm}
-                          onChange={(event) => setMatchingSearchTerm(event.target.value)}
-                          placeholder="Suche nach Steam/CSFloat Item..."
-                          className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
-                        />
-                      </label>
-                      <select
-                        value={matchingSortBy}
-                        onChange={(event) => setMatchingSortBy(event.target.value)}
-                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      >
-                        <option value="score_desc">Sortierung: Score absteigend</option>
-                        <option value="score_asc">Sortierung: Score aufsteigend</option>
-                          <option value="newest">Sortierung: Neueste zuerst</option>
-                        </select>
-                      <label className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={showMatchedMatchingRows}
-                          onChange={(event) => setShowMatchedMatchingRows(event.target.checked)}
-                          className="h-4 w-4 accent-primary"
-                        />
-                        Gematchte anzeigen
-                      </label>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {matchingLoading ? (
-                      <div className="space-y-2">
-                        <Skeleton className="h-14 w-full" />
-                        <Skeleton className="h-14 w-full" />
-                      </div>
-                    ) : matchingDisplayRows.length === 0 ? (
-                      showMatchedMatchingRows ? (
-                        <p className="text-sm text-muted-foreground">
-                          Keine Matching-Eintraege vorhanden.
-                        </p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          Keine offenen Matching-Vorschlaege vorhanden.
-                        </p>
-                      )
-                    ) : filteredMatchingRows.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Kein Match passt zur Suche.
-                      </p>
-                    ) : (
-                      <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-                        {filteredMatchingRows.map((row, index) => {
-                          const steamItem = managementInvestmentById.get(String(row?.steamAssetId || ""));
-                          const csfloatItem = managementInvestmentById.get(String(row?.csfloatInvestmentId || ""));
-                          const steamImageUrl = String(steamItem?.imageUrl || steamItem?.iconUrl || "").trim() || null;
-                          const csfloatImageUrl = String(csfloatItem?.imageUrl || csfloatItem?.iconUrl || "").trim() || null;
-                          const matchScore = Number(row.matchScore);
-                          const matchScoreLabel = Number.isFinite(matchScore) ? matchScore.toFixed(0) : "-";
-                          const createdAtLabel = formatDateSafe(row?.createdAt || null);
-
-                          return (
-                            <div key={String(row.id || `match-${index}`)} className="rounded-md border p-2 sm:p-3">
-                              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                                <div className="space-y-2">
-                                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <div className="flex items-center gap-2 rounded-md border border-border/60 p-2">
-                                      <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
-                                        {steamImageUrl ? (
-                                          <img
-                                            src={steamImageUrl}
-                                            alt={row?.steamItemName || "Steam Item"}
-                                            className="h-full w-full object-contain"
-                                            loading="lazy"
-                                            decoding="async"
-                                          />
-                                        ) : (
-                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                            N/A
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="text-[11px] text-muted-foreground">Steam</p>
-                                        <p className="truncate text-xs font-semibold">{row?.steamItemName || "-"}</p>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 rounded-md border border-border/60 p-2">
-                                      <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
-                                        {csfloatImageUrl ? (
-                                          <img
-                                            src={csfloatImageUrl}
-                                            alt={row?.csfloatItemName || "CSFloat Item"}
-                                            className="h-full w-full object-contain"
-                                            loading="lazy"
-                                            decoding="async"
-                                          />
-                                        ) : (
-                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                            N/A
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="text-[11px] text-muted-foreground">CSFloat</p>
-                                        <p className="truncate text-xs font-semibold">{row?.csfloatItemName || "-"}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Score: {matchScoreLabel} | Confidence: {row.confidence} | Status: {row.status} | Erstellt: {createdAtLabel}
-                                  </p>
-                                  {row?.reason ? (
-                                    <p className="text-[11px] text-muted-foreground">Grund: {row.reason}</p>
-                                  ) : null}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {String(row?.status || "").toLowerCase() === "suggested" ? (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => void handleMatchStatusUpdate(row.id, "manual_confirmed")}
-                                      >
-                                        Bestaetigen
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => void handleMatchStatusUpdate(row.id, "rejected")}
-                                      >
-                                        Ablehnen
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <Badge variant="outline">
-                                      {String(row?.status || "").toLowerCase() === "auto_linked" ? "Auto gematcht" : "Gematcht"}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-                ) : null}
-              </>
-            )}
-          </TabsContent>
+          <PortfolioManagementSection
+            forceMount={visitedTabs.has("management")}
+            syncNotification={syncNotification}
+            autoSyncEnabled={autoSyncEnabled}
+            isSteamSyncing={isSteamSyncing}
+            steamSyncError={steamSyncError}
+            hasCsFloatKey={hasCsFloatKey}
+            hasSkinBaronImportReady={hasSkinBaronImportReady}
+            isCsFloatSyncOpen={isCsFloatSyncOpen}
+            isSkinBaronSyncOpen={isSkinBaronSyncOpen}
+            setIsCsFloatSyncOpen={setIsCsFloatSyncOpen}
+            setIsSkinBaronSyncOpen={setIsSkinBaronSyncOpen}
+            runSteamSync={runSteamSync}
+            handleToggleAutoSync={handleToggleAutoSync}
+            managementInvestments={managementInvestments}
+            managementLoading={managementLoading}
+            managementError={managementError}
+            managementSection={managementSection}
+            setManagementSection={setManagementSection}
+            managementFilter={managementFilter}
+            setManagementFilter={setManagementFilter}
+            managementSearchTerm={managementSearchTerm}
+            setManagementSearchTerm={setManagementSearchTerm}
+            managementTypeFilter={managementTypeFilter}
+            setManagementTypeFilter={setManagementTypeFilter}
+            managementBucketFilter={managementBucketFilter}
+            setManagementBucketFilter={setManagementBucketFilter}
+            managementSortBy={managementSortBy}
+            setManagementSortBy={setManagementSortBy}
+            expandedClusters={expandedClusters}
+            setExpandedClusters={setExpandedClusters}
+            handleManagementExcludeToggle={handleManagementExcludeToggle}
+            handleManagementBucketToggle={handleManagementBucketToggle}
+            handleManagementClusterToggle={handleManagementClusterToggle}
+            handleManagementClusterBucketToggle={handleManagementClusterBucketToggle}
+            handleExcludeChange={handleExcludeChange}
+            matchingRows={matchingRows}
+            matchingLoading={matchingLoading}
+            matchingSearchTerm={matchingSearchTerm}
+            setMatchingSearchTerm={setMatchingSearchTerm}
+            matchingSortBy={matchingSortBy}
+            setMatchingSortBy={setMatchingSortBy}
+            showMatchedMatchingRows={showMatchedMatchingRows}
+            setShowMatchedMatchingRows={setShowMatchedMatchingRows}
+            handleMatchStatusUpdate={handleMatchStatusUpdate}
+            managementInvestmentById={managementInvestmentById}
+            matchingDisplayRows={matchingDisplayRows}
+            handleEditPortfolioGroup={handleEditPortfolioGroup}
+            rawSteamInventoryItems={rawSteamInventoryItems}
+            steamInventoryItemsAll={steamInventoryItemsAll}
+            priceSearchTerm={priceSearchTerm}
+            setPriceSearchTerm={setPriceSearchTerm}
+            priceSortBy={priceSortBy}
+            setPriceSortBy={setPriceSortBy}
+            priceMissingOnly={priceMissingOnly}
+            setPriceMissingOnly={setPriceMissingOnly}
+            priceDrafts={priceDrafts}
+            setPriceDrafts={setPriceDrafts}
+            savingPriceItemId={savingPriceItemId}
+            setSavingPriceItemId={setSavingPriceItemId}
+            handlePriceDraftChange={handlePriceDraftChange}
+            handleSaveSteamItemPrice={handleSaveSteamItemPrice}
+            handleAcceptSuggestedPrice={handleAcceptSuggestedPrice}
+            manualItemDraft={manualItemDraft}
+            setManualItemDraft={setManualItemDraft}
+            manualSelectedSuggestion={manualSelectedSuggestion}
+            setManualSelectedSuggestion={setManualSelectedSuggestion}
+            manualItemSaving={manualItemSaving}
+            setManualItemSaving={setManualItemSaving}
+            handleManualItemDraftChange={handleManualItemDraftChange}
+            handleManualSuggestionPick={handleManualSuggestionPick}
+            handleCreateManualInvestment={handleCreateManualInvestment}
+            portfolioGroups={portfolioGroups}
+            portfolioGroupsLoading={portfolioGroupsLoading}
+            portfolioGroupDraft={portfolioGroupDraft}
+            portfolioGroupEditorId={portfolioGroupEditorId}
+            portfolioGroupMessage={portfolioGroupMessage}
+            portfolioGroupError={portfolioGroupError}
+            expandedGroupManagementClusters={expandedGroupManagementClusters}
+            setExpandedGroupManagementClusters={setExpandedGroupManagementClusters}
+            groupSearchTerm={groupSearchTerm}
+            setGroupSearchTerm={setGroupSearchTerm}
+            groupSortBy={groupSortBy}
+            setGroupSortBy={setGroupSortBy}
+            portfolioGroupEditor={portfolioGroupEditor}
+            handleStartCreatePortfolioGroup={handleStartCreatePortfolioGroup}
+            resetPortfolioGroupEditor={resetPortfolioGroupEditor}
+            handlePortfolioGroupDraftChange={handlePortfolioGroupDraftChange}
+            handleSavePortfolioGroup={handleSavePortfolioGroup}
+            handleDeletePortfolioGroup={handleDeletePortfolioGroup}
+            handleAssignInvestmentIdsToGroup={handleAssignInvestmentIdsToGroup}
+            handleRemoveInvestmentIdsFromGroup={handleRemoveInvestmentIdsFromGroup}
+            handleOpenPortfolioGroupInInventory={handleOpenPortfolioGroupInInventory}
+            handleOpenPortfolioGroupInManagement={handleOpenPortfolioGroupInManagement}
+            setPortfolioGroupEditorId={setPortfolioGroupEditorId}
+            filteredManagementClusters={filteredManagementClusters}
+            managementTypeOptions={managementTypeOptions}
+            managementQuickHints={managementQuickHints}
+            filteredMatchingRows={filteredMatchingRows}
+            matchingSuggestedCount={matchingSuggestedCount}
+            matchedSteamInventoryItemsCount={matchedSteamInventoryItemsCount}
+            filteredPriceItems={filteredPriceItems}
+            suggestedPriceByNameKey={suggestedPriceByNameKey}
+            priceMissingCount={priceMissingCount}
+          />
           ) : null}
         </Tabs>
         </div>

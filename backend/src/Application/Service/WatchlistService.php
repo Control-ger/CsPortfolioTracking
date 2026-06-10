@@ -15,7 +15,8 @@ final class WatchlistService
         private readonly WatchlistRepository $watchlistRepository,
         private readonly ItemRepository $itemRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
-        private readonly PricingService $pricingService
+        private readonly PricingService $pricingService,
+        private readonly WatchlistSearchService $watchlistSearchService
     ) {
     }
 
@@ -131,7 +132,7 @@ final class WatchlistService
         if ($searchQuery === '' && $browseMode) {
             $searchQuery = '';
         }
-        return $this->pricingService->searchWatchlistCandidates(
+        return $this->watchlistSearchService->searchWatchlistCandidates(
             $searchQuery,
             $resolvedLimit,
             $normalizedItemType !== '' ? $normalizedItemType : null,

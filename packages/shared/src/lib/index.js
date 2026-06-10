@@ -20,6 +20,24 @@ export * from "./encryption.js";
 // Frontend Telemetry
 export * from "./frontendTelemetry.js";
 
+// Portfolio Calculations
+export * from "./portfolioCalculations.js";
+
+// Portfolio Groups
+export * from "./portfolioGroups.js";
+
+// Portfolio Helpers
+export * from "./portfolioHelpers.js";
+
+// Settings Helpers
+export * from "./settingsHelpers.js";
+
+// Desktop Sync
+export * from "./desktopSync.js";
+
+// Local Store Result
+export * from "./localStoreResult.js";
+
 // Utils
 export * from "./utils.js";
 export * from "./serverConfig.js";

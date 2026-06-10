@@ -255,6 +255,7 @@ try {
         $userPriceSourcePreferenceRepository
     );
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
+    $feeCalculationService = new FeeCalculationService();
     $portfolioService = new PortfolioService(
         $investmentRepository,
         $exchangeRateRepository,
@@ -262,7 +263,8 @@ try {
         $portfolioHistoryRepository,
         $priceHistoryRepository,
         $pricingService,
-        $feeSettingsService
+        $feeSettingsService,
+        $feeCalculationService
     );
     $queueService = new PriceRefreshQueueService(
         $pdo,

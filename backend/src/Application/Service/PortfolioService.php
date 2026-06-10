@@ -25,7 +25,8 @@ final class PortfolioService
         private readonly PortfolioHistoryRepository $portfolioHistoryRepository,
         private readonly PriceHistoryRepository $priceHistoryRepository,
         private readonly PricingService $pricingService,
-        private readonly FeeSettingsService $feeSettingsService
+        private readonly FeeSettingsService $feeSettingsService,
+        private readonly FeeCalculationService $feeCalculationService
     ) {
     }
 
@@ -886,41 +887,17 @@ final class PortfolioService
 
     private function resolveAcquisitionFees(float $totalInvested, string $fundingMode, array $settings): float
     {
-        if ($fundingMode !== 'cash_in' || $totalInvested <= 0) {
-            return 0.0;
-        }
-
-        $depositPercent = max(0.0, ((float) ($settings['depositFeePercent'] ?? 0.0)) / 100.0);
-        $fxPercent = max(0.0, ((float) ($settings['fxFeePercent'] ?? 0.0)) / 100.0);
-        $depositFixed = max(0.0, (float) ($settings['depositFeeFixedEur'] ?? 0.0));
-
-        return ($totalInvested * $depositPercent) + ($totalInvested * $fxPercent) + $depositFixed;
+        return $this->feeCalculationService->resolveAcquisitionFees($totalInvested, $fundingMode, $settings);
     }
 
     private function calculateNetProceeds(float $grossSell, array $settings): float
     {
-        $sellerFeeRate = max(0.0, ((float) ($settings['sellerFeePercent'] ?? 0.0)) / 100.0);
-        $withdrawalFeeRate = max(0.0, ((float) ($settings['withdrawalFeePercent'] ?? 0.0)) / 100.0);
-
-        $afterSeller = $grossSell * (1 - $sellerFeeRate);
-        return $afterSeller * (1 - $withdrawalFeeRate);
+        return $this->feeCalculationService->calculateNetProceeds($grossSell, $settings);
     }
 
     private function calculateBreakEvenNetUnitPrice(float $costBasisUnit, array $settings): ?float
     {
-        if ($costBasisUnit <= 0) {
-            return null;
-        }
-
-        $sellerFeeRate = max(0.0, ((float) ($settings['sellerFeePercent'] ?? 0.0)) / 100.0);
-        $withdrawalFeeRate = max(0.0, ((float) ($settings['withdrawalFeePercent'] ?? 0.0)) / 100.0);
-        $multiplier = (1 - $sellerFeeRate) * (1 - $withdrawalFeeRate);
-
-        if ($multiplier <= 0) {
-            return null;
-        }
-
-        return $costBasisUnit / $multiplier;
+        return $this->feeCalculationService->calculateBreakEvenNetUnitPrice($costBasisUnit, $settings);
     }
 
     private function currentHourBucket(): string

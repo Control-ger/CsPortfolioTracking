@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-10
+Last updated: 2026-06-09
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -26,6 +26,10 @@ This document tracks:
   - server front controller: `backend/public/index.php`
   - desktop sidecar front controller: `backend/desktop/index.php`
   - ws gateway process: `backend/ws-gateway/server.mjs`
+- `.kilocode/`
+  - mode-specific agent instructions (rules per mode)
+- `plans/`
+  - codebase optimization plans
 - `docs/`
   - architecture and implementation plans
 
@@ -190,6 +194,13 @@ Health legend:
 | `backend/OBSERVABILITY_IMPLEMENTATION_PLAN.md` | IN PROGRESS | CURRENT | Rebased to actual implementation and remaining gaps. |
 | `backend/STRANGLER_ROLLOUT.md` | IN PROGRESS | CURRENT | Rebased to real cutover status + residual cleanup tasks. |
 | `docs/archive/MONOREPO_MIGRATION_STATUS.md` | HISTORICAL | HISTORICAL | Completion report, not live architecture source. |
+| `plans/codebase-optimization-findings.md` | IN PROGRESS | CURRENT | Codebase optimization analysis findings. |
+| `plans/codebase-optimization-plan.md` | IN PROGRESS | CURRENT | Codebase optimization implementation plan. |
+| `old_agents.md` | ARCHIVED | HISTORICAL | Previous German AGENTS.md (preserved as reference). |
+| `.kilocode/rules-architect/AGENTS.md` | ACTIVE | CURRENT | Kilo Code architect mode instructions. |
+| `.kilocode/rules-ask/AGENTS.md` | ACTIVE | CURRENT | Kilo Code ask mode instructions. |
+| `.kilocode/rules-code/AGENTS.md` | ACTIVE | CURRENT | Kilo Code code mode instructions. |
+| `.kilocode/rules-debug/AGENTS.md` | ACTIVE | CURRENT | Kilo Code debug mode instructions. |
 
 ## 8. Known Inconsistencies (current repo)
 

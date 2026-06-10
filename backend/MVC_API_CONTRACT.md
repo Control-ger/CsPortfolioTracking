@@ -1,7 +1,7 @@
 # MVC API Contract (v1)
 
 Status: FINAL  
-Updated: 2026-05-29
+Updated: 2026-06-09
 
 ## 1. Base Routing
 
@@ -169,8 +169,23 @@ Returns:
 - `investmentId`
 - `bucket`
 
-Note:
-- `PortfolioController::updateInvestmentOverpay(...)` exists in code, but no public `/api/v1/portfolio/investments/{id}/overpay` route is currently registered in `backend/public/index.php`.
+### `PUT /portfolio/investments/{id}/overpay`
+
+Body:
+- `overpayEnabled` / `isOverpayCandidate`: boolean (enables/disables overpay)
+- `overpayFloorEur`: float|null (minimum EUR floor, clamped to >= 0)
+- `overpayNote`: string|null (optional note about the overpay)
+
+Returns:
+- `success`
+- `investmentId`
+- `overpayEnabled`
+- `overpayFloorEur`
+- `overpayNote`
+
+Errors:
+- `INVALID_OVERPAY_FLOOR` (400) — `overpayFloorEur` is not numeric
+- `INVESTMENT_NOT_FOUND` (404) — investment does not exist
 
 ## 5. Sync Endpoints
 
