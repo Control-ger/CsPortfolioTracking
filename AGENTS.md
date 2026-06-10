@@ -745,3 +745,12 @@ Change: Desktop Legacy-User-Daten automatisch in Steam-User-Scope gemerged
 - `apps/desktop/src/localStore/index.js` merged bestehende lokale Legacy-Daten unter `user_id = "1"` beim ersten Zugriff in den aktiven `steam-<steamId>`-Scope.
 - Der Merge umfasst Investments, Watchlist, Portfolio-Snapshots, Steam-Inventory-State, Steam/CSFloat-Matches, Notifications, Portfolio-Preferences und Pending-Operation-Payloads.
 - Ziel: Updates auf den Steam-spezifischen Desktop-User-Scope duerfen vorhandene lokale Portfolio-/Investment-Daten nicht leer erscheinen lassen.
+
+---
+
+Updated: 2026-06-10
+Change: Beta-Release-Workflow + release:beta npm script ergaenzt
+- Neuer GitHub-Workflow `.github/workflows/beta-release.yml` triggered durch `beta-*` Tags (kein Prod-Deployment).
+- Baut Docker-Image + Desktop .exe als GitHub Pre-Release.
+- Neues npm-Script `release:beta` (bzw. `release:beta:codebase`) erzeugt und pusht Beta-Tag.
+- Zentrales Helfer-Script `scripts/release-beta.mjs`.
