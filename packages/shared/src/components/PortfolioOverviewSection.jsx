@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import { PortfolioChart } from "./PortfolioChart.jsx";
 import { PortfolioCompositionChart } from "./PortfolioCompositionChart.jsx";
 import { PortfolioHeaderCard } from "./PortfolioHeaderCard.jsx";
-import { StatCard } from "./StatCard.jsx";
+import { StatCard } from "./StatsCards.jsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./Card.jsx";
 import { Badge } from "./Badge.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
