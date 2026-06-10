@@ -4,11 +4,11 @@ import { PortfolioChart } from "./PortfolioChart.jsx";
 import { PortfolioCompositionChart } from "./PortfolioCompositionChart.jsx";
 import { PortfolioHeaderCard } from "./PortfolioHeaderCard.jsx";
 import { StatCard } from "./StatsCards.jsx";
-import { Card, CardContent, CardHeader, CardTitle } from "./Card.jsx";
-import { Badge } from "./Badge.jsx";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
+import { Badge } from "./ui/badge.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
-import { Button } from "./Button.jsx";
-import { useCurrency } from "../contexts/CurrencyContext.js";
+import { Button } from "./ui/button.jsx";
+import { useCurrency } from "../contexts/CurrencyContext.jsx";
 import {
   formatAge,
   syncHealthBadgeClass,

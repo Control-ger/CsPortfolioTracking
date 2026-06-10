@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import { Skeleton } from "./ui/skeleton.jsx";
-import { Button } from "./Button.jsx";
+import { Button } from "./ui/button.jsx";
 import { BREAKPOINTS } from "../lib/index.js";
 import { resolveLiveClusterItem, withBuyOrderFields } from "../lib/portfolioHelpers.js";
 
