@@ -26,7 +26,9 @@
     "rebuild:desktop-native": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint .",
     "docs:guard": "node scripts/docs-guard.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "release:beta": "node scripts/release-beta.mjs",
+    "release:beta:codebase": "node scripts/release-beta.mjs refactor/codebase-decomposition"
   },
   "build": {
     "appId": "com.csportfolio",
