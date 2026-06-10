@@ -44,6 +44,7 @@
     "files": [
       "dist/**/*",
       "apps/desktop/main.js",
+      "apps/desktop/main/**/*",
       "apps/desktop/preload.js",
       "apps/desktop/src/localStore/**/*",
       "backend/**/*",
