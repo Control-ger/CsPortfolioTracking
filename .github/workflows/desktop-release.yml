@@ -70,6 +70,10 @@ jobs:
           "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Create artifact attestation
+        # Best-effort provenance: a sigstore/rekor outage must not block the
+        # release. Marked non-fatal so the release step still publishes the
+        # already-built installer.
+        continue-on-error: true
         uses: actions/attest@v4
         with:
           subject-path: "release/*.exe"
