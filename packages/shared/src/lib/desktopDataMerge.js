@@ -20,7 +20,6 @@ import {
   DEFAULT_STATS,
 } from "./portfolioCalculations.js";
 
-import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 
 /** Desktop LocalStore accessor */

@@ -4625,6 +4625,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </TabsList>
             </div>
 
+          <TabsContent value="overview" forceMount={visitedTabs.has("overview") || undefined}>
           <PortfolioOverviewSection
             forceMount={visitedTabs.has("overview")}
             stats={stats}
@@ -4664,7 +4665,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             portfolioTotalValueForDisplay={portfolioTotalValueForDisplay}
             portfolioValueLabel={portfolioValueLabel}
           />
+          </TabsContent>
 
+          <TabsContent value="inventory" forceMount={visitedTabs.has("inventory") || undefined}>
           <PortfolioInventorySection
             forceMount={visitedTabs.has("inventory")}
             inventoryScope={inventoryScope}
@@ -4701,12 +4704,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             enrichedInvestments={enrichedInvestments}
             inventoryBuyOrderSummary={inventoryBuyOrderSummary}
           />
+          </TabsContent>
 
+          <TabsContent value="watchlist" forceMount={visitedTabs.has("watchlist") || undefined}>
           <PortfolioWatchlistSection
             forceMount={visitedTabs.has("watchlist")}
             watchlistFocusTarget={watchlistFocusTarget}
             handleWatchlistWarningsChange={handleWatchlistWarningsChange}
           />
+          </TabsContent>
+          <TabsContent value="search" forceMount={visitedTabs.has("search") || undefined}>
           <PortfolioSearchSection
             forceMount={visitedTabs.has("search")}
             loadGlobalSearchWatchlistItems={loadGlobalSearchWatchlistItems}
@@ -4714,7 +4721,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             handleUiWarningsChange={handleUiWarningsChange}
             searchPageInitialTerm={searchPageInitialTerm}
           />
+          </TabsContent>
           {isDesktopRuntime ? (
+          <TabsContent value="management" forceMount={visitedTabs.has("management") || undefined}>
           <PortfolioManagementSection
             forceMount={visitedTabs.has("management")}
             syncNotification={syncNotification}
@@ -4820,6 +4829,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             suggestedPriceByNameKey={suggestedPriceByNameKey}
             priceMissingCount={priceMissingCount}
           />
+          </TabsContent>
           ) : null}
         </Tabs>
         </div>

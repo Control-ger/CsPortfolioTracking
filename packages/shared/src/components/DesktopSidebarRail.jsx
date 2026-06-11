@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package } from "lucide-react";
+import { Bell, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -15,9 +15,10 @@ import { UserMenu } from "@shared/components/UserMenu";
 import { getCurrentUser, resolveDesktopLocalUserId } from "@shared/lib";
 
 const DESKTOP_SIDEBAR_ITEMS = [
-  { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/?tab=overview" },
-  { key: "inventory", label: "Inventar", icon: Package, to: "/?tab=inventory" },
-  { key: "watchlist", label: "Watchlist", icon: Eye, to: "/?tab=watchlist" },
+  { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/" },
+  { key: "inventory", label: "Inventar", icon: Package, to: "/inventory" },
+  { key: "watchlist", label: "Watchlist", icon: Eye, to: "/watchlist" },
+  { key: "search", label: "Suche", icon: Search, to: "/search" },
   { key: "management", label: "Verwaltung", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
   { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
   { key: "updates", label: "Updates", icon: Newspaper, to: "/cs-updates" },
