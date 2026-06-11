@@ -11,6 +11,8 @@ use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistSearchService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\WebPushService;
+use App\Application\Service\FeeCalculationService;
+use App\Application\Service\SyncEntityService;
 use App\Application\Service\SyncService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
