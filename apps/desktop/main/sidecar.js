@@ -109,6 +109,19 @@ function resolvePhpBinary() {
   return "php";
 }
 
+// Resolve the PHP extension directory (the folder holding php_curl.dll etc.)
+// from a resolved PHP binary path. Returns null when it cannot be determined
+// (e.g. the binary is just "php" on PATH), in which case PHP falls back to its
+// compiled-in default extension_dir.
+function resolvePhpExtensionDir(phpBinary) {
+  if (!phpBinary || phpBinary === "php") {
+    return null;
+  }
+
+  const extDir = path.join(path.dirname(phpBinary), "ext");
+  return fsSync.existsSync(extDir) ? extDir : null;
+}
+
 export function findFreePort() {
   if (cachedFreePort) {
     return Promise.resolve(cachedFreePort);
@@ -223,6 +236,14 @@ export async function startPhpSidecar() {
 
   if (fsSync.existsSync(phpIni)) {
     args.push("-c", phpIni);
+
+    // backend/desktop/php.ini enables the required extensions but cannot
+    // hardcode extension_dir (it is machine-specific). Resolve it from the PHP
+    // binary location and inject it so the bundled ini works on any install.
+    const phpExtDir = resolvePhpExtensionDir(phpBinary);
+    if (phpExtDir) {
+      args.push("-d", `extension_dir=${phpExtDir}`);
+    }
   }
 
   args.push(
