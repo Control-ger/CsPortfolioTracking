@@ -138,7 +138,7 @@ From `apps/web/src/App.jsx`:
 - Update notifications are dual-path in desktop runtime: native OS toast (when supported) plus persisted in-app system notifications (`category=app_update`) for reliable visibility.
 - Desktop app runtime is globally gated by Secret Vault status in `App.jsx`: while locked/not configured, shared routes are blocked by an unlock/setup screen and sensitive IPC paths (`backend-base-url`, local-store IPC, secret mutations) stay denied.
 - The Secret Vault setup/unlock screen now embeds welcome/onboarding context inside the same `steam-startup-shell`, using avatar-derived Steam palette variables (`--steam-shell-color-a` ... `--steam-shell-color-d`) with fallback colors.
-- `GET /api/v1/portfolio/summary` uses enriched rows without live refresh (`allowLiveRefresh=false`) to avoid duplicate CSFloat load in the same page cycle.
+- Passive portfolio reads (`investments`, `summary`, composition donut) are **cache-only**: `PortfolioService::getEnrichedInvestments` defaults to `allowLiveRefresh=false`, so they serve the last known price from `item_live_cache` immediately (stale is marked, never blocks on a CSFloat fetch). Live pricing enters only via the cron (`backend/sync-prices.php`) and the explicit, cooldown-gated `refresh-stale` action.
 - Interactive pricing requests apply a capped CSFloat lookup budget per request (`MAX_INTERACTIVE_CSFLOAT_LOOKUPS`), while CLI workers remain uncapped.
 - `CsFloatClient::fetchLowestListingResult()` uses `GET /api/v1/listings/price-list` as primary bulk source (90s in-memory cache), with per-item listing lookup as fallback.
 - Search observability includes `domain.watchlist.search.*` events and a debug aggregation endpoint `GET /api/v1/debug/watchlist-search-stats` (server + desktop sidecar proxy).
@@ -152,13 +152,16 @@ From `apps/web/src/App.jsx`:
 - For `metricsScope=all`, frontend normalizes history/KPI fallback inputs against the active summary values when the newest history snapshot diverges significantly, so `Gesamt Zuwachs` and chart stay scope-consistent.
 - CSFloat rate-limit handling uses a circuit-breaker file backoff and respects upstream `Retry-After` when present.
 
-### 6.4 Hourly price write policy
+### 6.4 Price tables and write policy
 
-- `backend/sync-prices.php` plans the hourly queue and processes the full planned kickoff batch by default (`PRICE_QUEUE_KICKOFF_BATCH` can override).
-- `backend/sync-prices.php` runs a bulk CSFloat price-list import to upsert all items into `items`, `item_live_cache`, and `price_history_hourly`.
+- **Canonical price tables (source-aware, cron-written only):**
+  - `item_live_cache` — current price per `(item_id, price_source)`.
+  - `price_history_hourly` — hourly USD snapshots per `(item_id, bucket_start, price_source)`; regular InnoDB table (no partitioning) for MariaDB foreign-key compatibility.
+  These are read by all price consumers (investments, summary, composition, watchlist, and the catalog/watchlist search price JOIN in `ItemRepository`).
+- **Writers are cron-only:** `backend/sync-prices.php` runs a bulk CSFloat price-list import (`PriceListBulkImportService`) to upsert all items into `items`, `item_live_cache`, and `price_history_hourly`, plus the CLI price-refresh queue worker for per-item top-ups. With `price-list` as bulk source, hourly runs update all tracked queue items without per-item external lookups in the common case.
 - `backend/sync-prices.php` is the only write-enabled process for `items` and sets `ITEMS_CATALOG_WRITE_SCOPE=cron` explicitly before catalog upserts.
-- `price_history_hourly` stores hourly USD snapshots as a regular InnoDB table (no partitioning) to stay compatible with MariaDB foreign-key limitations.
-- With `price-list` as bulk source, hourly runs can update all tracked queue items without per-item external lookups in the common case.
+- **Reads never live-fetch** (see §6.1): passive page reads serve from `item_live_cache`; only the cron and the explicit `refresh-stale` action contact CSFloat.
+- The previous dormant "scaling" mirror tables (`item_price_latest`, `item_price_history_hourly`) and the flag-gated `ScalingShadowReadService` were retired (migration `2026_06_11_001`). The future user-scaling read-model still builds on `user_positions` / `position_events` / `portfolio_snapshots_daily`, which remain.
 
 ### 6.2 CS updates feed behavior
 

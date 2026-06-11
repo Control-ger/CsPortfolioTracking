@@ -23,18 +23,25 @@ At high cardinality this causes:
 
 Design principle: item-centric pricing, user-centric holdings, async sync pipeline.
 
+> **Update (2026-06):** the pricing portion of this plan was superseded. The legacy
+> tables `item_live_cache` (`PK item_id, price_source`) and `price_history_hourly`
+> (`PK item_id, bucket_start, price_source`) are already source-aware and cron-written, so
+> they were kept as the canonical price stack and the dormant scaling mirror tables
+> (`item_price_latest`, `item_price_history_hourly`) were dropped (migration `2026_06_11_001`).
+> The user-scaling portion (`user_positions` / `position_events` / `portfolio_snapshots_daily`)
+> remains the forward target.
+
 ### 2.1 Canonical tables (core)
 
 - `items`: global item catalog (single source for metadata)
-- `item_price_latest`: one hot row per item
-- `item_price_history_hourly`: append-only hourly price buckets
-- `user_positions`: aggregated user holdings per item
+- `item_live_cache`: current price per `(item_id, price_source)` (canonical, cron-written)
+- `price_history_hourly`: hourly price buckets per `(item_id, bucket_start, price_source)` (canonical, cron-written)
+- `user_positions`: aggregated user holdings per item (future read-model)
 - `position_events`: optional append-only event log (buy/sell/import/audit)
 - `portfolio_snapshots_daily`: daily portfolio aggregates for charts
 
 ### 2.2 Non-canonical / optional tables
 
-- `item_live_cache`: transitional only, remove after cutover to `item_price_latest`
 - `item_catalog`: merge into `items`, then deprecate
 - `position_history`: keep only if UI requires per-item time snapshots; otherwise derive
 - `observability_events`: keep with strict retention + sampling

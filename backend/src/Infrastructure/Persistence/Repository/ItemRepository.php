@@ -359,9 +359,9 @@ final class ItemRepository
                         THEN (ipl.price_usd * er.usd_to_eur)
                         ELSE NULL
                      END AS price_eur';
-            $joinSql = '
-                LEFT JOIN item_price_latest ipl ON ipl.item_id = i.id
-                LEFT JOIN exchange_rates er ON er.id = ipl.exchange_rate_id';
+            $joinSql = "
+                LEFT JOIN item_live_cache ipl ON ipl.item_id = i.id AND ipl.price_source = 'csfloat'
+                LEFT JOIN exchange_rates er ON er.id = ipl.exchange_rate_id";
         } else {
             $selectSql .= ',
                     NULL AS price_usd,
@@ -501,9 +501,9 @@ final class ItemRepository
         }
 
         try {
-            $itemLatest = $this->pdo->query("SHOW TABLES LIKE 'item_price_latest'")?->fetchColumn();
+            $liveCache = $this->pdo->query("SHOW TABLES LIKE 'item_live_cache'")?->fetchColumn();
             $exchangeRates = $this->pdo->query("SHOW TABLES LIKE 'exchange_rates'")?->fetchColumn();
-            $this->priceJoinAvailable = $itemLatest !== false && $exchangeRates !== false;
+            $this->priceJoinAvailable = $liveCache !== false && $exchangeRates !== false;
         } catch (Throwable) {
             $this->priceJoinAvailable = false;
         }

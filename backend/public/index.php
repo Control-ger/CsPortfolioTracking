@@ -7,7 +7,6 @@ use App\Application\Service\CsFloatTradeNormalizer;
 use App\Application\Service\CsFloatTradeSyncService;
 use App\Application\Service\PricingService;
 use App\Application\Service\RequestRateLimiter;
-use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistSearchService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\WebPushService;
@@ -719,7 +718,6 @@ try {
         $pricingService,
         $watchlistSearchService
     );
-    $scalingShadowReadService = new ScalingShadowReadService($pdo);
     $syncEntityService = new SyncEntityService($pdo);
     $syncService = new SyncService($pdo, $syncEntityService);
 
@@ -734,8 +732,8 @@ try {
         $userScopeResolver
     );
 
-    $portfolioController = new PortfolioController($portfolioService, $syncService, $scalingShadowReadService, $userScopeResolver);
-    $watchlistController = new WatchlistController($watchlistService, $syncService, $scalingShadowReadService, $userScopeResolver);
+    $portfolioController = new PortfolioController($portfolioService, $syncService, $userScopeResolver);
+    $watchlistController = new WatchlistController($watchlistService, $syncService, $userScopeResolver);
     $debugController = new DebugController($observabilityRepository);
     $observabilityController = new ObservabilityController($observabilityRepository);
     $frontendTelemetryController = new FrontendTelemetryController();

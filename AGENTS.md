@@ -76,6 +76,11 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 | Prices | Server cron only | Desktop (via sidecar) + Web |
 | Import triggers | Desktop-initiated | Desktop |
 
+### Pricing Rules
+- Canonical, source-aware price tables: `item_live_cache` (`PK item_id, price_source`) and `price_history_hourly` (`PK item_id, bucket_start, price_source`). Written **only** by the cron (`backend/sync-prices.php` bulk import + CLI queue worker).
+- Passive reads never live-fetch: `PortfolioService::getEnrichedInvestments` defaults to `allowLiveRefresh=false`; investments/summary/composition/watchlist serve the last known price immediately. Only the cron and the explicit `refresh-stale` action call CSFloat.
+- The dormant "scaling" price mirror (`item_price_latest`, `item_price_history_hourly`, `ScalingShadowReadService`, `SCALING_*_READ_ENABLED` flags) was retired; `user_positions`/`position_events`/`portfolio_snapshots_daily` remain for the future read-model.
+
 ## Release Workflow
 "Release" means Electron release (not just git push):
 1. Commit feature changes with descriptive messages.

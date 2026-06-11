@@ -82,7 +82,7 @@ Key `data[]` fields:
 Meta:
 - `warnings[]`
 - `scope`
-- `readPath` (`legacy` | `scaling_primary`)
+- `readPath` (always `legacy`; cache-only read from `item_live_cache`)
 
 ### `GET /portfolio/summary`
 
@@ -109,8 +109,7 @@ Key `data` fields:
 Meta may include:
 - `warnings[]`
 - `scope`
-- `readPath`
-- optional `shadowRead`
+- `readPath` (always `legacy`; cache-only read from `item_live_cache`)
 
 ### `GET /portfolio/history`
 

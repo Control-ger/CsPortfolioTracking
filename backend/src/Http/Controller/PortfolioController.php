@@ -5,7 +5,6 @@ namespace App\Http\Controller;
 
 use App\Http\Auth\RequestUserScopeResolver;
 use App\Application\Service\PortfolioService;
-use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\SyncService;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
@@ -18,7 +17,6 @@ final class PortfolioController
     public function __construct(
         private readonly PortfolioService $portfolioService,
         private readonly SyncService $syncService,
-        private readonly ?ScalingShadowReadService $scalingShadowReadService = null,
         private readonly ?RequestUserScopeResolver $userScopeResolver = null
     ) {
     }
@@ -34,7 +32,7 @@ final class PortfolioController
                 [
                     'warnings' => $this->portfolioService->consumePricingWarnings(),
                     'scope' => $scope,
-                    'readPath' => $this->primaryScalingReadEnabled() ? 'scaling_primary' : 'legacy',
+                    'readPath' => 'legacy',
                 ]
             );
         } catch (UserScopeAuthorizationException $exception) {
@@ -56,72 +54,17 @@ final class PortfolioController
         try {
             $userId = $this->resolveUserId($request);
             $scope = $this->resolveScope($request);
-            $usePrimaryScalingRead = $scope === 'all'
-                && $this->primaryScalingReadEnabled()
-                && $this->scalingShadowReadService !== null;
-            $summary = [];
-            $meta = ['warnings' => []];
 
-            if ($usePrimaryScalingRead) {
-                $scaled = $this->scalingShadowReadService->buildPortfolioSummary($userId);
-                $totalValue = (float) ($scaled['totalValue'] ?? 0.0);
-                $totalInvested = (float) ($scaled['totalInvested'] ?? 0.0);
-                $totalProfitEuro = $totalValue - $totalInvested;
-                $summary = [
-                    'totalValue' => $totalValue,
-                    'totalInvested' => $totalInvested,
-                    'totalQuantity' => (int) ($scaled['totalQuantity'] ?? 0),
-                    'totalProfitEuro' => $totalProfitEuro,
-                    'totalRoiPercent' => $totalInvested > 0 ? ($totalProfitEuro / $totalInvested) * 100 : 0.0,
-                    'totalNetValue' => $totalValue,
-                    'totalNetProfitEuro' => $totalProfitEuro,
-                    'totalNetRoiPercent' => $totalInvested > 0 ? ($totalProfitEuro / $totalInvested) * 100 : 0.0,
-                    'isPositive' => $totalProfitEuro >= 0,
-                    'chartColor' => $totalProfitEuro >= 0 ? '#22c55e' : '#ef4444',
-                    'liveItemsCount' => (int) ($scaled['pricedPositions'] ?? 0),
-                    'staleLiveItemsCount' => 0,
-                    'staleLiveItemsRatioPercent' => 0.0,
-                    'freshestDataAgeSeconds' => null,
-                    'oldestDataAgeSeconds' => null,
-                ];
-                $meta['readPath'] = 'scaling_primary';
-            } else {
-                $rows = $this->portfolioService->getEnrichedInvestments(
-                    $userId,
-                    false,
-                    $scope,
-                    false
-                );
-                $summary = $this->portfolioService->getSummary($rows)->toArray();
-                $meta = ['warnings' => $this->portfolioService->consumePricingWarnings()];
-                $meta['readPath'] = 'legacy';
-            }
+            $rows = $this->portfolioService->getEnrichedInvestments(
+                $userId,
+                false,
+                $scope,
+                false
+            );
+            $summary = $this->portfolioService->getSummary($rows)->toArray();
+            $meta = ['warnings' => $this->portfolioService->consumePricingWarnings()];
+            $meta['readPath'] = 'legacy';
             $meta['scope'] = $scope;
-
-            if ($this->shadowReadEnabled() && $this->scalingShadowReadService !== null) {
-                $shadow = $this->scalingShadowReadService->buildPortfolioSummary($userId);
-                $delta = abs(((float) ($summary['totalValue'] ?? 0.0)) - ((float) ($shadow['totalValue'] ?? 0.0)));
-                $meta['shadowRead'] = [
-                    'enabled' => true,
-                    'totalValueDelta' => round($delta, 2),
-                    'positions' => (int) ($shadow['positions'] ?? 0),
-                ];
-
-                if ($delta > 0.5) {
-                    Logger::event(
-                        'warning',
-                        'domain',
-                        'domain.shadow_read.portfolio_summary_mismatch',
-                        'Portfolio summary mismatch between legacy and scalable shadow read',
-                        [
-                            'userId' => $userId,
-                            'legacyTotalValue' => (float) ($summary['totalValue'] ?? 0.0),
-                            'shadowTotalValue' => (float) ($shadow['totalValue'] ?? 0.0),
-                            'delta' => round($delta, 2),
-                        ]
-                    );
-                }
-            }
 
             JsonResponseFactory::success(
                 $summary,
@@ -488,25 +431,5 @@ final class PortfolioController
         $scopeInput = $request->query['scope'] ?? $request->body['scope'] ?? 'investments';
         $scope = strtolower(trim((string) $scopeInput));
         return $scope === 'all' ? 'all' : 'investments';
-    }
-
-    private function shadowReadEnabled(): bool
-    {
-        $value = getenv('SCALING_SHADOW_READ_ENABLED');
-        if ($value === false || $value === null) {
-            return false;
-        }
-
-        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
-    }
-
-    private function primaryScalingReadEnabled(): bool
-    {
-        $value = getenv('SCALING_PRIMARY_READ_ENABLED');
-        if ($value === false || $value === null) {
-            return false;
-        }
-
-        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 }

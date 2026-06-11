@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Http\Auth\RequestUserScopeResolver;
-use App\Application\Service\ScalingShadowReadService;
 use App\Application\Service\WatchlistService;
 use App\Application\Service\SyncService;
 use App\Shared\Http\JsonResponseFactory;
@@ -20,7 +19,6 @@ final class WatchlistController
     public function __construct(
         private readonly WatchlistService $watchlistService,
         private readonly SyncService $syncService,
-        private readonly ?ScalingShadowReadService $scalingShadowReadService = null,
         private readonly ?RequestUserScopeResolver $userScopeResolver = null
     )
     {
@@ -34,17 +32,8 @@ final class WatchlistController
             $items = $this->watchlistService->listWithMetrics($userId, $syncLive);
             $meta = [
                 'warnings' => $this->watchlistService->consumePricingWarnings(),
-                'readPath' => $this->primaryScalingReadEnabled() ? 'scaling_primary' : 'legacy',
+                'readPath' => 'legacy',
             ];
-
-            if ($this->shadowReadEnabled() && $this->scalingShadowReadService !== null) {
-                $shadow = $this->scalingShadowReadService->buildWatchlistStats($userId);
-                $meta['shadowRead'] = [
-                    'enabled' => true,
-                    'totalItems' => (int) ($shadow['totalItems'] ?? 0),
-                    'pricedItems' => (int) ($shadow['pricedItems'] ?? 0),
-                ];
-            }
 
             JsonResponseFactory::success(
                 $items,
@@ -274,25 +263,5 @@ final class WatchlistController
             );
             JsonResponseFactory::error('WATCHLIST_BATCH_CREATE_FAILED', $exception->getMessage(), [], 500);
         }
-    }
-
-    private function shadowReadEnabled(): bool
-    {
-        $value = getenv('SCALING_SHADOW_READ_ENABLED');
-        if ($value === false || $value === null) {
-            return false;
-        }
-
-        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
-    }
-
-    private function primaryScalingReadEnabled(): bool
-    {
-        $value = getenv('SCALING_PRIMARY_READ_ENABLED');
-        if ($value === false || $value === null) {
-            return false;
-        }
-
-        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 }

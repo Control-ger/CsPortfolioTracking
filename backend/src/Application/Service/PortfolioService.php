@@ -34,7 +34,7 @@ final class PortfolioService
         int $userId = 1,
         bool $aggregateByName = false,
         string $scope = 'investments',
-        bool $allowLiveRefresh = true
+        bool $allowLiveRefresh = false
     ): array
     {
         $this->ensurePriceHistoryTable();
@@ -72,7 +72,6 @@ final class PortfolioService
 
         $feeSettings = $this->feeSettingsService->getSettings($userId);
         $rows = [];
-        $snapshotTime = $this->currentHourBucket();
         $presentationCache = [];
 
         foreach ($activeInvestments as $investment) {
@@ -123,8 +122,6 @@ final class PortfolioService
             $breakEvenDeltaPercent = ($isLive && $breakEvenPrice > 0)
                 ? ($breakEvenDeltaEuro / $breakEvenPrice) * 100
                 : null;
-
-            $this->persistPriceHistorySnapshot($itemId, $snapshotTime, $presentation, $priceSource);
 
             $changeMetrics = $this->buildChangeMetricsFromBaselines(
                 $itemId,
@@ -528,34 +525,6 @@ final class PortfolioService
         $this->exchangeRateRepository->ensureTable();
         $this->priceHistoryRepository->ensureTable();
         $this->priceHistoryReady = true;
-    }
-
-    private function persistPriceHistorySnapshot(
-        int $itemId,
-        string $date,
-        array $presentation,
-        ?string $priceSource
-    ): void {
-        if (strtolower(trim((string) ($presentation['priceScope'] ?? 'item'))) !== 'item') {
-            // price_history_hourly remains item-level; instance-only valuations would corrupt shared baselines.
-            return;
-        }
-
-        $priceUsd = $presentation['priceUsd'] ?? null;
-        $exchangeRate = $presentation['exchangeRate'] ?? null;
-        $exchangeRateId = $this->exchangeRateRepository->ensureTodayRate((float) ($exchangeRate ?? $this->pricingService->getUsdToEurRate()));
-
-        if ($priceUsd === null || $priceUsd <= 0 || $itemId <= 0) {
-            return;
-        }
-
-        $this->priceHistoryRepository->upsertPrice(
-            $itemId,
-            $date,
-            $priceUsd,
-            $exchangeRateId,
-            $priceSource
-        );
     }
 
     private function buildChangeMetricsFromBaselines(
