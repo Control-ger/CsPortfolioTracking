@@ -201,6 +201,7 @@ Health legend:
 | `.kilocode/rules-ask/AGENTS.md` | ACTIVE | CURRENT | Kilo Code ask mode instructions. |
 | `.kilocode/rules-code/AGENTS.md` | ACTIVE | CURRENT | Kilo Code code mode instructions. |
 | `.kilocode/rules-debug/AGENTS.md` | ACTIVE | CURRENT | Kilo Code debug mode instructions. |
+| `CLAUDE.md` | ACTIVE | CURRENT | Claude Code session instructions. |
 
 ## 8. Known Inconsistencies (current repo)
 

@@ -112,6 +112,7 @@ No new `.md` files without entry in the Active Docs table (see `docs/architectur
 | `.kilocode/rules-ask/AGENTS.md` | ACTIVE | Kilo Code ask mode instructions |
 | `.kilocode/rules-code/AGENTS.md` | ACTIVE | Kilo Code code mode instructions |
 | `.kilocode/rules-debug/AGENTS.md` | ACTIVE | Kilo Code debug mode instructions |
+| `CLAUDE.md` | ACTIVE | Claude Code session instructions (overrides defaults) |
 
 ## Known Issues
 - Bootstrap/DI in `backend/public/index.php` should target final migrated repository dependencies.
