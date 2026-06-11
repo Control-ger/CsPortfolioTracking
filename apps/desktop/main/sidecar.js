@@ -209,9 +209,8 @@ export async function startPhpSidecar() {
   const secret = crypto.randomBytes(32).toString("hex");
   sidecarSecret = secret;
 
-  const desktopDir = path.resolve(__dirname, "..");
-  const backendEntry = path.resolve(desktopDir, "backend", "desktop", "index.php");
-  const phpIni = path.resolve(desktopDir, "..", "..", "backend", "desktop", "php.ini");
+  const backendEntry = resolveRuntimePath("backend", "desktop", "index.php");
+  const phpIni = resolveRuntimePath("backend", "desktop", "php.ini");
 
   if (!fsSync.existsSync(backendEntry)) {
     throw new Error(`Backend entry not found: ${backendEntry}`);
