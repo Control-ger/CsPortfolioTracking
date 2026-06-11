@@ -349,6 +349,10 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
   const [error, setError] = useState("");
   const [user, setUser] = useState(null);
   const [syncInfo, setSyncInfo] = useState("");
+  // Live, granular activity line shown beneath the step label (debug-style:
+  // reflects the concrete operation in flight, e.g. "Steam-Inventar abrufen",
+  // "Importiere 42 Items in lokale DB", "Preise abfragen").
+  const [setupDetail, setSetupDetail] = useState("");
   const [steamPalette, setSteamPalette] = useState(() => resolveSteamPalette(null));
   const [isDashboardReady, setIsDashboardReady] = useState(false);
   const [setupProgress, setSetupProgress] = useState({
@@ -528,7 +532,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
   const markPreparationFailed = (error) => {
     const message = formatSteamInventoryError(error);
-    setSyncInfo(`Vorbereitung fehlgeschlagen: ${message}`);
+    setSetupDetail("");
     setError(message);
     setSetupProgress((current) => ({
       ...current,
@@ -626,23 +630,31 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
     if (hasSteamId) {
       startStep(1);
+      setSetupDetail(`Steam-Inventar abrufen (SteamID ${currentUser.steamId})`);
       const inventoryResult = await fetchCS2Inventory(currentUser.steamId);
       finishStep(2);
 
       startStep(2);
       if (inventoryResult.success && inventoryResult.items?.length > 0) {
+        setSetupDetail(`Inventarantwort verarbeiten: ${inventoryResult.items.length} Items erhalten`);
         finishStep(3);
         startStep(3);
         const marketableItems = inventoryResult.items.filter((item) => item.marketable);
+        setSetupDetail(`${marketableItems.length} marketable von ${inventoryResult.items.length} Items gefiltert`);
         finishStep(4);
 
         startStep(4);
         const importCandidates = marketableItems.map((item) => ({ ...item }));
+        setSetupDetail(`Import-Payload für ${importCandidates.length} Items vorbereitet`);
         finishStep(5);
 
         startStep(5);
         if (marketableItems.length > 0) {
+          setSetupDetail(`Importiere ${importCandidates.length} Items in die lokale DB…`);
           const importResult = await importInventoryAsInvestments(importCandidates, currentUser.id);
+          setSetupDetail(
+            `Import abgeschlossen: ${importResult.imported || 0} neu · ${importResult.updated || 0} aktualisiert`,
+          );
           setSyncInfo(
             `Steam Sync: ${importResult.imported || 0} neu, ${importResult.updated || 0} aktualisiert, ${importResult.missingMarked || 0} als fehlend markiert, ${importResult.matchesSuggested || 0} Matching-Vorschlaege.`,
           );
@@ -665,15 +677,18 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
     const dashboardStartIndex = hasSteamId ? 6 : 1;
     startStep(dashboardStartIndex);
+    setSetupDetail("Portfolio-Positionen & Preise abfragen…");
     const portfolioData = await fetchPortfolioData({ scope: "investments", rowScope: "investments" });
     finishStep(dashboardStartIndex + 1);
 
     startStep(dashboardStartIndex + 1);
     const historyPoints = Array.isArray(portfolioData?.history) ? portfolioData.history.length : 0;
+    setSetupDetail(`Portfolio-Historie laden: ${historyPoints} Punkte`);
     finishStep(dashboardStartIndex + 2);
 
     startStep(dashboardStartIndex + 2);
     const positionCount = Array.isArray(portfolioData?.rows?.data) ? portfolioData.rows.data.length : 0;
+    setSetupDetail(`Kennzahlen aufbereiten: ${positionCount} Positionen`);
     if (!hasSteamId) {
       setSyncInfo(`Portfolio geladen: ${positionCount} Positionen, ${historyPoints} Historienpunkte.`);
     }
@@ -681,6 +696,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
     startStep(dashboardStartIndex + 3);
     finishStep();
+    setSetupDetail("");
 
     setSetupProgress({
       total: steps.length,
@@ -809,9 +825,18 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
             <p className="text-[11px] text-slate-300">
               Schritt {Math.min(setupProgress.completed, setupProgress.total)} von {setupProgress.total}
             </p>
+            {setupDetail ? (
+              <p className="truncate font-mono text-[11px] text-cyan-200/80" title={setupDetail}>
+                {`› ${setupDetail}`}
+              </p>
+            ) : null}
           </div>
 
-          {syncInfo ? (
+          {error ? (
+            <div className="rounded-md border border-red-400/40 bg-red-500/15 p-2 text-xs text-red-200">
+              Vorbereitung fehlgeschlagen: {error}
+            </div>
+          ) : syncInfo ? (
             <div className="rounded-md border border-emerald-300/35 bg-emerald-500/15 p-2 text-xs text-emerald-200">
               {syncInfo}
             </div>

@@ -603,7 +603,11 @@ app.whenReady().then(async () => {
   const storeLoader = await getLocalStore();
   if (typeof storeLoader === "function") {
     try {
-      localStore = storeLoader();
+      // createLocalStore(userDataPath) resolves the SQLite path from this
+      // argument; omitting it makes path.join() throw "path must be a string"
+      // and leaves localStore null → every IPC call returns
+      // "Local store not available".
+      localStore = storeLoader(app.getPath("userData"));
     } catch (storeError) {
       console.warn("[main] local store init error:", storeError);
     }
