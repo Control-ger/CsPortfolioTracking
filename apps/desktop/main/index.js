@@ -4,7 +4,7 @@ import { app, BrowserWindow, protocol as electronProtocol, shell } from "electro
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { createWriteStream } from "fs";
 
 import {
@@ -423,9 +423,13 @@ async function getLocalStore() {
     return createLocalStore;
   }
   try {
-    const localStoreModule = await import(
-      resolveRuntimePath("apps", "desktop", "src", "localStore", "index.js")
+    // Dynamic import() needs a file:// URL for absolute paths on Windows,
+    // otherwise the drive letter (C:) is parsed as a URL scheme and throws
+    // ERR_UNSUPPORTED_ESM_URL_SCHEME.
+    const localStorePath = resolveRuntimePath(
+      "apps", "desktop", "src", "localStore", "index.js",
     );
+    const localStoreModule = await import(pathToFileURL(localStorePath).href);
     createLocalStore = localStoreModule.createLocalStore;
     return createLocalStore;
   } catch (error) {

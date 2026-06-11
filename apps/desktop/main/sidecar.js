@@ -178,7 +178,7 @@ export async function waitForSidecarReady(sidecarUrl, timeoutMs = 15000) {
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const response = await fetch(`${sidecarUrl}/api/v1/health`, {
+      const response = await fetch(`${sidecarUrl}/api/v1/desktop/health`, {
         signal: AbortSignal.timeout(3000),
         headers: getSidecarAuthHeaders(),
       });
@@ -233,7 +233,7 @@ export async function startPhpSidecar() {
     backendEntry,
   );
 
-  const env = buildSidecarEnv(port, secret);
+  const env = await buildSidecarEnv(port, secret);
 
   console.log(`[sidecar] starting PHP built-in server on 127.0.0.1:${port}`);
   console.log(`[sidecar] php binary: ${phpBinary}`);
@@ -339,12 +339,33 @@ async function buildSidecarEnv(port, secret) {
   // Force SQLite-only
   env.APP_DATABASE_DRIVER = "sqlite";
   env.SIDECAR_PORT = String(port);
-  env.SIDECAR_SECRET = secret;
+  // PHP sidecar reads DESKTOP_SIDECAR_SECRET (backend/desktop/index.php).
+  env.DESKTOP_SIDECAR_SECRET = secret;
   env.DESKTOP_SIDECAR_MODE = "1";
   env.DESKTOP_ENTRY_POINT = "1";
 
-  // App paths for the PHP sidecar
-  env.DESKTOP_USER_DATA_PATH = app.getPath("userData");
+  // App paths for the PHP sidecar.
+  // DESKTOP_STATE_DIR is read by DesktopSteamAuthController for OpenID
+  // login/result state persistence; keep DESKTOP_USER_DATA_PATH for parity.
+  const userDataPath = app.getPath("userData");
+  env.DESKTOP_USER_DATA_PATH = userDataPath;
+  env.DESKTOP_STATE_DIR = userDataPath;
+  env.DESKTOP_LOG_FILE = path.join(userDataPath, "logs", "desktop.log");
+
+  // Upstream server base URL for read-only proxy routes (portfolio, watchlist,
+  // settings, cs-updates). Without it the sidecar can only serve local fallbacks.
+  try {
+    const serverConfigPath = path.join(userDataPath, "server-config.json");
+    if (fsSync.existsSync(serverConfigPath)) {
+      const parsed = JSON.parse(fsSync.readFileSync(serverConfigPath, "utf8"));
+      const serverUrl = String(parsed?.serverUrl || "").trim();
+      if (serverUrl) {
+        env.UPSTREAM_API_BASE_URL = serverUrl.replace(/\/+$/, "");
+      }
+    }
+  } catch {
+    // No stored server config; sidecar serves local fallbacks only.
+  }
 
   // Attempt to pass API keys from secret vault if already unlocked
   try {
@@ -365,12 +386,13 @@ async function buildSidecarEnv(port, secret) {
     // Vault locked or not configured - sidecar will read from files
   }
 
-  // Encryption key for session token storage
+  // Encryption key for Steam session token storage.
+  // DesktopSteamAuthController / SteamAuthController read ENCRYPTION_KEY.
   try {
     const { getOrCreateEncryptionKey } = await import("./secret-vault.js");
     const encryptionKey = getOrCreateEncryptionKey();
     if (encryptionKey) {
-      env.DESKTOP_ENCRYPTION_KEY = encryptionKey;
+      env.ENCRYPTION_KEY = encryptionKey;
     }
   } catch {
     // safeStorage unavailable

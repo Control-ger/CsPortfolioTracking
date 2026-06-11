@@ -69,7 +69,7 @@ export async function fetchCsFloatApiKeyStatus() {
     };
   }
 
-  return requestWithMeta("/api/v1/settings/csfloat-api-key");
+  return { data: { configured: false, hasKey: false }, meta: { source: "web-unavailable" } };
 }
 
 export async function updateCsFloatApiKey(apiKeyOrEncryptedKey) {
@@ -108,24 +108,10 @@ export async function fetchSkinBaronApiKeyStatus() {
     };
   }
 
-  try {
-    return await requestWithMeta("/api/v1/settings/skinbaron-api-key");
-  } catch (error) {
-    if (Number(error?.status) === 404) {
-      return {
-        data: {
-          configured: false,
-          sessionCookieConfigured: false,
-          importReady: false,
-        },
-        meta: {
-          source: "web-fallback",
-          endpointUnavailable: true,
-        },
-      };
-    }
-    throw error;
-  }
+  return {
+    data: { configured: false, sessionCookieConfigured: false, importReady: false },
+    meta: { source: "web-unavailable" },
+  };
 }
 
 export async function updateSkinBaronApiKey(apiKeyOrEncryptedKey) {
