@@ -426,7 +426,7 @@ async function getLocalStore() {
     const localStoreModule = await import(
       resolveRuntimePath("apps", "desktop", "src", "localStore", "index.js")
     );
-    createLocalStore = localStoreModule.default;
+    createLocalStore = localStoreModule.createLocalStore;
     return createLocalStore;
   } catch (error) {
     console.error("[main] failed to load local store:", error);

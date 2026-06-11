@@ -2,6 +2,7 @@
 
 import { app } from "electron";
 import { spawn } from "child_process";
+import { createServer as netCreateServer } from "net";
 import fsSync from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -113,7 +114,7 @@ export function findFreePort() {
     return Promise.resolve(cachedFreePort);
   }
   return new Promise((resolve, reject) => {
-    const server = require("net").createServer();
+    const server = netCreateServer();
     server.unref();
     server.on("error", reject);
     server.listen(0, "127.0.0.1", () => {
