@@ -27,7 +27,7 @@ No test suite is configured (Playwright exists as devDep but no `test` script).
 | Backend | `backend/` | PHP — two front controllers + shared `src/` |
 
 **Two PHP entry points:**
-- `backend/public/index.php` — Server front controller (Web, Sync, public API)
+- `backend/public/index.php` — Server front controller (Web, Sync, public API). Calls `ensureTable()` for all repositories at startup; new repositories must be added here.
 - `backend/desktop/index.php` — Desktop Sidecar (local 127.0.0.1, no MySQL required)
 
 **PHP autoloader** (`backend/src/bootstrap.php`): PSR-4-like, maps `App\` → `backend/src/`.

@@ -660,6 +660,7 @@ try {
     // are created lazily in a different order.
     $itemRepository->ensureTable();
     $investmentRepository->ensureTable();
+    (new CsUpdatesFeedRepository($pdo))->ensureTable();
     
     // Initialize auth state tokens table for Steam OpenID
     (new AuthStateRepository($pdo))->ensureTable();

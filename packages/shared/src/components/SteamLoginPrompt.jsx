@@ -13,7 +13,7 @@ import {
 import { fetchPortfolioData } from "@shared/lib/dataSource.js";
 
 function formatSteamInventoryError(error) {
-  const raw = String(error?.message || error || "");
+  const raw = String(error?.message || error?.error?.message || error || "");
   const upper = raw.toUpperCase();
   if (upper.includes("INVENTORY_ACCESS_DENIED")) {
     return "Steam-Inventar ist nicht oeffentlich erreichbar. Stelle in Steam Profil und Inventar auf oeffentlich und versuche es erneut.";

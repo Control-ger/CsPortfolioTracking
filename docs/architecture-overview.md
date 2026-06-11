@@ -165,6 +165,7 @@ From `apps/web/src/App.jsx`:
 - default query window: last `7` days,
 - incremental history via `before` cursor,
 - explicit UI action `Load older` for older entries.
+- `cs_updates_feed` table (including AI rating columns) is initialized via `CsUpdatesFeedRepository::ensureTable()` at server startup in `backend/public/index.php`.
 
 ### 6.3 Required rule for every new data-heavy page
 

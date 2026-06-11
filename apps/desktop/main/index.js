@@ -424,7 +424,7 @@ async function getLocalStore() {
   }
   try {
     const localStoreModule = await import(
-      resolveRuntimePath("src", "localStore", "index.js")
+      resolveRuntimePath("apps", "desktop", "src", "localStore", "index.js")
     );
     createLocalStore = localStoreModule.default;
     return createLocalStore;
@@ -450,7 +450,7 @@ function createWindow() {
     icon: resolveRuntimePath("icon.ico"),
     title: APP_NAME,
     webPreferences: {
-      preload: resolveRuntimePath("preload.js"),
+      preload: resolveRuntimePath("apps", "desktop", "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
