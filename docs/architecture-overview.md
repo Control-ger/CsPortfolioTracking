@@ -165,7 +165,8 @@ From `apps/web/src/App.jsx`:
 - default query window: last `7` days,
 - incremental history via `before` cursor,
 - explicit UI action `Load older` for older entries.
-- `cs_updates_feed` table (including AI rating columns) is initialized via `CsUpdatesFeedRepository::ensureTable()` at server startup in `backend/public/index.php`.
+- `cs_updates_feed` table (including AI rating columns) is initialized via `CsUpdatesFeedRepository::ensureTable()` at server startup in `backend/public/index.php`. Wrapped in a try-catch so a migration failure does not crash all API endpoints.
+- Desktop Electron preload is `apps/desktop/preload.cjs` (CommonJS, `.cjs` extension required because root `package.json` has `"type": "module"`).
 
 ### 6.3 Required rule for every new data-heavy page
 

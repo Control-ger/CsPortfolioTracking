@@ -450,7 +450,7 @@ function createWindow() {
     icon: resolveRuntimePath("icon.ico"),
     title: APP_NAME,
     webPreferences: {
-      preload: resolveRuntimePath("apps", "desktop", "preload.js"),
+      preload: resolveRuntimePath("apps", "desktop", "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

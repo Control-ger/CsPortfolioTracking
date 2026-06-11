@@ -660,8 +660,12 @@ try {
     // are created lazily in a different order.
     $itemRepository->ensureTable();
     $investmentRepository->ensureTable();
-    (new CsUpdatesFeedRepository($pdo))->ensureTable();
-    
+    try {
+        (new CsUpdatesFeedRepository($pdo))->ensureTable();
+    } catch (Throwable $schemaEx) {
+        error_log('[startup] CsUpdatesFeedRepository::ensureTable failed: ' . $schemaEx->getMessage());
+    }
+
     // Initialize auth state tokens table for Steam OpenID
     (new AuthStateRepository($pdo))->ensureTable();
     $feeSettingsService = new FeeSettingsService($userFeeSettingsRepository);
