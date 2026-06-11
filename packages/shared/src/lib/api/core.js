@@ -21,8 +21,9 @@ async function resolveApiBase() {
     typeof window !== "undefined" &&
     window.electronAPI?.backend?.getBaseUrl
   ) {
-    const desktopBase = await window.electronAPI.backend.getBaseUrl();
-    if (desktopBase) {
+    const raw = await window.electronAPI.backend.getBaseUrl();
+    const desktopBase = raw !== null && typeof raw === "object" ? raw?.url : raw;
+    if (desktopBase && typeof desktopBase === "string") {
       return normalizeApiBase(desktopBase);
     }
   }

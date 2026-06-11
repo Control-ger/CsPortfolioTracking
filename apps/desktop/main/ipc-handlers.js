@@ -87,7 +87,10 @@ function safeLocalStoreInvoke(channel, handler) {
   ipcMain.handle(channel, async (event, ...args) => {
     try {
       ensureDesktopRuntimeUnlocked();
-      const store = getLocalStoreRef();
+      const store = getLocalStoreRef ? getLocalStoreRef() : null;
+      if (!store) {
+        return { error: "Local store not available", channel };
+      }
       return await handler(store, ...args);
     } catch (error) {
       console.error(`[localStore] Error in ${channel}:`, error);
@@ -204,7 +207,8 @@ export function registerAllIpcHandlers() {
   // ── Backend / Auth headers ────────────────────────────────────
   ipcMain.handle("backend-base-url", async () => {
     ensureDesktopRuntimeUnlocked();
-    return await ensurePhpSidecarForRenderer();
+    const result = await ensurePhpSidecarForRenderer();
+    return result?.url ?? result;
   });
 
   ipcMain.handle("backend-auth-headers", async () => {
