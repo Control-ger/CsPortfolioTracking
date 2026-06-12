@@ -379,9 +379,14 @@ async function buildSidecarEnv(port, secret) {
     const serverConfigPath = path.join(userDataPath, "server-config.json");
     if (fsSync.existsSync(serverConfigPath)) {
       const parsed = JSON.parse(fsSync.readFileSync(serverConfigPath, "utf8"));
-      const serverUrl = String(parsed?.serverUrl || "").trim();
+      const serverUrl = String(parsed?.serverUrl || "").trim().replace(/\/+$/, "");
       if (serverUrl) {
-        env.UPSTREAM_API_BASE_URL = serverUrl.replace(/\/+$/, "");
+        // A stored host-only value lacks a scheme; curl in the sidecar would
+        // reject it, leaving every upstream proxy call as a local-only fallback.
+        const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(serverUrl)
+          ? serverUrl
+          : `https://${serverUrl}`;
+        env.UPSTREAM_API_BASE_URL = withScheme;
       }
     }
   } catch {

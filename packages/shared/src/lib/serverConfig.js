@@ -26,6 +26,20 @@ function parseHostFromUrlLikeInput(value) {
   }
 }
 
+export function ensureServerUrlScheme(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+  return `https://${trimmed}`;
+}
+
 export function normalizeServerBaseUrl(rawUrl) {
   const trimmed = String(rawUrl || "").trim();
   if (!trimmed) {
@@ -36,7 +50,11 @@ export function normalizeServerBaseUrl(rawUrl) {
   while (end > 0 && trimmed.charCodeAt(end - 1) === 47) {
     end -= 1;
   }
-  return end === trimmed.length ? trimmed : trimmed.slice(0, end);
+  const withoutTrailingSlash = end === trimmed.length ? trimmed : trimmed.slice(0, end);
+  // A stored host-only value (e.g. "cs2.example.cc") must become an absolute
+  // URL, otherwise renderer fetches resolve relative to file:// and fail with
+  // ERR_FILE_NOT_FOUND, and curl in the sidecar rejects the scheme-less URL.
+  return ensureServerUrlScheme(withoutTrailingSlash);
 }
 
 export function resolveAccessBaseUrl(serverBaseUrl) {

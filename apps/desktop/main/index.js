@@ -205,25 +205,78 @@ function writeServerConfig(config) {
   return merged;
 }
 
+function ensureHttpScheme(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+  return `https://${trimmed}`;
+}
+
+function looksLikeCloudflareAccessChallenge(response) {
+  const finalUrl = String(response?.url || "");
+  if (finalUrl.includes("/cdn-cgi/access/") || finalUrl.includes(".cloudflareaccess.com")) {
+    return true;
+  }
+  const server = String(response?.headers?.get?.("server") || "").toLowerCase();
+  const deniedReason = String(response?.headers?.get?.("cf-access-denied-reason") || "").trim();
+  return Boolean(deniedReason) || (response?.status === 403 && server.includes("cloudflare"));
+}
+
 async function testServerConnection(serverUrl) {
-  const normalizedUrl = String(serverUrl || "").replace(/\/+$/, "");
-  if (!normalizedUrl) {
+  // The settings UI persists a host-only value (e.g. "cs2.example.cc"); without
+  // a scheme `fetch` throws and the test always reports "Verbindung fehlgeschlagen".
+  const base = ensureHttpScheme(String(serverUrl || "").replace(/\/+$/, ""));
+  if (!base) {
     return { ok: false, error: "Keine URL angegeben." };
   }
-  try {
-    const response = await fetch(`${normalizedUrl}/api/v1/health`, {
-      signal: AbortSignal.timeout(10000),
-    });
-    if (response.ok) {
-      return { ok: true, status: response.status };
+
+  // The server entry point may sit at the host root or behind /api/index.php
+  // (depending on rewrite rules), so probe the same candidate shapes the
+  // sidecar/sync layer uses.
+  const candidates = [
+    `${base}/api/v1/health`,
+    `${base}/api/index.php/api/v1/health`,
+    `${base}/index.php/api/v1/health`,
+  ];
+
+  let lastStatus = null;
+  let networkError = null;
+  for (const url of candidates) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (response.ok) {
+        return { ok: true, status: response.status };
+      }
+      if (looksLikeCloudflareAccessChallenge(response)) {
+        return {
+          ok: true,
+          status: response.status,
+          note: "Server erreichbar – Cloudflare Access Login erforderlich.",
+        };
+      }
+      lastStatus = response.status;
+    } catch (error) {
+      networkError = error;
     }
-    return { ok: false, status: response.status, error: `HTTP ${response.status}` };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error?.message || "Verbindung fehlgeschlagen.",
-    };
   }
+
+  if (lastStatus !== null) {
+    // We reached the host but no candidate returned a healthy/2xx response.
+    return { ok: false, status: lastStatus, error: `Server erreichbar, aber HTTP ${lastStatus}.` };
+  }
+  return {
+    ok: false,
+    error: networkError?.message
+      ? `Verbindung fehlgeschlagen: ${networkError.message}`
+      : "Verbindung fehlgeschlagen.",
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════
