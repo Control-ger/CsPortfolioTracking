@@ -119,7 +119,7 @@ final class PricingService
         $this->ensureCacheTables();
         $priceMode = $this->resolvePriceModeForUser($userId);
 
-        $catalog = $this->getCatalogEntry($itemName, $steamHint);
+        $catalog = $this->getCatalogEntry($itemName, $steamHint, null, $allowLiveRefresh);
         $resolvedInstanceHint = $this->normalizeInstanceHint($instanceHint);
         $itemId = isset($catalog['itemId']) ? (int) $catalog['itemId'] : 0;
         $cachedBySource = $itemId > 0
@@ -265,7 +265,7 @@ final class PricingService
         $this->cacheTablesReady = true;
     }
 
-    private function getCatalogEntry(string $itemName, ?array $steamHint = null, ?array $listingHint = null): ?array
+    private function getCatalogEntry(string $itemName, ?array $steamHint = null, ?array $listingHint = null, bool $allowLiveRefresh = true): ?array
     {
         $this->ensureCacheTables();
 
@@ -274,6 +274,14 @@ final class PricingService
 
         $catalog = $this->normalizeCatalogRow($item);
         if ($catalog !== null && $this->hasUsefulCatalogData($catalog) && $this->isFreshCatalogCache($catalog)) {
+            return $catalog;
+        }
+
+        // Passive reads must not perform synchronous external lookups. When live refresh is
+        // disabled, serve whatever catalog row exists (even if stale/partial) instead of
+        // hitting the Steam Market per item; the cron (sync-prices.php, the sole catalog
+        // writer) backfills missing/stale catalog metadata.
+        if (!$allowLiveRefresh) {
             return $catalog;
         }
 
