@@ -359,29 +359,30 @@ async function openCloudflareAccessLoginWindow(serverUrl) {
       if (finished || !loginWindow || loginWindow.isDestroyed()) return;
       try {
         const cookies = await loginWindow.webContents.session.cookies.get({});
-        const cfCookies = cookies.filter(
-          (cookie) =>
-            cookie.name.toLowerCase().startsWith("cf_") ||
-            cookie.name === "__cflb" ||
-            cookie.name === "cf_clearance",
-        );
 
-        const cfAccessToken = cookies.find(
-          (cookie) =>
-            cookie.name.toLowerCase() === "cf_authorization" ||
-            cookie.name.toLowerCase().startsWith("cf-access-") ||
-            cookie.name.startsWith("CF_"),
-        );
+        // A completed Cloudflare Access login is proven by the CF_Authorization
+        // JWT (or a cf-access-* cookie). Generic Cloudflare cookies such as
+        // cf_clearance (anti-bot) and __cflb (load balancer) are set on the very
+        // first page load, before the user authenticates — treating them as the
+        // success signal closed the window immediately without a real session.
+        const cfAccessToken = cookies.find((cookie) => {
+          const lower = String(cookie.name || "").toLowerCase();
+          return lower === "cf_authorization" || lower.startsWith("cf-access-");
+        });
 
-        if (cfCookies.length > 0 || cfAccessToken) {
+        if (cfAccessToken) {
           clearTimeout(timeoutId);
+          const cfCookies = cookies.filter(
+            (cookie) =>
+              cookie.name.toLowerCase().startsWith("cf_") ||
+              cookie.name === "__cflb" ||
+              cookie.name === "cf_clearance",
+          );
           const cookieMap = {};
           for (const cookie of cfCookies) {
             cookieMap[cookie.name] = cookie.value;
           }
-          if (cfAccessToken && !cookieMap[cfAccessToken.name]) {
-            cookieMap[cfAccessToken.name] = cfAccessToken.value;
-          }
+          cookieMap[cfAccessToken.name] = cfAccessToken.value;
 
           try {
             const session = await readSessionFile();
