@@ -173,6 +173,13 @@ export async function installSidecarRequestHeaderBridge() {
     const headers = { ...details.requestHeaders };
 
     if (sidecarSecret) {
+      // Remove any existing case-variations of the header
+      const keys = Object.keys(headers);
+      for (const key of keys) {
+        if (key.toLowerCase() === "x-desktop-sidecar-secret") {
+          delete headers[key];
+        }
+      }
       headers["X-Desktop-Sidecar-Secret"] = sidecarSecret;
     }
 

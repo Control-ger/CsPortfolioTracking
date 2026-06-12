@@ -40,7 +40,7 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
     },
   });
 
-  if (response.status === 404) {
+  if (response.status === 404 || response.status === 400) {
     // Access is not active for this host.
     return true;
   }
@@ -138,7 +138,6 @@ async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, option
       }
     } catch (error) {
       lastError = error;
-      continue;
     }
   }
 
@@ -547,6 +546,11 @@ async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localSt
     throw new Error(`Sync push failed with status ${status}${body ? ` response: ${body}` : ""}`);
   }
 
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("text/html")) {
+    await response.text().catch(() => "");
+    throw new Error(`Sync push received HTML response instead of JSON. Server could be returning an error page or a captive portal. URL: ${response.url}, Status: ${response.status}`);
+  }
   const data = unwrapApiData(await response.json());
   const results = Array.isArray(data?.results) ? data.results : [];
   if (results.length === 0) {
@@ -720,6 +724,11 @@ async function pullServerChanges(serverBaseUrl, syncIdentity, token, localStore,
     throw new Error(`Sync pull failed with status ${status}${body ? ` response: ${body}` : ""}`);
   }
 
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("text/html")) {
+    await response.text().catch(() => "");
+    throw new Error(`Sync pull received HTML response instead of JSON. Server could be returning an error page or a captive portal. URL: ${response.url}, Status: ${response.status}`);
+  }
   const data = unwrapApiData(await response.json());
   const changes = Array.isArray(data?.changes) ? data.changes : [];
   await applyPulledChanges(changes, localStore, localUserId);
