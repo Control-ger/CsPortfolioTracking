@@ -45,7 +45,6 @@ import {
   createWatchlistItemData,
   fetchCsFloatApiKeyStatus,
   fetchSkinBaronApiKeyStatus,
-  refreshPortfolioStalePricesData,
   updateCsFloatApiKey,
   toggleExcludeInvestment,
   updatePortfolioPreferences,
@@ -118,9 +117,6 @@ const ItemSearch = lazy(() =>
     default: module.ItemSearch,
   })),
 );
-
-const STALE_PRICE_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
-const STALE_PRICE_REFRESH_THRESHOLD_SECONDS = 90 * 60;
 
 
 function getCsUpdateBannerTone(level) {
@@ -654,7 +650,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
   const portfolioChartCardRef = useRef(null);
   const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
-  const stalePriceRefreshRef = useRef({ key: "", at: 0 });
   const shouldPrepareInventoryData = activeTab === "inventory";
   const shouldPrepareManagementData =
     isDesktopRuntime && activeTab === "management";
@@ -2368,87 +2363,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     ? Math.min(Math.max(Number(watchlistMoverCardHeight), 340), 560)
     : null;
 
-  useEffect(() => {
-    if (activeTab !== "overview" || authRequired || portfolioLoading) {
-      return undefined;
-    }
-
-    const oldestAgeSeconds = Number(stats.oldestDataAgeSeconds);
-    const hasOldLivePrices =
-      liveItems > 0 &&
-      Number.isFinite(oldestAgeSeconds) &&
-      oldestAgeSeconds > STALE_PRICE_REFRESH_THRESHOLD_SECONDS;
-    const shouldRefresh = liveItems > 0 && (staleItems > 0 || hasOldLivePrices);
-    if (!shouldRefresh) {
-      return undefined;
-    }
-
-    const now = Date.now();
-    const lastRefresh = stalePriceRefreshRef.current || { key: "", at: 0 };
-    if (now - Number(lastRefresh.at || 0) < STALE_PRICE_REFRESH_COOLDOWN_MS) {
-      return undefined;
-    }
-
-    const refreshKey = `${metricsScope}:${staleItems}:${Math.floor(oldestAgeSeconds / 60)}`;
-    stalePriceRefreshRef.current = { key: refreshKey, at: now };
-
-    let cancelled = false;
-    let timeoutId = null;
-    let idleId = null;
-
-    const runRefresh = async () => {
-      try {
-        const response = await refreshPortfolioStalePricesData({
-          scope: metricsScope,
-          limit: 200,
-        });
-        const payload = response?.data || response || {};
-        const requested = Number(payload.requested ?? payload.staleItemsFound ?? 0);
-        const updated = Number(payload.updated ?? 0);
-        if (!cancelled && (requested > 0 || updated > 0)) {
-          await refreshPortfolio({ showLoading: false });
-          setCompositionRefreshToken((current) => current + 1);
-        }
-      } catch (refreshError) {
-        console.warn("[portfolio-prices] stale refresh failed", refreshError);
-      }
-    };
-
-    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-      idleId = window.requestIdleCallback(() => {
-        void runRefresh();
-      }, { timeout: 4000 });
-    } else if (typeof window !== "undefined") {
-      timeoutId = window.setTimeout(() => {
-        void runRefresh();
-      }, 1500);
-    } else {
-      void runRefresh();
-    }
-
-    return () => {
-      cancelled = true;
-      if (timeoutId !== null && typeof window !== "undefined") {
-        window.clearTimeout(timeoutId);
-      }
-      if (
-        idleId !== null &&
-        typeof window !== "undefined" &&
-        typeof window.cancelIdleCallback === "function"
-      ) {
-        window.cancelIdleCallback(idleId);
-      }
-    };
-  }, [
-    activeTab,
-    authRequired,
-    liveItems,
-    metricsScope,
-    portfolioLoading,
-    refreshPortfolio,
-    staleItems,
-    stats.oldestDataAgeSeconds,
-  ]);
+  // Price freshness is cron-owned: the web never live-fetches prices. This page
+  // previously auto-called refresh-stale (a synchronous CSFloat lookup) whenever it
+  // detected stale prices; that was removed so passive web reads make zero external
+  // calls. The cron (backend/sync-prices.php) is the sole price updater.
 
   const fallbackRangeDeltaPercent = Number(chartTrendData?.deltaPercent);
   const fallbackRangeDeltaValue = Number(chartTrendData?.deltaValue);

@@ -78,7 +78,8 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 
 ### Pricing Rules
 - Canonical, source-aware price tables: `item_live_cache` (`PK item_id, price_source`) and `price_history_hourly` (`PK item_id, bucket_start, price_source`). Written **only** by the cron (`backend/sync-prices.php` bulk import + CLI queue worker).
-- Passive reads never live-fetch: `PortfolioService::getEnrichedInvestments` defaults to `allowLiveRefresh=false`; investments/summary/composition/watchlist serve the last known price immediately. Only the cron and the explicit `refresh-stale` action call CSFloat.
+- Passive reads never live-fetch: `PortfolioService::getEnrichedInvestments` defaults to `allowLiveRefresh=false`; investments/summary/composition/watchlist serve the last known price immediately. The cron is the sole price updater for web users.
+- The web frontend makes **zero** external price calls: the old `PortfolioPage` auto-trigger that called `refresh-stale` (→ CSFloat) on stale prices was removed, along with the `refreshPortfolioStalePrices*` client wrappers. Do not reintroduce a web-initiated live price fetch — price freshness is cron-owned. (The desktop write-client and the CLI queue worker keep their own live-fetch paths.)
 - Passive reads also skip the Steam Market catalog metadata fetch: `PricingService::getCatalogEntry` honors `allowLiveRefresh` and, when off, serves the existing (possibly stale/partial) catalog row instead of calling `SteamMarketClient::findExactItem` per item. Catalog metadata (image/labels) is backfilled solely by the cron — a passive page read must never make a synchronous external call.
 - The dormant "scaling" price mirror (`item_price_latest`, `item_price_history_hourly`, `ScalingShadowReadService`, `SCALING_*_READ_ENABLED` flags) was retired; `user_positions`/`position_events`/`portfolio_snapshots_daily` remain for the future read-model.
 

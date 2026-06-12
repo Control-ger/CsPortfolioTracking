@@ -69,25 +69,6 @@ export async function fetchPortfolioComposition(options = {}) {
   }));
 }
 
-export async function refreshPortfolioStalePrices(options = {}) {
-  const scope = String(options.scope || "investments").toLowerCase() === "all"
-    ? "all"
-    : "investments";
-  const rawLimit = Number(options.limit);
-  const limit = Number.isFinite(rawLimit)
-    ? Math.max(1, Math.min(Math.trunc(rawLimit), 2000))
-    : 200;
-
-  const userQuery = await resolveCurrentUserQuery(options);
-
-  return requestWithMeta("/api/v1/portfolio/prices/refresh-stale", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...userQuery, scope, limit }),
-    signal: options.signal,
-  });
-}
-
 export async function savePortfolioDailyValue(totalValue) {
   const userQuery = await resolveCurrentUserQuery();
   return request("/api/v1/portfolio/daily-value", {
