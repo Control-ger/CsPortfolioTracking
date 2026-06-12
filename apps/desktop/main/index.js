@@ -340,7 +340,7 @@ async function clearStaleCloudflareAccessCookies(targetUrl) {
       const cookies = await sess.cookies.get({});
       for (const cookie of cookies) {
         const lower = String(cookie.name || "").toLowerCase();
-        if (lower === "cf_authorization" || lower.startsWith("cf-access-")) {
+        if (lower === "cf_authorization" || lower === "cf_appsession" || lower.startsWith("cf-access-")) {
           await sess.cookies.remove(origin, cookie.name).catch(() => {});
         }
       }
@@ -472,10 +472,14 @@ async function openCloudflareAccessLoginWindow(serverUrl) {
         finish(() => reject(new Error("Cloudflare Access Login wurde geschlossen, bevor der Authentifizierungsprozess abgeschlossen war.")));
       });
 
-      // The host root often serves the app directly (not behind Access), so it
-      // never triggers a CF login. Loading a protected API path forces CF to
-      // present the Access login, after which it redirects back with the cookie.
-      const loginTriggerUrl = `${normalizedUrl}/api/v1/sync/pull`;
+      // /cdn-cgi/access/login is Cloudflare's own login entry point for the
+      // domain. Loading it directly avoids hitting the backend after auth: CF
+      // redirects back to the origin root, the did-navigate handler below fires
+      // immediately, and the window closes before any backend response renders.
+      const loginTriggerUrl = `${normalizedUrl}/cdn-cgi/access/login`;
+      loginWindow.webContents.on("did-navigate", () => {
+        void pollCookies();
+      });
       await loginWindow.loadURL(loginTriggerUrl);
       pollTimer = setInterval(() => {
         void pollCookies();
