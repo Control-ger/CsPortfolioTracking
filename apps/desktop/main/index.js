@@ -1,6 +1,6 @@
 /* eslint-disable */
 
-import { app, BrowserWindow, protocol as electronProtocol, shell } from "electron";
+import { app, BrowserWindow, protocol as electronProtocol, session as electronSession, shell } from "electron";
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
@@ -317,6 +317,39 @@ function hasCloudflareAccessIdentity(serverUrl) {
   return Boolean(cookieHeader);
 }
 
+// A successful Cloudflare Access login persists cf_authorization in the
+// persist:cloudflare-access partition. When that cookie later expires, the next
+// login window finds the stale cookie instantly, "succeeds", and closes before
+// the user can authenticate — producing an endless open/close loop. Clearing the
+// stale Access cookies before opening the window forces a real login.
+async function clearStaleCloudflareAccessCookies(targetUrl) {
+  let origin;
+  try {
+    origin = new URL(targetUrl).origin;
+  } catch {
+    return;
+  }
+
+  const sessions = [
+    electronSession.fromPartition("persist:cloudflare-access"),
+    electronSession.defaultSession,
+  ];
+
+  for (const sess of sessions) {
+    try {
+      const cookies = await sess.cookies.get({});
+      for (const cookie of cookies) {
+        const lower = String(cookie.name || "").toLowerCase();
+        if (lower === "cf_authorization" || lower.startsWith("cf-access-")) {
+          await sess.cookies.remove(origin, cookie.name).catch(() => {});
+        }
+      }
+    } catch (error) {
+      console.warn("[cloudflare] failed to clear stale access cookies", error);
+    }
+  }
+}
+
 async function openCloudflareAccessLoginWindow(serverUrl) {
   const normalizedUrl = String(serverUrl || "").replace(/\/+$/, "");
   if (!normalizedUrl) {
@@ -415,6 +448,10 @@ async function openCloudflareAccessLoginWindow(serverUrl) {
     };
 
     const start = async () => {
+      // Drop any expired Access cookie first so the poll below only succeeds
+      // after a genuine fresh login (otherwise the window closes instantly).
+      await clearStaleCloudflareAccessCookies(normalizedUrl);
+
       loginWindow = new BrowserWindow({
         parent: undefined,
         modal: false,
@@ -435,9 +472,11 @@ async function openCloudflareAccessLoginWindow(serverUrl) {
         finish(() => reject(new Error("Cloudflare Access Login wurde geschlossen, bevor der Authentifizierungsprozess abgeschlossen war.")));
       });
 
-      await loginWindow.loadURL(normalizedUrl);
-      await new Promise((r) => setTimeout(r, 1000));
-      await pollCookies();
+      // The host root often serves the app directly (not behind Access), so it
+      // never triggers a CF login. Loading a protected API path forces CF to
+      // present the Access login, after which it redirects back with the cookie.
+      const loginTriggerUrl = `${normalizedUrl}/api/v1/sync/pull`;
+      await loginWindow.loadURL(loginTriggerUrl);
       pollTimer = setInterval(() => {
         void pollCookies();
       }, 1500);

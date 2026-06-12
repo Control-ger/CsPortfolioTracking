@@ -48,32 +48,34 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
     return false;
   }
 
-  const contentType = response.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json")
-    ? await response.json().catch(() => null)
-    : null;
+  // Read the body as text regardless of content-type: CF serves the
+  // get-identity error (e.g. {"err":"no app token set"}) without a reliable
+  // application/json header, so content-type sniffing would miss it.
+  const bodyText = await response.text().catch(() => "");
+  let payload = null;
+  try {
+    payload = bodyText ? JSON.parse(bodyText) : null;
+  } catch {
+    payload = null;
+  }
 
-  // Check for error in body (e.g., {"err":"no app token set"}).
-  const errText = String(payload?.err || "").toLowerCase();
-  if (errText) {
-    // "no app token set" means no Cloudflare Access application is configured in
-    // front of this host. Treat as Access-not-active and proceed without a login
-    // window — this avoids an endless login-popup loop on unconfigured hosts.
-    if (errText.includes("no app token") || errText.includes("not set")) {
-      return true;
-    }
+  const errText = (String(payload?.err || "") || bodyText).toLowerCase();
+  if (errText.includes("no app token") || errText.includes("not set")) {
+    // No usable Access token for this host. Don't preemptively open a login
+    // window here — a genuinely protected endpoint will return a CF challenge,
+    // and that challenge path drives the login. This avoids popup loops on hosts
+    // without an Access app while still logging in when one exists.
+    return true;
+  }
+  if (payload?.err) {
     console.log("[desktop-sync] CF Access error:", payload.err);
     return false;
   }
 
-  // 400 without a recognised "no Access app" error body means the session is
-  // expired or invalid — treat as unauthenticated so login is triggered.
-  if (response.status === 400) {
-    return false;
-  }
-
-  if (!contentType.includes("application/json")) {
-    return false;
+  // Any other non-OK status: defer to challenge detection rather than forcing a
+  // login window from here.
+  if (!response.ok) {
+    return true;
   }
 
   return Boolean(payload && typeof payload === "object" && !payload.err);
