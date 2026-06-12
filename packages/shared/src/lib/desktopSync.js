@@ -40,8 +40,8 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
     },
   });
 
-  if (response.status === 404 || response.status === 400) {
-    // Access is not active for this host.
+  if (response.status === 404) {
+    // No get-identity endpoint = no CF Access app.
     return true;
   }
   if (response.status === 401 || response.status === 403) {
@@ -57,13 +57,18 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
   const errText = String(payload?.err || "").toLowerCase();
   if (errText) {
     // "no app token set" means no Cloudflare Access application is configured in
-    // front of this host. Logging in would never produce a token, so treat it
-    // like Access-not-active and proceed without opening a login window — this
-    // avoids an endless login-popup + sidecar-restart loop.
+    // front of this host. Treat as Access-not-active and proceed without a login
+    // window — this avoids an endless login-popup loop on unconfigured hosts.
     if (errText.includes("no app token") || errText.includes("not set")) {
       return true;
     }
     console.log("[desktop-sync] CF Access error:", payload.err);
+    return false;
+  }
+
+  // 400 without a recognised "no Access app" error body means the session is
+  // expired or invalid — treat as unauthenticated so login is triggered.
+  if (response.status === 400) {
     return false;
   }
 

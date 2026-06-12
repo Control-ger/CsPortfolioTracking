@@ -189,9 +189,6 @@ export function registerAllIpcHandlers() {
   ipcMain.handle("cloudflare-access-login", async (event, serverUrl) => {
     try {
       const result = await openCloudflareAccessLoginWindowRef(serverUrl);
-      await restartPhpSidecar().catch((error) => {
-        console.warn("[sidecar] restart after cloudflare login failed", error);
-      });
       return {
         ok: true,
         ...result,

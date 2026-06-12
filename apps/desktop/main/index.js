@@ -392,28 +392,19 @@ async function openCloudflareAccessLoginWindow(serverUrl) {
             console.warn("[cloudflare] failed to persist session cookies", writeError);
           }
 
-          const { default: { session: electronSession } } = await import("electron");
-          const targetUrls = [
-            `${normalizedUrl}/api/v1/health`,
-            `${normalizedUrl}/api/v1/auth/steam/callback`,
-          ];
-          for (const url of targetUrls) {
-            try {
-              const cookieString = Object.entries(cookieMap)
-                .map(([k, v]) => `${k}=${v}`)
-                .join("; ");
-              const parsedUrl = new URL(url);
-              for (const [name, value] of Object.entries(cookieMap)) {
-                await electronSession.cookies.set({
-                  url: parsedUrl.origin,
-                  name,
-                  value,
-                  domain: parsedUrl.hostname,
-                });
-              }
-            } catch (cookieError) {
-              console.warn(`[cloudflare] failed to set cookie for ${url}`, cookieError);
+          try {
+            const { default: { session: electronSession } } = await import("electron");
+            const origin = new URL(normalizedUrl).origin;
+            for (const [name, value] of Object.entries(cookieMap)) {
+              await electronSession.defaultSession.cookies.set({
+                url: origin,
+                name,
+                value,
+                domain: new URL(normalizedUrl).hostname,
+              });
             }
+          } catch (cookieError) {
+            console.warn("[cloudflare] failed to set cookies in default session", cookieError);
           }
 
           finish(() => resolve({ ok: true, cookieCount: cfCookies.length }));
