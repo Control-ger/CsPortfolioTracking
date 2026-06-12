@@ -14,6 +14,33 @@ $backendRoot = dirname(__DIR__);
 
 require_once $backendRoot . '/src/bootstrap.php';
 
+// ── Required PHP extensions ────────────────────────────────────────────
+// The backend (services, repositories, name-resolution) depends on mbstring
+// for case-insensitive string handling. When the host PHP lacks it, routes
+// fatal deep inside a request with "Call to undefined function mb_*()" and
+// the renderer only sees an empty/non-JSON response. Fail fast with a clear
+// message instead so the cause is diagnosable.
+$missingPhpExtensions = array_values(array_filter(
+    ['mbstring', 'curl', 'json'],
+    static fn (string $ext): bool => !extension_loaded($ext)
+));
+if ($missingPhpExtensions !== []) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'error' => [
+            'code' => 'PHP_EXTENSION_MISSING',
+            'message' => 'Required PHP extension(s) not loaded: ' . implode(', ', $missingPhpExtensions)
+                . '. Enable them in php.ini (e.g. extension=mbstring) and restart the app.',
+            'missingExtensions' => $missingPhpExtensions,
+            'phpBinary' => PHP_BINARY,
+            'phpVersion' => PHP_VERSION,
+        ],
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 // ── Route Registry Note ────────────────────────────────────────────────
 // The server front controller (public/index.php) uses registerServerApiRoutes()
 // from backend/src/routes.php for shared route definitions.

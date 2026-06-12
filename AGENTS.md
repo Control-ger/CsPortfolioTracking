@@ -62,6 +62,7 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 - SQLite at Electron `userData` path (`cs-investor-hub.sqlite`), accessed only via `window.electronAPI.localStore` (IPC, never direct from renderer).
 - Local writes must fill `operations_log` for idempotent sync push.
 - Sidecar starts on `127.0.0.1` with per-start secret (`X-Desktop-Sidecar-Secret` header required). Exception: `GET /api/v1/auth/steam/callback` is public (external browser redirect).
+- Sidecar uses the host system PHP and requires the `mbstring`, `curl`, `json` extensions; `backend/desktop/index.php` returns a `PHP_EXTENSION_MISSING` error at startup if any are missing.
 - User scope: `steam-<steamId>`, never legacy `"1"`. Legacy data auto-merged on first access.
 - Secrets (CSFloat/SkinBaron keys) live only in the app-password-gated Secret Vault (Electron main process RAM after unlock). Never in `.env`, SQLite, or server.
 

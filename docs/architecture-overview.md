@@ -44,6 +44,7 @@ This document tracks:
 ### 3.1 Desktop runtime (primary write client)
 
 - Starts local PHP sidecar on `127.0.0.1` with dynamic port + per-start secret.
+- Sidecar runs the host's system PHP binary; the backend requires the `mbstring`, `curl`, and `json` extensions. `backend/desktop/index.php` fails fast with a `PHP_EXTENSION_MISSING` JSON error when any are absent, instead of fataling deep inside a route (which previously surfaced only as empty/non-JSON responses).
 - Sidecar secret is mandatory for desktop renderer/API traffic; only `GET /api/v1/auth/steam/callback` is public to allow the external Steam OpenID browser redirect.
 - Renderer never reads SQLite directly.
 - Renderer uses `window.electronAPI.localStore` for local persistence.

@@ -73,7 +73,7 @@ export async function startUpdateDownload(info = latestAvailableUpdateInfo) {
   }
 }
 
-async function promptForUpdateDownload(info = latestAvailableUpdateInfo) {
+export async function promptForUpdateDownload(info = latestAvailableUpdateInfo) {
   if (!info) {
     return { ok: false, reason: "no-update-info" };
   }

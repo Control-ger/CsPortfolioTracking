@@ -102,6 +102,10 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
   }, [preview]);
   const skipReasons = useMemo(() => preview?.skipReasons || {}, [preview]);
   const skipReasonEntries = useMemo(() => Object.entries(skipReasons).sort((a, b) => b[1] - a[1]), [skipReasons]);
+  const previewErrors = useMemo(
+    () => (Array.isArray(preview?.errors) ? preview.errors.filter(Boolean) : []),
+    [preview],
+  );
   const hasPreview = Boolean(preview);
 
   const handleExecute = async () => {
@@ -144,6 +148,23 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
       <div className="flex h-full flex-col gap-3 overflow-y-auto">
         {error ? (
           <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        ) : null}
+
+        {previewErrors.length > 0 ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="font-semibold">CSFloat hat den Abruf abgelehnt:</div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {previewErrors.map((err, index) => (
+                <li key={`${err?.code || "csfloat-error"}-${index}`}>
+                  {err?.statusCode ? `${err.statusCode} ` : ""}
+                  {err?.message || err?.label || err?.code || "Unbekannter CSFloat-Fehler"}
+                  {String(err?.code || "").includes("UNAUTHORIZED") || err?.statusCode === 401
+                    ? " — API-Key pruefen (Einstellungen → CSFloat)."
+                    : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
