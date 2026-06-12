@@ -49,18 +49,28 @@ async function hasCloudflareAccessIdentity(accessBaseUrl) {
   }
 
   const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json().catch(() => null)
+    : null;
+
+  // Check for error in body (e.g., {"err":"no app token set"}).
+  const errText = String(payload?.err || "").toLowerCase();
+  if (errText) {
+    // "no app token set" means no Cloudflare Access application is configured in
+    // front of this host. Logging in would never produce a token, so treat it
+    // like Access-not-active and proceed without opening a login window — this
+    // avoids an endless login-popup + sidecar-restart loop.
+    if (errText.includes("no app token") || errText.includes("not set")) {
+      return true;
+    }
+    console.log("[desktop-sync] CF Access error:", payload.err);
+    return false;
+  }
+
   if (!contentType.includes("application/json")) {
     return false;
   }
 
-  const payload = await response.json().catch(() => null);
-  
-  // Check for error in body (e.g., {"err":"no app token set"})
-  if (payload && payload.err) {
-    console.log("[desktop-sync] CF Access error:", payload.err);
-    return false;
-  }
-  
   return Boolean(payload && typeof payload === "object" && !payload.err);
 }
 

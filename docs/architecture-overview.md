@@ -132,6 +132,7 @@ From `apps/web/src/App.jsx`:
 - Currency popularity ranking in Settings is sourced from anonymized server aggregates (no user identifiers in `currency_usage_stats`).
 - Portfolio groups are loaded from server settings with local fallback; existing local-only groups are auto-migrated to server when the remote payload is empty.
 - Desktop sidecar upstream proxy now tries additional `index.php` + `?route=` candidate patterns and classifies Cloudflare Access login HTML as access denial hints instead of route-not-found noise.
+- Desktop Cloudflare Access detection (`hasCloudflareAccessIdentity`) treats a `404` or a `get-identity` body error of `no app token set` as "Access not active" and proceeds without a login window. Only `401/403` (or a valid identity that is absent) triggers the login flow, preventing an endless login-popup + sidecar-restart loop when no Access application is configured in front of the host.
 - Search-to-watchlist add checks in `PortfolioPage`/`ItemSearch` use watchlist entries only (not inventory/investment presence), so web runtime can add watchlist items independently.
 - `ItemSearch` mobile controls use larger touch targets (>=44px) for pagination/actions to improve finger usability.
 - Electron app updates are user-confirmed: update checks can report availability, but downloads start only after explicit user action (`Jetzt updaten`), not automatically in background.

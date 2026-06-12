@@ -69,6 +69,7 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 ### Auth/User Scope
 - Server enforces that `userId`/`steamId` in requests MUST match the authenticated Steam session (`RequestUserScopeResolver`). Foreign scopes → `401/403`.
 - Desktop sidecar forwards `Authorization`/`X-Auth-Token` to server upstreams so scope checks remain effective.
+- Desktop Cloudflare Access detection treats `404` or a `get-identity` `no app token set` body error as "Access not active" and proceeds without a login window; only `401/403` triggers the login flow. This avoids an endless login-popup + sidecar-restart loop when no Access app fronts the host.
 
 ### Data Ownership Layers
 | Layer | Writes | Reads |
