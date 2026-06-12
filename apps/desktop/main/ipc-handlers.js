@@ -356,8 +356,8 @@ export function registerAllIpcHandlers() {
   ipcMain.handle("secret-skinbaron-session-connect-browser", async () => {
     ensureDesktopRuntimeUnlocked();
     try {
-      const { openSkinBaronSessionLoginWindow } = await import("./secret-vault.js");
-      return await openSkinBaronSessionLoginWindow();
+      const { apiOpenSkinBaronSessionLoginWindow } = await import("./secret-vault.js");
+      return await apiOpenSkinBaronSessionLoginWindow();
     } catch (error) {
       return {
         ok: false,
