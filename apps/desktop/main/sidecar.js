@@ -308,17 +308,26 @@ export async function startPhpSidecar() {
 }
 
 export function stopPhpSidecar() {
-  if (!phpSidecar) {
+  const proc = phpSidecar;
+  if (!proc) {
     return;
   }
 
+  // Detach module state up front, then let the SIGKILL fallback reference the
+  // captured `proc` — NOT the module-level `phpSidecar`. A restart reassigns
+  // `phpSidecar` to a fresh process within ~500ms, so a timeout that re-read the
+  // module field would SIGKILL the new, healthy sidecar 3s later — the cause of
+  // the observed restart loop (SIGTERM → start → SIGKILL → ERR_CONNECTION_REFUSED).
+  phpSidecar = null;
+  cachedFreePort = null;
+
   try {
-    if (!phpSidecar.killed) {
-      phpSidecar.kill("SIGTERM");
+    if (!proc.killed) {
+      proc.kill("SIGTERM");
       setTimeout(() => {
-        if (phpSidecar && !phpSidecar.killed) {
+        if (!proc.killed) {
           try {
-            phpSidecar.kill("SIGKILL");
+            proc.kill("SIGKILL");
           } catch {
             // ignore
           }
@@ -328,9 +337,6 @@ export function stopPhpSidecar() {
   } catch (error) {
     console.warn("[sidecar] error stopping php sidecar:", error);
   }
-
-  phpSidecar = null;
-  cachedFreePort = null;
 }
 
 export async function restartPhpSidecar() {
