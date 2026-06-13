@@ -350,7 +350,7 @@ async function clearStaleCloudflareAccessCookies(targetUrl) {
   }
 }
 
-async function openCloudflareAccessLoginWindow(serverUrl) {
+async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
   const normalizedUrl = String(serverUrl || "").replace(/\/+$/, "");
   if (!normalizedUrl) {
     throw new Error("Keine Server-URL angegeben.");
@@ -428,13 +428,22 @@ async function openCloudflareAccessLoginWindow(serverUrl) {
           try {
             const { default: { session: electronSession } } = await import("electron");
             const origin = new URL(normalizedUrl).origin;
-            for (const [name, value] of Object.entries(cookieMap)) {
-              await electronSession.defaultSession.cookies.set({
+            const hostname = new URL(normalizedUrl).hostname;
+            const cookiesByName = new Map(cfCookies.map((c) => [c.name, c]));
+            cookiesByName.set(cfAccessToken.name, cfAccessToken);
+            for (const cookie of cookiesByName.values()) {
+              const details = {
                 url: origin,
-                name,
-                value,
-                domain: new URL(normalizedUrl).hostname,
-              });
+                name: cookie.name,
+                value: cookie.value,
+                domain: hostname,
+                secure: true,
+                sameSite: "no_restriction",
+              };
+              if (cookie.expirationDate !== undefined) {
+                details.expirationDate = cookie.expirationDate;
+              }
+              await electronSession.defaultSession.cookies.set(details);
             }
           } catch (cookieError) {
             console.warn("[cloudflare] failed to set cookies in default session", cookieError);
@@ -472,11 +481,12 @@ async function openCloudflareAccessLoginWindow(serverUrl) {
         finish(() => reject(new Error("Cloudflare Access Login wurde geschlossen, bevor der Authentifizierungsprozess abgeschlossen war.")));
       });
 
-      // /cdn-cgi/access/login is Cloudflare's own login entry point for the
-      // domain. Loading it directly avoids hitting the backend after auth: CF
-      // redirects back to the origin root, the did-navigate handler below fires
-      // immediately, and the window closes before any backend response renders.
-      const loginTriggerUrl = `${normalizedUrl}/cdn-cgi/access/login`;
+      // Use the CF Access login URL extracted from the challenge response so the
+      // window loads exactly the page CF already redirected to. Falls back to a
+      // protected API path that forces the same CF login when no challenge URL is
+      // available. The did-navigate handler below closes the window as soon as
+      // CF_Authorization is set, before any backend response body renders.
+      const loginTriggerUrl = cfLoginUrl || `${normalizedUrl}/api/v1/sync/pull`;
       loginWindow.webContents.on("did-navigate", () => {
         void pollCookies();
       });

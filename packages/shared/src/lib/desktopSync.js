@@ -281,7 +281,8 @@ async function fetchWithCloudflareAccess(url, options, serverBaseUrl) {
     return response;
   }
 
-  const loginResult = await window.electronAPI.cloudflareAccess.login(resolveAccessBaseUrl(serverBaseUrl));
+  const cfLoginUrl = response.url;
+  const loginResult = await window.electronAPI.cloudflareAccess.login(resolveAccessBaseUrl(serverBaseUrl), cfLoginUrl);
   if (!loginResult?.ok) {
     return response;
   }

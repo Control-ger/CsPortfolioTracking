@@ -25,7 +25,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getAuthHeaders: () => ipcRenderer.invoke("backend-auth-headers"),
   },
   cloudflareAccess: {
-    login: (serverUrl) => ipcRenderer.invoke("cloudflare-access-login", serverUrl),
+    login: (serverUrl, cfLoginUrl) => ipcRenderer.invoke("cloudflare-access-login", serverUrl, cfLoginUrl),
   },
   updater: {
     getVersion: () => ipcRenderer.invoke("app-get-version"),

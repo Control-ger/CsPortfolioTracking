@@ -186,9 +186,9 @@ export function registerAllIpcHandlers() {
   ipcMain.handle("app-get-version", () => app.getVersion());
 
   // ── Cloudflare Access login ───────────────────────────────────
-  ipcMain.handle("cloudflare-access-login", async (event, serverUrl) => {
+  ipcMain.handle("cloudflare-access-login", async (event, serverUrl, cfLoginUrl) => {
     try {
-      const result = await openCloudflareAccessLoginWindowRef(serverUrl);
+      const result = await openCloudflareAccessLoginWindowRef(serverUrl, cfLoginUrl);
       return {
         ok: true,
         ...result,
