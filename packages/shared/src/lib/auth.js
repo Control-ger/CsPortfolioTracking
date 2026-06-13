@@ -205,12 +205,25 @@ async function resolveRemoteServerBase() {
 }
 
 /**
+ * Build a remote API URL. The server only routes the API through
+ * /api/index.php — the bare /api/v1/... path returns 404 (the same constraint
+ * the sync layer handles, and the server's own OpenID callback uses
+ * /api/index.php/api/v1/...). apiPath starts with /api/v1/... and may carry a
+ * query string.
+ */
+function buildRemoteApiUrl(remoteBase, apiPath) {
+  const cleanBase = resolveAccessBaseUrl(remoteBase); // strips any /api or /api/index.php suffix
+  return `${cleanBase}/api/index.php${apiPath}`;
+}
+
+/**
  * Fetch a protected remote endpoint, transparently completing a Cloudflare
  * Access login if the request is intercepted by a CF challenge.
  */
-async function remoteFetchWithCloudflareAccess(remoteBase, path, options = {}) {
+async function remoteFetchWithCloudflareAccess(remoteBase, apiPath, options = {}) {
   const requestInit = { ...options, credentials: "include" };
-  let response = await fetch(`${remoteBase}${path}`, requestInit);
+  const url = buildRemoteApiUrl(remoteBase, apiPath);
+  let response = await fetch(url, requestInit);
 
   const isChallenge = (res) => {
     const url = String(res?.url || "");
@@ -224,7 +237,7 @@ async function remoteFetchWithCloudflareAccess(remoteBase, path, options = {}) {
 
   if (isChallenge(response) && window.electronAPI?.cloudflareAccess?.login) {
     await window.electronAPI.cloudflareAccess.login(resolveAccessBaseUrl(remoteBase), response.url);
-    response = await fetch(`${remoteBase}${path}`, requestInit);
+    response = await fetch(url, requestInit);
   }
 
   return response;
