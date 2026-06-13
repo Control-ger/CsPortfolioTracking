@@ -431,7 +431,7 @@ final class SyncEntityService
     //  Table DDL (ensure tables exist)
     // ────────────────────────────────────────────────────────────────
 
-    private function ensureItemsTable(): void
+    public function ensureItemsTable(): void
     {
         $this->pdo->exec(
             "CREATE TABLE IF NOT EXISTS items (
@@ -460,7 +460,7 @@ final class SyncEntityService
         );
     }
 
-    private function ensureInvestmentsTable(): void
+    public function ensureInvestmentsTable(): void
     {
         $this->pdo->exec(
             "CREATE TABLE IF NOT EXISTS investments (
@@ -484,7 +484,7 @@ final class SyncEntityService
         );
     }
 
-    private function ensureWatchlistTable(): void
+    public function ensureWatchlistTable(): void
     {
         $this->pdo->exec(
             "CREATE TABLE IF NOT EXISTS watchlist (

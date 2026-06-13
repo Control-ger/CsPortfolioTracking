@@ -52,9 +52,13 @@ final class SyncService
     public function push(int $userId, array $changes): array
     {
         $this->ensureTables();
-        $this->ensureItemsTable();
-        $this->ensureInvestmentsTable();
-        $this->ensureWatchlistTable();
+        // These DDL helpers live on SyncEntityService (the entity layer owns the
+        // domain tables). Calling them on $this would fatal with "undefined
+        // method" — which is exactly what surfaced once Variante C let the push
+        // path actually execute against the server.
+        $this->syncEntityService->ensureItemsTable();
+        $this->syncEntityService->ensureInvestmentsTable();
+        $this->syncEntityService->ensureWatchlistTable();
 
         $normalizedChanges = $this->normalizeChanges($changes);
         $results = [];
