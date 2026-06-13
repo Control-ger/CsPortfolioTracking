@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   cloudflareAccess: {
     login: (serverUrl, cfLoginUrl) => ipcRenderer.invoke("cloudflare-access-login", serverUrl, cfLoginUrl),
   },
+  steamAuth: {
+    serverLogin: (steamOpenIdUrl) => ipcRenderer.invoke("steam-server-login", steamOpenIdUrl),
+  },
   updater: {
     getVersion: () => ipcRenderer.invoke("app-get-version"),
     check: () => ipcRenderer.invoke("app-updater-check"),

@@ -45,6 +45,7 @@ export let readSessionFileRef = null;
 export let writeSessionFileRef = null;
 export let deleteSessionFileRef = null;
 export let openCloudflareAccessLoginWindowRef = null;
+export let openSteamServerLoginWindowRef = null;
 export let getStoredServerConfigRef = null;
 export let writeServerConfigRef = null;
 export let testServerConnectionRef = null;
@@ -61,6 +62,7 @@ export function setIpcDeps(deps) {
   writeSessionFileRef = deps.writeSessionFile;
   deleteSessionFileRef = deps.deleteSessionFile;
   openCloudflareAccessLoginWindowRef = deps.openCloudflareAccessLoginWindow;
+  openSteamServerLoginWindowRef = deps.openSteamServerLoginWindow;
   getStoredServerConfigRef = deps.getStoredServerConfig;
   writeServerConfigRef = deps.writeServerConfig;
   testServerConnectionRef = deps.testServerConnection;
@@ -193,6 +195,18 @@ export function registerAllIpcHandlers() {
         ok: true,
         ...result,
       };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || String(error),
+      };
+    }
+  });
+
+  // ── Steam server login (Variante C: server-issued session token) ──
+  ipcMain.handle("steam-server-login", async (event, steamOpenIdUrl) => {
+    try {
+      return await openSteamServerLoginWindowRef(steamOpenIdUrl);
     } catch (error) {
       return {
         ok: false,

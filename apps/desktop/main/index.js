@@ -522,6 +522,99 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
   return cloudflareAccessLoginPromise;
 }
 
+// Variante C: obtain a SERVER-issued Steam session token.
+// The remote server runs the Steam OpenID flow and, for a custom-protocol
+// returnUrl, redirects to cs-portfolio://auth/steam/callback#token=<token>.
+// We open the Steam OpenID URL in a window that shares defaultSession (so the
+// CF_Authorization cookie lets the protected callback through) and intercept the
+// cs-portfolio:// navigation to capture the token without leaving Electron.
+async function openSteamServerLoginWindow(steamOpenIdUrl) {
+  const url = String(steamOpenIdUrl || "").trim();
+  if (!/^https:\/\//i.test(url)) {
+    throw new Error("Ungueltige Steam-Login-URL.");
+  }
+
+  return new Promise((resolve, reject) => {
+    let loginWindow = null;
+    let finished = false;
+
+    const finish = (handler) => {
+      if (finished) return;
+      finished = true;
+      if (loginWindow && !loginWindow.isDestroyed()) {
+        loginWindow.removeAllListeners("closed");
+        loginWindow.close();
+      }
+      loginWindow = null;
+      handler();
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish(() => reject(new Error("Steam Login Timeout.")));
+    }, 300000);
+
+    // Returns: null = not our protocol, "" = protocol but no token, "<token>" = ok
+    const extractToken = (candidate) => {
+      const raw = String(candidate || "");
+      if (!raw.toLowerCase().startsWith("cs-portfolio://")) {
+        return null;
+      }
+      const hashIndex = raw.indexOf("#");
+      const fragment = hashIndex >= 0 ? raw.slice(hashIndex + 1) : "";
+      const token = new URLSearchParams(fragment).get("token");
+      return token || "";
+    };
+
+    const handleCandidate = (event, candidateUrl) => {
+      const token = extractToken(candidateUrl);
+      if (token === null) {
+        return; // unrelated navigation (Steam/CF pages)
+      }
+      if (event && typeof event.preventDefault === "function") {
+        event.preventDefault();
+      }
+      clearTimeout(timeoutId);
+      if (token) {
+        finish(() => resolve({ ok: true, token }));
+      } else {
+        finish(() => reject(new Error("Steam Login lieferte keinen Token.")));
+      }
+    };
+
+    loginWindow = new BrowserWindow({
+      width: 1180,
+      height: 860,
+      minWidth: 980,
+      minHeight: 700,
+      show: true,
+      title: "Steam Login",
+      webPreferences: {
+        contextIsolation: true,
+        // No partition → shares defaultSession (carries the CF_Authorization
+        // cookie so the protected callback is not blocked by Cloudflare Access).
+      },
+    });
+
+    // The custom-scheme redirect can surface as a redirect, a navigation, or a
+    // failed load (ERR_UNKNOWN_URL_SCHEME) depending on platform — handle all.
+    loginWindow.webContents.on("will-redirect", (event, nextUrl) => handleCandidate(event, nextUrl));
+    loginWindow.webContents.on("will-navigate", (event, nextUrl) => handleCandidate(event, nextUrl));
+    loginWindow.webContents.on("did-fail-load", (_event, _code, _desc, validatedUrl) =>
+      handleCandidate(null, validatedUrl),
+    );
+
+    loginWindow.on("closed", () => {
+      clearTimeout(timeoutId);
+      finish(() => reject(new Error("Steam Login wurde geschlossen, bevor er abgeschlossen war.")));
+    });
+
+    loginWindow.loadURL(url).catch(() => {
+      // Loading may reject when the flow ends on the custom scheme; the
+      // did-fail-load / will-redirect handlers above capture the token.
+    });
+  });
+}
+
 async function ensureCloudflareAccessSession(serverUrl) {
   if (hasCloudflareAccessIdentity(serverUrl)) {
     return { ok: true, alreadyAuthenticated: true };
@@ -737,6 +830,7 @@ app.whenReady().then(async () => {
     writeSessionFile,
     deleteSessionFile,
     openCloudflareAccessLoginWindow,
+    openSteamServerLoginWindow,
     getStoredServerConfig,
     writeServerConfig,
     testServerConnection,
@@ -783,5 +877,6 @@ export {
   getAccessCookieHeader,
   hasCloudflareAccessIdentity,
   openCloudflareAccessLoginWindow,
+  openSteamServerLoginWindow,
   ensureCloudflareAccessSession,
 };

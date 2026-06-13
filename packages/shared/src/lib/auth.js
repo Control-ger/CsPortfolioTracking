@@ -7,6 +7,7 @@
 
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { normalizeDesktopLocalUserId } from "./userIdentity.js";
+import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
 
 // Resolve configured API base URL - handle Electron file:// origin gracefully
 function resolveConfiguredApiBase() {
@@ -187,9 +188,123 @@ export async function initiateSteamLogin() {
 }
 
 /**
+ * Resolve the configured remote server base URL (desktop only).
+ * Variante C authenticates against this server so the issued session token
+ * is valid for the protected sync endpoints.
+ */
+async function resolveRemoteServerBase() {
+  if (!isDesktopApp() || !window.electronAPI?.serverConfig?.get) {
+    return "";
+  }
+  try {
+    const config = await window.electronAPI.serverConfig.get();
+    return normalizeServerBaseUrl(config?.serverUrl || "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Fetch a protected remote endpoint, transparently completing a Cloudflare
+ * Access login if the request is intercepted by a CF challenge.
+ */
+async function remoteFetchWithCloudflareAccess(remoteBase, path, options = {}) {
+  const requestInit = { ...options, credentials: "include" };
+  let response = await fetch(`${remoteBase}${path}`, requestInit);
+
+  const isChallenge = (res) => {
+    const url = String(res?.url || "");
+    if (url.includes("/cdn-cgi/access/")) {
+      return true;
+    }
+    const contentType = String(res?.headers?.get?.("content-type") || "").toLowerCase();
+    const server = String(res?.headers?.get?.("server") || "").toLowerCase();
+    return contentType.includes("text/html") && server.includes("cloudflare");
+  };
+
+  if (isChallenge(response) && window.electronAPI?.cloudflareAccess?.login) {
+    await window.electronAPI.cloudflareAccess.login(resolveAccessBaseUrl(remoteBase), response.url);
+    response = await fetch(`${remoteBase}${path}`, requestInit);
+  }
+
+  return response;
+}
+
+/**
+ * Validate a session token against a specific server base (used for the
+ * server-issued desktop token, which only the remote server can decrypt).
+ */
+async function validateSessionAgainst(remoteBase, token) {
+  const response = await remoteFetchWithCloudflareAccess(remoteBase, "/api/v1/auth/session/validate", {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "X-Auth-Token": token,
+    },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const data = unwrapApiData(await response.json());
+  return data?.valid ? { success: true, user: data.user } : null;
+}
+
+/**
+ * Variante C: Steam login against the remote server.
+ * The server runs the OpenID flow and issues a session token it can itself
+ * validate; we capture it from the cs-portfolio:// callback via the main process.
+ */
+async function initiateDesktopServerSteamLogin(remoteBase) {
+  const loginResponse = await remoteFetchWithCloudflareAccess(
+    remoteBase,
+    `/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(DESKTOP_PROTOCOL)}`,
+    { method: "GET", headers: { "Content-Type": "application/json" } },
+  );
+  const loginData = unwrapApiData(await loginResponse.json());
+  if (!loginResponse.ok || !loginData?.success || !loginData?.redirectUrl) {
+    throw new Error(loginData?.error || "Steam-Login konnte am Server nicht gestartet werden.");
+  }
+
+  const result = await window.electronAPI.steamAuth.serverLogin(loginData.redirectUrl);
+  if (!result?.ok || !result?.token) {
+    throw new Error(result?.error || "Steam-Login wurde abgebrochen.");
+  }
+
+  const validation = await validateSessionAgainst(remoteBase, result.token);
+  if (!validation?.user) {
+    throw new Error("Session-Validierung am Server fehlgeschlagen.");
+  }
+
+  await storeSession(result.token, validation.user);
+  return { success: true, user: validation.user, sessionToken: result.token };
+}
+
+/**
  * Desktop Steam Login via system browser
  */
 async function initiateDesktopSteamLogin() {
+  // Variante C: when a remote server is configured, authenticate against it so
+  // the session token is valid for the protected sync endpoints. Falls back to
+  // the local sidecar login (local-only token) if the server flow fails, so the
+  // user is never locked out of the app.
+  const remoteBase = await resolveRemoteServerBase();
+  if (remoteBase) {
+    try {
+      return await initiateDesktopServerSteamLogin(remoteBase);
+    } catch (error) {
+      console.warn("[auth] server Steam login failed, falling back to sidecar login", error);
+    }
+  }
+
+  return await initiateDesktopSidecarSteamLogin();
+}
+
+/**
+ * Legacy desktop Steam login against the local sidecar.
+ * Issues a sidecar-signed token (valid only for local sidecar routes).
+ */
+async function initiateDesktopSidecarSteamLogin() {
   try {
     // 1. Request login URL from backend
     const response = await fetchWithDesktopRetry(`/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(DESKTOP_PROTOCOL)}`, {
@@ -519,6 +634,18 @@ export async function logout() {
  * and user data is returned, avoiding exposing user data in URLs.
  */
 export async function validateSession(token) {
+  // Desktop: a server-issued token (Variante C) only validates against the
+  // remote server, not the local sidecar. Try the remote server first.
+  if (isDesktopApp()) {
+    const remoteBase = await resolveRemoteServerBase();
+    if (remoteBase) {
+      const remote = await validateSessionAgainst(remoteBase, token).catch(() => null);
+      if (remote) {
+        return remote;
+      }
+    }
+  }
+
   try {
     const response = await fetchWithDesktopRetry("/api/v1/auth/session/validate", {
       method: 'GET',
