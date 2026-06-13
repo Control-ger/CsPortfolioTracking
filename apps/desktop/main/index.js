@@ -565,11 +565,26 @@ async function openSteamServerLoginWindow(steamOpenIdUrl) {
       return token || "";
     };
 
-    const handleCandidate = (event, candidateUrl) => {
+    // Diagnostic: log each navigation hop's host (never the token) so a failed
+    // capture can be told apart from "no callback ever arrived".
+    const logHop = (source, candidateUrl) => {
+      const raw = String(candidateUrl || "");
+      let host = raw;
+      try {
+        host = new URL(raw).host || raw.slice(0, 40);
+      } catch {
+        host = raw.slice(0, 40);
+      }
+      console.log(`[steam-login] ${source}: ${host}`);
+    };
+
+    const handleCandidate = (event, candidateUrl, source) => {
+      logHop(source, candidateUrl);
       const token = extractToken(candidateUrl);
       if (token === null) {
         return; // unrelated navigation (Steam/CF pages)
       }
+      console.log(`[steam-login] callback reached; token extracted: ${token ? "yes" : "NO (fragment missing)"}`);
       if (event && typeof event.preventDefault === "function") {
         event.preventDefault();
       }
@@ -577,7 +592,7 @@ async function openSteamServerLoginWindow(steamOpenIdUrl) {
       if (token) {
         finish(() => resolve({ ok: true, token }));
       } else {
-        finish(() => reject(new Error("Steam Login lieferte keinen Token.")));
+        finish(() => reject(new Error("Steam Login lieferte keinen Token (Fragment fehlt).")));
       }
     };
 
@@ -597,10 +612,10 @@ async function openSteamServerLoginWindow(steamOpenIdUrl) {
 
     // The custom-scheme redirect can surface as a redirect, a navigation, or a
     // failed load (ERR_UNKNOWN_URL_SCHEME) depending on platform — handle all.
-    loginWindow.webContents.on("will-redirect", (event, nextUrl) => handleCandidate(event, nextUrl));
-    loginWindow.webContents.on("will-navigate", (event, nextUrl) => handleCandidate(event, nextUrl));
-    loginWindow.webContents.on("did-fail-load", (_event, _code, _desc, validatedUrl) =>
-      handleCandidate(null, validatedUrl),
+    loginWindow.webContents.on("will-redirect", (event, nextUrl) => handleCandidate(event, nextUrl, "will-redirect"));
+    loginWindow.webContents.on("will-navigate", (event, nextUrl) => handleCandidate(event, nextUrl, "will-navigate"));
+    loginWindow.webContents.on("did-fail-load", (_event, code, _desc, validatedUrl) =>
+      handleCandidate(null, validatedUrl, `did-fail-load(${code})`),
     );
 
     loginWindow.on("closed", () => {

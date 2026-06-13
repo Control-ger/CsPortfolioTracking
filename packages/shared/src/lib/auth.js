@@ -291,9 +291,14 @@ async function initiateDesktopSteamLogin() {
   const remoteBase = await resolveRemoteServerBase();
   if (remoteBase) {
     try {
-      return await initiateDesktopServerSteamLogin(remoteBase);
+      const serverResult = await initiateDesktopServerSteamLogin(remoteBase);
+      console.log("[auth] Variante C server login succeeded — token is sync-valid");
+      return serverResult;
     } catch (error) {
-      console.warn("[auth] server Steam login failed, falling back to sidecar login", error);
+      // Loud on purpose: a silent fallback to the sidecar token reproduces the
+      // exact original symptom (login OK, sync AUTH_REQUIRED). This line is the
+      // signal that Variante C did not complete.
+      console.error("[auth] Variante C server login FAILED — falling back to sidecar (sync will not work):", error);
     }
   }
 
