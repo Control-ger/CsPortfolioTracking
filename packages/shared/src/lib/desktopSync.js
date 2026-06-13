@@ -114,9 +114,13 @@ function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
     candidates.push(joinWithQuery(`${normalizedBase}/index.php`, routeWithQuery));
     candidates.push(joinWithQuery(`${normalizedBase.slice(0, -"/api".length)}${endpoint}`, endpointQuery));
   } else {
-    candidates.push(joinWithQuery(`${normalizedBase}${endpoint}`, endpointQuery));
+    // The deployed server routes the API only through /api/index.php; the bare
+    // /api/v1/... path returns 404. The fallback below still recovers, but trying
+    // the bare path first spams the console with 404s on every sync — so try the
+    // working /api/index.php form first and keep the bare path as a fallback.
     candidates.push(joinWithQuery(`${normalizedBase}/api/index.php${endpoint}`, endpointQuery));
     candidates.push(joinWithQuery(`${normalizedBase}/api/index.php`, routeWithQuery));
+    candidates.push(joinWithQuery(`${normalizedBase}${endpoint}`, endpointQuery));
     candidates.push(joinWithQuery(`${normalizedBase}/index.php${endpoint}`, endpointQuery));
     candidates.push(joinWithQuery(`${normalizedBase}/index.php`, routeWithQuery));
   }

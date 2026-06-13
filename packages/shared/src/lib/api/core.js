@@ -327,7 +327,11 @@ async function requestPayload(path, options = {}) {
     };
   });
   if (upstreamHint?.code) {
-    console.warn("[apiClient] upstream hint", {
+    // Desktop is local-first: the sidecar's upstream proxy to the server is
+    // best-effort, so UPSTREAM_UNAVAILABLE is an expected fallback (local data
+    // still serves). Log at debug level so it stays available under Verbose
+    // without spamming the default console. Telemetry below is unchanged.
+    console.debug("[apiClient] upstream hint", {
       ...upstreamHint,
       request: {
         method,

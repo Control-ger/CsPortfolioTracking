@@ -30,7 +30,7 @@ No test suite is configured (Playwright exists as devDep but no `test` script).
 - `backend/public/index.php` — Server front controller (Web, Sync, public API). Calls `ensureTable()` for all repositories at startup; new repositories must be added here. Schema migration failures are caught and logged so they don't take down all routes.
 - `backend/desktop/index.php` — Desktop Sidecar (local 127.0.0.1, no MySQL required)
 
-**Sync push ownership:** `SyncService` owns `sync_entities`/`sync_idempotency` (revision + idempotency); domain projection into `items`/`investments`/`watchlist` (and their DDL `ensure*Table()`) belongs to `SyncEntityService`, invoked via `applyDomainChange`. `SyncService::push` must call the `ensure*Table()` helpers on `$this->syncEntityService`, not `$this`.
+**Sync push ownership:** `SyncService` owns `sync_entities`/`sync_idempotency` (revision + idempotency); domain projection into `items`/`investments`/`watchlist` (and their DDL `ensure*Table()`) belongs to `SyncEntityService`, invoked via `applyDomainChange`. `SyncService::push` must call the `ensure*Table()` helpers on `$this->syncEntityService`, not `$this`. Desktop sync/login calls the server via `/api/index.php/api/v1/...` (bare `/api/v1/...` 404s at the edge); `buildSyncEndpointCandidates` (desktopSync.js) tries the `/api/index.php` form first.
 
 **PHP autoloader** (`backend/src/bootstrap.php`): PSR-4-like, maps `App\` → `backend/src/`.
 No Composer. No framework (custom Router, DI, Logger).
