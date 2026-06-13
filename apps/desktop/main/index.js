@@ -41,6 +41,7 @@ import {
   resolveRuntimePath,
   isAsarVirtualPath,
   readDotEnvFile,
+  setUpstreamCfCookieHeader,
 } from "./sidecar.js";
 
 import {
@@ -283,37 +284,63 @@ async function testServerConnection(serverUrl) {
 // Cloudflare Access
 // ═══════════════════════════════════════════════════════════════════
 
-function getAccessCookieHeader(serverUrl) {
-  const normalizedUrl = String(serverUrl || "").replace(/\/+$/, "");
-  if (!normalizedUrl) {
-    return null;
+function isCloudflareCookieName(name) {
+  const lower = String(name || "").toLowerCase();
+  return lower.startsWith("cf_") || lower === "__cflb" || lower.startsWith("cf-access-");
+}
+
+function buildCfCookieHeaderFromList(cookies) {
+  return (Array.isArray(cookies) ? cookies : [])
+    .filter((cookie) => isCloudflareCookieName(cookie?.name))
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join("; ");
+}
+
+function ensureUrlScheme(value) {
+  const normalized = String(value || "").replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
+}
+
+// Read the live Cloudflare Access cookies for the configured server from the
+// defaultSession — the authoritative store the renderer's fetch() also uses (the
+// login flow re-asserts CF cookies there with sameSite:no_restriction). Returns
+// the "name=value; ..." header string, or "" when no CF cookie is present.
+// (Previously read desktop-session.json without awaiting the async reader, so it
+// always returned null; the cookie is not reliably persisted there anyway.)
+async function getAccessCookieHeader(serverUrl) {
+  const origin = (() => {
+    try {
+      return new URL(ensureUrlScheme(serverUrl)).origin;
+    } catch {
+      return "";
+    }
+  })();
+  if (!origin) {
+    return "";
   }
 
   try {
-    const session = readSessionFile();
-    const urlSession = session[normalizedUrl];
-    if (!urlSession || typeof urlSession !== "object") {
-      return null;
-    }
-
-    const cookies = urlSession.cookies;
-    if (!cookies || typeof cookies !== "object") {
-      return null;
-    }
-
-    const cfCookies = Object.keys(cookies)
-      .filter((key) => key.toLowerCase().startsWith("cf_") || key.toLowerCase() === "__cflb" || key.toLowerCase() === "cf_clearance")
-      .map((key) => `${key}=${cookies[key]}`)
-      .join("; ");
-
-    return cfCookies || null;
+    const cookies = await electronSession.defaultSession.cookies.get({ url: origin });
+    return buildCfCookieHeaderFromList(cookies);
   } catch {
-    return null;
+    return "";
   }
 }
 
-function hasCloudflareAccessIdentity(serverUrl) {
-  const cookieHeader = getAccessCookieHeader(serverUrl);
+// Refresh the sidecar's upstream CF cookie cache from the live defaultSession so
+// the PHP upstream proxy can authenticate after a cold start (reusing a still
+// valid cookie from a previous login), not only right after a fresh login.
+async function refreshUpstreamCfCookieFromSession(serverUrl) {
+  const header = await getAccessCookieHeader(serverUrl);
+  setUpstreamCfCookieHeader(header);
+  return header;
+}
+
+async function hasCloudflareAccessIdentity(serverUrl) {
+  const cookieHeader = await getAccessCookieHeader(serverUrl);
   return Boolean(cookieHeader);
 }
 
@@ -450,6 +477,11 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
               }
               await electronSession.defaultSession.cookies.set(details);
             }
+
+            // Seed the sidecar upstream proxy cookie cache so proxied reads
+            // (prices/history/search/composition) authenticate through CF
+            // immediately, without waiting for the startup session refresh.
+            setUpstreamCfCookieHeader(buildCfCookieHeaderFromList([...cookiesByName.values()]));
 
             // Diagnostic: confirm CF_Authorization is now in defaultSession so a
             // failing login can be told apart from a failing cookie delivery.
@@ -631,7 +663,7 @@ async function openSteamServerLoginWindow(steamOpenIdUrl) {
 }
 
 async function ensureCloudflareAccessSession(serverUrl) {
-  if (hasCloudflareAccessIdentity(serverUrl)) {
+  if (await hasCloudflareAccessIdentity(serverUrl)) {
     return { ok: true, alreadyAuthenticated: true };
   }
   return await openCloudflareAccessLoginWindow(serverUrl);
@@ -864,6 +896,18 @@ app.whenReady().then(async () => {
 
   // Install request header bridge for sidecar auth
   await installSidecarRequestHeaderBridge();
+
+  // Seed the upstream CF cookie cache from any still-valid prior login so the
+  // sidecar proxy authenticates immediately on cold start, before the user
+  // triggers a fresh CF login window.
+  try {
+    const seedServerUrl = String(getStoredServerConfig?.()?.serverUrl || "").trim();
+    if (seedServerUrl) {
+      await refreshUpstreamCfCookieFromSession(seedServerUrl);
+    }
+  } catch (cfSeedError) {
+    console.warn("[cloudflare] failed to seed upstream cookie cache", cfSeedError?.message || cfSeedError);
+  }
 
   // Register updater refs
   const win = createWindow();

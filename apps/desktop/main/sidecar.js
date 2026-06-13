@@ -16,12 +16,27 @@ export let phpSidecar = null;
 export let sidecarSecret = "";
 export let sidecarRequestHeaderBridgeInstalled = false;
 
+// Current Cloudflare Access cookie header (e.g. "cf_authorization=...; cf_clearance=...").
+// Set by main/index.js after a CF login / session refresh and injected by the
+// request header bridge into every renderer→sidecar call so the PHP upstream
+// proxy can authenticate through the Zero Trust tunnel. Kept here (not in
+// index.js) so the bridge reads it synchronously without a circular import.
+let upstreamCfCookieHeader = "";
+
 export function setSidecarProcess(proc) {
   phpSidecar = proc;
 }
 
 export function setSidecarSecret(secret) {
   sidecarSecret = secret;
+}
+
+export function setUpstreamCfCookieHeader(value) {
+  upstreamCfCookieHeader = String(value || "").trim();
+}
+
+export function getUpstreamCfCookieHeader() {
+  return upstreamCfCookieHeader;
 }
 
 export function setSidecarHeaderBridgeInstalled(val) {
@@ -181,6 +196,20 @@ export async function installSidecarRequestHeaderBridge() {
         }
       }
       headers["X-Desktop-Sidecar-Secret"] = sidecarSecret;
+    }
+
+    // Forward the renderer's Cloudflare Access cookie to the sidecar so the PHP
+    // upstream proxy (backend/desktop/index.php) can authenticate through the
+    // Zero Trust tunnel. The renderer→sidecar fetch is same-origin to 127.0.0.1
+    // and never carries the CF cookie itself, so we inject it explicitly here.
+    if (upstreamCfCookieHeader) {
+      const keys = Object.keys(headers);
+      for (const key of keys) {
+        if (key.toLowerCase() === "x-upstream-cf-cookie") {
+          delete headers[key];
+        }
+      }
+      headers["X-Upstream-Cf-Cookie"] = upstreamCfCookieHeader;
     }
 
     callback({ requestHeaders: headers });

@@ -43,6 +43,39 @@ export function getDesktopSecrets() {
   return window.electronAPI.secrets;
 }
 
+// When the desktop sidecar proxy reports that the upstream is behind a
+// Cloudflare Access challenge (cookie missing/expired), prompt the user to sign
+// in again via the existing CF login window, then retry the request once. The
+// main process dedupes concurrent login windows; we also coalesce here so a
+// burst of parallel reads triggers only one re-auth.
+let cfAccessReauthInFlight = null;
+function tryCloudflareAccessReauth() {
+  if (typeof window === "undefined" || !window.electronAPI?.cloudflareAccess?.login) {
+    return Promise.resolve(false);
+  }
+  if (cfAccessReauthInFlight) {
+    return cfAccessReauthInFlight;
+  }
+  cfAccessReauthInFlight = (async () => {
+    try {
+      const cfg = await window.electronAPI.serverConfig?.get?.();
+      const rawServerUrl = String(cfg?.serverUrl || cfg?.url || "").trim().replace(/\/+$/, "");
+      if (!rawServerUrl) {
+        return false;
+      }
+      const serverUrl = /^https?:\/\//i.test(rawServerUrl) ? rawServerUrl : `https://${rawServerUrl}`;
+      const result = await window.electronAPI.cloudflareAccess.login(serverUrl);
+      return Boolean(result?.ok);
+    } catch (error) {
+      console.warn("[apiClient] Cloudflare Access re-login failed", error);
+      return false;
+    } finally {
+      cfAccessReauthInFlight = null;
+    }
+  })();
+  return cfAccessReauthInFlight;
+}
+
 // Deterministic cache keys for Phase 1 offline fallback. Only GET endpoints
 // consumed by portfolio/watchlist UI are cached; mutations are never cached.
 const GET_CACHE_KEYS = [
@@ -326,6 +359,23 @@ async function requestPayload(path, options = {}) {
       url,
     };
   });
+  if (
+    upstreamHint?.code === "CLOUDFLARE_ACCESS_LOGIN_REQUIRED" &&
+    options._cfAccessRetried !== true
+  ) {
+    // The CF Access cookie is missing/expired, so the proxy got the login HTML
+    // instead of data. Unlike the generic best-effort fallback, this is
+    // actionable: prompt the user to re-authenticate, then retry once.
+    console.warn("[apiClient] Cloudflare Access login required — prompting re-authentication", {
+      method,
+      path,
+    });
+    const reauthed = await tryCloudflareAccessReauth();
+    if (reauthed) {
+      return requestPayload(path, { ...options, _cfAccessRetried: true });
+    }
+  }
+
   if (upstreamHint?.code) {
     // Desktop is local-first: the sidecar's upstream proxy to the server is
     // best-effort, so UPSTREAM_UNAVAILABLE is an expected fallback (local data

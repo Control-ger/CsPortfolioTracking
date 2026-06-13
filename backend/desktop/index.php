@@ -41,6 +41,22 @@ if ($missingPhpExtensions !== []) {
     exit;
 }
 
+// ── Cloudflare Access cookie (per-request) ─────────────────────────────
+// The renderer authenticates to the Zero Trust tunnel and the Electron header
+// bridge forwards its CF cookie on every renderer→sidecar call as
+// X-Upstream-Cf-Cookie. Promote it into UPSTREAM_COOKIE_HEADER so the existing
+// upstream proxy ($proxyUpstreamGet) sends it as the Cookie: header on every
+// upstream curl — otherwise CF returns its login HTML and every proxied read
+// (prices/history/search/composition) fails silently.
+// Set unconditionally (even to empty) every request: the PHP built-in server is
+// a long-lived process, so putenv() persists across requests. A later request
+// without the header (cookie cleared/expired → bridge omits it) must NOT keep
+// reusing a stale cookie from an earlier request. Strip CR/LF defensively to
+// avoid injecting extra headers into the upstream Cookie line.
+$incomingCfCookie = str_replace(["\r", "\n"], '', trim((string) ($_SERVER['HTTP_X_UPSTREAM_CF_COOKIE'] ?? '')));
+putenv('UPSTREAM_COOKIE_HEADER=' . $incomingCfCookie);
+$_ENV['UPSTREAM_COOKIE_HEADER'] = $incomingCfCookie;
+
 // ── Route Registry Note ────────────────────────────────────────────────
 // The server front controller (public/index.php) uses registerServerApiRoutes()
 // from backend/src/routes.php for shared route definitions.
@@ -381,7 +397,18 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = [], ar
                 $headers[] = $trimmed;
             }
         }
-        if ($upstreamCookieHeader !== '') {
+        // Only add the env cookie when the forwarded headers don't already carry
+        // one (auth'd routes get it via $resolveUpstreamAuthHeaders); avoids a
+        // duplicate Cookie header. Routes without auth headers (cs-updates,
+        // exchange-rate) still get the cookie from the env here.
+        $hasCookieHeader = false;
+        foreach ($headers as $existingHeader) {
+            if (stripos((string) $existingHeader, 'cookie:') === 0) {
+                $hasCookieHeader = true;
+                break;
+            }
+        }
+        if (!$hasCookieHeader && $upstreamCookieHeader !== '') {
             $headers[] = 'Cookie: ' . $upstreamCookieHeader;
         }
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -396,12 +423,14 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = [], ar
 
         $response = curl_exec($ch);
         $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $effectiveUrl = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
         $curlError = curl_error($ch);
         curl_close($ch);
 
         return [
             'response' => $response,
             'httpCode' => $httpCode,
+            'effectiveUrl' => $effectiveUrl,
             'curlError' => $curlError,
             'insecureTls' => $insecureTls,
         ];
@@ -469,6 +498,7 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = [], ar
             $attempts[] = [
                 'url' => $url,
                 'httpCode' => $httpCode,
+                'effectiveUrl' => (string) ($result['effectiveUrl'] ?? ''),
                 'curlError' => $curlError,
                 'responseType' => 'non_json',
                 'bodyPreview' => substr(trim($response), 0, 180),
@@ -544,20 +574,25 @@ $summarizeProxyIssue = static function (array $attempts, string $endpointPath = 
         }
     }
 
+    // Positively identify a Cloudflare Access challenge so the renderer can
+    // re-trigger the CF login window. curl follows the 302, so the most reliable
+    // signal is the effective URL landing on the Access login host; the body
+    // preview is a fallback (the login HTML may not carry markers in its head).
     foreach ($attempts as $attempt) {
         if (!is_array($attempt)) {
             continue;
         }
+        $effectiveUrl = strtolower((string) ($attempt['effectiveUrl'] ?? ''));
         $bodyPreview = strtolower((string) ($attempt['bodyPreview'] ?? ''));
-        if (
-            $bodyPreview !== ''
-            && (str_contains($bodyPreview, 'cloudflare access')
+        $looksLikeAccessChallenge =
+            ($effectiveUrl !== '' && (str_contains($effectiveUrl, 'cloudflareaccess.com') || str_contains($effectiveUrl, '/cdn-cgi/access/')))
+            || ($bodyPreview !== '' && (str_contains($bodyPreview, 'cloudflare access')
                 || str_contains($bodyPreview, '/cdn-cgi/access/login')
-                || str_contains($bodyPreview, 'cloudflareaccess.com'))
-        ) {
+                || str_contains($bodyPreview, 'cloudflareaccess.com')));
+        if ($looksLikeAccessChallenge) {
             return $withContext([
-                'code' => 'UPSTREAM_ACCESS_DENIED',
-                'message' => 'Upstream requires Cloudflare Access authentication for this request.',
+                'code' => 'CLOUDFLARE_ACCESS_LOGIN_REQUIRED',
+                'message' => 'Cloudflare Access session is missing or expired. Sign in again to continue.',
             ]);
         }
     }
@@ -620,6 +655,15 @@ $resolveUpstreamAuthHeaders = static function (Request $request): array {
 
         $normalizedName = $headerKey === 'authorization' ? 'Authorization' : 'X-Auth-Token';
         $headers[] = $normalizedName . ': ' . $value;
+    }
+
+    // Forward the Cloudflare Access cookie (promoted into UPSTREAM_COOKIE_HEADER
+    // from the per-request X-Upstream-Cf-Cookie header) so the inline POST/PUT
+    // upstream calls (refresh-stale, watchlist/batch, settings PUT) authenticate
+    // through the Zero Trust tunnel too — not just the GET proxy.
+    $cfCookie = trim((string) (getenv('UPSTREAM_COOKIE_HEADER') ?: ($_ENV['UPSTREAM_COOKIE_HEADER'] ?? '')));
+    if ($cfCookie !== '') {
+        $headers[] = 'Cookie: ' . $cfCookie;
     }
 
     return $headers;
