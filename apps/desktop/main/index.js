@@ -426,7 +426,12 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
           }
 
           try {
-            const { default: { session: electronSession } } = await import("electron");
+            // electronSession is the top-level named import from "electron".
+            // The login window now shares defaultSession, so CF_Authorization is
+            // already present here — but CF sets it SameSite=Lax, which a
+            // renderer cross-origin fetch() will NOT send. Re-assert each cookie
+            // with sameSite:no_restriction + secure so it is sent with the
+            // renderer's API calls to the Cloudflare-protected origin.
             const origin = new URL(normalizedUrl).origin;
             const hostname = new URL(normalizedUrl).hostname;
             const cookiesByName = new Map(cfCookies.map((c) => [c.name, c]));
@@ -445,6 +450,16 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
               }
               await electronSession.defaultSession.cookies.set(details);
             }
+
+            // Diagnostic: confirm CF_Authorization is now in defaultSession so a
+            // failing login can be told apart from a failing cookie delivery.
+            const verify = await electronSession.defaultSession.cookies.get({ name: cfAccessToken.name });
+            console.log("[cloudflare] CF_Authorization in defaultSession after login:", {
+              present: verify.length > 0,
+              sameSite: verify[0]?.sameSite,
+              domain: verify[0]?.domain,
+              secure: verify[0]?.secure,
+            });
           } catch (cookieError) {
             console.warn("[cloudflare] failed to set cookies in default session", cookieError);
           }
@@ -472,7 +487,9 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
         title: "Cloudflare Access Login",
         webPreferences: {
           contextIsolation: true,
-          partition: "persist:cloudflare-access",
+          // Share the main window's defaultSession (no partition). CF sets
+          // CF_Authorization on this session during login, so it is immediately
+          // available to the renderer's fetch() calls — no cross-session copy.
         },
       });
 
