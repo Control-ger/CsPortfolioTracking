@@ -372,6 +372,11 @@ async function buildSidecarEnv(port, secret) {
 
   // Force SQLite-only
   env.APP_DATABASE_DRIVER = "sqlite";
+  // Mark the runtime as desktop. The External API clients (CsFloatTradeClient,
+  // SkinBaronClient) gate "skip TLS peer verification" on APP_ENV === 'desktop'
+  // because the bundled PHP ships no CA bundle; without this, CSFloat/SkinBaron/
+  // Steam imports fail with "unable to get local issuer certificate".
+  env.APP_ENV = "desktop";
   env.SIDECAR_PORT = String(port);
   // PHP sidecar reads DESKTOP_SIDECAR_SECRET (backend/desktop/index.php).
   env.DESKTOP_SIDECAR_SECRET = secret;
