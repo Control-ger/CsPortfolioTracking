@@ -251,37 +251,42 @@ export function calculateTokenOverlap(aTokens = [], bTokens = []) {
 
 export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
   const reasons = [];
+  // breakdown captures, per signal, the points awarded AND the actual measured
+  // values/deviations that earned them (e.g. the float delta, the price gap %),
+  // so the persisted match can be retraced down to the raw numbers — not just the
+  // categorical bucket. `metrics` carries the bare numbers for downstream formatting.
+  const breakdown = [];
   let score = 0;
+  const record = (code, points, metrics = null) => {
+    score += points;
+    reasons.push(code);
+    breakdown.push({ code, points, metrics });
+  };
 
   const steamType = normalizeType(steamItem.type);
   const csfloatType = normalizeType(csfloatItem.type);
   if (steamType !== csfloatType) {
     return null;
   }
-  score += 12;
-  reasons.push("same_type");
+  record("same_type", 12, { type: steamType });
 
   const steamName = normalizeMarketName(steamItem.marketHashName || steamItem.name);
   const csfloatName = normalizeMarketName(csfloatItem.marketHashName || csfloatItem.name);
   const steamCoreName = normalizeNameForMatching(steamName);
   const csfloatCoreName = normalizeNameForMatching(csfloatName);
   if (steamCoreName && csfloatCoreName && steamCoreName === csfloatCoreName) {
-    score += 50;
-    reasons.push("exact_core_name");
+    record("exact_core_name", 50, { overlap: 1 });
   } else {
     const overlap = calculateTokenOverlap(
       splitNameTokens(steamCoreName),
       splitNameTokens(csfloatCoreName),
     );
     if (overlap >= 0.8) {
-      score += 36;
-      reasons.push("token_overlap_high");
+      record("token_overlap_high", 36, { overlap });
     } else if (overlap >= 0.6) {
-      score += 24;
-      reasons.push("token_overlap_medium");
+      record("token_overlap_medium", 24, { overlap });
     } else if (overlap >= 0.4) {
-      score += 12;
-      reasons.push("token_overlap_low");
+      record("token_overlap_low", 12, { overlap });
     } else {
       return null;
     }
@@ -293,8 +298,7 @@ export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
     if (steamWear !== csfloatWear) {
       return null;
     }
-    score += 8;
-    reasons.push("wear_exact");
+    record("wear_exact", 8, { wear: steamWear });
   }
 
   const steamFloat = toFiniteNumber(steamItem.floatValue ?? steamItem.float ?? steamItem.wearFloat);
@@ -305,16 +309,14 @@ export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
     if (floatDiff > 0.03) {
       return null;
     }
+    const floatMetrics = { steamFloat, csfloatFloat, floatDiff };
     if (floatDiff <= 0.00001) {
-      score += 22;
       hasFloatMatch = true;
-      reasons.push("float_exact");
+      record("float_exact", 22, floatMetrics);
     } else if (floatDiff <= 0.0005) {
-      score += 14;
-      reasons.push("float_near");
+      record("float_near", 14, floatMetrics);
     } else {
-      score += 6;
-      reasons.push("float_loose");
+      record("float_loose", 6, floatMetrics);
     }
   }
 
@@ -325,9 +327,8 @@ export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
     if (steamSeed !== csfloatSeed) {
       return null;
     }
-    score += 20;
     hasSeedMatch = true;
-    reasons.push("seed_exact");
+    record("seed_exact", 20, { seed: steamSeed });
   }
 
   const steamPrice = toFiniteNumber(steamItem.buyPriceUsd);
@@ -335,12 +336,11 @@ export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
   if (steamPrice !== null && csfloatPrice !== null && steamPrice > 0 && csfloatPrice > 0) {
     const avgPrice = (steamPrice + csfloatPrice) / 2;
     const priceDiffRatio = avgPrice > 0 ? Math.abs(steamPrice - csfloatPrice) / avgPrice : 1;
+    const priceMetrics = { steamPrice, csfloatPrice, priceDiffRatio };
     if (priceDiffRatio <= 0.03) {
-      score += 10;
-      reasons.push("price_near");
+      record("price_near", 10, priceMetrics);
     } else if (priceDiffRatio <= 0.1) {
-      score += 5;
-      reasons.push("price_loose");
+      record("price_loose", 5, priceMetrics);
     }
   }
 
@@ -348,15 +348,13 @@ export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
   const csfloatTime = toTimestamp(csfloatItem.purchasedAt ?? csfloatItem.createdAt);
   if (steamTime !== null && csfloatTime !== null) {
     const dayDiff = Math.abs(steamTime - csfloatTime) / (24 * 60 * 60 * 1000);
+    const timeMetrics = { dayDiff };
     if (dayDiff <= 2) {
-      score += 12;
-      reasons.push("time_near");
+      record("time_near", 12, timeMetrics);
     } else if (dayDiff <= 7) {
-      score += 7;
-      reasons.push("time_medium");
+      record("time_medium", 7, timeMetrics);
     } else if (dayDiff <= 14) {
-      score += 5;
-      reasons.push("time_loose");
+      record("time_loose", 5, timeMetrics);
     }
   }
 
@@ -371,6 +369,7 @@ export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
     score,
     confidence,
     reasons,
+    breakdown,
   };
 }
 

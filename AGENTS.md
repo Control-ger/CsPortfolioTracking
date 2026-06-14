@@ -63,6 +63,8 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 - Desktop is the primary write client for investments and watchlist.
 - SQLite at Electron `userData` path (`cs-investor-hub.sqlite`), accessed only via `window.electronAPI.localStore` (IPC, never direct from renderer).
 - Local writes must fill `operations_log` for idempotent sync push.
+- Sync pull import (`investments`/`watchlist_items`) treats `server_id` as the canonical identity: before upserting a pulled row it hard-deletes any other local row holding the same `server_id` (different `id`), so the `UNIQUE(server_id)` constraint can't abort the pull when the server re-emits a fresh local id for an existing server row.
+- Steam↔CSFloat match scoring persists a `score_breakdown` (per-signal points + measured deviations) on `steam_csfloat_matches`; `listSteamCsfloatMatches` backfills it for pre-existing matches (incl. confirmed/auto-linked) without altering status/score/confidence.
 - Sidecar starts on `127.0.0.1` with per-start secret (`X-Desktop-Sidecar-Secret` header required). Exception: `GET /api/v1/auth/steam/callback` is public (external browser redirect).
 - Sidecar uses the host system PHP and requires the `mbstring`, `curl`, `json` extensions; `backend/desktop/index.php` returns a `PHP_EXTENSION_MISSING` error at startup if any are missing.
 - User scope: `steam-<steamId>`, never legacy `"1"`. Legacy data auto-merged on first access.

@@ -80,11 +80,23 @@ export function createImportInvestmentRowsTransaction(db) {
         deleted = 0,
         updated_at = excluded.updated_at`,
     );
+    // server_id is the server's investments.id (unique, AUTO_INCREMENT, never reused),
+    // so two local rows sharing a server_id are always the same logical investment.
+    // The upsert only reconciles ON CONFLICT(id); without releasing the server_id from
+    // any other local id first, the INSERT would violate UNIQUE(server_id) and abort
+    // the whole pull. Must be a hard DELETE — a tombstoned row still occupies its
+    // server_id in the unique index. (Mirrors watchlist import.)
+    const releaseServerId = db.prepare(
+      "DELETE FROM investments WHERE server_id = ? AND id != ?",
+    );
 
     rows.forEach((row) => {
       const id = String(row.id || randomUUID());
       const serverId =
         row.serverId ?? (Number.isFinite(Number(row.id)) ? Number(row.id) : null);
+      if (serverId !== null && serverId !== undefined) {
+        releaseServerId.run(serverId, id);
+      }
       const existingRow = db
         .prepare("SELECT payload FROM investments WHERE id = ? LIMIT 1")
         .get(id);

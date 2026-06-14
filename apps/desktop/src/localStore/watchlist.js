@@ -52,11 +52,25 @@ export function createImportWatchlistRowsTransaction(db) {
         deleted = 0,
         updated_at = excluded.updated_at`,
     );
+    // server_id is the server's watchlist.id, which is UNIQUE(user_id, item_id) and
+    // never reused (AUTO_INCREMENT). So two local rows that carry the same server_id
+    // are always the *same* logical item — the server can legitimately emit a fresh
+    // local id (e.g. after a re-add) for a watchlist row that an older local id still
+    // owns. The import upsert only reconciles ON CONFLICT(id), so without this the
+    // INSERT would violate UNIQUE(server_id) and abort the whole pull. A hard DELETE
+    // is required: a soft-deleted (deleted=1) row still occupies its server_id in the
+    // unique index, so tombstoning would not release the collision.
+    const releaseServerId = db.prepare(
+      "DELETE FROM watchlist_items WHERE server_id = ? AND id != ?",
+    );
 
     rows.forEach((row) => {
       const id = String(row.id || randomUUID());
       const serverId =
         row.serverId ?? (Number.isFinite(Number(row.id)) ? Number(row.id) : null);
+      if (serverId !== null && serverId !== undefined) {
+        releaseServerId.run(serverId, id);
+      }
       const normalizedUserId = normalizeLocalUserId(row.userId || userId);
       const resolvedName = String(row.name || row.marketHashName || "");
       const existingRow = db

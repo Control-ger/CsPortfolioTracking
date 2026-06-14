@@ -143,6 +143,7 @@ function runMigrations(db) {
       confidence TEXT NOT NULL DEFAULT 'low',
       status TEXT NOT NULL DEFAULT 'suggested',
       reason TEXT,
+      score_breakdown TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE(user_id, steam_asset_id, csfloat_investment_id)
@@ -178,6 +179,20 @@ function runMigrations(db) {
      VALUES ('schema_version', ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
   ).run(String(SCHEMA_VERSION), nowIso());
+
+  // Additive column migrations for DBs created before the column existed.
+  // CREATE TABLE IF NOT EXISTS above never alters an existing table, so backfill
+  // newly introduced columns here. Guarded by pragma so it is idempotent.
+  const ensureColumn = (table, column, definition) => {
+    const exists = db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .some((info) => String(info.name) === column);
+    if (!exists) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  };
+  ensureColumn("steam_csfloat_matches", "score_breakdown", "TEXT");
 
   const legacyUserWhere =
     "user_id IS NULL OR TRIM(user_id) = '' OR lower(user_id) = 'local'";

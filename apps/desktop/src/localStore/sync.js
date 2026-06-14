@@ -178,6 +178,7 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
       confidence: row.confidence,
       status: row.status,
       reason: row.reason || "",
+      scoreBreakdown: row.score_breakdown ? deserialize(row.score_breakdown) : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -264,6 +265,76 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
     });
 
     return changedCount;
+  }
+
+  // Rebuild the steam side of a match from retained local state. The matcher ran over
+  // the inventory snapshot, which is persisted in steam_inventory_state.payload
+  // (float/seed/name/type) — so we can re-derive the exact item even for old matches.
+  function reconstructSteamMatchItem(userId, steamAssetId) {
+    const assetId = String(steamAssetId || "");
+    const stateRow = db
+      .prepare(
+        `SELECT market_hash_name, item_type, payload
+         FROM steam_inventory_state
+         WHERE steam_asset_id = ?
+         LIMIT 1`,
+      )
+      .get(assetId);
+    if (stateRow) {
+      const payload = stateRow.payload ? deserialize(stateRow.payload) : {};
+      return {
+        ...payload,
+        steamAssetId: assetId,
+        marketHashName: payload.marketHashName || payload.name || stateRow.market_hash_name,
+        name: payload.name || payload.marketHashName || stateRow.market_hash_name,
+        type: payload.type || stateRow.item_type || "skin",
+      };
+    }
+    const invRow = db
+      .prepare(`SELECT * FROM investments WHERE user_id = ? AND id = ? LIMIT 1`)
+      .get(normalizeLocalUserId(userId), assetId);
+    return invRow ? mapInvestment(invRow) : null;
+  }
+
+  // One-time backfill of score_breakdown for matches created before the breakdown was
+  // recorded — including already confirmed/auto-linked rows, which are blocked from the
+  // normal re-match path. Recomputes ONLY the breakdown from retained local data; never
+  // changes status/score/confidence so an existing user decision is preserved. Cheap and
+  // idempotent: once filled, the guard query returns no rows.
+  function backfillSteamCsfloatMatchBreakdowns(userId) {
+    const normalizedUserId = normalizeLocalUserId(userId);
+    const rows = db
+      .prepare(
+        `SELECT id, steam_asset_id, csfloat_investment_id
+         FROM steam_csfloat_matches
+         WHERE user_id = ? AND (score_breakdown IS NULL OR score_breakdown = '')`,
+      )
+      .all(normalizedUserId);
+    if (rows.length === 0) {
+      return { updated: 0 };
+    }
+
+    const update = db.prepare(
+      `UPDATE steam_csfloat_matches SET score_breakdown = @scoreBreakdown WHERE id = @id`,
+    );
+    let updated = 0;
+    for (const row of rows) {
+      const steamItem = reconstructSteamMatchItem(normalizedUserId, row.steam_asset_id);
+      const invRow = db
+        .prepare(`SELECT * FROM investments WHERE id = ? LIMIT 1`)
+        .get(String(row.csfloat_investment_id || ""));
+      const csfloatItem = invRow ? mapInvestment(invRow) : null;
+      if (!steamItem || !csfloatItem) {
+        continue;
+      }
+      const calculated = calculateSteamCsfloatMatch(steamItem, csfloatItem);
+      if (!calculated || !Array.isArray(calculated.breakdown) || calculated.breakdown.length === 0) {
+        continue;
+      }
+      update.run({ id: row.id, scoreBreakdown: serialize(calculated.breakdown) });
+      updated += 1;
+    }
+    return { updated };
   }
 
   return {
@@ -510,6 +581,7 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
             score: calculated.score,
             confidence: calculated.confidence,
             reasons: calculated.reasons,
+            breakdown: calculated.breakdown,
           });
         }
       }
@@ -559,10 +631,10 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
         db.prepare(
           `INSERT INTO steam_csfloat_matches (
             id, user_id, steam_asset_id, steam_item_name, csfloat_investment_id, csfloat_trade_id,
-            match_score, confidence, status, reason, created_at, updated_at
+            match_score, confidence, status, reason, score_breakdown, created_at, updated_at
           ) VALUES (
             @id, @userId, @steamAssetId, @steamItemName, @csfloatInvestmentId, @csfloatTradeId,
-            @matchScore, @confidence, @status, @reason, @createdAt, @updatedAt
+            @matchScore, @confidence, @status, @reason, @scoreBreakdown, @createdAt, @updatedAt
           )
           ON CONFLICT(user_id, steam_asset_id, csfloat_investment_id) DO UPDATE SET
             steam_item_name = excluded.steam_item_name,
@@ -575,6 +647,7 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
               ELSE excluded.status
             END,
             reason = excluded.reason,
+            score_breakdown = excluded.score_breakdown,
             updated_at = excluded.updated_at`,
         ).run({
           id: existingMatch?.id || randomUUID(),
@@ -587,6 +660,9 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
           confidence: edge.confidence,
           status,
           reason,
+          scoreBreakdown: Array.isArray(edge.breakdown)
+            ? serialize(edge.breakdown)
+            : null,
           createdAt: now,
           updatedAt: now,
         });
@@ -636,6 +712,7 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
     listSteamCsfloatMatches(userId = CANONICAL_LOCAL_USER_ID, status = null, limit = 200) {
       const normalizedUserId = normalizeLocalUserId(userId);
       maybeMigrateLegacyUserRows(normalizedUserId);
+      backfillSteamCsfloatMatchBreakdowns(normalizedUserId);
       if (status) {
         return db
           .prepare(

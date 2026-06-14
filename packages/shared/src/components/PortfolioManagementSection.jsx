@@ -16,6 +16,166 @@ import {
   formatDateSafe,
 } from "../lib/portfolioHelpers.js";
 
+// Human-readable labels for the match `reason` codes produced by
+// calculateSteamCsfloatMatch (see apps/desktop/src/localStore/utils.js). These are
+// the signals that earned the score, surfaced as chips so a match can be judged at a
+// glance instead of trusting a bare number.
+const MATCH_REASON_LABELS = {
+  same_type: "Typ",
+  exact_core_name: "Name exakt",
+  token_overlap_high: "Name ~hoch",
+  token_overlap_medium: "Name ~mittel",
+  token_overlap_low: "Name ~niedrig",
+  wear_exact: "Wear",
+  float_exact: "Float exakt",
+  float_near: "Float nah",
+  float_loose: "Float grob",
+  seed_exact: "Seed",
+  price_near: "Preis nah",
+  price_loose: "Preis grob",
+  time_near: "Zeit nah",
+  time_medium: "Zeit mittel",
+  time_loose: "Zeit grob",
+};
+
+const MATCH_CONFIDENCE_META = {
+  high: { label: "Hoch", className: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" },
+  medium: { label: "Mittel", className: "border-amber-500/40 text-amber-600 dark:text-amber-400" },
+  low: { label: "Niedrig", className: "border-muted-foreground/40 text-muted-foreground" },
+};
+
+// Point value each reason code contributes — kept in lockstep with the scorer in
+// apps/desktop/src/localStore/utils.js (calculateSteamCsfloatMatch). Every fired code
+// maps to exactly one value, so the listed contributions add up to the stored score:
+// this is what makes the confidence traceable instead of a black-box number.
+const MATCH_REASON_POINTS = {
+  same_type: 12,
+  exact_core_name: 50,
+  token_overlap_high: 36,
+  token_overlap_medium: 24,
+  token_overlap_low: 12,
+  wear_exact: 8,
+  float_exact: 22,
+  float_near: 14,
+  float_loose: 6,
+  seed_exact: 20,
+  price_near: 10,
+  price_loose: 5,
+  time_near: 12,
+  time_medium: 7,
+  time_loose: 5,
+};
+
+// Mirrors the confidence thresholds in calculateSteamCsfloatMatch.
+const MATCH_CONFIDENCE_HIGH_SCORE = 88;
+const MATCH_CONFIDENCE_MEDIUM_SCORE = 68;
+
+function parseMatchReasons(reason) {
+  return String(reason || "")
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function formatMatchFloat(value) {
+  if (!Number.isFinite(value)) {
+    return "?";
+  }
+  // CS floats live in 0..1; show enough precision to be meaningful without noise.
+  return value
+    .toFixed(6)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "");
+}
+
+// Turn the persisted per-signal metrics into the concrete deviation the user wants to
+// see (actual float delta, price gap %, day gap, name overlap %), per reason code.
+function formatMatchMetric(code, metrics) {
+  if (!metrics || typeof metrics !== "object") {
+    return null;
+  }
+  switch (code) {
+    case "same_type":
+      return metrics.type ? String(metrics.type) : null;
+    case "exact_core_name":
+      return "Name identisch";
+    case "token_overlap_high":
+    case "token_overlap_medium":
+    case "token_overlap_low":
+      return Number.isFinite(metrics.overlap)
+        ? `${Math.round(metrics.overlap * 100)}% Namensüberlappung`
+        : null;
+    case "wear_exact":
+      return metrics.wear ? String(metrics.wear).toUpperCase() : null;
+    case "float_exact":
+    case "float_near":
+    case "float_loose":
+      return Number.isFinite(metrics.floatDiff)
+        ? `Δ ${formatMatchFloat(metrics.floatDiff)} (${formatMatchFloat(metrics.steamFloat)} ↔ ${formatMatchFloat(metrics.csfloatFloat)})`
+        : null;
+    case "seed_exact":
+      return metrics.seed !== undefined && metrics.seed !== null
+        ? `Seed ${metrics.seed} (identisch)`
+        : null;
+    case "price_near":
+    case "price_loose":
+      return Number.isFinite(metrics.priceDiffRatio)
+        ? `${(metrics.priceDiffRatio * 100).toFixed(1)}% Preisabweichung`
+        : null;
+    case "time_near":
+    case "time_medium":
+    case "time_loose":
+      return Number.isFinite(metrics.dayDiff)
+        ? `${metrics.dayDiff.toFixed(1)} Tage Abstand`
+        : null;
+    default:
+      return null;
+  }
+}
+
+// Build the per-signal rows for one match. Prefer the persisted breakdown (carries the
+// raw measured deviations); fall back to the bare reason codes for matches synced
+// before the breakdown column existed — those still show label + points, just no delta.
+function buildMatchBreakdownRows(scoreBreakdown, reasonCodes) {
+  if (Array.isArray(scoreBreakdown) && scoreBreakdown.length > 0) {
+    return scoreBreakdown.map((entry) => {
+      const code = String(entry?.code || "");
+      const points = Number.isFinite(entry?.points)
+        ? entry.points
+        : MATCH_REASON_POINTS[code];
+      return {
+        code,
+        points,
+        label: MATCH_REASON_LABELS[code] || code,
+        detail: formatMatchMetric(code, entry?.metrics),
+      };
+    });
+  }
+  return reasonCodes.map((code) => ({
+    code,
+    points: MATCH_REASON_POINTS[code],
+    label: MATCH_REASON_LABELS[code] || code,
+    detail: null,
+  }));
+}
+
+// Explain, per match, exactly which rule produced the confidence tier — using this
+// match's own score so the user can retrace how the value came about.
+function describeMatchConfidence(confidence, score, reasonCodes) {
+  const tier = String(confidence || "").toLowerCase();
+  const scoreLabel = Number.isFinite(score) ? score : "-";
+  if (tier === "high") {
+    if (reasonCodes.includes("float_exact") && reasonCodes.includes("seed_exact")) {
+      return "Float + Seed exakt → Hoch";
+    }
+    return `Score ${scoreLabel} ≥ ${MATCH_CONFIDENCE_HIGH_SCORE} → Hoch`;
+  }
+  if (tier === "medium") {
+    return `Score ${scoreLabel} ≥ ${MATCH_CONFIDENCE_MEDIUM_SCORE} → Mittel`;
+  }
+  return `Score ${scoreLabel} < ${MATCH_CONFIDENCE_MEDIUM_SCORE} → Niedrig`;
+}
+
 const CsFloatTradeSyncModal = lazy(() =>
   import("./CsFloatTradeSyncModal.jsx").then((module) => ({
     default: module.CsFloatTradeSyncModal,
@@ -82,6 +242,8 @@ export function PortfolioManagementSection({
   setMatchingSearchTerm,
   matchingSortBy,
   setMatchingSortBy,
+  matchingConfidenceFilter,
+  setMatchingConfidenceFilter,
   showMatchedMatchingRows,
   setShowMatchedMatchingRows,
   handleMatchStatusUpdate,
@@ -1151,7 +1313,7 @@ export function PortfolioManagementSection({
                     ) : null}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
                   <label className="relative block">
                     <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <input
@@ -1164,6 +1326,18 @@ export function PortfolioManagementSection({
                       className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
                     />
                   </label>
+                  <select
+                    value={matchingConfidenceFilter}
+                    onChange={(event) =>
+                      setMatchingConfidenceFilter(event.target.value)
+                    }
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="all">Konfidenz: Alle</option>
+                    <option value="high">Konfidenz: Hoch</option>
+                    <option value="medium">Konfidenz: Mittel</option>
+                    <option value="low">Konfidenz: Niedrig</option>
+                  </select>
                   <select
                     value={matchingSortBy}
                     onChange={(event) => setMatchingSortBy(event.target.value)}
@@ -1210,7 +1384,7 @@ export function PortfolioManagementSection({
                   )
                 ) : filteredMatchingRows.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Kein Match passt zur Suche.
+                    Kein Match passt zu den aktiven Filtern.
                   </p>
                 ) : (
                   <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
@@ -1234,11 +1408,27 @@ export function PortfolioManagementSection({
                             "",
                         ).trim() || null;
                       const matchScore = Number(row.matchScore);
-                      const matchScoreLabel = Number.isFinite(matchScore)
-                        ? matchScore.toFixed(0)
-                        : "-";
                       const createdAtLabel = formatDateSafe(
                         row?.createdAt || null,
+                      );
+                      const confidenceMeta =
+                        MATCH_CONFIDENCE_META[
+                          String(row?.confidence || "").toLowerCase()
+                        ] || MATCH_CONFIDENCE_META.low;
+                      const reasonChips = parseMatchReasons(row?.reason);
+                      const breakdownRows = buildMatchBreakdownRows(
+                        row?.scoreBreakdown,
+                        reasonChips,
+                      );
+                      const breakdownSum = breakdownRows.reduce(
+                        (acc, item) =>
+                          acc + (Number.isFinite(item.points) ? item.points : 0),
+                        0,
+                      );
+                      const confidenceRationale = describeMatchConfidence(
+                        row?.confidence,
+                        matchScore,
+                        reasonChips,
                       );
 
                       return (
@@ -1305,10 +1495,48 @@ export function PortfolioManagementSection({
                                   </div>
                                 </div>
                               </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                Score: {matchScoreLabel} · Erstellt:{" "}
-                                {createdAtLabel}
-                              </p>
+                              {breakdownRows.length > 0 ? (
+                                <div className="space-y-0.5 rounded-md border border-border/50 bg-muted/20 p-2 text-[11px]">
+                                  {breakdownRows.map((item, itemIndex) => (
+                                    <div
+                                      key={`${item.code}-${itemIndex}`}
+                                      className="flex items-baseline gap-2"
+                                    >
+                                      <span className="font-medium text-foreground/90">
+                                        {item.label}
+                                      </span>
+                                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                                        {item.detail || ""}
+                                      </span>
+                                      <span className="shrink-0 font-semibold tabular-nums text-foreground/70">
+                                        {Number.isFinite(item.points)
+                                          ? `+${item.points}`
+                                          : ""}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  <div className="mt-1 flex items-baseline gap-2 border-t border-border/50 pt-1">
+                                    <span className="flex-1 font-semibold text-foreground">
+                                      Summe
+                                    </span>
+                                    <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                                      {breakdownSum}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                <Badge
+                                  variant="outline"
+                                  className={`px-1.5 py-0 text-[10px] ${confidenceMeta.className}`}
+                                >
+                                  {confidenceMeta.label}
+                                </Badge>
+                                <span className="font-medium text-foreground/80">
+                                  {confidenceRationale}
+                                </span>
+                                <span>· Erstellt: {createdAtLabel}</span>
+                              </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               {row.status === "pending" ? (

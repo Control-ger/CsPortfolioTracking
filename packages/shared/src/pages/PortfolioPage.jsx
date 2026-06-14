@@ -576,6 +576,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [priceMissingOnly, setPriceMissingOnly] = useState(false);
   const [matchingSearchTerm, setMatchingSearchTerm] = useState("");
   const [matchingSortBy, setMatchingSortBy] = useState("score_desc");
+  const [matchingConfidenceFilter, setMatchingConfidenceFilter] = useState("all");
   const [showMatchedMatchingRows, setShowMatchedMatchingRows] = useState(false);
   const [priceDrafts, setPriceDrafts] = useState({});
   const [savingPriceItemId, setSavingPriceItemId] = useState(null);
@@ -2679,6 +2680,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       });
     }
 
+    if (matchingConfidenceFilter !== "all") {
+      rows = rows.filter(
+        (row) => String(row?.confidence || "").toLowerCase() === matchingConfidenceFilter,
+      );
+    }
+
     rows.sort((left, right) => {
       const leftScore = Number(left?.matchScore || 0);
       const rightScore = Number(right?.matchScore || 0);
@@ -4684,6 +4691,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             setMatchingSearchTerm={setMatchingSearchTerm}
             matchingSortBy={matchingSortBy}
             setMatchingSortBy={setMatchingSortBy}
+            matchingConfidenceFilter={matchingConfidenceFilter}
+            setMatchingConfidenceFilter={setMatchingConfidenceFilter}
             showMatchedMatchingRows={showMatchedMatchingRows}
             setShowMatchedMatchingRows={setShowMatchedMatchingRows}
             handleMatchStatusUpdate={handleMatchStatusUpdate}
