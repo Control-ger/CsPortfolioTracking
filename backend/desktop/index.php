@@ -840,6 +840,7 @@ $router->register('PUT', '/api/v1/settings/portfolio-groups', static function (R
         return;
     }
 
+    $attempts = [];
     foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/settings/portfolio-groups') as $candidate) {
         $ch = curl_init($candidate);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -857,6 +858,7 @@ $router->register('PUT', '/api/v1/settings/portfolio-groups', static function (R
         $response = curl_exec($ch);
         $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+        $attempts[] = $httpCode;
 
         if (!is_string($response) || trim($response) === '') {
             continue;
@@ -878,11 +880,22 @@ $router->register('PUT', '/api/v1/settings/portfolio-groups', static function (R
         }
     }
 
-    JsonResponseFactory::error(
-        'SETTINGS_SAVE_FAILED',
-        'Portfolio-Gruppen konnten nicht zum Server gespeichert werden.',
-        [],
-        502
+    // Upstream unreachable/erroring (CF Access lapse, server down, 5xx). The renderer
+    // has already persisted these groups to local state, and the GET handler serves a
+    // desktop-local fallback + auto-migrates local-only groups to the server once it is
+    // reachable again. So degrade gracefully to a local-fallback success instead of a
+    // hard 502 that loses the write and spams the console — mirroring the GET handler.
+    JsonResponseFactory::success(
+        [
+            'userId' => 1,
+            'groups' => $groups,
+            'updatedAt' => gmdate('Y-m-d H:i:s'),
+            'source' => 'desktop-local-fallback',
+        ],
+        [
+            'source' => 'desktop-local-fallback',
+            'upstreamAttempts' => $attempts,
+        ]
     );
 });
 

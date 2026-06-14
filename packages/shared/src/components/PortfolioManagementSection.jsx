@@ -1173,10 +1173,11 @@ export function PortfolioManagementSection({
                       <button
                         type="button"
                         onClick={() =>
-                          setExpandedClusters((current) => ({
-                            ...current,
-                            [cluster.id]: !isExpanded,
-                          }))
+                          // Accordion: only one cluster open at a time — opening a new
+                          // one collapses the previously expanded cluster.
+                          setExpandedClusters((current) =>
+                            current[cluster.id] ? {} : { [cluster.id]: true },
+                          )
                         }
                         className="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-muted/30"
                       >
@@ -1196,11 +1197,31 @@ export function PortfolioManagementSection({
 
                       {isExpanded ? (
                         <div className="space-y-1 border-t border-border/50 p-2">
-                          {visiblePositions.map((position) => (
+                          {visiblePositions.map((position) => {
+                            const positionImageUrl =
+                              String(
+                                position.imageUrl || position.iconUrl || "",
+                              ).trim() || null;
+                            return (
                             <div
                               key={position.id}
                               className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 p-2 sm:flex-nowrap"
                             >
+                              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md border bg-muted/30 p-1">
+                                {positionImageUrl ? (
+                                  <img
+                                    src={positionImageUrl}
+                                    alt={position.name || "Item"}
+                                    className="h-full w-full object-contain"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[9px] text-muted-foreground">
+                                    N/A
+                                  </div>
+                                )}
+                              </div>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-xs font-medium">
                                   {position.name || "Unbekannt"}
@@ -1246,7 +1267,8 @@ export function PortfolioManagementSection({
                                 </select>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                           {cluster.positions.filter((p) => !p.excluded).length >
                           0 ? (
                             <div className="flex items-center gap-2 pt-1">
@@ -1430,6 +1452,7 @@ export function PortfolioManagementSection({
                         matchScore,
                         reasonChips,
                       );
+                      const matchStatus = String(row?.status || "").toLowerCase();
 
                       return (
                         <div
@@ -1495,51 +1518,49 @@ export function PortfolioManagementSection({
                                   </div>
                                 </div>
                               </div>
+                              {/* Confidence + score header */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className={`px-2 py-0 text-[10px] ${confidenceMeta.className}`}
+                                >
+                                  Konfidenz: {confidenceMeta.label}
+                                </Badge>
+                                <span className="text-xs font-semibold tabular-nums text-foreground">
+                                  Score {breakdownSum}
+                                </span>
+                              </div>
+                              {/* Signal pills carrying the actual measured deviation */}
                               {breakdownRows.length > 0 ? (
-                                <div className="space-y-0.5 rounded-md border border-border/50 bg-muted/20 p-2 text-[11px]">
+                                <div className="flex flex-wrap gap-1.5">
                                   {breakdownRows.map((item, itemIndex) => (
-                                    <div
+                                    <span
                                       key={`${item.code}-${itemIndex}`}
-                                      className="flex items-baseline gap-2"
+                                      className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[10px]"
                                     >
                                       <span className="font-medium text-foreground/90">
                                         {item.label}
                                       </span>
-                                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                                        {item.detail || ""}
-                                      </span>
-                                      <span className="shrink-0 font-semibold tabular-nums text-foreground/70">
-                                        {Number.isFinite(item.points)
-                                          ? `+${item.points}`
-                                          : ""}
-                                      </span>
-                                    </div>
+                                      {item.detail ? (
+                                        <span className="text-muted-foreground">
+                                          {item.detail}
+                                        </span>
+                                      ) : null}
+                                      {Number.isFinite(item.points) ? (
+                                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                          +{item.points}
+                                        </span>
+                                      ) : null}
+                                    </span>
                                   ))}
-                                  <div className="mt-1 flex items-baseline gap-2 border-t border-border/50 pt-1">
-                                    <span className="flex-1 font-semibold text-foreground">
-                                      Summe
-                                    </span>
-                                    <span className="shrink-0 font-semibold tabular-nums text-foreground">
-                                      {breakdownSum}
-                                    </span>
-                                  </div>
                                 </div>
                               ) : null}
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                                <Badge
-                                  variant="outline"
-                                  className={`px-1.5 py-0 text-[10px] ${confidenceMeta.className}`}
-                                >
-                                  {confidenceMeta.label}
-                                </Badge>
-                                <span className="font-medium text-foreground/80">
-                                  {confidenceRationale}
-                                </span>
-                                <span>· Erstellt: {createdAtLabel}</span>
-                              </div>
+                              <p className="text-[10px] text-muted-foreground">
+                                {confidenceRationale} · Erstellt: {createdAtLabel}
+                              </p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {row.status === "pending" ? (
+                            <div className="flex shrink-0 flex-row flex-wrap items-start gap-1.5 lg:flex-col lg:items-stretch">
+                              {matchStatus === "suggested" ? (
                                 <>
                                   <Button
                                     size="sm"
@@ -1557,21 +1578,36 @@ export function PortfolioManagementSection({
                                     size="sm"
                                     variant="outline"
                                     onClick={() =>
-                                      void handleMatchStatusUpdate(
-                                        row.id,
-                                        "rejected",
-                                      )
+                                      void handleMatchStatusUpdate(row.id, "rejected")
                                     }
                                   >
                                     Ablehnen
                                   </Button>
                                 </>
+                              ) : matchStatus === "auto_linked" ? (
+                                <>
+                                  <Badge variant="outline" className="justify-center">
+                                    Auto-Match
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      void handleMatchStatusUpdate(
+                                        row.id,
+                                        "manual_confirmed",
+                                      )
+                                    }
+                                  >
+                                    Bestaetigen
+                                  </Button>
+                                </>
                               ) : (
-                                <Badge variant="outline">
-                                  {String(row?.status || "").toLowerCase() ===
-                                  "auto_linked"
-                                    ? "Auto gematcht"
-                                    : "Gematcht"}
+                                <Badge
+                                  variant="outline"
+                                  className="justify-center border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                >
+                                  Bestaetigt
                                 </Badge>
                               )}
                             </div>
