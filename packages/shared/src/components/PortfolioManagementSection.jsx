@@ -14,7 +14,12 @@ import {
   getItemNameKey,
   normalizeBucket,
   formatDateSafe,
+  getClusterUpdatedAt,
 } from "../lib/portfolioHelpers.js";
+import {
+  uniqueInvestmentIds,
+  normalizeInvestmentId,
+} from "../lib/portfolioGroups.js";
 
 // Human-readable labels for the match `reason` codes produced by
 // calculateSteamCsfloatMatch (see apps/desktop/src/localStore/utils.js). These are
@@ -287,6 +292,18 @@ export function PortfolioManagementSection({
   handleDeletePortfolioGroup,
   handleOpenPortfolioGroupInInventory,
   handleOpenPortfolioGroupInManagement,
+  groupSearchTerm,
+  setGroupSearchTerm,
+  groupSortBy,
+  setGroupSortBy,
+  expandedGroupManagementClusters,
+  toggleExpandedGroupManagementCluster,
+  filteredGroupManagementClusters,
+  managementGroupsByClusterKey,
+  portfolioGroupMembershipMap,
+  portfolioGroupsById,
+  handleAssignInvestmentIdsToGroup,
+  handleRemoveInvestmentIdsFromGroup,
 
   // Additional matching state
   matchingDisplayRows,
@@ -890,6 +907,249 @@ export function PortfolioManagementSection({
                       ))
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden">
+                <CardHeader className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle>Cluster und Positionen zuweisen</CardTitle>
+                    {portfolioGroupEditor ? (
+                      <Badge variant="secondary">Aktiv: {portfolioGroupEditor.name}</Badge>
+                    ) : (
+                      <Badge variant="outline">Bitte links Gruppe waehlen</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    "Cluster hinzufuegen" ist nur ein Shortcut. Intern werden die
+                    konkreten Positionen der Gruppe zugeordnet.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="relative block flex-1">
+                      <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={groupSearchTerm}
+                        onChange={(event) => setGroupSearchTerm(event.target.value)}
+                        placeholder="Nach Cluster oder Gruppenname suchen..."
+                        className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
+                      />
+                    </label>
+                    <select
+                      value={groupSortBy}
+                      onChange={(event) => setGroupSortBy(event.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="name_asc">Name (A-Z)</option>
+                      <option value="updated_desc">Neueste</option>
+                    </select>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {managementLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-16 w-full" />
+                      <Skeleton className="h-16 w-full" />
+                      <Skeleton className="h-16 w-full" />
+                    </div>
+                  ) : filteredGroupManagementClusters.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Kein Cluster passt zur Suche.
+                    </p>
+                  ) : (
+                    <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+                      {filteredGroupManagementClusters.map((cluster) => {
+                        const clusterAssignment = managementGroupsByClusterKey.get(cluster.key) || {
+                          assignmentState: "ungrouped",
+                          assignedGroupId: "",
+                          assignedGroupName: "",
+                          assignedCount: 0,
+                          totalCount: cluster.positions.length,
+                        };
+                        const clusterInvestmentIds = uniqueInvestmentIds(
+                          cluster.positions.map((position) => position.id),
+                        );
+                        const isExpanded = Boolean(expandedGroupManagementClusters[cluster.key]);
+                        const activeGroupAssignedCount = portfolioGroupEditor
+                          ? clusterInvestmentIds.filter(
+                              (investmentId) =>
+                                portfolioGroupMembershipMap.get(investmentId) === portfolioGroupEditor.id,
+                            ).length
+                          : 0;
+                        const isAssignedToActiveGroup =
+                          portfolioGroupEditor && clusterAssignment.assignedGroupId === portfolioGroupEditor.id;
+                        const canAssignCluster = Boolean(portfolioGroupEditor) && !isAssignedToActiveGroup;
+                        const canRemoveCluster =
+                          Boolean(portfolioGroupEditor) && activeGroupAssignedCount > 0;
+
+                        return (
+                          <div key={cluster.id} className="rounded-xl border border-border/70 bg-background/30 p-3">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-border/70 bg-muted/25 p-1">
+                                  {cluster.imageUrl ? (
+                                    <img
+                                      src={cluster.imageUrl}
+                                      alt={cluster.name}
+                                      className="h-full w-full object-contain"
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
+                                      N/A
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold">{cluster.name}</p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                    <span>{cluster.totalCount} Stk.</span>
+                                    <span>|</span>
+                                    <span>{cluster.positions.length} Positionen</span>
+                                    {getClusterUpdatedAt(cluster) > 0 ? (
+                                      <>
+                                        <span>|</span>
+                                        <span>{new Date(getClusterUpdatedAt(cluster)).toLocaleDateString("de-DE")}</span>
+                                      </>
+                                    ) : null}
+                                    {clusterAssignment.assignmentState === "grouped" ? (
+                                      <>
+                                        <span>|</span>
+                                        <span>Gruppe: {clusterAssignment.assignedGroupName}</span>
+                                      </>
+                                    ) : null}
+                                    {clusterAssignment.assignmentState === "partial" ? (
+                                      <>
+                                        <span>|</span>
+                                        <span>
+                                          Teilweise gruppiert ({clusterAssignment.assignedCount}/{clusterAssignment.totalCount})
+                                        </span>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                {clusterAssignment.assignmentState === "grouped" ? (
+                                  <Badge variant="secondary">Vollstaendig gruppiert</Badge>
+                                ) : clusterAssignment.assignmentState === "partial" ? (
+                                  <Badge variant="outline">Teilweise gruppiert</Badge>
+                                ) : (
+                                  <Badge variant="outline">Nicht gruppiert</Badge>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => toggleExpandedGroupManagementCluster(cluster.key)}
+                                >
+                                  {isExpanded ? "Positionen ausblenden" : "Positionen anzeigen"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!canAssignCluster}
+                                  onClick={() =>
+                                    void handleAssignInvestmentIdsToGroup(
+                                      portfolioGroupEditor?.id,
+                                      clusterInvestmentIds,
+                                    )
+                                  }
+                                >
+                                  Cluster hinzufuegen
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!canRemoveCluster}
+                                  onClick={() =>
+                                    void handleRemoveInvestmentIdsFromGroup(
+                                      portfolioGroupEditor?.id,
+                                      clusterInvestmentIds,
+                                    )
+                                  }
+                                >
+                                  Cluster entfernen
+                                </Button>
+                              </div>
+                            </div>
+
+                            {isExpanded ? (
+                              <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                                {cluster.positions.map((position) => {
+                                  const positionId = normalizeInvestmentId(position.id);
+                                  const assignedGroupId = portfolioGroupMembershipMap.get(positionId) || "";
+                                  const assignedGroupName = assignedGroupId
+                                    ? portfolioGroupsById.get(assignedGroupId)?.name || ""
+                                    : "";
+                                  const inActiveGroup =
+                                    Boolean(portfolioGroupEditor) && assignedGroupId === portfolioGroupEditor.id;
+                                  const canAssignPosition =
+                                    Boolean(portfolioGroupEditor) && !inActiveGroup;
+                                  const canRemovePosition =
+                                    Boolean(portfolioGroupEditor) && inActiveGroup;
+                                  const positionPrice = Number(position.buyPriceUsd || 0);
+
+                                  return (
+                                    <div
+                                      key={position.id}
+                                      className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card/55 p-3 md:flex-row md:items-center md:justify-between"
+                                    >
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium">{position.name}</p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                          <span>{position.quantity} Stk.</span>
+                                          <span>|</span>
+                                          <span>{position.bucket === "inventory" ? "Inventar" : "Investment"}</span>
+                                          <span>|</span>
+                                          <span>{positionPrice > 0 ? `${positionPrice.toFixed(2)} USD Buy-in` : "ohne Buy-in"}</span>
+                                          {assignedGroupName ? (
+                                            <>
+                                              <span>|</span>
+                                              <span>Gruppe: {assignedGroupName}</span>
+                                            </>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={!canAssignPosition}
+                                          onClick={() =>
+                                            void handleAssignInvestmentIdsToGroup(
+                                              portfolioGroupEditor?.id,
+                                              [positionId],
+                                            )
+                                          }
+                                        >
+                                          Position hinzufuegen
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={!canRemovePosition}
+                                          onClick={() =>
+                                            void handleRemoveInvestmentIdsFromGroup(
+                                              portfolioGroupEditor?.id,
+                                              [positionId],
+                                            )
+                                          }
+                                        >
+                                          Entfernen
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>

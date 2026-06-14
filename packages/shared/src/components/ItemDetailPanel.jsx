@@ -282,8 +282,8 @@ export const ItemDetailPanel = ({
                     {item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}
                   </p>
                   {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
-                    <p className="text-[10px] text-sky-300">
-                      Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
+                    <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-400/40 bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+                      Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
                         useUsd: true,
                         buyPriceUsd: Number(item.buyOrderBestPriceUsd),
                       })}

@@ -606,8 +606,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                               Aktuell: {formatPrice(Number(selectedItemWithBuyOrderRows.currentPrice))}
                             </p>
                             {selectedItemWithBuyOrderRows?.hasBuyOrder && Number(selectedItemWithBuyOrderRows?.buyOrderBestPriceUsd || 0) > 0 ? (
-                              <p>
-                                Buyorder: {formatPrice(Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd), {
+                              <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 font-medium text-sky-300">
+                                Meine Buyorder: {formatPrice(Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd), {
                                   useUsd: true,
                                   buyPriceUsd: Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd),
                                 })}
@@ -668,9 +668,20 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       Keine Preishistorie verfuegbar.
                     </div>
                   )}
-                  <div className="mt-4 rounded-xl border border-border/70 bg-card/65 p-4">
+                  <div className={`mt-4 rounded-xl border p-4 ${
+                    selectedItemBuyOrderRows.length > 0
+                      ? "border-sky-400/40 bg-sky-400/5"
+                      : "border-border/70 bg-card/65"
+                  }`}>
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <h4 className="text-sm font-semibold">Buyorders (CSFloat)</h4>
+                      <h4 className="flex items-center gap-2 text-sm font-semibold">
+                        Meine Buyorders (CSFloat)
+                        {selectedItemBuyOrderRows.length > 0 ? (
+                          <span className="rounded-full border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-300">
+                            Aktiv
+                          </span>
+                        ) : null}
+                      </h4>
                       {selectedItemBuyOrderRows.length > 0 ? (
                         <span className="text-xs text-muted-foreground">
                           {selectedItemBuyOrderRows.reduce((sum, row) => sum + Number(row.orders || 0), 0)} Orders,{" "}
@@ -680,7 +691,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     </div>
                     {selectedItemBuyOrderRows.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        Keine passenden Buyorders fuer dieses Item gefunden.
+                        Du hast aktuell keine Buyorders bei CSFloat fuer dieses Item gesetzt.
                       </p>
                     ) : (
                       <div className="overflow-hidden rounded-lg border border-border/60">

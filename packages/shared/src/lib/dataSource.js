@@ -47,13 +47,21 @@ import {
 // ──────────────────────────────────────────────
 
 async function fetchApiPortfolioData(options = {}) {
-  const [rows, history] = await Promise.all([
+  const [rows, historyResponse] = await Promise.all([
     fetchApiPortfolioInvestments({
       signal: options.signal,
       scope: options.rowScope || options.scope,
     }),
     fetchApiPortfolioHistory({ signal: options.signal, scope: options.scope }),
   ]);
+
+  // The history API returns an envelope ({ data, meta }); consumers (usePortfolio /
+  // PortfolioPage) expect a bare array, matching the desktop data path.
+  const history = Array.isArray(historyResponse?.data)
+    ? historyResponse.data
+    : Array.isArray(historyResponse)
+      ? historyResponse
+      : [];
 
   const sanitizedRows = {
     ...rows,

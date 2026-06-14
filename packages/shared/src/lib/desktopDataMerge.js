@@ -448,10 +448,19 @@ export async function fetchDesktopPortfolioData(options = {}, fetchApiPortfolioI
       })()
     : Promise.resolve(null);
 
-  const [upstreamRowsResponse, upstreamHistory] = await Promise.all([
+  const [upstreamRowsResponse, upstreamHistoryResponse] = await Promise.all([
     upstreamRowsPromise,
     upstreamHistoryPromise,
   ]);
+
+  // fetchApiPortfolioHistory resolves to the API envelope ({ data, meta }), not a
+  // bare array. Unwrap to the array form the consumer (PortfolioPage) expects;
+  // without this the server-side portfolio history was always silently discarded.
+  const upstreamHistory = Array.isArray(upstreamHistoryResponse?.data)
+    ? upstreamHistoryResponse.data
+    : Array.isArray(upstreamHistoryResponse)
+      ? upstreamHistoryResponse
+      : [];
 
   const upstreamRows = Array.isArray(upstreamRowsResponse?.data)
     ? upstreamRowsResponse.data

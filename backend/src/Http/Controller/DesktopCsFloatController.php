@@ -6,6 +6,7 @@ namespace App\Http\Controller;
 use App\Infrastructure\External\CsFloatTradeClient;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
+use App\Shared\Logger;
 
 final class DesktopCsFloatController
 {
@@ -135,6 +136,26 @@ final class DesktopCsFloatController
                 }
 
                 $pageOrders = is_array($response['orders'] ?? null) ? $response['orders'] : [];
+                // TEMP DIAGNOSTIC (buy-order shape): log raw count + a redacted sample of
+                // the first element so we can see why /me/buy-orders parses to empty for
+                // some users (expression vs market_hash_name, qty/price field names).
+                // Remove once the buy-order mapping is confirmed correct.
+                if ($page === 0) {
+                    $sample = (is_array($pageOrders[0] ?? null)) ? $pageOrders[0] : null;
+                    Logger::event(
+                        'info',
+                        'external',
+                        'external.csfloat.buy_orders.raw_shape',
+                        'Raw /me/buy-orders shape sample',
+                        [
+                            'attempt' => $attempt,
+                            'page' => $page + $buyOrdersPageBase,
+                            'rawCount' => count($pageOrders),
+                            'firstKeys' => $sample !== null ? array_keys($sample) : [],
+                            'firstSample' => $sample,
+                        ]
+                    );
+                }
                 $pageStats[] = [
                     'page' => $page + $buyOrdersPageBase,
                     'count' => count($pageOrders),
@@ -345,8 +366,12 @@ final class DesktopCsFloatController
 
     private function shouldFallbackToTrades(array $errors): bool
     {
+        // No errors means the buy-orders call succeeded. An empty-but-successful
+        // result must NOT fall back to trades: completed purchases are not active
+        // buy orders, and surfacing them here is misleading. Only genuine temporary
+        // upstream failures (below) justify the trades fallback.
         if ($errors === []) {
-            return true;
+            return false;
         }
 
         $first = is_array($errors[0] ?? null) ? $errors[0] : [];
@@ -444,12 +469,14 @@ final class DesktopCsFloatController
     {
         foreach (
             [
+                ['qty'],
                 ['quantity'],
                 ['remaining_quantity'],
                 ['remainingQuantity'],
                 ['amount'],
                 ['size'],
                 ['count'],
+                ['order', 'qty'],
                 ['order', 'quantity'],
                 ['order', 'remaining_quantity'],
                 ['order', 'remainingQuantity'],

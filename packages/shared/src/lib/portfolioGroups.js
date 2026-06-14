@@ -8,12 +8,12 @@ function normalizeLowerText(value) {
   return normalizeText(value).toLowerCase();
 }
 
-function normalizeInvestmentId(value) {
+export function normalizeInvestmentId(value) {
   const normalized = normalizeText(value);
   return normalized === "" ? "" : normalized;
 }
 
-function uniqueInvestmentIds(values = []) {
+export function uniqueInvestmentIds(values = []) {
   const seen = new Set();
   const result = [];
 

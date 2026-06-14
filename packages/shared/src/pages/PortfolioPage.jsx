@@ -58,6 +58,8 @@ import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
   PORTFOLIO_GROUPS_STORAGE_KEY,
   buildPortfolioGroupSummaries,
+  buildPortfolioGroupMembershipMap,
+  summarizeManagementClusterAssignment,
   createPortfolioGroupDraft,
   normalizePortfolioGroups,
 } from "@shared/lib/portfolioGroups.js";
@@ -1632,6 +1634,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     resetPortfolioGroupEditor,
   ]);
 
+  const toggleExpandedGroupManagementCluster = useCallback((clusterKey) => {
+    setExpandedGroupManagementClusters((current) => ({
+      ...current,
+      [clusterKey]: !current[clusterKey],
+    }));
+  }, []);
+
   const handleAssignInvestmentIdsToGroup = useCallback(async (groupId, investmentIds = []) => {
     const normalizedGroupId = String(groupId || "").trim();
     const nextIds = uniqueInvestmentIds(investmentIds);
@@ -2551,6 +2560,24 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     () => new Map(portfolioGroupSummaries.map((group) => [String(group.id), group])),
     [portfolioGroupSummaries],
   );
+  const portfolioGroupMembershipMap = useMemo(
+    () => buildPortfolioGroupMembershipMap(portfolioGroups),
+    [portfolioGroups],
+  );
+  const portfolioGroupsById = useMemo(
+    () => new Map(portfolioGroups.map((group) => [String(group.id), group])),
+    [portfolioGroups],
+  );
+  const managementGroupsByClusterKey = useMemo(() => {
+    const map = new Map();
+    managementClusters.forEach((cluster) => {
+      map.set(
+        cluster.key,
+        summarizeManagementClusterAssignment(cluster, portfolioGroupMembershipMap, portfolioGroupsById),
+      );
+    });
+    return map;
+  }, [managementClusters, portfolioGroupMembershipMap, portfolioGroupsById]);
   const managementSearchQuery = normalizeSearchText(managementSearchTerm);
   const filteredManagementClusters = (() => {
     let rows = [...managementClusters];
@@ -2595,6 +2622,31 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     });
     return rows;
   })();
+  const groupSearchQuery = normalizeSearchText(groupSearchTerm);
+  const filteredGroupManagementClusters = useMemo(() => {
+    let rows = [...managementClusters];
+
+    if (groupSearchQuery) {
+      rows = rows.filter((cluster) => {
+        const assignment = managementGroupsByClusterKey.get(cluster.key);
+        return (
+          normalizeSearchText(cluster.name).includes(groupSearchQuery) ||
+          normalizeSearchText(assignment?.assignedGroupName || "").includes(groupSearchQuery) ||
+          cluster.positions.some((position) =>
+            normalizeSearchText(position.externalTradeId).includes(groupSearchQuery),
+          )
+        );
+      });
+    }
+
+    rows.sort((left, right) => {
+      if (groupSortBy === "updated_desc") {
+        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, "de");
+      }
+      return left.name.localeCompare(right.name, "de");
+    });
+    return rows;
+  }, [groupSearchQuery, groupSortBy, managementClusters, managementGroupsByClusterKey]);
   const managementTypeOptions = (() => {
     const uniqueTypes = Array.from(
       new Set(
@@ -4746,6 +4798,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             handleOpenPortfolioGroupInInventory={handleOpenPortfolioGroupInInventory}
             handleOpenPortfolioGroupInManagement={handleOpenPortfolioGroupInManagement}
             setPortfolioGroupEditorId={setPortfolioGroupEditorId}
+            toggleExpandedGroupManagementCluster={toggleExpandedGroupManagementCluster}
+            filteredGroupManagementClusters={filteredGroupManagementClusters}
+            managementGroupsByClusterKey={managementGroupsByClusterKey}
+            portfolioGroupMembershipMap={portfolioGroupMembershipMap}
+            portfolioGroupsById={portfolioGroupsById}
             filteredManagementClusters={filteredManagementClusters}
             managementTypeOptions={managementTypeOptions}
             managementQuickHints={managementQuickHints}

@@ -31,7 +31,7 @@ export const ItemListRow = ({
     item.changeLabel || (Number.isFinite(derivedPercent) ? `${derivedPercent >= 0 ? "+" : ""}${derivedPercent.toFixed(1)}%` : "-");
   const hasBuyOrder = Number(item?.buyOrderCount || 0) > 0 && Number(item?.buyOrderBestPriceUsd || 0) > 0;
   const buyOrderLabel = hasBuyOrder
-    ? `Buyorder ${formatPrice(item.buyOrderBestPriceUsd, { useUsd: true, buyPriceUsd: item.buyOrderBestPriceUsd })}${item.buyOrderCount > 1 ? ` x${item.buyOrderCount}` : ""}`
+    ? `Meine Buyorder ${formatPrice(item.buyOrderBestPriceUsd, { useUsd: true, buyPriceUsd: item.buyOrderBestPriceUsd })}${item.buyOrderCount > 1 ? ` x${item.buyOrderCount}` : ""}`
     : "";
 
   return (
@@ -70,7 +70,7 @@ export const ItemListRow = ({
             </p>
           )}
           {hasBuyOrder ? (
-            <Badge variant="outline" className="mt-1 border-sky-400/35 bg-sky-500/12 text-[10px] text-sky-300">
+            <Badge variant="outline" className="mt-1 border-sky-400/50 bg-sky-500/20 text-[10px] font-medium text-sky-200">
               {buyOrderLabel}
             </Badge>
           ) : null}

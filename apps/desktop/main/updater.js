@@ -214,9 +214,21 @@ export function setupAutoUpdater() {
   });
 
   autoUpdater.on("error", (error) => {
-    console.error("[updater] error:", error?.message || error);
+    const errorMessage = error?.message || String(error);
+    console.error("[updater] error:", errorMessage);
     updateDownloadInProgress = false;
-    emitUpdaterStatus({ state: "error", message: error?.message || String(error) });
+    emitUpdaterStatus({ state: "error", message: errorMessage });
+    createSystemNotificationEntry({
+      category: "app_update",
+      title: "Update-Fehler",
+      message: errorMessage || "Beim Update ist ein Fehler aufgetreten.",
+      payload: {
+        state: "error",
+        error: errorMessage,
+      },
+      // Avoid spamming identical transient errors (e.g. offline) on every retry.
+      dedupeWindowHours: 6,
+    });
   });
 
   autoUpdater.on("update-downloaded", async (info) => {
