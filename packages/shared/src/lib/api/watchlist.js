@@ -31,6 +31,18 @@ export async function fetchCsFloatBuyOrders(options = {}) {
   );
 }
 
+export async function fetchCsFloatWatchlist(options = {}) {
+  const limit = Number.isFinite(Number(options.limit))
+    ? Math.max(1, Math.min(Math.trunc(Number(options.limit)), 40))
+    : 40;
+
+  return requestWithMeta(
+    buildPath("/api/v1/csfloat/watchlist", {
+      limit,
+    }),
+  );
+}
+
 export async function createWatchlistItem(name, type = "skin") {
   const userQuery = await resolveCurrentUserQuery();
   return request("/api/v1/watchlist", {

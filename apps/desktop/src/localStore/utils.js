@@ -12,6 +12,7 @@ export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   skinBaronImportBucket: "investment",
   metricsDisplayMode: "toggle_mode",
   metricsScopeDefault: "investments",
+  csfloatWatchlistAutoImport: false,
 });
 
 export function nowIso() {
@@ -88,6 +89,18 @@ export function normalizeMetricsScope(value, fallback = "investments") {
   return fallback === "all" ? "all" : "investments";
 }
 
+// Preferences round-trip through the meta store as strings, so a stored "false"
+// is truthy under Boolean(). Coerce explicitly via === "true".
+export function normalizeBoolean(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  return String(value).trim().toLowerCase() === "true";
+}
+
 export function normalizePortfolioPreferences(input = {}) {
   return {
     steamImportBucket: normalizeBucket(
@@ -108,6 +121,10 @@ export function normalizePortfolioPreferences(input = {}) {
     metricsScopeDefault: normalizeMetricsScope(
       input.metricsScopeDefault,
       DEFAULT_PORTFOLIO_PREFERENCES.metricsScopeDefault,
+    ),
+    csfloatWatchlistAutoImport: normalizeBoolean(
+      input.csfloatWatchlistAutoImport,
+      DEFAULT_PORTFOLIO_PREFERENCES.csfloatWatchlistAutoImport,
     ),
   };
 }

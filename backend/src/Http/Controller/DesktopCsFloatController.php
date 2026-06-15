@@ -307,6 +307,94 @@ final class DesktopCsFloatController
         );
     }
 
+    public function watchlist(Request $request): void
+    {
+        $limit = $this->readInt($request, 'limit', 40, 1, 40);
+
+        $items = [];
+        $errors = [];
+        $rawCount = 0;
+
+        $response = $this->tradeClient->fetchWatchlistPage($limit);
+        if (!empty($response['error'])) {
+            $errors[] = $response['error'];
+        } else {
+            $rows = is_array($response['items'] ?? null) ? $response['items'] : [];
+            $rawCount = count($rows);
+            // TEMP DIAGNOSTIC (watchlist shape): /me/watchlist's response structure
+            // is unconfirmed; log the raw count + a redacted first sample so the
+            // mapping (market_hash_name path, nesting) can be verified from a real
+            // payload before finalizing. Remove once confirmed correct.
+            $sample = is_array($rows[0] ?? null) ? $rows[0] : null;
+            Logger::event(
+                'info',
+                'external',
+                'external.csfloat.watchlist.raw_shape',
+                'Raw /me/watchlist shape sample',
+                [
+                    'rawCount' => $rawCount,
+                    'firstKeys' => $sample !== null ? array_keys($sample) : [],
+                    'firstSample' => $sample,
+                ]
+            );
+            $items = $rows;
+        }
+
+        $normalized = [];
+        $seen = [];
+        foreach ($items as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $row = $this->mapWatchlistRow($entry);
+            if ($row === null) {
+                continue;
+            }
+            $key = strtolower($row['marketHashName']);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $normalized[] = $row;
+        }
+
+        JsonResponseFactory::success(
+            [
+                'items' => $normalized,
+            ],
+            [
+                'source' => 'watchlist',
+                'requested' => ['limit' => $limit],
+                'rawCount' => $rawCount,
+                'errors' => $errors,
+            ]
+        );
+    }
+
+    private function mapWatchlistRow(array $entry): ?array
+    {
+        $marketHashName = $this->readString($entry, ['item', 'market_hash_name'])
+            ?? $this->readString($entry, ['item', 'marketHashName'])
+            ?? $this->readString($entry, ['item', 'name'])
+            ?? $this->readString($entry, ['listing', 'item', 'market_hash_name'])
+            ?? $this->readString($entry, ['listing', 'item', 'marketHashName'])
+            ?? $this->readString($entry, ['listing', 'item', 'name'])
+            ?? $this->readString($entry, ['market_hash_name'])
+            ?? $this->readString($entry, ['marketHashName'])
+            ?? $this->readString($entry, ['name'])
+            ?? $this->findFirstStringByKey($entry, ['market_hash_name', 'marketHashName', 'item_name', 'name']);
+        if ($marketHashName === null || $marketHashName === '') {
+            return null;
+        }
+
+        return [
+            'marketHashName' => $marketHashName,
+            'name' => $marketHashName,
+            'type' => 'skin',
+            'imageUrl' => $this->readImageUrl($entry),
+        ];
+    }
+
     private function readInt(Request $request, string $key, int $default, int $min, int $max): int
     {
         $value = $request->body[$key] ?? $request->query[$key] ?? $default;

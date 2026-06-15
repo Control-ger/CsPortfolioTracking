@@ -26,6 +26,8 @@ import {
 } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
 import { getCurrentUser } from "@shared/lib/auth";
+import { getPortfolioPreferences, updatePortfolioPreferences } from "@shared/lib/portfolioPreferences";
+import { importCsFloatWatchlistData } from "@shared/lib/dataSource";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
   DEFAULT_FORM,
@@ -102,6 +104,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [webPushSuccess, setWebPushSuccess] = useState("");
   const [currencySearchTerm, setCurrencySearchTerm] = useState("");
   const [appVersion, setAppVersion] = useState("");
+  const [csfloatWatchlistAutoImport, setCsfloatWatchlistAutoImport] = useState(false);
+  const [csfloatWatchlistSaving, setCsfloatWatchlistSaving] = useState(false);
+  const [csfloatWatchlistImporting, setCsfloatWatchlistImporting] = useState(false);
+  const [csfloatWatchlistMessage, setCsfloatWatchlistMessage] = useState("");
+  const [csfloatWatchlistError, setCsfloatWatchlistError] = useState("");
   const desktopRuntime = isDesktopRuntime();
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const webPushSupported =
@@ -227,6 +234,73 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
     void loadAppVersion();
   }, []);
+
+  useEffect(() => {
+    if (!desktopRuntime) {
+      return;
+    }
+    const loadCsfloatWatchlistPref = async () => {
+      try {
+        const prefs = await getPortfolioPreferences();
+        setCsfloatWatchlistAutoImport(Boolean(prefs?.csfloatWatchlistAutoImport));
+      } catch {
+        setCsfloatWatchlistAutoImport(false);
+      }
+    };
+
+    void loadCsfloatWatchlistPref();
+  }, [desktopRuntime]);
+
+  const handleToggleCsfloatWatchlistAutoImport = async () => {
+    const next = !csfloatWatchlistAutoImport;
+    setCsfloatWatchlistAutoImport(next);
+    setCsfloatWatchlistSaving(true);
+    setCsfloatWatchlistError("");
+    setCsfloatWatchlistMessage("");
+    try {
+      const saved = await updatePortfolioPreferences({ csfloatWatchlistAutoImport: next });
+      setCsfloatWatchlistAutoImport(Boolean(saved?.csfloatWatchlistAutoImport));
+    } catch (error) {
+      setCsfloatWatchlistAutoImport(!next);
+      setCsfloatWatchlistError(error?.message || "Einstellung konnte nicht gespeichert werden.");
+    } finally {
+      setCsfloatWatchlistSaving(false);
+    }
+  };
+
+  const handleImportCsfloatWatchlistNow = async () => {
+    setCsfloatWatchlistImporting(true);
+    setCsfloatWatchlistError("");
+    setCsfloatWatchlistMessage("");
+    try {
+      const result = await importCsFloatWatchlistData({ force: true });
+      if (result?.skipped) {
+        if (result.reason === "auth-required") {
+          setCsfloatWatchlistError("Bitte zuerst bei CSFloat/Steam anmelden.");
+        } else if (result.reason === "upstream-error") {
+          const code = String(result?.error?.code || "CSFLOAT_ERROR");
+          const status = Number(result?.error?.statusCode || 0);
+          setCsfloatWatchlistError(
+            `CSFloat-Watchlist konnte nicht geladen werden (${code}${status ? ` ${status}` : ""}).`,
+          );
+        } else {
+          setCsfloatWatchlistError("Import wurde übersprungen.");
+        }
+      } else {
+        const added = Number(result?.added || 0);
+        const fetched = Number(result?.fetched || 0);
+        setCsfloatWatchlistMessage(
+          added > 0
+            ? `${added} neue${added === 1 ? "s Item" : " Items"} aus der CSFloat-Watchlist hinzugefügt (${fetched} geprüft).`
+            : `Keine neuen Items – Watchlist ist bereits aktuell (${fetched} geprüft).`,
+        );
+      }
+    } catch (error) {
+      setCsfloatWatchlistError(error?.message || "CSFloat-Watchlist-Import fehlgeschlagen.");
+    } finally {
+      setCsfloatWatchlistImporting(false);
+    }
+  };
 
   useEffect(() => {
     const loadWebPushState = async () => {
@@ -617,6 +691,59 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           onEnable={handleEnableWebPush}
           onDisable={handleDisableWebPush}
         />
+
+        {desktopRuntime ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>CSFloat Watchlist-Sync</CardTitle>
+              <CardDescription>
+                Übernimmt Items aus deiner CSFloat-Watchlist automatisch in die Electron-Watchlist.
+                Bestehende Einträge bleiben erhalten; es wird nur hinzugefügt, nie entfernt.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                <div>
+                  <p className="text-sm font-medium">Automatischer Import</p>
+                  <p className="text-xs text-muted-foreground">
+                    {csfloatWatchlistAutoImport
+                      ? "Aktiv: bei jedem CSFloat-Sync werden neue Watchlist-Items übernommen."
+                      : "Inaktiv: nur per manuellem Import unten."}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  disabled={csfloatWatchlistSaving}
+                  onClick={handleToggleCsfloatWatchlistAutoImport}
+                >
+                  {csfloatWatchlistSaving
+                    ? "Speichert..."
+                    : csfloatWatchlistAutoImport
+                      ? "Deaktivieren"
+                      : "Aktivieren"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Einmaligen Import jetzt ausführen.
+                </p>
+                <Button
+                  variant="outline"
+                  disabled={csfloatWatchlistImporting}
+                  onClick={handleImportCsfloatWatchlistNow}
+                >
+                  {csfloatWatchlistImporting ? "Importiert..." : "Jetzt importieren"}
+                </Button>
+              </div>
+              {csfloatWatchlistMessage ? (
+                <p className="text-xs text-emerald-400">{csfloatWatchlistMessage}</p>
+              ) : null}
+              {csfloatWatchlistError ? (
+                <p className="text-xs text-amber-400">{csfloatWatchlistError}</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {desktopRuntime ? (
           <Card>

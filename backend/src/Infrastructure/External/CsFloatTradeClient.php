@@ -81,6 +81,31 @@ final class CsFloatTradeClient
         ];
     }
 
+    public function fetchWatchlistPage(int $limit = 40): array
+    {
+        // CSFloat's /me/watchlist returns the user's watched listings. The
+        // reverse-engineered web client calls it with a small limit; keep it
+        // modest to avoid the oversize-page 500s seen on /me/buy-orders.
+        $limit = max(1, min($limit, 40));
+        $query = http_build_query([
+            'limit' => $limit,
+        ]);
+        $url = 'https://csfloat.com/api/v1/me/watchlist' . ($query !== '' ? '?' . $query : '');
+        $result = $this->requestCollectionEndpoint(
+            $url,
+            'watchlist',
+            [
+                'provider' => 'csfloat',
+                'limit' => $limit,
+            ]
+        );
+
+        return [
+            'items' => $result['rows'],
+            'error' => $result['error'],
+        ];
+    }
+
     private function requestCollectionEndpoint(string $url, string $eventSuffix, array $context = []): array
     {
         $apiKey = getenv('CSFLOAT_API_KEY') ?: ($_ENV['CSFLOAT_API_KEY'] ?? null);
@@ -249,7 +274,7 @@ final class CsFloatTradeClient
                 return array_values($data);
             }
 
-            foreach (['buy_orders', 'orders', 'items', 'results', 'trades'] as $nestedKey) {
+            foreach (['buy_orders', 'orders', 'items', 'results', 'trades', 'watchlist'] as $nestedKey) {
                 if (isset($data[$nestedKey]) && is_array($data[$nestedKey])) {
                     return array_values($data[$nestedKey]);
                 }

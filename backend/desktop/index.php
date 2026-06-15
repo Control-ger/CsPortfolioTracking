@@ -326,6 +326,7 @@ $router->register('POST', '/api/v1/portfolio/sync/csfloat/execute', [$csFloatCon
 $router->register('POST', '/api/v1/portfolio/sync/skinbaron/preview', [$skinBaronController, 'preview']);
 $router->register('POST', '/api/v1/portfolio/sync/skinbaron/execute', [$skinBaronController, 'execute']);
 $router->register('GET', '/api/v1/csfloat/buy-orders', [$csFloatController, 'buyOrders']);
+$router->register('GET', '/api/v1/csfloat/watchlist', [$csFloatController, 'watchlist']);
 
 // Proxy selected read-only routes to upstream server when configured.
 $resolveUpstreamApiBase = static function (): string {

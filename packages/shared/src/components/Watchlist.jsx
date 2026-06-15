@@ -8,7 +8,9 @@ import {
   fetchCsFloatBuyOrdersData,
   deleteWatchlistItemData,
   fetchWatchlistData,
+  importCsFloatWatchlistData,
 } from "@shared/lib/dataSource.js";
+import { getPortfolioPreferences } from "@shared/lib/portfolioPreferences";
 import { BREAKPOINTS } from "@shared/lib/constants";
 import { Button } from "@shared/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
@@ -260,6 +262,21 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         setLoading(true);
       }
       setError("");
+
+      // Auto-import the CSFloat watchlist before reading the local watchlist, so
+      // newly added items appear in the same load. Gated by the opt-in toggle;
+      // importCsFloatWatchlistData self-throttles (cooldown) and only forces a
+      // sync when it actually finds new names, so this is safe per load.
+      if (isDesktopRuntime) {
+        try {
+          const prefs = await getPortfolioPreferences();
+          if (prefs?.csfloatWatchlistAutoImport) {
+            await importCsFloatWatchlistData();
+          }
+        } catch (autoImportError) {
+          console.warn("[watchlist] csfloat auto-import failed", autoImportError);
+        }
+      }
 
       const response = await fetchWatchlistData({ syncLive: true });
       const nextItemsRaw = response?.data || [];

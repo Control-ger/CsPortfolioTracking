@@ -11,6 +11,7 @@ import {
   createWatchlistItemsBatch as createApiWatchlistItemsBatch,
   deleteWatchlistItem as deleteApiWatchlistItem,
   fetchCsFloatBuyOrders as fetchApiCsFloatBuyOrders,
+  fetchCsFloatWatchlist as fetchApiCsFloatWatchlist,
   fetchPortfolioComposition as fetchApiPortfolioComposition,
   fetchPortfolioHistory as fetchApiPortfolioHistory,
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
@@ -362,6 +363,82 @@ export async function fetchCsFloatBuyOrdersData(options = {}) {
     }
     throw error;
   }
+}
+
+let lastCsFloatWatchlistImportAtMs = 0;
+const CSFLOAT_WATCHLIST_IMPORT_MIN_INTERVAL_MS = 60_000;
+
+/**
+ * Import the user's CSFloat watchlist into the local (Electron) watchlist.
+ * One-way add-only: items already present locally (matched by name) are skipped,
+ * and nothing is removed. Reuses createWatchlistItemsBatchData so the items go
+ * through the proven add-by-name + sync path. Self-throttled so the auto-trigger
+ * (per watchlist load) does not refetch/force-sync on every render.
+ */
+export async function importCsFloatWatchlistData(options = {}) {
+  const force = options.force === true;
+  const localStore = getDesktopLocalStore();
+  if (!localStore) {
+    return { skipped: true, reason: "not-desktop", fetched: 0, added: 0 };
+  }
+
+  const authenticated = await isAuthenticated();
+  if (!authenticated) {
+    return { skipped: true, reason: "auth-required", fetched: 0, added: 0 };
+  }
+
+  const now = Date.now();
+  if (!force && now - lastCsFloatWatchlistImportAtMs < CSFLOAT_WATCHLIST_IMPORT_MIN_INTERVAL_MS) {
+    return { skipped: true, reason: "cooldown", fetched: 0, added: 0 };
+  }
+  lastCsFloatWatchlistImportAtMs = Date.now();
+
+  const response = await fetchApiCsFloatWatchlist(options);
+  const items = Array.isArray(response?.data?.items) ? response.data.items : [];
+  const upstreamErrors = Array.isArray(response?.meta?.errors) ? response.meta.errors : [];
+
+  // An empty result paired with an upstream error (e.g. /me/watchlist 500s like
+  // /me/buy-orders did) must not look like "already up to date". Surface it.
+  if (items.length === 0 && upstreamErrors.length > 0) {
+    return {
+      skipped: true,
+      reason: "upstream-error",
+      fetched: 0,
+      added: 0,
+      error: upstreamErrors[0],
+    };
+  }
+
+  const currentUser = await getCurrentUser();
+  const userId = resolveDesktopUserId(currentUser, 1);
+  const existing = unwrapLocalStoreResult(
+    await localStore.listWatchlist(userId),
+    "local-store-list-watchlist",
+  );
+  const existingNames = new Set(
+    (Array.isArray(existing) ? existing : [])
+      .map((row) => String(row?.name || row?.marketHashName || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  const newItems = [];
+  const seen = new Set();
+  for (const item of items) {
+    const name = String(item?.marketHashName || item?.name || "").trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key) || existingNames.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    newItems.push({ marketHashName: name, type: String(item?.type || "skin") });
+  }
+
+  if (newItems.length === 0) {
+    return { skipped: false, reason: "no-new-items", fetched: items.length, added: 0 };
+  }
+
+  await createWatchlistItemsBatchData(newItems);
+  return { skipped: false, reason: "ok", fetched: items.length, added: newItems.length };
 }
 
 /**

@@ -88,6 +88,13 @@ export function createSettingsStore(db) {
       upsert.run(`${prefix}skinBaronImportBucket`, next.skinBaronImportBucket, updatedAt);
       upsert.run(`${prefix}metricsDisplayMode`, next.metricsDisplayMode, updatedAt);
       upsert.run(`${prefix}metricsScopeDefault`, next.metricsScopeDefault, updatedAt);
+      // Booleans must be stored as strings (better-sqlite3 cannot bind booleans);
+      // normalizePortfolioPreferences coerces the "true"/"false" string on read.
+      upsert.run(
+        `${prefix}csfloatWatchlistAutoImport`,
+        String(next.csfloatWatchlistAutoImport),
+        updatedAt,
+      );
 
       return next;
     },
