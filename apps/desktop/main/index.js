@@ -367,7 +367,16 @@ async function clearStaleCloudflareAccessCookies(targetUrl) {
       const cookies = await sess.cookies.get({});
       for (const cookie of cookies) {
         const lower = String(cookie.name || "").toLowerCase();
-        if (lower === "cf_authorization" || lower === "cf_appsession" || lower.startsWith("cf-access-")) {
+        // CF_Session is the short-lived session cookie; an expired one that is
+        // not cleared lets the login window "succeed" on the still-valid
+        // CF_Authorization while every protected request keeps failing with
+        // "Invalid login session". Clear it too so a real fresh session is issued.
+        if (
+          lower === "cf_authorization" ||
+          lower === "cf_session" ||
+          lower === "cf_appsession" ||
+          lower.startsWith("cf-access-")
+        ) {
           await sess.cookies.remove(origin, cookie.name).catch(() => {});
         }
       }
@@ -430,7 +439,21 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
           return lower === "cf_authorization" || lower.startsWith("cf-access-");
         });
 
-        if (cfAccessToken) {
+        // CF Access pairs the long-lived CF_Authorization with a short-lived
+        // CF_Session. CF_Authorization can stay valid for weeks, so completing on
+        // it alone closes the window before CF re-issues a fresh CF_Session —
+        // every protected request then loops on "Invalid login session". Only
+        // complete when there is no EXPIRED CF_Session present (the stale one is
+        // cleared up front, so a fresh token + session arrive together).
+        const nowSec = Date.now() / 1000;
+        const expiredSession = cookies.find((cookie) => {
+          if (String(cookie.name || "").toLowerCase() !== "cf_session") {
+            return false;
+          }
+          return cookie.expirationDate !== undefined && cookie.expirationDate <= nowSec;
+        });
+
+        if (cfAccessToken && !expiredSession) {
           clearTimeout(timeoutId);
           const cfCookies = cookies.filter(
             (cookie) =>
@@ -464,6 +487,12 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
             const cookiesByName = new Map(cfCookies.map((c) => [c.name, c]));
             cookiesByName.set(cfAccessToken.name, cfAccessToken);
             for (const cookie of cookiesByName.values()) {
+              // Never re-assert an already-expired cookie (e.g. a stale
+              // CF_Session): cookies.set with a past expirationDate is dropped,
+              // and re-seeding it would only reintroduce the dead session.
+              if (cookie.expirationDate !== undefined && cookie.expirationDate <= nowSec) {
+                continue;
+              }
               const details = {
                 url: origin,
                 name: cookie.name,
@@ -486,11 +515,17 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
             // Diagnostic: confirm CF_Authorization is now in defaultSession so a
             // failing login can be told apart from a failing cookie delivery.
             const verify = await electronSession.defaultSession.cookies.get({ name: cfAccessToken.name });
+            const verifySession = await electronSession.defaultSession.cookies.get({ name: "cf_session" });
             console.log("[cloudflare] CF_Authorization in defaultSession after login:", {
               present: verify.length > 0,
               sameSite: verify[0]?.sameSite,
               domain: verify[0]?.domain,
               secure: verify[0]?.secure,
+              cfSessionPresent: verifySession.length > 0,
+              cfSessionExpiresInSec:
+                verifySession[0]?.expirationDate !== undefined
+                  ? Math.round(verifySession[0].expirationDate - Date.now() / 1000)
+                  : null,
             });
           } catch (cookieError) {
             console.warn("[cloudflare] failed to set cookies in default session", cookieError);
@@ -530,12 +565,16 @@ async function openCloudflareAccessLoginWindow(serverUrl, cfLoginUrl = null) {
         finish(() => reject(new Error("Cloudflare Access Login wurde geschlossen, bevor der Authentifizierungsprozess abgeschlossen war.")));
       });
 
-      // Use the CF Access login URL extracted from the challenge response so the
-      // window loads exactly the page CF already redirected to. Falls back to a
-      // protected API path that forces the same CF login when no challenge URL is
-      // available. The did-navigate handler below closes the window as soon as
-      // CF_Authorization is set, before any backend response body renders.
-      const loginTriggerUrl = cfLoginUrl || `${normalizedUrl}/api/v1/sync/pull`;
+      // Load a protected API path to force a CF login. We deliberately do NOT
+      // reuse a `cdn-cgi/access/*` challenge URL (e.g. the `authorized?nonce=…`
+      // SSO callback): those carry a single-use nonce and, once consumed, reload
+      // as "Invalid login session", so the window could never obtain a fresh
+      // session. Hitting the protected resource makes CF mint a brand-new SSO
+      // flow (silent via the still-valid IdP cookie) that issues fresh
+      // CF_Authorization + CF_Session together.
+      const isConsumedAccessUrl = /\/cdn-cgi\/access\//i.test(String(cfLoginUrl || ""));
+      const loginTriggerUrl =
+        cfLoginUrl && !isConsumedAccessUrl ? cfLoginUrl : `${normalizedUrl}/api/v1/sync/pull`;
       loginWindow.webContents.on("did-navigate", () => {
         void pollCookies();
       });
