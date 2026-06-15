@@ -115,12 +115,17 @@ final class DesktopCsFloatController
     {
         $limit = $this->readInt($request, 'limit', 500, 1, 500);
         $maxPages = $this->readInt($request, 'maxPages', 8, 1, 20);
+        // /me/buy-orders is capped to 50 per page upstream (larger sizes 500).
+        // Keep the loop's end-of-data check aligned with the real page size, or
+        // pagination would always break after page 0 and drop orders past 50.
+        $buyOrderLimit = min($limit, 50);
 
         $orders = [];
         $pageStats = [];
         $errors = [];
         $source = 'buy-orders';
         $buyOrdersPageBase = 0;
+        $buyOrdersError = null;
 
         for ($attempt = 0; $attempt < 2; $attempt++) {
             $orders = [];
@@ -129,7 +134,7 @@ final class DesktopCsFloatController
             $buyOrdersPageBase = $attempt === 0 ? 0 : 1;
 
             for ($page = 0; $page < $maxPages; $page++) {
-                $response = $this->tradeClient->fetchBuyOrdersPage($limit, $page + $buyOrdersPageBase);
+                $response = $this->tradeClient->fetchBuyOrdersPage($buyOrderLimit, $page + $buyOrdersPageBase);
                 if (!empty($response['error'])) {
                     $errors[] = $response['error'];
                     break;
@@ -162,7 +167,7 @@ final class DesktopCsFloatController
                 ];
                 $orders = array_merge($orders, $pageOrders);
 
-                if (count($pageOrders) < $limit) {
+                if (count($pageOrders) < $buyOrderLimit) {
                     break;
                 }
             }
@@ -174,6 +179,10 @@ final class DesktopCsFloatController
 
         if ($orders === [] && $this->shouldFallbackToTrades($errors)) {
             $source = 'trades-fallback';
+            // Preserve the original buy-orders failure before resetting $errors for
+            // the trades phase, so the cause stays visible in the response metadata
+            // instead of being silently swallowed by a successful trades fallback.
+            $buyOrdersError = is_array($errors[0] ?? null) ? $errors[0] : null;
             $errors = [];
             $pageStats = [];
             for ($page = 0; $page < $maxPages; $page++) {
@@ -293,6 +302,7 @@ final class DesktopCsFloatController
                 'pagesFetched' => count($pageStats),
                 'pageStats' => $pageStats,
                 'errors' => $errors,
+                'buyOrdersError' => $buyOrdersError,
             ]
         );
     }

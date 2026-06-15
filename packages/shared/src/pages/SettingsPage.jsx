@@ -101,6 +101,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [webPushError, setWebPushError] = useState("");
   const [webPushSuccess, setWebPushSuccess] = useState("");
   const [currencySearchTerm, setCurrencySearchTerm] = useState("");
+  const [appVersion, setAppVersion] = useState("");
   const desktopRuntime = isDesktopRuntime();
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const webPushSupported =
@@ -209,6 +210,22 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     };
 
     void loadServerConfig();
+  }, []);
+
+  useEffect(() => {
+    const loadAppVersion = async () => {
+      if (!window.electronAPI?.updater?.getVersion) {
+        return;
+      }
+      try {
+        const value = await window.electronAPI.updater.getVersion();
+        setAppVersion(String(value || ""));
+      } catch {
+        setAppVersion("");
+      }
+    };
+
+    void loadAppVersion();
   }, []);
 
   useEffect(() => {
@@ -600,6 +617,25 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           onEnable={handleEnableWebPush}
           onDisable={handleDisableWebPush}
         />
+
+        {desktopRuntime ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Über die App</CardTitle>
+              <CardDescription>
+                Installierte Version der Desktop-App.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
+                <p className="text-sm text-muted-foreground">Version</p>
+                <Badge variant="outline" className="border-border/70 font-mono text-foreground">
+                  {appVersion ? `v${appVersion}` : "unbekannt"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
       </div>
     );

@@ -53,11 +53,16 @@ final class CsFloatTradeClient
 
     public function fetchBuyOrdersPage(int $limit = 200, int $page = 0): array
     {
-        $limit = max(1, min($limit, 500));
+        // CSFloat's /me/buy-orders endpoint rejects large page sizes with a 500
+        // (unlike /me/trades which accepts up to 500). The CSFloat web client and
+        // reverse-engineered libraries call it with a small limit and order=desc.
+        // Matching that shape avoids the HTTP 500 that forced a trades fallback.
+        $limit = max(1, min($limit, 50));
         $page = max(0, $page);
         $query = http_build_query([
             'limit' => $limit,
             'page' => $page,
+            'order' => 'desc',
         ]);
         $url = 'https://csfloat.com/api/v1/me/buy-orders' . ($query !== '' ? '?' . $query : '');
         $result = $this->requestCollectionEndpoint(
