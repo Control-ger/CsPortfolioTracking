@@ -10,6 +10,10 @@ import {
   fetchWatchlistData,
   importCsFloatWatchlistData,
 } from "@shared/lib/dataSource.js";
+import {
+  getWatchlistMutationVersion,
+  subscribeWatchlistMutation,
+} from "@shared/lib/watchlistMutationBus.js";
 import { getPortfolioPreferences } from "@shared/lib/portfolioPreferences";
 import { BREAKPOINTS } from "@shared/lib/constants";
 import { Button } from "@shared/components/ui/button";
@@ -239,6 +243,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const [watchlistMutationVersion, setWatchlistMutationVersion] = useState(getWatchlistMutationVersion);
+  const handledMutationVersionRef = useRef(getWatchlistMutationVersion());
   const itemRefs = useRef(new Map());
   const isDesktopRuntime = typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
   const hasFiniteNumber = (value) => Number.isFinite(Number(value));
@@ -462,6 +468,19 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   useEffect(() => {
     void loadWatchlistData({ showLoading: !getValidWatchlistSnapshot() });
   }, [loadWatchlistData]);
+
+  // Refetch when a watchlist mutation happens elsewhere (search add, batch
+  // import). The tab stays mounted via forceMount, so the snapshot it holds
+  // would otherwise stay stale until a full reload.
+  useEffect(() => subscribeWatchlistMutation(setWatchlistMutationVersion), []);
+
+  useEffect(() => {
+    if (watchlistMutationVersion === handledMutationVersionRef.current) {
+      return;
+    }
+    handledMutationVersionRef.current = watchlistMutationVersion;
+    void loadWatchlistData({ showLoading: false });
+  }, [watchlistMutationVersion, loadWatchlistData]);
 
   useEffect(() => {
     onWarningsChange?.(combinedWarnings);

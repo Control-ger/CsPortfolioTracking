@@ -86,6 +86,8 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 | Prices | Server cron only | Desktop (via sidecar) + Web |
 | Import triggers | Desktop-initiated | Desktop |
 
+- Frontend watchlist view refresh: the Watchlist tab stays mounted via `forceMount` and holds a module-level snapshot, so a watchlist mutation from another surface (global search, search tab, CSFloat import) must signal it to refetch. `dataSource.js` create/batch helpers call `notifyWatchlistMutated()` (`watchlistMutationBus.js`) and `Watchlist.jsx` subscribes; without this the mounted view shows stale data until a full reload.
+
 ### Pricing Rules
 - Canonical, source-aware price tables: `item_live_cache` (`PK item_id, price_source`) and `price_history_hourly` (`PK item_id, bucket_start, price_source`). Written **only** by the cron (`backend/sync-prices.php` bulk import + CLI queue worker).
 - Passive reads never live-fetch: `PortfolioService::getEnrichedInvestments` defaults to `allowLiveRefresh=false`; investments/summary/composition/watchlist serve the last known price immediately. The cron is the sole price updater for web users.

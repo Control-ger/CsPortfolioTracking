@@ -20,6 +20,7 @@ import {
 
 import { getCurrentUser, isAuthenticated } from "./auth.js";
 import { runDesktopSyncNowIfDue } from "./desktopSync.js";
+import { notifyWatchlistMutated } from "./watchlistMutationBus.js";
 import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { resolveDesktopLocalUserId as resolveDesktopUserId } from "./userIdentity.js";
@@ -453,7 +454,9 @@ export async function createWatchlistItemData(name, type = "skin") {
   const localStore = getDesktopLocalStore();
 
   if (!localStore) {
-    return createApiWatchlistItem(name, type);
+    const created = await createApiWatchlistItem(name, type);
+    notifyWatchlistMutated();
+    return created;
   }
 
   const currentUser = await getCurrentUser();
@@ -474,6 +477,7 @@ export async function createWatchlistItemData(name, type = "skin") {
     console.warn("[desktop-sync] watchlist create sync failed", error);
   }
 
+  notifyWatchlistMutated();
   return created;
 }
 
@@ -482,7 +486,9 @@ export async function createWatchlistItemsBatchData(items = []) {
   const localStore = getDesktopLocalStore();
 
   if (!localStore) {
-    return createApiWatchlistItemsBatch(normalizedItems);
+    const result = await createApiWatchlistItemsBatch(normalizedItems);
+    notifyWatchlistMutated();
+    return result;
   }
 
   const currentUser = await getCurrentUser();
@@ -508,6 +514,7 @@ export async function createWatchlistItemsBatchData(items = []) {
     console.warn("[desktop-sync] watchlist batch create sync failed", error);
   }
 
+  notifyWatchlistMutated();
   return {
     created,
     createdCount: created.length,

@@ -124,6 +124,7 @@ From `apps/web/src/App.jsx`:
 - Desktop watchlist detail exposes a compact debug line (client source, upstream source, pages fetched, raw rows, summary rows, cache/error indicators plus first upstream error code/status) to diagnose CSFloat buyorder mismatches quickly.
 - If desktop sidecar proxy returns a `syncLive` fallback payload without upstream metrics/history, desktop watchlist performs one follow-up upstream read with `syncLive=false` to preserve visible price history/change metrics.
 - `WatchlistOverview` uses in-memory snapshots with TTL `120s`.
+- The `Watchlist` tab stays mounted via `forceMount`, so a watchlist mutation (add/batch-add) from another surface (global search, search tab, CSFloat import) signals it to refetch through `watchlistMutationBus`: `dataSource.js` create/batch helpers call `notifyWatchlistMutated()` and `Watchlist.jsx` subscribes via `subscribeWatchlistMutation`. Without this the already-mounted view shows stale data until a full page reload (snapshot invalidation alone cannot re-render a live `forceMount`ed component).
 - `useCsUpdatesFeed` uses in-memory snapshots with TTL `120s`.
 - Web runtime app shell uses a fixed viewport container (`h-[100dvh]`) and a flex-constrained `<main>` scroll area (`flex-1 min-h-0 overflow-y-auto`) to avoid mobile scroll-lock regressions.
 - `PortfolioPage` no longer uses horizontal swipe tab switching on mobile; tab changes are explicit to avoid accidental gesture-triggered navigation.
