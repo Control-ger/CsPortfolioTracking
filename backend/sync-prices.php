@@ -33,6 +33,7 @@ putenv('ITEMS_CATALOG_WRITE_SCOPE=cron');
 $_ENV['ITEMS_CATALOG_WRITE_SCOPE'] = 'cron';
 
 use App\Application\Service\PortfolioService;
+use App\Application\Service\FeeCalculationService;
 use App\Application\Service\FeeSettingsService;
 use App\Application\Service\PriceListBulkImportService;
 use App\Application\Service\PriceRefreshQueueService;
