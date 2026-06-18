@@ -38,6 +38,7 @@ use App\Application\Service\PriceListBulkImportService;
 use App\Application\Service\PriceRefreshQueueService;
 use App\Application\Service\PricingService;
 use App\Application\Service\SyncService;
+use App\Application\Service\SyncEntityService;
 use App\Config\DatabaseConfig;
 use App\Infrastructure\External\CsFloatClient;
 use App\Infrastructure\External\ExchangeRateClient;
@@ -106,7 +107,7 @@ try {
     $syncStatusRepository->ensureTable();
     $watchlistRepository->ensureTable();
     $userRepository->ensureDefaultUser();
-    (new SyncService($pdo))->ensureTables();
+    (new SyncService($pdo, new SyncEntityService($pdo)))->ensureTables();
 
     $idempotencyRetentionDaysRaw = getenv('SYNC_IDEMPOTENCY_RETENTION_DAYS');
     $idempotencyRetentionDays = is_numeric($idempotencyRetentionDaysRaw) ? (int) $idempotencyRetentionDaysRaw : 30;
