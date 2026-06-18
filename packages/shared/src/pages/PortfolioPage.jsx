@@ -1202,10 +1202,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           category: "steam_sync",
           title: "Neue Steam Items",
           message: `${imported} neue Items durch Steam Sync`,
+          // Keep the dedupe payload stable: a fresh `syncedAt` (or volatile
+          // `updated` count) on every sync made stableSerialize() differ each
+          // time, so the 24h dedupe never matched and an identical "N neue
+          // Items" notification was recreated (unread) on every sync. The
+          // timestamp lives in `createdAt`; identity is the imported count.
           payload: {
             imported,
-            updated,
-            syncedAt,
           },
           createdAt: syncedAt,
         });
