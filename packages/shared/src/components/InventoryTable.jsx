@@ -508,7 +508,7 @@ export function InventoryTable({
         {/* Mobile-View (unter md) */}
         <div className="space-y-3 px-2 md:hidden">
           {/* Sort Controls - Compact Horizontal */}
-          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/75 p-2.5 shadow-[0_14px_28px_rgba(0,0,0,0.2)]">
+          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/75 p-2.5">
             <span className="text-[10px] uppercase text-muted-foreground shrink-0 pl-1">Sortierung</span>
             <div className="flex flex-1 gap-1 overflow-x-auto no-scrollbar">
               {[

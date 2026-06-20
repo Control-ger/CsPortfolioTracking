@@ -313,7 +313,7 @@ export const PortfolioChart = ({
           ? (periodDeltaValue / firstValue) * 100
           : 0;
 
-    const isPositive = periodDeltaValue >= 0;
+    const isPositive = showAbsolute ? periodDeltaValue >= 0 : periodDeltaPercent >= 0;
 
     return {
       lineColor: isPositive ? "#22c55e" : "#ef4444",

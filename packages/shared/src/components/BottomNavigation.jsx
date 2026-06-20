@@ -1,13 +1,12 @@
 ﻿import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Home, Archive, Eye, Search, UserRound } from "lucide-react";
+import { Home, Archive, Eye, UserRound } from "lucide-react";
 import { getCurrentUser, getSession, validateSession } from "@shared/lib/auth";
 
 const NAV_ITEMS = [
   { path: "/", label: "Portfolio", icon: Home },
   { path: "/inventory", label: "Inventar", icon: Archive },
   { path: "/watchlist", label: "Watchlist", icon: Eye },
-  { path: "/search", label: "Suche", icon: Search },
 ];
 
 function isVideoAvatarUrl(url) {
