@@ -295,6 +295,7 @@ export const PortfolioChart = ({
         lineColor: "#22c55e",
         deltaValue: 0,
         deltaPercent: 0,
+        roiGainEuro: 0,
         isPositive: true,
       };
     }
@@ -313,12 +314,25 @@ export const PortfolioChart = ({
           ? (periodDeltaValue / firstValue) * 100
           : 0;
 
+    // ROI gain over the period in EUR: the change in profit (wert - invested) rather
+    // than the raw value delta. Deposits/withdrawals during the period move wert and
+    // invested in lockstep, so they cancel out here — this is the EUR figure that
+    // matches the period performance percent and won't show a phantom gain just because
+    // money was added. Falls back to the value delta when profit data is unavailable.
+    const firstProfitEuro = Number(chartData[0]?.profitEuro);
+    const lastProfitEuro = Number(chartData[chartData.length - 1]?.profitEuro);
+    const periodRoiGainEuro =
+      Number.isFinite(firstProfitEuro) && Number.isFinite(lastProfitEuro)
+        ? lastProfitEuro - firstProfitEuro
+        : periodDeltaValue;
+
     const isPositive = showAbsolute ? periodDeltaValue >= 0 : periodDeltaPercent >= 0;
 
     return {
       lineColor: isPositive ? "#22c55e" : "#ef4444",
       deltaValue: periodDeltaValue,
       deltaPercent: periodDeltaPercent,
+      roiGainEuro: periodRoiGainEuro,
       isPositive,
     };
   }, [chartData, showAbsolute]);
@@ -613,7 +627,7 @@ export const PortfolioChart = ({
         ) : (
           <>
             <div className="flex items-center gap-2 leading-none font-semibold">
-              Performance: {formatSignedCurrency(trendStats.deltaValue)} (
+              Performance: {formatSignedCurrency(showAbsolute ? trendStats.deltaValue : trendStats.roiGainEuro)} (
               {formatSignedPercent(trendStats.deltaPercent)})
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             </div>
