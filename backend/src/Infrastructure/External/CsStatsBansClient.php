@@ -5,9 +5,9 @@ namespace App\Infrastructure\External;
 
 use RuntimeException;
 
-// Scrapes https://csstats.gg/bans for daily VAC ban counts.
+// Scrapes https://csstats.gg/bans for CS2-specific daily VAC ban counts.
 // The page embeds data as: const vacs = [{"date":"2026-05-22","num":"508"}, ...];
-// FRAGILE: regex-based; Cloudflare may block. Treat as fallback source only.
+// Primary source for CS2 ban-wave detection (CS2-specific, unlike vac-ban.com which is all-Steam).
 // Regex last verified: 2026-06-21.
 final class CsStatsBansClient
 {
@@ -31,10 +31,19 @@ final class CsStatsBansClient
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => $this->timeoutSeconds,
+            CURLOPT_ENCODING => '',
             CURLOPT_HTTPHEADER => [
-                'Accept: text/html,application/xhtml+xml',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Accept-Language: en-US,en;q=0.9',
-                'User-Agent: CSInvestorHub/1.0 (+https://github.com/Control-ger/CsPortfolioTracking)',
+                'DNT: 1',
+                'Connection: keep-alive',
+                'Upgrade-Insecure-Requests: 1',
+                'Sec-Fetch-Dest: document',
+                'Sec-Fetch-Mode: navigate',
+                'Sec-Fetch-Site: none',
+                'Sec-Fetch-User: ?1',
+                'Cache-Control: max-age=0',
             ],
         ]);
 
@@ -48,15 +57,16 @@ final class CsStatsBansClient
         }
 
         if (!is_string($body) || $body === '') {
-            throw new RuntimeException('CsStatsBansClient: Empty response.');
+            throw new RuntimeException('CsStatsBansClient: Empty response (HTTP ' . $httpCode . ').');
+        }
+
+        // 403 is Cloudflare's most common block response; check body too for JS challenges on 200
+        if ($httpCode === 403 || $this->isCloudflareChallenge($body)) {
+            throw new RuntimeException('CsStatsBansClient: Cloudflare block (HTTP ' . $httpCode . ') — page unavailable.');
         }
 
         if ($httpCode < 200 || $httpCode >= 300) {
             throw new RuntimeException('CsStatsBansClient: HTTP ' . $httpCode . '.');
-        }
-
-        if ($this->isCloudflareChallenge($body)) {
-            throw new RuntimeException('CsStatsBansClient: Cloudflare challenge detected — page unavailable.');
         }
 
         return $this->extractVacsData($body);

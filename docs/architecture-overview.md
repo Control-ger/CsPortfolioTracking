@@ -72,7 +72,7 @@ This document tracks:
 - Explicit request scopes (`userId`, `steamId`) are only valid when they match the authenticated Steam session; otherwise the server returns `401/403` instead of accepting foreign scopes.
 - Owns pricing ingestion/read flows.
 - Owns CS-updates ingest and web push.
-- Owns ban-stats ingest (`backend/sync-ban-stats.php`, hourly): fetches daily VAC ban counts from `api.vac-ban.com` and `csstats.gg/bans`, stores in `cs_ban_stats` table, and injects synthetic ban-wave entries into `cs_updates_feed` when a spike exceeds the configured threshold (ratio vs. 14-day median + absolute floor). `BanStatsIngestService` / `BanStatsRepository` / `VacBanApiClient` / `CsStatsBansClient`.
+- Owns ban-stats ingest (`backend/sync-ban-stats.php`, hourly): fetches CS2-specific VAC ban counts from `csstats.gg/bans` (primary) and all-Steam counts from `api.vac-ban.com` (corroboration), stores in `cs_ban_stats`, injects synthetic ban-wave entries into `cs_updates_feed` with dual-source corroboration context. `BanStatsIngestService` / `BanStatsRepository` / `VacBanApiClient` / `CsStatsBansClient`.
 - Owns user currency preference persistence (`GET/PUT /api/v1/settings/currency`) and anonymized aggregate popularity stats (`currency_usage_stats`).
 - Owns portfolio group preference persistence (`GET/PUT /api/v1/settings/portfolio-groups`) for cross-runtime group availability.
 - Enforces `items` catalog ownership: only the CLI price-catalog cron path may mutate `items`; request/interactive sync flows are read-only against `items`.
@@ -180,9 +180,11 @@ From `apps/web/src/App.jsx`:
 
 ### 6.5 Ban-stats ingest and ban-wave detection
 
-- `sync-ban-stats.php` runs hourly via supervisord. Fetches daily VAC ban counts from two sources: `api.vac-ban.com/api/stats` (primary) and `csstats.gg/bans` (fallback, HTML scrape). Each source stored independently in `cs_ban_stats` keyed by `(stat_date, source)`.
+- `sync-ban-stats.php` runs hourly via supervisord. Fetches daily VAC ban counts from two sources: `csstats.gg/bans` (CS2-specific, primary trigger) and `api.vac-ban.com/api/stats` (all Steam games, corroboration). Each source stored independently in `cs_ban_stats` keyed by `(stat_date, source)`.
+- **Source roles:** `csstats_gg` is preferred for wave detection because it tracks CS2-specific bans; `vac_ban_api` is the fallback trigger (used when CS2 source lacks sufficient history) and always provides corroboration context.
 - Detection runs only on completed days (`stat_date < today UTC`) to avoid injecting feed entries with partial-day counts (which would be frozen by the idempotency lock).
 - Algorithm: median baseline over the last 14 completed rows from the active source; wave if `ratio >= BAN_WAVE_THRESHOLD` (default 2.5) AND `ban_count >= BAN_WAVE_MIN_COUNT` (default 200). Median is used instead of mean to avoid historical waves inflating the baseline.
+- After a wave is detected, `buildCorroborationContext()` checks the other source for the same date and includes the result in `summary_raw` (for Gemini confidence weighting): confirmed / elevated / no spike / not available.
 - Ban-wave entries appear in `cs_updates_feed` with `source='ban_wave_detected'` and `external_id='banwave_YYYY-MM-DD'`. The Gemini AI rater picks them up automatically within 60 s. No re-injection on subsequent runs (idempotent via `findByExternalId`).
 - ENV: `BAN_WAVE_THRESHOLD` (float, default 2.5, clamped [0.1, 10.0]), `BAN_WAVE_MIN_COUNT` (int, default 200).
 
