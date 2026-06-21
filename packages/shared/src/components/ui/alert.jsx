@@ -1,3 +1,5 @@
+// DEAD CODE — pending deletion (siehe plan): not in components barrel, zero importers.
+// Note: this is NOT alert-dialog.jsx (which is live).
 import * as React from "react";
 import { cva } from "class-variance-authority";
 

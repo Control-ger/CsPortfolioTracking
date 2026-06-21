@@ -1,3 +1,4 @@
+// DEAD CODE — pending deletion (siehe plan): not in components barrel, zero importers.
 import { useState } from "react";
 import { ChevronDown, ChevronUp, FolderCog } from "lucide-react";
 

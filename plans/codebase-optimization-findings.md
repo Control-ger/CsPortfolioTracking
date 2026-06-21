@@ -2,12 +2,26 @@
 
 ## Priority 1 — Dead Code to Remove
 
-| File | Size | Reason |
-|------|------|--------|
-| `packages/shared/src/hooks/ajax.jsx` | 284 B | Never imported anywhere; calls non-existent `/api/getPortfolioData.php` |
-| `packages/shared/src/components/ItemDetailModal.jsx` | 8.8 KB | Never imported anywhere (confusingly named like `ItemDetailsModal.jsx` which IS used) |
-| `packages/shared/src/pages/ItemBrowserPage.jsx` | 3.6 KB | Exported from barrel but never routed in App.jsx |
-| `packages/shared/src/pages/DebugDashboardPage.jsx` | 30 KB | Exported from barrel but never routed in App.jsx |
+The original 4 candidates (`hooks/ajax.jsx`, `components/ItemDetailModal.jsx`,
+`pages/ItemBrowserPage.jsx`, `pages/DebugDashboardPage.jsx`) were already deleted on
+2026-06-10 (commits `ba073fd` / `cca1f4b`).
+
+A fresh repo-wide scan (2026-06-22) found 6 new dead files in `packages/shared`, each
+verified at 100% (incl. dynamic/lazy-import check). **Currently commented out / neutralized;
+hard deletion to follow after a green build is confirmed.**
+
+| File | Evidence |
+|------|----------|
+| `packages/shared/src/components/PortfolioGroupsPanel.jsx` | Not in barrel, zero importers |
+| `packages/shared/src/components/ui/alert.jsx` | Not in barrel, zero importers (≠ `alert-dialog.jsx`, which is live) |
+| `packages/shared/src/components/DebugPanel.jsx` | In barrel (`components/index.js:12`) but never consumed; no lazy/dynamic route |
+| `packages/shared/src/components/CacheMaintenancePanel.jsx` | In barrel (`components/index.js:7`), only imported by the dead `DebugPanel` (transitive) |
+| `packages/shared/src/CurrencyContext.jsx` | Root re-export shim, zero importers (all use `@shared/contexts/CurrencyContext`) |
+| `packages/shared/src/ModalContext.jsx` | Root re-export shim, zero importers |
+
+Note: `packages/shared/src/ThemeContext.jsx` is the third root shim but is **live** —
+`ThemeToggle.jsx` imports it via `'../ThemeContext'`. Deletable only after migrating
+`ThemeToggle` to `@shared/contexts/ThemeContext` (deferred; touches a live import).
 
 ## Priority 2 — Monster Files (Split Recommended)
 
@@ -30,9 +44,12 @@ These files are excessively large and should be refactored into smaller modules:
 
 `backend/public/index.php` and `backend/desktop/index.php` both `require` the same `bootstrap.php` but each independently wires up the DI container. The two containers can drift independently without a compile-time check. Consider extracting the shared route registration into a separate file.
 
-## Priority 4 — Unused Barrel Exports
+## Priority 4 — Unused Barrel Exports (resolved / stale)
 
-These barrel files export items that are never imported:
+Both original findings no longer hold:
 
-- `packages/shared/src/pages/index.js` exports `ItemBrowserPage` and `DebugDashboardPage` — both unused in App.jsx
-- `packages/shared/src/lib/index.js` does NOT export `portfolioGroups.js` or `desktopSync.js` — these are imported directly, which suggests the barrel is incomplete
+- `packages/shared/src/pages/index.js` does **not** export `ItemBrowserPage` /
+  `DebugDashboardPage` — those files were deleted (see Priority 1).
+- `packages/shared/src/lib/index.js` **does** export `portfolioGroups.js` (line 27) and
+  `desktopSync.js` (line 36). The barrel is complete; some consumers additionally import
+  these modules by direct path, which is a style inconsistency, not a missing export.
