@@ -49,14 +49,14 @@ final class GeminiUpdateRaterClient
      * @param array<string,mixed> $updateRow
      * @return array<string,mixed>
      */
-    public function classify(array $updateRow): array
+    public function classify(array $updateRow, string $banWaveContext = ''): array
     {
         $title = trim((string) ($updateRow['title'] ?? ''));
         $summary = trim((string) ($updateRow['summary_raw'] ?? ''));
         $source = trim((string) ($updateRow['source'] ?? ''));
         $publishedAt = trim((string) ($updateRow['published_at'] ?? ''));
 
-        $prompt = implode("\n", [
+        $promptParts = [
             'Du bewertest Counter-Strike 2 Update-Meldungen fuer Trading-Entscheidungen (Skins, Sticker, Cases).',
             'Bewerte nur Markt-Impact und Handlungsdringlichkeit.',
             '',
@@ -71,20 +71,22 @@ final class GeminiUpdateRaterClient
             '',
             'Regelhinweise:',
             '- Reine Bugfixes/UI/Audio meist none/low.',
-            '- Ban waves (source=ban_wave_detected): haeufig medium oder high Impact.',
-            '  * Grosse Ban-Wellen (>2.5x Median) -> impact_level=medium, impact_score 55-70.',
-            '  * Sehr grosse Ban-Wellen (>4x Median) -> impact_level=high, impact_score 75-90.',
-            '  * Ban-Wellen gehen Marktbewegungen oft voraus oder folgen ihnen (1-3 Tage Verzoegerung).',
-            '  * Erhoehte Nachfrage nach Cases und guenstigen Skins typisch nach Ban-Wellen.',
-            '  * Empfehlung: "WATCH Cases und Entry-Level Skins" oder "BUY guenstige Cases staffeln".',
-            '  * urgency=observe fuer moderate Wellen, urgency=today fuer sehr grosse Wellen (>4x).',
-            '  * Wenn summary "Korroboriert durch" enthaelt -> confidence=high, score nahe Obergrenze des Bereichs.',
-            '  * Wenn summary "Einzelquellen-Signal" oder "nicht verfuegbar" -> confidence=medium.',
-            '  * Wenn summary "basiert auf Alle-Steam-Daten" -> confidence=low; CS2-Impact schwerer abzuschaetzen.',
             '- Trade-up, Sticker-Entfernung, neue Sticker/Cases/Capsules/Collections meist medium/high.',
             '- Wenn moeglich: nenne Segment im recommended_action (z.B. Souvenir, Sticker Capsule, High-Tier Skins).',
             '- Formuliere handlungsorientiert, z.B. "SELL High-Tier Skins heute", "BUY alte Major Capsules staffeln".',
+            '- Wenn "KONTEXT VAC BAN-WELLEN" Daten vorhanden: beachte Timing-Effekt (1-3 Tage Verzoegerung typisch, Fenster 14 Tage).',
+            '  * Jüngste Ban-Wellen erhoehen Nachfrage nach Cases und Entry-Level Skins.',
+            '  * Kombinationseffekt Update + Ban-Welle: erhoehe urgency und score leicht.',
             '- Bei Unsicherheit konservativ bleiben.',
+        ];
+
+        if ($banWaveContext !== '') {
+            $promptParts[] = '';
+            $promptParts[] = 'KONTEXT VAC BAN-WELLEN (letzte 14 Tage):';
+            $promptParts[] = $banWaveContext;
+        }
+
+        $promptParts = array_merge($promptParts, [
             '',
             'INPUT:',
             'title: ' . $title,
@@ -92,6 +94,8 @@ final class GeminiUpdateRaterClient
             'source: ' . $source,
             'published_at_utc: ' . $publishedAt,
         ]);
+
+        $prompt = implode("\n", $promptParts);
 
         $url = sprintf(
             'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',

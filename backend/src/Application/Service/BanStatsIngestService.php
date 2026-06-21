@@ -137,10 +137,10 @@ final class BanStatsIngestService
             return [true, false];
         }
 
-        $ratioFormatted = number_format($ratio, 1, ',', '.');
+        $ratioFormatted = number_format($ratio * 100, 0, ',', '.') . '%';
         $countFormatted = number_format($todayCount, 0, ',', '.');
         $baselineFormatted = number_format((int) round($baseline), 0, ',', '.');
-        $thresholdFormatted = number_format($this->waveThreshold, 1, ',', '.');
+        $thresholdFormatted = number_format($this->waveThreshold * 100, 0, ',', '.') . '%';
 
         $corroborationSource = $activeSource === self::CS2_SOURCE ? self::STEAM_SOURCE : self::CS2_SOURCE;
         $corroborationContext = $this->buildCorroborationContext(
@@ -151,10 +151,10 @@ final class BanStatsIngestService
 
         $title = 'VAC Ban-Welle erkannt: ' . $countFormatted . ' Bans am ' . $latestRow['stat_date'];
         $summary = sprintf(
-            'Am %s wurden %s VAC-Bans verzeichnet (%sx ueber dem Median der letzten %d Tage: %s Bans). '
+            'Am %s wurden %s VAC-Bans verzeichnet (%s des Medians der letzten %d Tage: %s Bans). '
             . 'Ban-Wellen koennen kurzfristigen Markt-Impact haben: erhoehte Trading-Aktivitaet und '
             . 'Preisbewegungen bei Skins und Kisten sind typisch. '
-            . 'Quelle: %s. Schwellenwert: %sx / mind. %d Bans. %s',
+            . 'Quelle: %s. Schwellenwert: %s / mind. %d Bans. %s',
             $latestRow['stat_date'],
             $countFormatted,
             $ratioFormatted,
@@ -230,17 +230,17 @@ final class BanStatsIngestService
         $sourceLabel = $otherSource === self::STEAM_SOURCE
             ? 'vac-ban.com (alle Steam-Spiele)'
             : 'csstats.gg (CS2-spezifisch)';
-        $otherRatioFmt = number_format($otherRatio, 1, ',', '.');
+        $otherRatioFmt = number_format($otherRatio * 100, 0, ',', '.') . '%';
         $otherCountFmt = number_format($otherCount, 0, ',', '.');
 
         if ($otherRatio >= $this->waveThreshold) {
-            return sprintf('Korroboriert durch %s: %s Bans (%sx ueber Median).', $sourceLabel, $otherCountFmt, $otherRatioFmt);
+            return sprintf('Korroboriert durch %s: %s Bans (%s des Medians).', $sourceLabel, $otherCountFmt, $otherRatioFmt);
         }
 
         if ($otherRatio > 1.0) {
-            return sprintf('%s zeigt erhoehte Aktivitaet (%sx Median), aber unter Schwellenwert.', $sourceLabel, $otherRatioFmt);
+            return sprintf('%s zeigt erhoehte Aktivitaet (%s des Medians), aber unter Schwellenwert.', $sourceLabel, $otherRatioFmt);
         }
 
-        return sprintf('%s zeigt keinen Spike (%sx Median) — Einzelquellen-Signal.', $sourceLabel, $otherRatioFmt);
+        return sprintf('%s zeigt keinen Spike (%s des Medians) — Einzelquellen-Signal.', $sourceLabel, $otherRatioFmt);
     }
 }

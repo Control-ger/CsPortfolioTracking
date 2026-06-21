@@ -372,6 +372,36 @@ final class CsUpdatesFeedRepository
         }
     }
 
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    public function findRecentBanWaves(int $days = 7): array
+    {
+        $days = max(1, min(90, $days));
+        $since = gmdate('Y-m-d H:i:s', time() - $days * 86400);
+        $sql = "SELECT id, title, published_at, summary_raw
+                FROM cs_updates_feed
+                WHERE source = 'ban_wave_detected'
+                  AND published_at >= ?
+                ORDER BY published_at DESC
+                LIMIT 10";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$since]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['days' => $days]
+            );
+            throw $exception;
+        }
+    }
+
     public function markAiRatingFailed(int $id, string $error): void
     {
         $sql = "UPDATE cs_updates_feed

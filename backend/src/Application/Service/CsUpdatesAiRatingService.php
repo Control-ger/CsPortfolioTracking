@@ -29,6 +29,8 @@ final class CsUpdatesAiRatingService
         $ratedCount = 0;
         $failedCount = 0;
 
+        $banWaveContext = $this->buildBanWaveContext();
+
         foreach ($rows as $row) {
             $id = (int) ($row['id'] ?? 0);
             if ($id <= 0) {
@@ -36,7 +38,11 @@ final class CsUpdatesAiRatingService
             }
 
             try {
-                $rating = $this->client->classify($row);
+                if (($row['source'] ?? '') === 'ban_wave_detected') {
+                    $rating = $this->autoRateBanWave($row);
+                } else {
+                    $rating = $this->client->classify($row, $banWaveContext);
+                }
                 $this->repository->saveAiRating($id, $rating);
                 $this->notifyHighImpactWebPush($rating);
                 $ratedCount++;
@@ -52,6 +58,85 @@ final class CsUpdatesAiRatingService
             'ratedCount' => $ratedCount,
             'failedCount' => $failedCount,
         ];
+    }
+
+    /**
+     * @param array<string,mixed> $row
+     * @return array<string,mixed>
+     */
+    private function autoRateBanWave(array $row): array
+    {
+        $summary = (string) ($row['summary_raw'] ?? '');
+
+        $ratio = 2.5;
+        if (preg_match('/\((\d+)%\s+des\s+Medians/', $summary, $m)) {
+            $ratio = (float) $m[1] / 100.0;
+        } elseif (preg_match('/\((\d+[,.]\d*)x\s+ueber\s+dem\s+Median/', $summary, $m)) {
+            $ratio = (float) str_replace(',', '.', $m[1]);
+        }
+
+        $isHigh = $ratio >= 4.0;
+        $impactLevel = $isHigh ? 'high' : 'medium';
+        $impactScore = $isHigh
+            ? max(70, min(90, (int) round(70 + ($ratio - 4.0) * 5)))
+            : max(50, min(70, (int) round(50 + ($ratio - 2.5) * 13)));
+        $urgency = $isHigh ? 'today' : 'observe';
+
+        $confidence = 'medium';
+        if (str_contains($summary, 'Korroboriert durch')) {
+            $confidence = 'high';
+        } elseif (str_contains($summary, 'Alle-Steam-Daten')) {
+            $confidence = 'low';
+        }
+
+        return [
+            'impact_level' => $impactLevel,
+            'impact_score' => $impactScore,
+            'urgency' => $urgency,
+            'recommended_action' => $isHigh
+                ? 'WATCH Cases und Entry-Level Skins — grosse Ban-Welle.'
+                : 'Cases und guenstige Skins beobachten.',
+            'confidence' => $confidence,
+            'reasoning' => 'Automatisch bewertet basierend auf Ban-Wellen-Schwellenwert und Quellen-Korroboration.',
+            'model' => 'auto',
+        ];
+    }
+
+    private function buildBanWaveContext(): string
+    {
+        try {
+            $waves = $this->repository->findRecentBanWaves(14);
+        } catch (Throwable) {
+            return '';
+        }
+
+        if ($waves === []) {
+            return '';
+        }
+
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $lines = [];
+        foreach ($waves as $wave) {
+            $published = trim((string) ($wave['published_at'] ?? ''));
+            if ($published === '') {
+                continue;
+            }
+            try {
+                $dt = new \DateTimeImmutable($published, new \DateTimeZone('UTC'));
+            } catch (\Throwable) {
+                continue;
+            }
+            $daysAgo = (int) $now->diff($dt)->days;
+            $label = match (true) {
+                $daysAgo === 0 => 'heute',
+                $daysAgo === 1 => 'vor 1 Tag',
+                default => "vor {$daysAgo} Tagen",
+            };
+            $title = trim((string) ($wave['title'] ?? ''));
+            $lines[] = "- {$label}: {$title}";
+        }
+
+        return $lines !== [] ? implode("\n", $lines) : '';
     }
 
     private function truncateError(string $message, int $max = 2000): string

@@ -185,8 +185,9 @@ From `apps/web/src/App.jsx`:
 - **Source roles:** `csstats_gg` is preferred for wave detection because it tracks CS2-specific bans; `vac_ban_api` is the fallback trigger (used when CS2 source lacks sufficient history) and always provides corroboration context.
 - Detection runs only on completed days (`stat_date < today UTC`) to avoid injecting feed entries with partial-day counts (which would be frozen by the idempotency lock).
 - Algorithm: median baseline over the last 14 completed rows from the active source; wave if `ratio >= BAN_WAVE_THRESHOLD` (default 2.5) AND `ban_count >= BAN_WAVE_MIN_COUNT` (default 200). Median is used instead of mean to avoid historical waves inflating the baseline.
-- After a wave is detected, `buildCorroborationContext()` checks the other source for the same date and includes the result in `summary_raw` (for Gemini confidence weighting): confirmed / elevated / no spike / not available.
-- Ban-wave entries appear in `cs_updates_feed` with `source='ban_wave_detected'` and `external_id='banwave_YYYY-MM-DD'`. The Gemini AI rater picks them up automatically within 60 s. No re-injection on subsequent runs (idempotent via `findByExternalId`).
+- After a wave is detected, `buildCorroborationContext()` checks the other source for the same date and includes the result in `summary_raw` (corroboration phrase drives confidence in auto-rating): confirmed / elevated / no spike / not available. Ratio and threshold are displayed as percentages (e.g. `250% des Medians`).
+- Ban-wave entries appear in `cs_updates_feed` with `source='ban_wave_detected'` and `external_id='banwave_YYYY-MM-DD'`. **Ban waves are auto-rated by `CsUpdatesAiRatingService::autoRateBanWave()` without a Gemini call** — impact/urgency/confidence are derived deterministically from the ratio parsed out of `summary_raw`. No re-injection on subsequent runs (idempotent via `findByExternalId`).
+- When `sync-cs-updates-ai-rating.php` rates non-ban-wave entries, `CsUpdatesFeedRepository::findRecentBanWaves(14)` injects a 14-day ban-wave context block into the Gemini prompt so the AI can factor in recent wave activity when assessing update market impact.
 - ENV: `BAN_WAVE_THRESHOLD` (float, default 2.5, clamped [0.1, 10.0]), `BAN_WAVE_MIN_COUNT` (int, default 200).
 
 ### 6.2 CS updates feed behavior
