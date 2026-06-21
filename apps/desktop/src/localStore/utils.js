@@ -13,6 +13,15 @@ export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   metricsDisplayMode: "toggle_mode",
   metricsScopeDefault: "investments",
   csfloatWatchlistAutoImport: false,
+  notifyBanWaveDesktop: true,
+  notifyBanWaveDesktopMinLevel: "low",
+  notifyCsUpdatesDesktop: true,
+  notifyCsUpdatesDesktopMinLevel: "medium",
+  notifySteamSyncDesktop: true,
+  notifyBanWaveWebPush: false,
+  notifyBanWaveWebPushMinLevel: "medium",
+  notifyCsUpdatesWebPush: false,
+  notifyCsUpdatesWebPushMinLevel: "high",
 });
 
 export function nowIso() {
@@ -89,6 +98,13 @@ export function normalizeMetricsScope(value, fallback = "investments") {
   return fallback === "all" ? "all" : "investments";
 }
 
+const IMPACT_LEVELS = ["none", "low", "medium", "high"];
+
+function normalizeImpactLevel(value, fallback = "medium") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return IMPACT_LEVELS.includes(normalized) ? normalized : fallback;
+}
+
 // Preferences round-trip through the meta store as strings, so a stored "false"
 // is truthy under Boolean(). Coerce explicitly via === "true".
 export function normalizeBoolean(value, fallback = false) {
@@ -126,6 +142,15 @@ export function normalizePortfolioPreferences(input = {}) {
       input.csfloatWatchlistAutoImport,
       DEFAULT_PORTFOLIO_PREFERENCES.csfloatWatchlistAutoImport,
     ),
+    notifyBanWaveDesktop: normalizeBoolean(input.notifyBanWaveDesktop, true),
+    notifyBanWaveDesktopMinLevel: normalizeImpactLevel(input.notifyBanWaveDesktopMinLevel, "low"),
+    notifyCsUpdatesDesktop: normalizeBoolean(input.notifyCsUpdatesDesktop, true),
+    notifyCsUpdatesDesktopMinLevel: normalizeImpactLevel(input.notifyCsUpdatesDesktopMinLevel, "medium"),
+    notifySteamSyncDesktop: normalizeBoolean(input.notifySteamSyncDesktop, true),
+    notifyBanWaveWebPush: normalizeBoolean(input.notifyBanWaveWebPush, false),
+    notifyBanWaveWebPushMinLevel: normalizeImpactLevel(input.notifyBanWaveWebPushMinLevel, "medium"),
+    notifyCsUpdatesWebPush: normalizeBoolean(input.notifyCsUpdatesWebPush, false),
+    notifyCsUpdatesWebPushMinLevel: normalizeImpactLevel(input.notifyCsUpdatesWebPushMinLevel, "high"),
   };
 }
 

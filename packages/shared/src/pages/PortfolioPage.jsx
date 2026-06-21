@@ -40,6 +40,7 @@ import {
   getPortfolioPreferences,
   getCurrentUser,
   importInventoryAsInvestments,
+  IMPACT_LEVELS,
   resolveDesktopLocalUserId as resolveDesktopRuntimeUserId,
   resolveMetricsScopeFromPreferences,
   createWatchlistItemData,
@@ -514,6 +515,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     notifyCsUpdatesWebPush: false,
     notifyCsUpdatesWebPushMinLevel: "high",
   });
+  // Ref so the startup auto-sync callback always reads the latest pref without
+  // needing to be re-memoized (avoids the race where auto-sync fires before
+  // loadPortfolioPreferences resolves and evaluates against the initial default).
+  const notifySteamSyncDesktopRef = useRef(true);
   const [selectedMetricsScope, setSelectedMetricsScope] = useState("investments");
   const [inventoryScope, setInventoryScope] = useState("investment");
   const metricsScope = resolveMetricsScopeFromPreferences(
@@ -874,6 +879,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       try {
         const preferences = await getPortfolioPreferences();
         setPortfolioPreferences(preferences);
+        notifySteamSyncDesktopRef.current = preferences.notifySteamSyncDesktop;
         setSelectedMetricsScope(preferences.metricsScopeDefault || "investments");
       } catch (preferenceError) {
         console.warn("Failed to load portfolio preferences", preferenceError);
@@ -1208,7 +1214,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
 
       await writeLocalState(STEAM_SYNC_META_KEY, { lastRunAt: syncedAt });
-      if (imported > 0 && portfolioPreferences.notifySteamSyncDesktop && window.electronAPI?.localStore?.createNotification) {
+      if (imported > 0 && notifySteamSyncDesktopRef.current && window.electronAPI?.localStore?.createNotification) {
         await window.electronAPI.localStore.createNotification({
           userId,
           category: "steam_sync",
@@ -1280,7 +1286,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     } finally {
       setIsSteamSyncing(false);
     }
-  }, [authRequired, isElectronRuntime, isSteamSyncing, portfolioPreferences.steamImportBucket, portfolioPreferences.notifySteamSyncDesktop, refreshPortfolio]);
+  }, [authRequired, isElectronRuntime, isSteamSyncing, portfolioPreferences.steamImportBucket, refreshPortfolio]);
 
   useEffect(() => () => {
     if (manualSteamSyncInfoTimeoutRef.current) {
@@ -2536,9 +2542,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
   const freshBanWaveItem = useMemo(() => {
     if (!csUpdatesItems || csUpdatesFreshItemIds.length === 0) return null;
+    const freshIdSet = new Set(csUpdatesFreshItemIds.map((id) => String(id)));
     return (
       csUpdatesItems.find(
-        (item) => item.source === "ban_wave_detected" && csUpdatesFreshItemIds.includes(item.id),
+        (item) => item.source === "ban_wave_detected" && freshIdSet.has(String(item.id)),
       ) ?? null
     );
   }, [csUpdatesItems, csUpdatesFreshItemIds]);
@@ -2560,17 +2567,22 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!freshBanWaveItem || !isDesktopRuntime) return;
     if (!portfolioPreferences.notifyBanWaveDesktop) return;
 
-    const lastNotifiedId = localStorage.getItem(BAN_WAVE_NOTIFIED_KEY) || "";
-    if (String(freshBanWaveItem.id) === lastNotifiedId) return;
+    // Capture primitives at effect entry to avoid stale closure during async IPC
+    const itemId = String(freshBanWaveItem.id);
+    const itemTitle = freshBanWaveItem.title || "Erhöhte Ban-Aktivität in CS2";
+    const itemPublishedAt = freshBanWaveItem.publishedAt || new Date().toISOString();
+    const itemAiImpactLevel = String(freshBanWaveItem.aiImpactLevel || "").toLowerCase();
 
-    // Check impact level against minimum threshold
-    const impactOrder = { none: 0, low: 1, medium: 2, high: 3 };
-    const itemLevel = impactOrder[String(freshBanWaveItem.aiImpactLevel || "").toLowerCase()] ?? 1;
-    const minLevel = impactOrder[portfolioPreferences.notifyBanWaveDesktopMinLevel] ?? 0;
-    if (itemLevel < minLevel) {
-      localStorage.setItem(BAN_WAVE_NOTIFIED_KEY, String(freshBanWaveItem.id));
-      return;
-    }
+    const lastNotifiedId = localStorage.getItem(BAN_WAVE_NOTIFIED_KEY) || "";
+    if (itemId === lastNotifiedId) return;
+
+    const itemLevel = IMPACT_LEVELS.indexOf(itemAiImpactLevel);
+    const minLevel = IMPACT_LEVELS.indexOf(portfolioPreferences.notifyBanWaveDesktopMinLevel);
+
+    // Unrated (-1): skip without stamping so we retry once the item gets rated
+    if (itemLevel === -1) return;
+    // Below threshold: skip without stamping so user can lower threshold later and still get notified
+    if (minLevel >= 0 && itemLevel < minLevel) return;
 
     const trigger = async () => {
       try {
@@ -2581,9 +2593,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             userId,
             category: "cs_updates",
             title: "VAC Ban-Welle erkannt",
-            message: freshBanWaveItem.title || "Erhöhte Ban-Aktivität in CS2",
-            payload: { source: "ban_wave", itemId: freshBanWaveItem.id },
-            createdAt: freshBanWaveItem.publishedAt || new Date().toISOString(),
+            message: itemTitle,
+            payload: { source: "ban_wave", itemId },
+            createdAt: itemPublishedAt,
           });
         }
       } catch {
@@ -2591,10 +2603,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
       if (typeof window.Notification !== "undefined" && Notification.permission === "granted") {
         new window.Notification("VAC Ban-Welle erkannt", {
-          body: freshBanWaveItem.title || "Erhöhte Ban-Aktivität in CS2 — Marktbewegung möglich",
+          body: itemTitle + " — Marktbewegung möglich",
         });
       }
-      localStorage.setItem(BAN_WAVE_NOTIFIED_KEY, String(freshBanWaveItem.id));
+      localStorage.setItem(BAN_WAVE_NOTIFIED_KEY, itemId);
     };
 
     void trigger();

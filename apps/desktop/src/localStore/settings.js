@@ -90,11 +90,16 @@ export function createSettingsStore(db) {
       upsert.run(`${prefix}metricsScopeDefault`, next.metricsScopeDefault, updatedAt);
       // Booleans must be stored as strings (better-sqlite3 cannot bind booleans);
       // normalizePortfolioPreferences coerces the "true"/"false" string on read.
-      upsert.run(
-        `${prefix}csfloatWatchlistAutoImport`,
-        String(next.csfloatWatchlistAutoImport),
-        updatedAt,
-      );
+      upsert.run(`${prefix}csfloatWatchlistAutoImport`, String(next.csfloatWatchlistAutoImport), updatedAt);
+      upsert.run(`${prefix}notifyBanWaveDesktop`, String(next.notifyBanWaveDesktop), updatedAt);
+      upsert.run(`${prefix}notifyBanWaveDesktopMinLevel`, next.notifyBanWaveDesktopMinLevel, updatedAt);
+      upsert.run(`${prefix}notifyCsUpdatesDesktop`, String(next.notifyCsUpdatesDesktop), updatedAt);
+      upsert.run(`${prefix}notifyCsUpdatesDesktopMinLevel`, next.notifyCsUpdatesDesktopMinLevel, updatedAt);
+      upsert.run(`${prefix}notifySteamSyncDesktop`, String(next.notifySteamSyncDesktop), updatedAt);
+      upsert.run(`${prefix}notifyBanWaveWebPush`, String(next.notifyBanWaveWebPush), updatedAt);
+      upsert.run(`${prefix}notifyBanWaveWebPushMinLevel`, next.notifyBanWaveWebPushMinLevel, updatedAt);
+      upsert.run(`${prefix}notifyCsUpdatesWebPush`, String(next.notifyCsUpdatesWebPush), updatedAt);
+      upsert.run(`${prefix}notifyCsUpdatesWebPushMinLevel`, next.notifyCsUpdatesWebPushMinLevel, updatedAt);
 
       return next;
     },

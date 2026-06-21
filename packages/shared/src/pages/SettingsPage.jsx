@@ -817,73 +817,75 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               </div>
             ) : null}
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
+            {!isElectronRuntime ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
 
-              {/* VAC Ban-Welle — web push */}
-              <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">VAC Ban-Welle erkannt</p>
-                    <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei erkannter Ban-Welle.</p>
+                {/* VAC Ban-Welle — web push */}
+                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">VAC Ban-Welle erkannt</p>
+                      <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei erkannter Ban-Welle.</p>
+                    </div>
+                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPush", notifyBanWaveWebPush, setNotifyBanWaveWebPush)}>
+                      {notifyBanWaveWebPush ? "Deaktivieren" : "Aktivieren"}
+                    </Button>
                   </div>
-                  <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPush", notifyBanWaveWebPush, setNotifyBanWaveWebPush)}>
-                    {notifyBanWaveWebPush ? "Deaktivieren" : "Aktivieren"}
-                  </Button>
+                  {notifyBanWaveWebPush ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
+                      {IMPACT_LEVELS.map((level) => {
+                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                        const active = notifyBanWaveWebPushMinLevel === level;
+                        return (
+                          <button
+                            key={level}
+                            disabled={notifySaving}
+                            onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPushMinLevel", notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel, level)}
+                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
+                          >
+                            {labels[level]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
-                {notifyBanWaveWebPush ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
-                    {IMPACT_LEVELS.map((level) => {
-                      const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
-                      const active = notifyBanWaveWebPushMinLevel === level;
-                      return (
-                        <button
-                          key={level}
-                          disabled={notifySaving}
-                          onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPushMinLevel", notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel, level)}
-                          className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
-                        >
-                          {labels[level]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
 
-              {/* CS2 Updates — web push */}
-              <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">CS2 Updates</p>
-                    <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei neuen CS2-Updates.</p>
+                {/* CS2 Updates — web push */}
+                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">CS2 Updates</p>
+                      <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei neuen CS2-Updates.</p>
+                    </div>
+                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPush", notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush)}>
+                      {notifyCsUpdatesWebPush ? "Deaktivieren" : "Aktivieren"}
+                    </Button>
                   </div>
-                  <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPush", notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush)}>
-                    {notifyCsUpdatesWebPush ? "Deaktivieren" : "Aktivieren"}
-                  </Button>
+                  {notifyCsUpdatesWebPush ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
+                      {IMPACT_LEVELS.map((level) => {
+                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                        const active = notifyCsUpdatesWebPushMinLevel === level;
+                        return (
+                          <button
+                            key={level}
+                            disabled={notifySaving}
+                            onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPushMinLevel", notifyCsUpdatesWebPushMinLevel, setNotifyCsUpdatesWebPushMinLevel, level)}
+                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
+                          >
+                            {labels[level]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
-                {notifyCsUpdatesWebPush ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
-                    {IMPACT_LEVELS.map((level) => {
-                      const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
-                      const active = notifyCsUpdatesWebPushMinLevel === level;
-                      return (
-                        <button
-                          key={level}
-                          disabled={notifySaving}
-                          onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPushMinLevel", notifyCsUpdatesWebPushMinLevel, setNotifyCsUpdatesWebPushMinLevel, level)}
-                          className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
-                        >
-                          {labels[level]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
               </div>
-            </div>
+            ) : null}
 
             {notifyError ? (
               <p className="text-xs text-amber-400">{notifyError}</p>
