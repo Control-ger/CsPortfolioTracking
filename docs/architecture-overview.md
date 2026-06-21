@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-09
+Last updated: 2026-06-21
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -72,6 +72,7 @@ This document tracks:
 - Explicit request scopes (`userId`, `steamId`) are only valid when they match the authenticated Steam session; otherwise the server returns `401/403` instead of accepting foreign scopes.
 - Owns pricing ingestion/read flows.
 - Owns CS-updates ingest and web push.
+- Owns ban-stats ingest (`backend/sync-ban-stats.php`, hourly): fetches daily VAC ban counts from `api.vac-ban.com` and `csstats.gg/bans`, stores in `cs_ban_stats` table, and injects synthetic ban-wave entries into `cs_updates_feed` when a spike exceeds the configured threshold (ratio vs. 14-day median + absolute floor). `BanStatsIngestService` / `BanStatsRepository` / `VacBanApiClient` / `CsStatsBansClient`.
 - Owns user currency preference persistence (`GET/PUT /api/v1/settings/currency`) and anonymized aggregate popularity stats (`currency_usage_stats`).
 - Owns portfolio group preference persistence (`GET/PUT /api/v1/settings/portfolio-groups`) for cross-runtime group availability.
 - Enforces `items` catalog ownership: only the CLI price-catalog cron path may mutate `items`; request/interactive sync flows are read-only against `items`.
@@ -89,6 +90,7 @@ This document tracks:
 | Prices | Server workers | server DB | Web + Desktop (via sidecar/upstream) |
 | Import execution (Steam/CSFloat) | Desktop-initiated | Desktop + server processing path | Desktop |
 | Steam/CSFloat secrets | Desktop only | Local Secret Vault (app-password wrapped, main-memory unlock session) | Desktop only |
+| VAC ban stats + ban-wave feed entries | Server cron (`sync-ban-stats.php`, hourly) | `cs_ban_stats` (raw daily counts) + `cs_updates_feed` (synthetic ban-wave entries, source=`ban_wave_detected`) | Web + Desktop |
 
 ## 5. Frontend Route Map (current)
 
@@ -175,6 +177,14 @@ From `apps/web/src/App.jsx`:
 - `backend/sync-prices.php` is the only write-enabled process for `items` and sets `ITEMS_CATALOG_WRITE_SCOPE=cron` explicitly before catalog upserts.
 - **Reads never live-fetch** (see §6.1): passive page reads serve from `item_live_cache`; only the cron and the explicit `refresh-stale` action contact CSFloat.
 - The previous dormant "scaling" mirror tables (`item_price_latest`, `item_price_history_hourly`) and the flag-gated `ScalingShadowReadService` were retired (migration `2026_06_11_001`). The future user-scaling read-model still builds on `user_positions` / `position_events` / `portfolio_snapshots_daily`, which remain.
+
+### 6.5 Ban-stats ingest and ban-wave detection
+
+- `sync-ban-stats.php` runs hourly via supervisord. Fetches daily VAC ban counts from two sources: `api.vac-ban.com/api/stats` (primary) and `csstats.gg/bans` (fallback, HTML scrape). Each source stored independently in `cs_ban_stats` keyed by `(stat_date, source)`.
+- Detection runs only on completed days (`stat_date < today UTC`) to avoid injecting feed entries with partial-day counts (which would be frozen by the idempotency lock).
+- Algorithm: median baseline over the last 14 completed rows from the active source; wave if `ratio >= BAN_WAVE_THRESHOLD` (default 2.5) AND `ban_count >= BAN_WAVE_MIN_COUNT` (default 200). Median is used instead of mean to avoid historical waves inflating the baseline.
+- Ban-wave entries appear in `cs_updates_feed` with `source='ban_wave_detected'` and `external_id='banwave_YYYY-MM-DD'`. The Gemini AI rater picks them up automatically within 60 s. No re-injection on subsequent runs (idempotent via `findByExternalId`).
+- ENV: `BAN_WAVE_THRESHOLD` (float, default 2.5, clamped [0.1, 10.0]), `BAN_WAVE_MIN_COUNT` (int, default 200).
 
 ### 6.2 CS updates feed behavior
 

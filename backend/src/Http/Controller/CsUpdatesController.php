@@ -128,6 +128,7 @@ final class CsUpdatesController
         return match (strtolower(trim($source))) {
             'steamdb_rss' => 'SteamDB RSS',
             'steam_news_api' => 'Steam News',
+            'ban_wave_detected' => 'VAC Ban-Welle',
             default => 'CS Feed',
         };
     }

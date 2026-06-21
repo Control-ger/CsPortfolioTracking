@@ -85,6 +85,7 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 | Investments/Watchlist | Desktop only | Desktop + Web (via sync) |
 | Prices | Server cron only | Desktop (via sidecar) + Web |
 | Import triggers | Desktop-initiated | Desktop |
+| VAC ban stats + ban-wave feed entries | Server cron only (`sync-ban-stats.php`, hourly) | Web + Desktop |
 
 - Frontend watchlist view refresh: the Watchlist tab stays mounted via `forceMount` and holds a module-level snapshot, so a watchlist mutation from another surface (global search, search tab, CSFloat import) must signal it to refetch. `dataSource.js` create/batch helpers call `notifyWatchlistMutated()` (`watchlistMutationBus.js`) and `Watchlist.jsx` subscribes; without this the mounted view shows stale data until a full reload.
 
