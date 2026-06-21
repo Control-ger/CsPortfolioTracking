@@ -141,33 +141,14 @@ final class DesktopCsFloatController
                 }
 
                 $pageOrders = is_array($response['orders'] ?? null) ? $response['orders'] : [];
-                // TEMP DIAGNOSTIC (buy-order shape): log raw count + a redacted sample of
-                // the first element so we can see why /me/buy-orders parses to empty for
-                // some users (expression vs market_hash_name, qty/price field names).
-                // Remove once the buy-order mapping is confirmed correct.
-                if ($page === 0) {
-                    $sample = (is_array($pageOrders[0] ?? null)) ? $pageOrders[0] : null;
-                    Logger::event(
-                        'info',
-                        'external',
-                        'external.csfloat.buy_orders.raw_shape',
-                        'Raw /me/buy-orders shape sample',
-                        [
-                            'attempt' => $attempt,
-                            'page' => $page + $buyOrdersPageBase,
-                            'rawCount' => count($pageOrders),
-                            'firstKeys' => $sample !== null ? array_keys($sample) : [],
-                            'firstSample' => $sample,
-                        ]
-                    );
-                }
+                $pageCount = count($pageOrders);
                 $pageStats[] = [
                     'page' => $page + $buyOrdersPageBase,
-                    'count' => count($pageOrders),
+                    'count' => $pageCount,
                 ];
                 $orders = array_merge($orders, $pageOrders);
 
-                if (count($pageOrders) < $buyOrderLimit) {
+                if ($pageCount < $buyOrderLimit) {
                     break;
                 }
             }
@@ -193,13 +174,14 @@ final class DesktopCsFloatController
                 }
 
                 $pageTrades = is_array($response['trades'] ?? null) ? $response['trades'] : [];
+                $pageCount = count($pageTrades);
                 $pageStats[] = [
                     'page' => $page,
-                    'count' => count($pageTrades),
+                    'count' => $pageCount,
                 ];
                 $orders = array_merge($orders, $pageTrades);
 
-                if (count($pageTrades) < $limit) {
+                if ($pageCount < $limit) {
                     break;
                 }
             }
@@ -321,22 +303,6 @@ final class DesktopCsFloatController
         } else {
             $rows = is_array($response['items'] ?? null) ? $response['items'] : [];
             $rawCount = count($rows);
-            // TEMP DIAGNOSTIC (watchlist shape): /me/watchlist's response structure
-            // is unconfirmed; log the raw count + a redacted first sample so the
-            // mapping (market_hash_name path, nesting) can be verified from a real
-            // payload before finalizing. Remove once confirmed correct.
-            $sample = is_array($rows[0] ?? null) ? $rows[0] : null;
-            Logger::event(
-                'info',
-                'external',
-                'external.csfloat.watchlist.raw_shape',
-                'Raw /me/watchlist shape sample',
-                [
-                    'rawCount' => $rawCount,
-                    'firstKeys' => $sample !== null ? array_keys($sample) : [],
-                    'firstSample' => $sample,
-                ]
-            );
             $items = $rows;
         }
 
@@ -366,6 +332,7 @@ final class DesktopCsFloatController
                 'source' => 'watchlist',
                 'requested' => ['limit' => $limit],
                 'rawCount' => $rawCount,
+                'mappedCount' => count($normalized),
                 'errors' => $errors,
             ]
         );
@@ -382,7 +349,10 @@ final class DesktopCsFloatController
             ?? $this->readString($entry, ['market_hash_name'])
             ?? $this->readString($entry, ['marketHashName'])
             ?? $this->readString($entry, ['name'])
-            ?? $this->findFirstStringByKey($entry, ['market_hash_name', 'marketHashName', 'item_name', 'name']);
+            // Depth-first walk restricted to unambiguous keys only — 'name' is
+            // excluded here because it is already covered by readString above and
+            // a recursive search would match seller/user name fields in sub-objects.
+            ?? $this->findFirstStringByKey($entry, ['market_hash_name', 'marketHashName', 'item_name']);
         if ($marketHashName === null || $marketHashName === '') {
             return null;
         }

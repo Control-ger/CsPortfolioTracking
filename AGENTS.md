@@ -137,3 +137,4 @@ No new `.md` files without entry in the Active Docs table (see `docs/architectur
 
 ## Known Issues
 - Bootstrap/DI in `backend/public/index.php` should target final migrated repository dependencies.
+- `DesktopCsFloatController::watchlist` response metadata includes `mappedCount` (normalized items after parser) alongside `rawCount` (raw API rows); a caller can detect a silent parse failure when `rawCount > 0 && mappedCount === 0 && errors.length === 0`.

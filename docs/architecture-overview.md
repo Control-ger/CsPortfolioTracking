@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-21
+Last updated: 2026-06-22
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
