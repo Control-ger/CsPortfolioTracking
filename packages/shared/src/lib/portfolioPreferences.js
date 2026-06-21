@@ -9,6 +9,11 @@ export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   metricsDisplayMode: "toggle_mode",
   metricsScopeDefault: "investments",
   csfloatWatchlistAutoImport: false,
+  notifyBanWaveDesktop: true,
+  notifyCsUpdatesDesktop: true,
+  notifySteamSyncDesktop: true,
+  notifyBanWaveWebPush: false,
+  notifyCsUpdatesWebPush: false,
 });
 
 // Preferences round-trip through the desktop meta store as strings, so a stored
@@ -82,6 +87,11 @@ export function normalizePortfolioPreferences(input = {}) {
       input.csfloatWatchlistAutoImport,
       DEFAULT_PORTFOLIO_PREFERENCES.csfloatWatchlistAutoImport,
     ),
+    notifyBanWaveDesktop: normalizeBoolean(input.notifyBanWaveDesktop, true),
+    notifyCsUpdatesDesktop: normalizeBoolean(input.notifyCsUpdatesDesktop, true),
+    notifySteamSyncDesktop: normalizeBoolean(input.notifySteamSyncDesktop, true),
+    notifyBanWaveWebPush: normalizeBoolean(input.notifyBanWaveWebPush, false),
+    notifyCsUpdatesWebPush: normalizeBoolean(input.notifyCsUpdatesWebPush, false),
   };
 }
 

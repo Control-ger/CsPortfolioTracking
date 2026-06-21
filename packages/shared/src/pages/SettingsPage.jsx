@@ -106,6 +106,13 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [appVersion, setAppVersion] = useState("");
   const [csfloatWatchlistAutoImport, setCsfloatWatchlistAutoImport] = useState(false);
   const [csfloatWatchlistSaving, setCsfloatWatchlistSaving] = useState(false);
+  const [notifyBanWaveDesktop, setNotifyBanWaveDesktop] = useState(true);
+  const [notifyCsUpdatesDesktop, setNotifyCsUpdatesDesktop] = useState(true);
+  const [notifySteamSyncDesktop, setNotifySteamSyncDesktop] = useState(true);
+  const [notifyBanWaveWebPush, setNotifyBanWaveWebPush] = useState(false);
+  const [notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush] = useState(false);
+  const [notifySaving, setNotifySaving] = useState(false);
+  const [notifyError, setNotifyError] = useState("");
   const [csfloatWatchlistImporting, setCsfloatWatchlistImporting] = useState(false);
   const [csfloatWatchlistMessage, setCsfloatWatchlistMessage] = useState("");
   const [csfloatWatchlistError, setCsfloatWatchlistError] = useState("");
@@ -243,6 +250,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       try {
         const prefs = await getPortfolioPreferences();
         setCsfloatWatchlistAutoImport(Boolean(prefs?.csfloatWatchlistAutoImport));
+        setNotifyBanWaveDesktop(prefs?.notifyBanWaveDesktop ?? true);
+        setNotifyCsUpdatesDesktop(prefs?.notifyCsUpdatesDesktop ?? true);
+        setNotifySteamSyncDesktop(prefs?.notifySteamSyncDesktop ?? true);
+        setNotifyBanWaveWebPush(Boolean(prefs?.notifyBanWaveWebPush));
+        setNotifyCsUpdatesWebPush(Boolean(prefs?.notifyCsUpdatesWebPush));
       } catch {
         setCsfloatWatchlistAutoImport(false);
       }
@@ -265,6 +277,21 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setCsfloatWatchlistError(error?.message || "Einstellung konnte nicht gespeichert werden.");
     } finally {
       setCsfloatWatchlistSaving(false);
+    }
+  };
+
+  const handleToggleNotifyPref = async (key, currentValue, setter) => {
+    const next = !currentValue;
+    setter(next);
+    setNotifySaving(true);
+    setNotifyError("");
+    try {
+      await updatePortfolioPreferences({ [key]: next });
+    } catch (error) {
+      setter(currentValue);
+      setNotifyError(error?.message || "Einstellung konnte nicht gespeichert werden.");
+    } finally {
+      setNotifySaving(false);
     }
   };
 
@@ -691,6 +718,65 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           onEnable={handleEnableWebPush}
           onDisable={handleDisableWebPush}
         />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Benachrichtigungen</CardTitle>
+            <CardDescription>
+              Steuere, wofür du System-Benachrichtigungen und Web-Push-Nachrichten erhältst.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {desktopRuntime ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">System-Benachrichtigungen</p>
+                {[
+                  { label: "VAC Ban-Welle erkannt", hint: "Systembenachrichtigung bei erhöhter Ban-Aktivität in CS2.", value: notifyBanWaveDesktop, setter: setNotifyBanWaveDesktop, key: "notifyBanWaveDesktop" },
+                  { label: "CS2 Updates", hint: "Systembenachrichtigung bei neuen CS2 Game-Updates im Feed.", value: notifyCsUpdatesDesktop, setter: setNotifyCsUpdatesDesktop, key: "notifyCsUpdatesDesktop" },
+                  { label: "Steam Sync (neue Items)", hint: "Systembenachrichtigung wenn Steam Sync neue Items findet.", value: notifySteamSyncDesktop, setter: setNotifySteamSyncDesktop, key: "notifySteamSyncDesktop" },
+                ].map(({ label, hint, value, setter, key }) => (
+                  <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                    <div>
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-xs text-muted-foreground">{hint}</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      disabled={notifySaving}
+                      onClick={() => void handleToggleNotifyPref(key, value, setter)}
+                    >
+                      {value ? "Deaktivieren" : "Aktivieren"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
+              {[
+                { label: "VAC Ban-Welle erkannt", hint: "Web-Push-Nachricht bei erkannter Ban-Welle.", value: notifyBanWaveWebPush, setter: setNotifyBanWaveWebPush, key: "notifyBanWaveWebPush" },
+                { label: "CS2 Updates", hint: "Web-Push-Nachricht bei neuen CS2-Updates.", value: notifyCsUpdatesWebPush, setter: setNotifyCsUpdatesWebPush, key: "notifyCsUpdatesWebPush" },
+              ].map(({ label, hint, value, setter, key }) => (
+                <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                  <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">{hint}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    disabled={notifySaving}
+                    onClick={() => void handleToggleNotifyPref(key, value, setter)}
+                  >
+                    {value ? "Deaktivieren" : "Aktivieren"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {notifyError ? (
+              <p className="text-xs text-amber-400">{notifyError}</p>
+            ) : null}
+          </CardContent>
+        </Card>
 
         {desktopRuntime ? (
           <Card>

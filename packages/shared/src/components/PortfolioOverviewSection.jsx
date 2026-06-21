@@ -40,6 +40,9 @@ export function PortfolioOverviewSection({
   latestCsUpdateAiModelLabel,
   hasUnreadCsUpdate,
   handleOpenLatestCsUpdateFeed,
+  showBanWaveBanner,
+  freshBanWaveItem,
+  handleOpenBanWaveFeed,
   scopedPortfolioHistory,
   portfolioChartCardRef,
   onChartHoverChange,
@@ -72,6 +75,36 @@ export function PortfolioOverviewSection({
           oldestDataAgeSeconds={stats.oldestDataAgeSeconds}
         />
       </div>
+
+      {showBanWaveBanner && freshBanWaveItem ? (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleOpenBanWaveFeed}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleOpenBanWaveFeed();
+            }
+          }}
+          className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 sm:px-5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-400/80">
+                VAC Ban-Welle
+              </p>
+              <Badge variant="outline" className="border-amber-400/30 bg-amber-500/10 text-amber-200 text-[10px]">
+                aktuell
+              </Badge>
+            </div>
+            <p className="text-sm font-semibold text-foreground">{freshBanWaveItem.title}</p>
+            <p className="text-xs text-muted-foreground">
+              Erhöhte Ban-Aktivität erkannt — Marktbewegungen bei Skins und Cases möglich.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {showCsUpdateBanner && latestCsUpdate ? (
         <div

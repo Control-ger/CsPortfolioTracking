@@ -164,6 +164,7 @@ const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
 const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
+const BAN_WAVE_NOTIFIED_KEY = "ban-wave:last-notified-id:v1";
 const DEFAULT_CS_UPDATES_BANNER_VISIBLE_HOURS = 24 * 7;
 const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "push_notifications", "matching", "management"];
 const DESKTOP_SIDEBAR_TABS = [
@@ -503,6 +504,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     skinBaronImportBucket: "investment",
     metricsDisplayMode: "toggle_mode",
     metricsScopeDefault: "investments",
+    notifyBanWaveDesktop: true,
+    notifyCsUpdatesDesktop: true,
+    notifySteamSyncDesktop: true,
+    notifyBanWaveWebPush: false,
+    notifyCsUpdatesWebPush: false,
   });
   const [selectedMetricsScope, setSelectedMetricsScope] = useState("investments");
   const [inventoryScope, setInventoryScope] = useState("investment");
@@ -522,6 +528,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     removeInvestmentFromView,
   } = usePortfolio({ scope: metricsScope, rowScope: "all" });
   const {
+    items: csUpdatesItems,
+    freshItemIds: csUpdatesFreshItemIds,
     latestItem: latestCsUpdate,
     latestItemAgeHours: latestCsUpdateAgeHours,
     meta: csUpdatesMeta,
@@ -1196,7 +1204,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
 
       await writeLocalState(STEAM_SYNC_META_KEY, { lastRunAt: syncedAt });
-      if (imported > 0 && window.electronAPI?.localStore?.createNotification) {
+      if (imported > 0 && portfolioPreferences.notifySteamSyncDesktop && window.electronAPI?.localStore?.createNotification) {
         await window.electronAPI.localStore.createNotification({
           userId,
           category: "steam_sync",
@@ -1268,7 +1276,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     } finally {
       setIsSteamSyncing(false);
     }
-  }, [authRequired, isElectronRuntime, isSteamSyncing, portfolioPreferences.steamImportBucket, refreshPortfolio]);
+  }, [authRequired, isElectronRuntime, isSteamSyncing, portfolioPreferences.steamImportBucket, portfolioPreferences.notifySteamSyncDesktop, refreshPortfolio]);
 
   useEffect(() => () => {
     if (manualSteamSyncInfoTimeoutRef.current) {
@@ -2521,6 +2529,64 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     navigate(`/cs-updates?item=${encodeURIComponent(latestId)}`);
   }, [latestCsUpdate?.id, markLatestCsUpdateSeen, navigate]);
+
+  const freshBanWaveItem = useMemo(() => {
+    if (!csUpdatesItems || csUpdatesFreshItemIds.length === 0) return null;
+    return (
+      csUpdatesItems.find(
+        (item) => item.source === "ban_wave_detected" && csUpdatesFreshItemIds.includes(item.id),
+      ) ?? null
+    );
+  }, [csUpdatesItems, csUpdatesFreshItemIds]);
+
+  // Don't show a separate banner if the main CS update banner already shows this item
+  const showBanWaveBanner =
+    Boolean(freshBanWaveItem) &&
+    !(showCsUpdateBanner && String(latestCsUpdate?.id) === String(freshBanWaveItem?.id));
+
+  const handleOpenBanWaveFeed = useCallback(() => {
+    if (!freshBanWaveItem?.id) {
+      navigate("/cs-updates");
+      return;
+    }
+    navigate(`/cs-updates?item=${encodeURIComponent(String(freshBanWaveItem.id))}`);
+  }, [freshBanWaveItem?.id, navigate]);
+
+  useEffect(() => {
+    if (!freshBanWaveItem || !isDesktopRuntime) return;
+    if (!portfolioPreferences.notifyBanWaveDesktop) return;
+
+    const lastNotifiedId = localStorage.getItem(BAN_WAVE_NOTIFIED_KEY) || "";
+    if (String(freshBanWaveItem.id) === lastNotifiedId) return;
+
+    const trigger = async () => {
+      try {
+        const user = await getCurrentUser();
+        const userId = resolveDesktopRuntimeUserId(user, 1);
+        if (window.electronAPI?.localStore?.createNotification) {
+          await window.electronAPI.localStore.createNotification({
+            userId,
+            category: "cs_updates",
+            title: "VAC Ban-Welle erkannt",
+            message: freshBanWaveItem.title || "Erhöhte Ban-Aktivität in CS2",
+            payload: { source: "ban_wave", itemId: freshBanWaveItem.id },
+            createdAt: freshBanWaveItem.publishedAt || new Date().toISOString(),
+          });
+        }
+      } catch {
+        // non-critical
+      }
+      if (typeof window.Notification !== "undefined" && Notification.permission === "granted") {
+        new window.Notification("VAC Ban-Welle erkannt", {
+          body: freshBanWaveItem.title || "Erhöhte Ban-Aktivität in CS2 — Marktbewegung möglich",
+        });
+      }
+      localStorage.setItem(BAN_WAVE_NOTIFIED_KEY, String(freshBanWaveItem.id));
+    };
+
+    void trigger();
+  }, [freshBanWaveItem, isDesktopRuntime, portfolioPreferences.notifyBanWaveDesktop]);
+
   const portfolioValueLabel = formatPrice(portfolioTotalValueForDisplay, {
     useUsd: true,
     buyPriceUsd: portfolioTotalValueForDisplay,
@@ -4630,6 +4696,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             latestCsUpdateAiModelLabel={latestCsUpdateAiModelLabel}
             hasUnreadCsUpdate={hasUnreadCsUpdate}
             handleOpenLatestCsUpdateFeed={handleOpenLatestCsUpdateFeed}
+            showBanWaveBanner={showBanWaveBanner}
+            freshBanWaveItem={freshBanWaveItem}
+            handleOpenBanWaveFeed={handleOpenBanWaveFeed}
             scopedPortfolioHistory={scopedPortfolioHistory}
             portfolioChartCardRef={portfolioChartCardRef}
             onChartHoverChange={setHoveredChartData}
