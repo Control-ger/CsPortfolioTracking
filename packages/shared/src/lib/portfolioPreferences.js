@@ -10,10 +10,14 @@ export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   metricsScopeDefault: "investments",
   csfloatWatchlistAutoImport: false,
   notifyBanWaveDesktop: true,
+  notifyBanWaveDesktopMinLevel: "low",
   notifyCsUpdatesDesktop: true,
+  notifyCsUpdatesDesktopMinLevel: "medium",
   notifySteamSyncDesktop: true,
   notifyBanWaveWebPush: false,
+  notifyBanWaveWebPushMinLevel: "medium",
   notifyCsUpdatesWebPush: false,
+  notifyCsUpdatesWebPushMinLevel: "high",
 });
 
 // Preferences round-trip through the desktop meta store as strings, so a stored
@@ -39,6 +43,13 @@ function normalizeBucket(value, fallback = "investment") {
     return "investment";
   }
   return fallback === "inventory" ? "inventory" : "investment";
+}
+
+export const IMPACT_LEVELS = ["none", "low", "medium", "high"];
+
+function normalizeImpactLevel(value, fallback = "medium") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return IMPACT_LEVELS.includes(normalized) ? normalized : fallback;
 }
 
 function normalizeMetricsDisplayMode(value) {
@@ -88,10 +99,14 @@ export function normalizePortfolioPreferences(input = {}) {
       DEFAULT_PORTFOLIO_PREFERENCES.csfloatWatchlistAutoImport,
     ),
     notifyBanWaveDesktop: normalizeBoolean(input.notifyBanWaveDesktop, true),
+    notifyBanWaveDesktopMinLevel: normalizeImpactLevel(input.notifyBanWaveDesktopMinLevel, "low"),
     notifyCsUpdatesDesktop: normalizeBoolean(input.notifyCsUpdatesDesktop, true),
+    notifyCsUpdatesDesktopMinLevel: normalizeImpactLevel(input.notifyCsUpdatesDesktopMinLevel, "medium"),
     notifySteamSyncDesktop: normalizeBoolean(input.notifySteamSyncDesktop, true),
     notifyBanWaveWebPush: normalizeBoolean(input.notifyBanWaveWebPush, false),
+    notifyBanWaveWebPushMinLevel: normalizeImpactLevel(input.notifyBanWaveWebPushMinLevel, "medium"),
     notifyCsUpdatesWebPush: normalizeBoolean(input.notifyCsUpdatesWebPush, false),
+    notifyCsUpdatesWebPushMinLevel: normalizeImpactLevel(input.notifyCsUpdatesWebPushMinLevel, "high"),
   };
 }
 

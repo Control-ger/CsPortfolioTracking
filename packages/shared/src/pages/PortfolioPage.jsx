@@ -505,10 +505,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     metricsDisplayMode: "toggle_mode",
     metricsScopeDefault: "investments",
     notifyBanWaveDesktop: true,
+    notifyBanWaveDesktopMinLevel: "low",
     notifyCsUpdatesDesktop: true,
+    notifyCsUpdatesDesktopMinLevel: "medium",
     notifySteamSyncDesktop: true,
     notifyBanWaveWebPush: false,
+    notifyBanWaveWebPushMinLevel: "medium",
     notifyCsUpdatesWebPush: false,
+    notifyCsUpdatesWebPushMinLevel: "high",
   });
   const [selectedMetricsScope, setSelectedMetricsScope] = useState("investments");
   const [inventoryScope, setInventoryScope] = useState("investment");
@@ -2559,6 +2563,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     const lastNotifiedId = localStorage.getItem(BAN_WAVE_NOTIFIED_KEY) || "";
     if (String(freshBanWaveItem.id) === lastNotifiedId) return;
 
+    // Check impact level against minimum threshold
+    const impactOrder = { none: 0, low: 1, medium: 2, high: 3 };
+    const itemLevel = impactOrder[String(freshBanWaveItem.aiImpactLevel || "").toLowerCase()] ?? 1;
+    const minLevel = impactOrder[portfolioPreferences.notifyBanWaveDesktopMinLevel] ?? 0;
+    if (itemLevel < minLevel) {
+      localStorage.setItem(BAN_WAVE_NOTIFIED_KEY, String(freshBanWaveItem.id));
+      return;
+    }
+
     const trigger = async () => {
       try {
         const user = await getCurrentUser();
@@ -2585,7 +2598,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
 
     void trigger();
-  }, [freshBanWaveItem, isDesktopRuntime, portfolioPreferences.notifyBanWaveDesktop]);
+  }, [freshBanWaveItem, isDesktopRuntime, portfolioPreferences.notifyBanWaveDesktop, portfolioPreferences.notifyBanWaveDesktopMinLevel]);
 
   const portfolioValueLabel = formatPrice(portfolioTotalValueForDisplay, {
     useUsd: true,

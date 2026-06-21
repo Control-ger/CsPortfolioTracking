@@ -26,7 +26,7 @@ import {
 } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
 import { getCurrentUser } from "@shared/lib/auth";
-import { getPortfolioPreferences, updatePortfolioPreferences } from "@shared/lib/portfolioPreferences";
+import { getPortfolioPreferences, updatePortfolioPreferences, IMPACT_LEVELS } from "@shared/lib/portfolioPreferences";
 import { importCsFloatWatchlistData } from "@shared/lib/dataSource";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
@@ -107,10 +107,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [csfloatWatchlistAutoImport, setCsfloatWatchlistAutoImport] = useState(false);
   const [csfloatWatchlistSaving, setCsfloatWatchlistSaving] = useState(false);
   const [notifyBanWaveDesktop, setNotifyBanWaveDesktop] = useState(true);
+  const [notifyBanWaveDesktopMinLevel, setNotifyBanWaveDesktopMinLevel] = useState("low");
   const [notifyCsUpdatesDesktop, setNotifyCsUpdatesDesktop] = useState(true);
+  const [notifyCsUpdatesDesktopMinLevel, setNotifyCsUpdatesDesktopMinLevel] = useState("medium");
   const [notifySteamSyncDesktop, setNotifySteamSyncDesktop] = useState(true);
   const [notifyBanWaveWebPush, setNotifyBanWaveWebPush] = useState(false);
+  const [notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel] = useState("medium");
   const [notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush] = useState(false);
+  const [notifyCsUpdatesWebPushMinLevel, setNotifyCsUpdatesWebPushMinLevel] = useState("high");
   const [notifySaving, setNotifySaving] = useState(false);
   const [notifyError, setNotifyError] = useState("");
   const [csfloatWatchlistImporting, setCsfloatWatchlistImporting] = useState(false);
@@ -251,10 +255,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         const prefs = await getPortfolioPreferences();
         setCsfloatWatchlistAutoImport(Boolean(prefs?.csfloatWatchlistAutoImport));
         setNotifyBanWaveDesktop(prefs?.notifyBanWaveDesktop ?? true);
+        setNotifyBanWaveDesktopMinLevel(prefs?.notifyBanWaveDesktopMinLevel ?? "low");
         setNotifyCsUpdatesDesktop(prefs?.notifyCsUpdatesDesktop ?? true);
+        setNotifyCsUpdatesDesktopMinLevel(prefs?.notifyCsUpdatesDesktopMinLevel ?? "medium");
         setNotifySteamSyncDesktop(prefs?.notifySteamSyncDesktop ?? true);
         setNotifyBanWaveWebPush(Boolean(prefs?.notifyBanWaveWebPush));
+        setNotifyBanWaveWebPushMinLevel(prefs?.notifyBanWaveWebPushMinLevel ?? "medium");
         setNotifyCsUpdatesWebPush(Boolean(prefs?.notifyCsUpdatesWebPush));
+        setNotifyCsUpdatesWebPushMinLevel(prefs?.notifyCsUpdatesWebPushMinLevel ?? "high");
       } catch {
         setCsfloatWatchlistAutoImport(false);
       }
@@ -280,8 +288,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     }
   };
 
-  const handleToggleNotifyPref = async (key, currentValue, setter) => {
-    const next = !currentValue;
+  const handleToggleNotifyPref = async (key, currentValue, setter, explicitValue) => {
+    const next = explicitValue !== undefined ? explicitValue : !currentValue;
+    if (next === currentValue) return;
     setter(next);
     setNotifySaving(true);
     setNotifyError("");
@@ -730,48 +739,152 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             {desktopRuntime ? (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">System-Benachrichtigungen</p>
-                {[
-                  { label: "VAC Ban-Welle erkannt", hint: "Systembenachrichtigung bei erhöhter Ban-Aktivität in CS2.", value: notifyBanWaveDesktop, setter: setNotifyBanWaveDesktop, key: "notifyBanWaveDesktop" },
-                  { label: "CS2 Updates", hint: "Systembenachrichtigung bei neuen CS2 Game-Updates im Feed.", value: notifyCsUpdatesDesktop, setter: setNotifyCsUpdatesDesktop, key: "notifyCsUpdatesDesktop" },
-                  { label: "Steam Sync (neue Items)", hint: "Systembenachrichtigung wenn Steam Sync neue Items findet.", value: notifySteamSyncDesktop, setter: setNotifySteamSyncDesktop, key: "notifySteamSyncDesktop" },
-                ].map(({ label, hint, value, setter, key }) => (
-                  <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
+
+                {/* VAC Ban-Welle — desktop */}
+                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="text-xs text-muted-foreground">{hint}</p>
+                      <p className="text-sm font-medium">VAC Ban-Welle erkannt</p>
+                      <p className="text-xs text-muted-foreground">Systembenachrichtigung bei erhöhter Ban-Aktivität in CS2.</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      disabled={notifySaving}
-                      onClick={() => void handleToggleNotifyPref(key, value, setter)}
-                    >
-                      {value ? "Deaktivieren" : "Aktivieren"}
+                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyBanWaveDesktop", notifyBanWaveDesktop, setNotifyBanWaveDesktop)}>
+                      {notifyBanWaveDesktop ? "Deaktivieren" : "Aktivieren"}
                     </Button>
                   </div>
-                ))}
-              </div>
-            ) : null}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
-              {[
-                { label: "VAC Ban-Welle erkannt", hint: "Web-Push-Nachricht bei erkannter Ban-Welle.", value: notifyBanWaveWebPush, setter: setNotifyBanWaveWebPush, key: "notifyBanWaveWebPush" },
-                { label: "CS2 Updates", hint: "Web-Push-Nachricht bei neuen CS2-Updates.", value: notifyCsUpdatesWebPush, setter: setNotifyCsUpdatesWebPush, key: "notifyCsUpdatesWebPush" },
-              ].map(({ label, hint, value, setter, key }) => (
-                <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                  <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-muted-foreground">{hint}</p>
+                  {notifyBanWaveDesktop ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
+                      {IMPACT_LEVELS.map((level) => {
+                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                        const active = notifyBanWaveDesktopMinLevel === level;
+                        return (
+                          <button
+                            key={level}
+                            disabled={notifySaving}
+                            onClick={() => void handleToggleNotifyPref("notifyBanWaveDesktopMinLevel", notifyBanWaveDesktopMinLevel, setNotifyBanWaveDesktopMinLevel, level)}
+                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
+                          >
+                            {labels[level]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* CS2 Updates — desktop */}
+                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">CS2 Updates</p>
+                      <p className="text-xs text-muted-foreground">Systembenachrichtigung bei neuen CS2 Game-Updates im Feed.</p>
+                    </div>
+                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyCsUpdatesDesktop", notifyCsUpdatesDesktop, setNotifyCsUpdatesDesktop)}>
+                      {notifyCsUpdatesDesktop ? "Deaktivieren" : "Aktivieren"}
+                    </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    disabled={notifySaving}
-                    onClick={() => void handleToggleNotifyPref(key, value, setter)}
-                  >
-                    {value ? "Deaktivieren" : "Aktivieren"}
+                  {notifyCsUpdatesDesktop ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
+                      {IMPACT_LEVELS.map((level) => {
+                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                        const active = notifyCsUpdatesDesktopMinLevel === level;
+                        return (
+                          <button
+                            key={level}
+                            disabled={notifySaving}
+                            onClick={() => void handleToggleNotifyPref("notifyCsUpdatesDesktopMinLevel", notifyCsUpdatesDesktopMinLevel, setNotifyCsUpdatesDesktopMinLevel, level)}
+                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
+                          >
+                            {labels[level]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Steam Sync — no level selector */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                  <div>
+                    <p className="text-sm font-medium">Steam Sync (neue Items)</p>
+                    <p className="text-xs text-muted-foreground">Systembenachrichtigung wenn Steam Sync neue Items findet.</p>
+                  </div>
+                  <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifySteamSyncDesktop", notifySteamSyncDesktop, setNotifySteamSyncDesktop)}>
+                    {notifySteamSyncDesktop ? "Deaktivieren" : "Aktivieren"}
                   </Button>
                 </div>
-              ))}
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
+
+              {/* VAC Ban-Welle — web push */}
+              <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">VAC Ban-Welle erkannt</p>
+                    <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei erkannter Ban-Welle.</p>
+                  </div>
+                  <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPush", notifyBanWaveWebPush, setNotifyBanWaveWebPush)}>
+                    {notifyBanWaveWebPush ? "Deaktivieren" : "Aktivieren"}
+                  </Button>
+                </div>
+                {notifyBanWaveWebPush ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
+                    {IMPACT_LEVELS.map((level) => {
+                      const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                      const active = notifyBanWaveWebPushMinLevel === level;
+                      return (
+                        <button
+                          key={level}
+                          disabled={notifySaving}
+                          onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPushMinLevel", notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel, level)}
+                          className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
+                        >
+                          {labels[level]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* CS2 Updates — web push */}
+              <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">CS2 Updates</p>
+                    <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei neuen CS2-Updates.</p>
+                  </div>
+                  <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPush", notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush)}>
+                    {notifyCsUpdatesWebPush ? "Deaktivieren" : "Aktivieren"}
+                  </Button>
+                </div>
+                {notifyCsUpdatesWebPush ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
+                    {IMPACT_LEVELS.map((level) => {
+                      const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                      const active = notifyCsUpdatesWebPushMinLevel === level;
+                      return (
+                        <button
+                          key={level}
+                          disabled={notifySaving}
+                          onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPushMinLevel", notifyCsUpdatesWebPushMinLevel, setNotifyCsUpdatesWebPushMinLevel, level)}
+                          className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
+                        >
+                          {labels[level]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </div>
+
             {notifyError ? (
               <p className="text-xs text-amber-400">{notifyError}</p>
             ) : null}
