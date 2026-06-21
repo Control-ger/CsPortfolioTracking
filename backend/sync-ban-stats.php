@@ -33,11 +33,13 @@ try {
     $banStatsRepository = new BanStatsRepository($pdo);
     $banStatsRepository->ensureTable();
 
-    // Clamp to [0.1, 10.0] — lower bound allows override testing with BAN_WAVE_THRESHOLD=0.1
-    $threshold = (float) (getenv('BAN_WAVE_THRESHOLD') ?: 2.5);
+    // Use !== false to distinguish unset (use default) from '0' (valid override)
+    $envThreshold = getenv('BAN_WAVE_THRESHOLD');
+    $threshold = $envThreshold !== false ? (float) $envThreshold : 2.5;
     $threshold = max(0.1, min(10.0, $threshold));
 
-    $minCount = (int) (getenv('BAN_WAVE_MIN_COUNT') ?: 200);
+    $envMinCount = getenv('BAN_WAVE_MIN_COUNT');
+    $minCount = $envMinCount !== false ? (int) $envMinCount : 200;
     $minCount = max(0, $minCount);
 
     $service = new BanStatsIngestService(
