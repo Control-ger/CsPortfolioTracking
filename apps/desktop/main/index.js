@@ -744,7 +744,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 700,
     show: false,
-    frame: true,
+    frame: false,
     icon: resolveRuntimePath("icon.ico"),
     title: APP_NAME,
     webPreferences: {
