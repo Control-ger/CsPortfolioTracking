@@ -442,6 +442,75 @@ export async function importCsFloatWatchlistData(options = {}) {
   return { skipped: false, reason: "ok", fetched: items.length, added: newItems.length };
 }
 
+let lastCsFloatBuyOrderWatchlistImportAtMs = 0;
+const CSFLOAT_BUY_ORDER_WATCHLIST_IMPORT_MIN_INTERVAL_MS = 60_000;
+
+export async function importCsFloatBuyOrdersAsWatchlistData(options = {}) {
+  const force = options.force === true;
+  const localStore = getDesktopLocalStore();
+  if (!localStore) {
+    return { skipped: true, reason: "not-desktop", fetched: 0, added: 0 };
+  }
+
+  const authenticated = await isAuthenticated();
+  if (!authenticated) {
+    return { skipped: true, reason: "auth-required", fetched: 0, added: 0 };
+  }
+
+  const now = Date.now();
+  if (!force && now - lastCsFloatBuyOrderWatchlistImportAtMs < CSFLOAT_BUY_ORDER_WATCHLIST_IMPORT_MIN_INTERVAL_MS) {
+    return { skipped: true, reason: "cooldown", fetched: 0, added: 0 };
+  }
+  lastCsFloatBuyOrderWatchlistImportAtMs = Date.now();
+
+  const response = await fetchApiCsFloatBuyOrders();
+  const summary = Array.isArray(response?.data?.summaryByMarketHashName)
+    ? response.data.summaryByMarketHashName
+    : [];
+  const upstreamErrors = Array.isArray(response?.meta?.errors) ? response.meta.errors : [];
+
+  if (summary.length === 0 && upstreamErrors.length > 0) {
+    return {
+      skipped: true,
+      reason: "upstream-error",
+      fetched: 0,
+      added: 0,
+      error: upstreamErrors[0],
+    };
+  }
+
+  const currentUser = await getCurrentUser();
+  const userId = resolveDesktopUserId(currentUser, 1);
+  const existing = unwrapLocalStoreResult(
+    await localStore.listWatchlist(userId),
+    "local-store-list-watchlist",
+  );
+  const existingNames = new Set(
+    (Array.isArray(existing) ? existing : [])
+      .map((row) => String(row?.name || row?.marketHashName || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  const newItems = [];
+  const seen = new Set();
+  for (const row of summary) {
+    const name = String(row?.marketHashName || "").trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key) || existingNames.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    newItems.push({ marketHashName: name, type: "skin" });
+  }
+
+  if (newItems.length === 0) {
+    return { skipped: false, reason: "no-new-items", fetched: summary.length, added: 0 };
+  }
+
+  await createWatchlistItemsBatchData(newItems);
+  return { skipped: false, reason: "ok", fetched: summary.length, added: newItems.length };
+}
+
 /**
  * Check if authentication is required to view data (async for Desktop IPC)
  */

@@ -27,7 +27,7 @@ import {
 import { isEncryptionConfigured } from "@shared/lib/encryption";
 import { getCurrentUser } from "@shared/lib/auth";
 import { getPortfolioPreferences, updatePortfolioPreferences, IMPACT_LEVELS } from "@shared/lib/portfolioPreferences";
-import { importCsFloatWatchlistData } from "@shared/lib/dataSource";
+import { importCsFloatWatchlistData, importCsFloatBuyOrdersAsWatchlistData } from "@shared/lib/dataSource";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
   DEFAULT_FORM,
@@ -120,6 +120,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [csfloatWatchlistImporting, setCsfloatWatchlistImporting] = useState(false);
   const [csfloatWatchlistMessage, setCsfloatWatchlistMessage] = useState("");
   const [csfloatWatchlistError, setCsfloatWatchlistError] = useState("");
+  const [csfloatBuyOrderAutoImport, setCsfloatBuyOrderAutoImport] = useState(false);
+  const [csfloatBuyOrderSaving, setCsfloatBuyOrderSaving] = useState(false);
+  const [csfloatBuyOrderImporting, setCsfloatBuyOrderImporting] = useState(false);
+  const [csfloatBuyOrderMessage, setCsfloatBuyOrderMessage] = useState("");
+  const [csfloatBuyOrderError, setCsfloatBuyOrderError] = useState("");
   const desktopRuntime = isDesktopRuntime();
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const webPushSupported =
@@ -254,6 +259,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       try {
         const prefs = await getPortfolioPreferences();
         setCsfloatWatchlistAutoImport(Boolean(prefs?.csfloatWatchlistAutoImport));
+        setCsfloatBuyOrderAutoImport(Boolean(prefs?.csfloatBuyOrderAutoImport));
         setNotifyBanWaveDesktop(prefs?.notifyBanWaveDesktop ?? true);
         setNotifyBanWaveDesktopMinLevel(prefs?.notifyBanWaveDesktopMinLevel ?? "low");
         setNotifyCsUpdatesDesktop(prefs?.notifyCsUpdatesDesktop ?? true);
@@ -265,6 +271,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         setNotifyCsUpdatesWebPushMinLevel(prefs?.notifyCsUpdatesWebPushMinLevel ?? "high");
       } catch {
         setCsfloatWatchlistAutoImport(false);
+        setCsfloatBuyOrderAutoImport(false);
       }
     };
 
@@ -335,6 +342,57 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setCsfloatWatchlistError(error?.message || "CSFloat-Watchlist-Import fehlgeschlagen.");
     } finally {
       setCsfloatWatchlistImporting(false);
+    }
+  };
+
+  const handleToggleCsfloatBuyOrderAutoImport = async () => {
+    const next = !csfloatBuyOrderAutoImport;
+    setCsfloatBuyOrderAutoImport(next);
+    setCsfloatBuyOrderSaving(true);
+    setCsfloatBuyOrderError("");
+    setCsfloatBuyOrderMessage("");
+    try {
+      const saved = await updatePortfolioPreferences({ csfloatBuyOrderAutoImport: next });
+      setCsfloatBuyOrderAutoImport(Boolean(saved?.csfloatBuyOrderAutoImport));
+    } catch (error) {
+      setCsfloatBuyOrderAutoImport(!next);
+      setCsfloatBuyOrderError(error?.message || "Einstellung konnte nicht gespeichert werden.");
+    } finally {
+      setCsfloatBuyOrderSaving(false);
+    }
+  };
+
+  const handleImportCsfloatBuyOrdersNow = async () => {
+    setCsfloatBuyOrderImporting(true);
+    setCsfloatBuyOrderError("");
+    setCsfloatBuyOrderMessage("");
+    try {
+      const result = await importCsFloatBuyOrdersAsWatchlistData({ force: true });
+      if (result?.skipped) {
+        if (result.reason === "auth-required") {
+          setCsfloatBuyOrderError("Bitte zuerst bei CSFloat/Steam anmelden.");
+        } else if (result.reason === "upstream-error") {
+          const code = String(result?.error?.code || "CSFLOAT_ERROR");
+          const status = Number(result?.error?.statusCode || 0);
+          setCsfloatBuyOrderError(
+            `CSFloat Buy Orders konnten nicht geladen werden (${code}${status ? ` ${status}` : ""}).`,
+          );
+        } else {
+          setCsfloatBuyOrderError("Import wurde übersprungen.");
+        }
+      } else {
+        const added = Number(result?.added || 0);
+        const fetched = Number(result?.fetched || 0);
+        setCsfloatBuyOrderMessage(
+          added > 0
+            ? `${added} neue${added === 1 ? "s Item" : " Items"} aus den CSFloat Buy Orders hinzugefügt (${fetched} geprüft).`
+            : `Keine neuen Items – alle Buy Orders bereits in der Watchlist (${fetched} geprüft).`,
+        );
+      }
+    } catch (error) {
+      setCsfloatBuyOrderError(error?.message || "CSFloat Buy Order-Import fehlgeschlagen.");
+    } finally {
+      setCsfloatBuyOrderImporting(false);
     }
   };
 
@@ -941,6 +999,59 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               ) : null}
               {csfloatWatchlistError ? (
                 <p className="text-xs text-amber-400">{csfloatWatchlistError}</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {desktopRuntime ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>CSFloat Buy Order-Sync</CardTitle>
+              <CardDescription>
+                Übernimmt Items aus deinen CSFloat Buy Orders automatisch in die Watchlist.
+                Bestehende Einträge bleiben erhalten; es wird nur hinzugefügt, nie entfernt.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
+                <div>
+                  <p className="text-sm font-medium">Automatischer Import</p>
+                  <p className="text-xs text-muted-foreground">
+                    {csfloatBuyOrderAutoImport
+                      ? "Aktiv: bei jedem Watchlist-Load werden neue Buy Order-Items übernommen."
+                      : "Inaktiv: nur per manuellem Import unten."}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  disabled={csfloatBuyOrderSaving}
+                  onClick={handleToggleCsfloatBuyOrderAutoImport}
+                >
+                  {csfloatBuyOrderSaving
+                    ? "Speichert..."
+                    : csfloatBuyOrderAutoImport
+                      ? "Deaktivieren"
+                      : "Aktivieren"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Einmaligen Import jetzt ausführen.
+                </p>
+                <Button
+                  variant="outline"
+                  disabled={csfloatBuyOrderImporting}
+                  onClick={handleImportCsfloatBuyOrdersNow}
+                >
+                  {csfloatBuyOrderImporting ? "Importiert..." : "Jetzt importieren"}
+                </Button>
+              </div>
+              {csfloatBuyOrderMessage ? (
+                <p className="text-xs text-emerald-400">{csfloatBuyOrderMessage}</p>
+              ) : null}
+              {csfloatBuyOrderError ? (
+                <p className="text-xs text-amber-400">{csfloatBuyOrderError}</p>
               ) : null}
             </CardContent>
           </Card>

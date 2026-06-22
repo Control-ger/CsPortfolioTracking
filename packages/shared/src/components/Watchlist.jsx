@@ -9,6 +9,7 @@ import {
   deleteWatchlistItemData,
   fetchWatchlistData,
   importCsFloatWatchlistData,
+  importCsFloatBuyOrdersAsWatchlistData,
 } from "@shared/lib/dataSource.js";
 import {
   getWatchlistMutationVersion,
@@ -276,8 +277,15 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       if (isDesktopRuntime) {
         try {
           const prefs = await getPortfolioPreferences();
+          const autoImportPromises = [];
           if (prefs?.csfloatWatchlistAutoImport) {
-            await importCsFloatWatchlistData();
+            autoImportPromises.push(importCsFloatWatchlistData());
+          }
+          if (prefs?.csfloatBuyOrderAutoImport) {
+            autoImportPromises.push(importCsFloatBuyOrdersAsWatchlistData());
+          }
+          if (autoImportPromises.length > 0) {
+            await Promise.allSettled(autoImportPromises);
           }
         } catch (autoImportError) {
           console.warn("[watchlist] csfloat auto-import failed", autoImportError);

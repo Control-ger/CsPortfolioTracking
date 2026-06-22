@@ -9,6 +9,7 @@ export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   metricsDisplayMode: "toggle_mode",
   metricsScopeDefault: "investments",
   csfloatWatchlistAutoImport: false,
+  csfloatBuyOrderAutoImport: false,
   notifyBanWaveDesktop: true,
   notifyBanWaveDesktopMinLevel: "low",
   notifyCsUpdatesDesktop: true,
@@ -97,6 +98,10 @@ export function normalizePortfolioPreferences(input = {}) {
     csfloatWatchlistAutoImport: normalizeBoolean(
       input.csfloatWatchlistAutoImport,
       DEFAULT_PORTFOLIO_PREFERENCES.csfloatWatchlistAutoImport,
+    ),
+    csfloatBuyOrderAutoImport: normalizeBoolean(
+      input.csfloatBuyOrderAutoImport,
+      DEFAULT_PORTFOLIO_PREFERENCES.csfloatBuyOrderAutoImport,
     ),
     notifyBanWaveDesktop: normalizeBoolean(input.notifyBanWaveDesktop, true),
     notifyBanWaveDesktopMinLevel: normalizeImpactLevel(input.notifyBanWaveDesktopMinLevel, "low"),
