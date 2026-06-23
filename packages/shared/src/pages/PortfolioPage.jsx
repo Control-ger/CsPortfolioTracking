@@ -63,6 +63,9 @@ import {
   summarizeManagementClusterAssignment,
   createPortfolioGroupDraft,
   normalizePortfolioGroups,
+  mergePortfolioGroups,
+  portfolioGroupsSignature,
+  portfolioGroupsStorageKey,
 } from "@shared/lib/portfolioGroups.js";
 import {
   formatDateSafe,
@@ -898,27 +901,58 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
       setPortfolioGroupsLoading(true);
       try {
-        const stored = await readLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: [] });
-        const localGroups = normalizePortfolioGroups(stored);
+        const currentUser = await getCurrentUser();
+        const groupsUserId = resolveDesktopRuntimeUserId(currentUser, 1);
+        const storageKey = portfolioGroupsStorageKey(groupsUserId);
+
+        let stored = await readLocalState(storageKey, null);
+        if (!stored) {
+          // One-time migration off the legacy global (un-scoped) key so groups
+          // that only ever reached the local cache (never the server) are not
+          // lost when the key becomes user-scoped. Adopt then clear the legacy
+          // key so a later account switch on this machine cannot inherit it.
+          const legacy = await readLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, null);
+          if (legacy && Array.isArray(legacy.groups) && legacy.groups.length > 0) {
+            stored = legacy;
+            await writeLocalState(storageKey, legacy);
+            await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: [] });
+          }
+        }
+        const localGroups = normalizePortfolioGroups(stored || { groups: [] });
 
         let remoteGroups = [];
+        let remoteReachable = false;
         try {
           const remoteResponse = await fetchPortfolioGroupsSetting();
           remoteGroups = normalizePortfolioGroups(remoteResponse?.data?.groups || []);
+          remoteReachable = true;
         } catch (remoteLoadError) {
           console.warn("Failed to load remote portfolio groups", remoteLoadError);
         }
 
-        const nextGroups = remoteGroups.length > 0 ? remoteGroups : localGroups;
-        if (remoteGroups.length === 0 && localGroups.length > 0) {
+        // Merge instead of letting the server wholesale-overwrite the local cache.
+        // A group that only ever reached the local cache (e.g. saved while upstream
+        // was unreachable and the sidecar returned a desktop-local-fallback success)
+        // must not be dropped just because the server holds a different/older subset.
+        const nextGroups = mergePortfolioGroups(localGroups, remoteGroups);
+
+        // If the merge carries anything the server does not already have (local-only
+        // or locally-newer groups), push the merged set up so the server catches up.
+        // Only attempt when the server was actually reachable — otherwise the cache
+        // keeps the merged set and a later (online) load self-heals, instead of
+        // firing a doomed PUT on every load while offline.
+        if (
+          remoteReachable &&
+          portfolioGroupsSignature(nextGroups) !== portfolioGroupsSignature(remoteGroups)
+        ) {
           try {
-            await updatePortfolioGroupsSetting(localGroups);
+            await updatePortfolioGroupsSetting(nextGroups);
           } catch (migrationError) {
-            console.warn("Failed to migrate local portfolio groups to server", migrationError);
+            console.warn("Failed to push merged portfolio groups to server", migrationError);
           }
         }
 
-        await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: nextGroups });
+        await writeLocalState(storageKey, { groups: nextGroups });
         if (cancelled) {
           return;
         }
@@ -1517,12 +1551,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const persistPortfolioGroups = useCallback(async (nextGroups) => {
     const normalizedGroups = normalizePortfolioGroups(nextGroups);
     setPortfolioGroups(normalizedGroups);
-    await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: normalizedGroups });
+    const currentUser = await getCurrentUser();
+    const storageKey = portfolioGroupsStorageKey(resolveDesktopRuntimeUserId(currentUser, 1));
+    await writeLocalState(storageKey, { groups: normalizedGroups });
     try {
       const remoteResponse = await updatePortfolioGroupsSetting(normalizedGroups);
       const remoteGroups = normalizePortfolioGroups(remoteResponse?.data?.groups || normalizedGroups);
       setPortfolioGroups(remoteGroups);
-      await writeLocalState(PORTFOLIO_GROUPS_STORAGE_KEY, { groups: remoteGroups });
+      await writeLocalState(storageKey, { groups: remoteGroups });
       return remoteGroups;
     } catch (groupSyncError) {
       console.warn("Failed to sync portfolio groups to server", groupSyncError);

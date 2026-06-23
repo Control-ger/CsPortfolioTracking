@@ -117,6 +117,18 @@ function finalizeClusterAggregate(cluster) {
 
 export const PORTFOLIO_GROUPS_STORAGE_KEY = "portfolio:groups:v1";
 
+/**
+ * Per-user local cache key for portfolio groups. The legacy
+ * `PORTFOLIO_GROUPS_STORAGE_KEY` is a single global slot, so switching Steam
+ * accounts on the same machine would let two users clobber each other's cached
+ * groups. Scope the key by the resolved local user id; callers migrate the
+ * legacy global key into the scoped one once (see PortfolioPage load).
+ */
+export function portfolioGroupsStorageKey(userId) {
+  const scope = String(userId ?? "").trim();
+  return scope ? `${PORTFOLIO_GROUPS_STORAGE_KEY}:user:${scope}` : PORTFOLIO_GROUPS_STORAGE_KEY;
+}
+
 export function createPortfolioGroupDraft() {
   return {
     id: "",
@@ -146,6 +158,58 @@ export function normalizePortfolioGroups(input) {
       };
     })
     .filter((group) => group.name !== "");
+}
+
+/**
+ * Merge locally-cached groups with the server's set without losing either side.
+ *
+ * The previous load strategy was "server wins wholesale if it has any groups",
+ * which silently dropped a group that only ever reached the local cache (e.g.
+ * created while upstream was unreachable and the sidecar returned a
+ * desktop-local-fallback success). Here we union by `id` and let the newer
+ * `updatedAt` win on conflicts, so a local-only / locally-newer group survives a
+ * reload and can be pushed back up.
+ *
+ * Known limitation: there are no tombstones, so a deletion that never reached the
+ * server is undone on the next merge (the group reappears). Resurrecting a group
+ * is far less harmful than silently losing one; proper delete-sync would need an
+ * operations_log-style tombstone like investments/watchlist.
+ */
+export function mergePortfolioGroups(localGroups = [], remoteGroups = []) {
+  const byId = new Map();
+
+  const consider = (group) => {
+    const existing = byId.get(group.id);
+    if (!existing) {
+      byId.set(group.id, group);
+      return;
+    }
+    const existingAt = Date.parse(existing.updatedAt) || 0;
+    const candidateAt = Date.parse(group.updatedAt) || 0;
+    if (candidateAt >= existingAt) {
+      byId.set(group.id, group);
+    }
+  };
+
+  normalizePortfolioGroups(remoteGroups).forEach(consider);
+  normalizePortfolioGroups(localGroups).forEach(consider);
+
+  return Array.from(byId.values()).sort((left, right) => {
+    const leftAt = Date.parse(left.createdAt) || 0;
+    const rightAt = Date.parse(right.createdAt) || 0;
+    return leftAt - rightAt || left.name.localeCompare(right.name, "de");
+  });
+}
+
+/**
+ * Stable content signature for a group set — used to decide whether a merged set
+ * carries anything the server does not already have (and thus needs a push-up).
+ */
+export function portfolioGroupsSignature(groups = []) {
+  return normalizePortfolioGroups(groups)
+    .map((group) => `${group.id}:${group.updatedAt}:${group.memberInvestmentIds.length}`)
+    .sort()
+    .join("|");
 }
 
 export function buildPortfolioGroupMembershipMap(groups = []) {
