@@ -16,6 +16,7 @@ import {
   fetchPortfolioHistory as fetchApiPortfolioHistory,
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
   fetchWatchlist as fetchApiWatchlist,
+  searchWatchlistItems as searchApiWatchlistItems,
 } from "./apiClient.js";
 
 import { getCurrentUser, isAuthenticated } from "./auth.js";
@@ -370,6 +371,83 @@ let lastCsFloatWatchlistImportAtMs = 0;
 const CSFLOAT_WATCHLIST_IMPORT_MIN_INTERVAL_MS = 60_000;
 
 /**
+ * Resolve a list of market hash names against the server item catalog (via the
+ * watchlist search endpoint) so imported items can carry a real item_id, image
+ * and price.
+ *
+ * Desktop is not allowed to invent catalog items, and the server sync rejects
+ * (throws on) a watchlist change whose name is not in the catalog. So we only
+ * add names the catalog actually knows; the exact catalog match also yields the
+ * canonical name (so server-side sync resolves item_id by name) and the icon.
+ *
+ * Returns:
+ *  - matched:   [{ marketHashName (canonical), type, imageUrl }] — exact catalog hit
+ *  - fallback:  [{ marketHashName, type }] — search threw OR returned no rows at
+ *               all (e.g. no server configured / a CF Access lapse that yields an
+ *               empty result set instead of an error); kept as name-only so the
+ *               import does not silently become a no-op
+ *  - notInCatalog: string[] — catalog returned rows but none is this exact name →
+ *               genuinely absent, skipped (can never carry price data)
+ */
+async function resolveWatchlistCandidatesFromCatalog(names = []) {
+  const cleaned = names.map((name) => String(name || "").trim()).filter(Boolean);
+
+  const classify = async (name) => {
+    try {
+      const res = await searchApiWatchlistItems(name, {}, 5, 1);
+      const items = Array.isArray(res?.data?.items) ? res.data.items : [];
+      if (items.length === 0) {
+        // Reachable-but-empty is indistinguishable from "search unavailable"
+        // here (a CF Access lapse returns an empty set, not an error), so keep
+        // the item as a name-only add rather than dropping every candidate.
+        return { kind: "fallback", value: { marketHashName: name, type: "skin" } };
+      }
+      const key = name.toLowerCase();
+      const candidate = items.find(
+        (c) => String(c?.marketHashName || "").trim().toLowerCase() === key,
+      );
+      if (candidate) {
+        return {
+          kind: "matched",
+          value: {
+            marketHashName: String(candidate.marketHashName).trim(),
+            type: String(candidate.itemType || "skin"),
+            imageUrl: candidate.iconUrl || null,
+          },
+        };
+      }
+      // Catalog answered with rows but not this exact name — genuinely absent.
+      return { kind: "notInCatalog", value: name };
+    } catch {
+      // Search threw (no server configured / upstream down): keep as name-only.
+      return { kind: "fallback", value: { marketHashName: name, type: "skin" } };
+    }
+  };
+
+  const matched = [];
+  const fallback = [];
+  const notInCatalog = [];
+
+  // Bounded concurrency: a large first import would otherwise serialize one
+  // search round-trip per name on the watchlist-load path.
+  const CONCURRENCY = 6;
+  for (let i = 0; i < cleaned.length; i += CONCURRENCY) {
+    const results = await Promise.all(cleaned.slice(i, i + CONCURRENCY).map(classify));
+    for (const result of results) {
+      if (result.kind === "matched") {
+        matched.push(result.value);
+      } else if (result.kind === "fallback") {
+        fallback.push(result.value);
+      } else {
+        notInCatalog.push(result.value);
+      }
+    }
+  }
+
+  return { matched, fallback, notInCatalog };
+}
+
+/**
  * Import the user's CSFloat watchlist into the local (Electron) watchlist.
  * One-way add-only: items already present locally (matched by name) are skipped,
  * and nothing is removed. Reuses createWatchlistItemsBatchData so the items go
@@ -422,7 +500,7 @@ export async function importCsFloatWatchlistData(options = {}) {
       .filter(Boolean),
   );
 
-  const newItems = [];
+  const candidateNames = [];
   const seen = new Set();
   for (const item of items) {
     const name = String(item?.marketHashName || item?.name || "").trim();
@@ -431,15 +509,34 @@ export async function importCsFloatWatchlistData(options = {}) {
       continue;
     }
     seen.add(key);
-    newItems.push({ marketHashName: name, type: String(item?.type || "skin") });
+    candidateNames.push(name);
   }
 
+  if (candidateNames.length === 0) {
+    return { skipped: false, reason: "no-new-items", fetched: items.length, added: 0, notInCatalog: 0 };
+  }
+
+  const { matched, fallback, notInCatalog } = await resolveWatchlistCandidatesFromCatalog(candidateNames);
+  const newItems = [...matched, ...fallback];
+
   if (newItems.length === 0) {
-    return { skipped: false, reason: "no-new-items", fetched: items.length, added: 0 };
+    return {
+      skipped: false,
+      reason: "no-new-items",
+      fetched: items.length,
+      added: 0,
+      notInCatalog: notInCatalog.length,
+    };
   }
 
   await createWatchlistItemsBatchData(newItems);
-  return { skipped: false, reason: "ok", fetched: items.length, added: newItems.length };
+  return {
+    skipped: false,
+    reason: "ok",
+    fetched: items.length,
+    added: newItems.length,
+    notInCatalog: notInCatalog.length,
+  };
 }
 
 let lastCsFloatBuyOrderWatchlistImportAtMs = 0;
@@ -491,7 +588,7 @@ export async function importCsFloatBuyOrdersAsWatchlistData(options = {}) {
       .filter(Boolean),
   );
 
-  const newItems = [];
+  const candidateNames = [];
   const seen = new Set();
   for (const row of summary) {
     const name = String(row?.marketHashName || "").trim();
@@ -500,15 +597,34 @@ export async function importCsFloatBuyOrdersAsWatchlistData(options = {}) {
       continue;
     }
     seen.add(key);
-    newItems.push({ marketHashName: name, type: "skin" });
+    candidateNames.push(name);
   }
 
+  if (candidateNames.length === 0) {
+    return { skipped: false, reason: "no-new-items", fetched: summary.length, added: 0, notInCatalog: 0 };
+  }
+
+  const { matched, fallback, notInCatalog } = await resolveWatchlistCandidatesFromCatalog(candidateNames);
+  const newItems = [...matched, ...fallback];
+
   if (newItems.length === 0) {
-    return { skipped: false, reason: "no-new-items", fetched: summary.length, added: 0 };
+    return {
+      skipped: false,
+      reason: "no-new-items",
+      fetched: summary.length,
+      added: 0,
+      notInCatalog: notInCatalog.length,
+    };
   }
 
   await createWatchlistItemsBatchData(newItems);
-  return { skipped: false, reason: "ok", fetched: summary.length, added: newItems.length };
+  return {
+    skipped: false,
+    reason: "ok",
+    fetched: summary.length,
+    added: newItems.length,
+    notInCatalog: notInCatalog.length,
+  };
 }
 
 /**
@@ -570,8 +686,14 @@ export async function createWatchlistItemsBatchData(items = []) {
       continue;
     }
     const type = String(item?.itemType || item?.type || "skin");
+    const imageUrl = item?.imageUrl || item?.iconUrl || null;
     const row = unwrapLocalStoreResult(
-      await localStore.upsertWatchlistItem({ name, type, userId }),
+      await localStore.upsertWatchlistItem({
+        name,
+        type,
+        userId,
+        ...(imageUrl ? { imageUrl } : {}),
+      }),
       "local-store-upsert-watchlist-item",
     );
     created.push(row);

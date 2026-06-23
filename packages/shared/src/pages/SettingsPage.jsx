@@ -332,10 +332,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       } else {
         const added = Number(result?.added || 0);
         const fetched = Number(result?.fetched || 0);
+        const notInCatalog = Number(result?.notInCatalog || 0);
+        const skippedSuffix = notInCatalog > 0
+          ? ` ${notInCatalog} nicht im Katalog – übersprungen.`
+          : "";
         setCsfloatWatchlistMessage(
-          added > 0
+          (added > 0
             ? `${added} neue${added === 1 ? "s Item" : " Items"} aus der CSFloat-Watchlist hinzugefügt (${fetched} geprüft).`
-            : `Keine neuen Items – Watchlist ist bereits aktuell (${fetched} geprüft).`,
+            : `Keine neuen Items – Watchlist ist bereits aktuell (${fetched} geprüft).`) + skippedSuffix,
         );
       }
     } catch (error) {
@@ -383,10 +387,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       } else {
         const added = Number(result?.added || 0);
         const fetched = Number(result?.fetched || 0);
+        const notInCatalog = Number(result?.notInCatalog || 0);
+        const skippedSuffix = notInCatalog > 0
+          ? ` ${notInCatalog} nicht im Katalog – übersprungen.`
+          : "";
         setCsfloatBuyOrderMessage(
-          added > 0
+          (added > 0
             ? `${added} neue${added === 1 ? "s Item" : " Items"} aus den CSFloat Buy Orders hinzugefügt (${fetched} geprüft).`
-            : `Keine neuen Items – alle Buy Orders bereits in der Watchlist (${fetched} geprüft).`,
+            : `Keine neuen Items – alle Buy Orders bereits in der Watchlist (${fetched} geprüft).`) + skippedSuffix,
         );
       }
     } catch (error) {

@@ -217,7 +217,11 @@ export function createWatchlistStore(db) {
       const normalizedUserId = normalizeLocalUserId(
         input.userId || input.user_id || existing?.user_id || "1",
       );
-      const imageUrl = resolveImageFromWatchlistPayload({
+      // A directly supplied image (e.g. from the catalog search during a CSFloat
+      // import) wins over the existing-payload/investment fallback resolution.
+      const directImageUrl =
+        input.imageUrl || input.image_url || input.iconUrl || input.icon_url || null;
+      const imageUrl = directImageUrl || resolveImageFromWatchlistPayload({
         ...(existing || {}),
         ...input,
         name,
