@@ -169,6 +169,7 @@ const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
 const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
 const BAN_WAVE_NOTIFIED_KEY = "ban-wave:last-notified-id:v1";
+const CS_UPDATE_NOTIFIED_KEY = "cs-update:last-notified-id:v1";
 const DEFAULT_CS_UPDATES_BANNER_VISIBLE_HOURS = 24 * 7;
 const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "push_notifications", "matching", "management"];
 const DESKTOP_SIDEBAR_TABS = [
@@ -2647,6 +2648,67 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     void trigger();
   }, [freshBanWaveItem, isDesktopRuntime, portfolioPreferences.notifyBanWaveDesktop, portfolioPreferences.notifyBanWaveDesktopMinLevel]);
+
+  const freshCsUpdateItem = useMemo(() => {
+    if (!csUpdatesItems || csUpdatesFreshItemIds.length === 0) return null;
+    const freshIdSet = new Set(csUpdatesFreshItemIds.map((id) => String(id)));
+    // Newest fresh item that is a regular CS update; ban-wave items are handled
+    // by their own notification effect above to avoid double-firing.
+    return (
+      csUpdatesItems.find(
+        (item) => item.source !== "ban_wave_detected" && freshIdSet.has(String(item.id)),
+      ) ?? null
+    );
+  }, [csUpdatesItems, csUpdatesFreshItemIds]);
+
+  useEffect(() => {
+    if (!freshCsUpdateItem || !isDesktopRuntime) return;
+    if (!portfolioPreferences.notifyCsUpdatesDesktop) return;
+
+    // Capture primitives at effect entry to avoid stale closure during async IPC
+    const itemId = String(freshCsUpdateItem.id);
+    const itemTitle = freshCsUpdateItem.title || "Neues CS2 Update";
+    const itemPublishedAt = freshCsUpdateItem.publishedAt || new Date().toISOString();
+    const itemAiImpactLevel = String(freshCsUpdateItem.aiImpactLevel || "").toLowerCase();
+
+    const lastNotifiedId = localStorage.getItem(CS_UPDATE_NOTIFIED_KEY) || "";
+    if (itemId === lastNotifiedId) return;
+
+    const itemLevel = IMPACT_LEVELS.indexOf(itemAiImpactLevel);
+    const minLevel = IMPACT_LEVELS.indexOf(portfolioPreferences.notifyCsUpdatesDesktopMinLevel);
+
+    // Unrated (-1): skip without stamping so we retry once the item gets rated
+    if (itemLevel === -1) return;
+    // Below threshold: skip without stamping so user can lower threshold later and still get notified
+    if (minLevel >= 0 && itemLevel < minLevel) return;
+
+    const trigger = async () => {
+      try {
+        const user = await getCurrentUser();
+        const userId = resolveDesktopRuntimeUserId(user, 1);
+        if (window.electronAPI?.localStore?.createNotification) {
+          await window.electronAPI.localStore.createNotification({
+            userId,
+            category: "cs_updates",
+            title: "Neues CS2 Update",
+            message: itemTitle,
+            payload: { source: "cs_update", itemId },
+            createdAt: itemPublishedAt,
+          });
+        }
+      } catch {
+        // non-critical
+      }
+      if (typeof window.Notification !== "undefined" && Notification.permission === "granted") {
+        new window.Notification("Neues CS2 Update", {
+          body: itemTitle,
+        });
+      }
+      localStorage.setItem(CS_UPDATE_NOTIFIED_KEY, itemId);
+    };
+
+    void trigger();
+  }, [freshCsUpdateItem, isDesktopRuntime, portfolioPreferences.notifyCsUpdatesDesktop, portfolioPreferences.notifyCsUpdatesDesktopMinLevel]);
 
   const portfolioValueLabel = formatPrice(portfolioTotalValueForDisplay, {
     useUsd: true,
