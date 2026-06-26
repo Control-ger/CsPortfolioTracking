@@ -345,6 +345,11 @@ export async function deriveSteamPaletteFromUser(user) {
 }
 
 export function SteamLoginPrompt({ onLoginSuccess }) {
+  // The "Willkommen zurück" preparation/welcome screen (Steam inventory import,
+  // multi-step progress) is a Desktop-only startup flow. On Web the inventory
+  // import is not implemented (write-owner is Desktop), so this component must
+  // stay a pure login prompt there — never the welcome-back screen.
+  const isDesktopRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [user, setUser] = useState(null);
@@ -562,7 +567,11 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       finished: false,
     };
 
-    const hasSteamId = Boolean(currentUser?.steamId);
+    // Steam inventory import is a Desktop-only flow (Desktop is the sole write
+    // client for investments; Web's importInventoryAsInvestments is a no-op).
+    // On Web, skip the inventory steps entirely and run the lightweight
+    // portfolio-only preparation — never hit the server inventory endpoint.
+    const hasSteamId = isDesktopRuntime && Boolean(currentUser?.steamId);
     const steps = hasSteamId
       ? [
           { label: "Steam-Verbindung pruefen", percent: 8 },
@@ -715,6 +724,13 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
   };
 
   useEffect(() => {
+    // Web renders this component only as a login prompt (when the server reports
+    // requiresAuth). Auto-running the welcome/preparation flow off a stale local
+    // session token would surface the Desktop-only inventory import — and its
+    // "profile might be private" error — on web/mobile. Keep it Desktop-only.
+    if (!isDesktopRuntime) {
+      return;
+    }
     const checkAuth = async () => {
       const authenticated = await isAuthenticated();
       if (!authenticated) {
@@ -749,6 +765,12 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
       if (result?.success) {
         const hydratedUser = await hydrateUserMediaIfNeeded(result.user);
+        if (isWeb) {
+          // Web never shows the welcome/preparation screen — advance straight
+          // to the dashboard; the portfolio loads via the normal data path.
+          onLoginSuccessRef.current?.(hydratedUser);
+          return;
+        }
         setUser(hydratedUser);
         try {
           await runPostLoginPreparation(hydratedUser);
