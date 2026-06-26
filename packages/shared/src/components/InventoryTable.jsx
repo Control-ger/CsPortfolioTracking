@@ -543,6 +543,104 @@ export function InventoryTable({
             </div>
           </div>
 
+          {groups.map((group) => {
+            const isExpanded = Boolean(expandedGroupIds[group.id]);
+            const profitClassName = deltaClassName(group.totalProfit);
+            const roiClassName = deltaClassName(group.roiPercent);
+
+            return (
+              <div
+                key={`group-${group.id}`}
+                className="overflow-hidden rounded-2xl border border-border/70 bg-card/75 shadow-[0_14px_30px_rgba(0,0,0,0.2)]"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleExpanded(group.id);
+                    if (typeof onSelectGroup === "function") {
+                      onSelectGroup(group);
+                    }
+                  }}
+                  className="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:bg-accent/40 active:scale-[0.995]"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <LayeredGroupIcon visuals={group.topVisuals} fallbackLabel={group.name} />
+                    <div className="min-w-0 flex-1">
+                      <h4 className="truncate text-sm font-semibold">{group.name}</h4>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                        <Badge variant="outline" className="text-[9px]">
+                          Gruppe
+                        </Badge>
+                        <span>{group.clusterCount} Cluster</span>
+                        <span>|</span>
+                        <span>{group.memberCount} Positionen</span>
+                        <span>|</span>
+                        <span>{group.totalQuantity}x</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span
+                        className={`text-sm font-bold ${group.totalValue > 0 ? "text-primary" : "text-muted-foreground"}`}
+                      >
+                        {formatPrice(group.totalValue)}
+                      </span>
+                      <span className={`text-[10px] font-semibold ${roiClassName}`}>
+                        {formatSignedPercentOneDecimal(group.roiPercent)}
+                      </span>
+                      <span className={`text-[10px] ${profitClassName}`}>
+                        {formatSignedCurrency(group.totalProfit, formatPrice)}
+                      </span>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="h-4 w-4 text-muted-foreground/85" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground/85" />
+                    )}
+                  </div>
+                </button>
+
+                {isExpanded && Array.isArray(group.clusters) ? (
+                  <div className="space-y-2 border-t border-border/60 bg-background/35 p-2">
+                    {group.clusters.map((cluster) => (
+                      <button
+                        key={`cluster-${cluster.id}`}
+                        type="button"
+                        onClick={() => {
+                          if (typeof onSelectCluster === "function") {
+                            onSelectCluster(group, cluster);
+                          }
+                        }}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/55 bg-card/60 p-2.5 text-left transition-colors hover:bg-accent/30 active:scale-[0.995]"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <ItemThumbnail imageUrl={cluster.imageUrl} name={cluster.name} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{cluster.name}</p>
+                            <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                              <span>{cluster.quantity} Stk.</span>
+                              <span>|</span>
+                              <span>{formatSharePercent(cluster.sharePercent)}</span>
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
+                          <span className="text-sm font-bold text-muted-foreground">
+                            {formatPrice(cluster.totalValue)}
+                          </span>
+                          <span className={`text-[10px] font-semibold ${deltaClassName(cluster.roiPercent)}`}>
+                            {formatSignedPercentOneDecimal(cluster.roiPercent)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+
           {sortedInvestments.map((item) => {
             const roiValue = isFiniteNumber(item.roi) ? item.roi : null;
 
