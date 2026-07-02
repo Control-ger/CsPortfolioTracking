@@ -396,6 +396,7 @@ function buildManagementClusters(items = []) {
     group.positions.push({
       id: item.id,
       name: item.name || group.name,
+      type: item.type || group.type || null,
       quantity: Number(item.quantity || 0),
       buyPriceUsd: Number(item.buyPriceUsd ?? item.buyPrice ?? 0),
       imageUrl: item.imageUrl || group.imageUrl || null,

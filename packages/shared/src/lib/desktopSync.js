@@ -354,6 +354,23 @@ function operationBelongsToLocalUser(operation, localUserId) {
   return normalizeDesktopLocalUserId(rawUserId, "1") === String(localUserId);
 }
 
+// Foreign ops with a purely numeric (or missing) user scope are legacy artifacts —
+// desktop scopes are `steam-<steamId>` and legacy scope "1" is migrated on access,
+// so a numeric-scope op can never be claimed and pushed by any account. They must
+// be retired, not skipped: listPendingOperations serves the oldest 200 ops, so a
+// block of >=200 unclaimable ops permanently occupies the push window and silently
+// stops ALL sync pushes (observed with stale scope-"4" ops from an old build).
+function isRetiredForeignOperation(operation) {
+  const payload = operation && typeof operation.payload === "object" && operation.payload !== null
+    ? operation.payload
+    : {};
+  const rawUserId = payload.userId ?? payload.user_id;
+  if (rawUserId === null || rawUserId === undefined || String(rawUserId).trim() === "") {
+    return true;
+  }
+  return /^\d+$/.test(normalizeDesktopLocalUserId(rawUserId, "1"));
+}
+
 function withSafetyWindow(timestamp) {
   const parsed = Date.parse(String(timestamp || ""));
   if (!Number.isFinite(parsed)) {
@@ -507,30 +524,60 @@ function shouldDropRejectedOperation(operation, rejected) {
 }
 
 async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localStore, localUserId) {
-  const pending = unwrapLocalStoreResult(
-    await localStore.listPendingOperations(200),
-    "local-store-list-pending-operations",
-  );
-  if (!Array.isArray(pending) || pending.length === 0) {
-    return;
-  }
+  let mapped = [];
 
-  const mapped = [];
-  for (const operation of pending) {
-    if (!operationBelongsToLocalUser(operation, localUserId)) {
-      continue;
+  // Retiring a full window of junk ops uncovers the next window; keep fetching
+  // until pushable ops surface or the queue is drained. Retired ops are marked
+  // applied before the next fetch, so every pass sees a strictly smaller queue.
+  for (;;) {
+    const pending = unwrapLocalStoreResult(
+      await localStore.listPendingOperations(200),
+      "local-store-list-pending-operations",
+    );
+    if (!Array.isArray(pending) || pending.length === 0) {
+      return;
     }
-    const base = mapOperationToSyncChange(operation);
-    if (!base) {
-      continue;
+
+    mapped = [];
+    const retiredOperationIds = [];
+    for (const operation of pending) {
+      if (!operationBelongsToLocalUser(operation, localUserId)) {
+        if (isRetiredForeignOperation(operation)) {
+          retiredOperationIds.push(operation.id);
+        }
+        continue;
+      }
+      const base = mapOperationToSyncChange(operation);
+      if (!base) {
+        // Unknown entity types can never be mapped to a sync change; retire them so
+        // they cannot clog the oldest-first push window either.
+        retiredOperationIds.push(operation.id);
+        continue;
+      }
+      const enriched = await enrichSyncChange(base, localStore);
+      if (enriched) {
+        mapped.push(enriched);
+      }
     }
-    const enriched = await enrichSyncChange(base, localStore);
-    if (enriched) {
-      mapped.push(enriched);
+
+    for (const retiredOperationId of retiredOperationIds) {
+      unwrapLocalStoreResult(
+        await localStore.markOperationApplied(retiredOperationId),
+        "local-store-mark-operation-applied",
+      );
     }
-  }
-  if (mapped.length === 0) {
-    return;
+    if (retiredOperationIds.length > 0) {
+      console.info("[desktop-sync] retired unclaimable pending operations", {
+        count: retiredOperationIds.length,
+      });
+    }
+
+    if (mapped.length > 0) {
+      break;
+    }
+    if (retiredOperationIds.length === 0) {
+      return;
+    }
   }
 
   const response = await fetchSyncEndpointWithFallback(serverBaseUrl, "/api/v1/sync/push", {

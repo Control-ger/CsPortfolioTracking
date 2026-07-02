@@ -55,16 +55,31 @@ export async function executeCsFloatTradeSync(payload = {}) {
         continue;
       }
 
-      const row = {
-        ...mapCsFloatPreviewTradeToInvestment(trade),
-        bucket: targetBucket,
-      };
+      const row = mapCsFloatPreviewTradeToInvestment(trade);
       const existing = resolveExistingCsFloatInvestmentMatch(existingLookup, row, trade);
+      const rowForUpsert = existing
+        ? {
+            ...row,
+            // Keep stable identifiers for already-known entries: a re-import whose
+            // cluster key changed (e.g. legacy key scheme) must update the existing
+            // row instead of inserting a sibling under a new id. A new id would
+            // orphan portfolio-group memberInvestmentIds and duplicate the position.
+            id: String(existing?.id || row.id),
+            externalTradeId:
+              String(existing?.externalTradeId || "").trim() || row.externalTradeId,
+            // Never reset a user-chosen bucket (e.g. "inventory") back to the
+            // import default on re-import.
+            bucket: existing.bucket || targetBucket,
+          }
+        : {
+            ...row,
+            bucket: targetBucket,
+          };
 
       unwrapLocalStoreResult(
         await localStore.upsertInvestment({
           ...(existing || {}),
-          ...row,
+          ...rowForUpsert,
           userId,
           excluded: Boolean(existing?.excluded),
         }),
@@ -77,15 +92,17 @@ export async function executeCsFloatTradeSync(payload = {}) {
         inserted += 1;
       }
 
-      const rowId = String(row?.id || "").trim();
+      const rowId = String(rowForUpsert?.id || "").trim();
       if (rowId) {
-        existingLookup.byId.set(rowId, row);
+        existingLookup.byId.set(rowId, rowForUpsert);
       }
-      const externalTradeId = normalizeImportIdentifier(row?.externalTradeId);
+      const externalTradeId = normalizeImportIdentifier(rowForUpsert?.externalTradeId);
       if (externalTradeId) {
-        existingLookup.byExternalTradeId.set(externalTradeId, row);
+        existingLookup.byExternalTradeId.set(externalTradeId, rowForUpsert);
       }
     }
+
+    await triggerDesktopSteamMatchingRefresh(localStore, userId);
 
     try {
       await runDesktopSyncNowIfDue({ force: true });

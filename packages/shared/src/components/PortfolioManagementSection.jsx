@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Info, Search } from "lucide-react";
+import { Info, Link2, Search } from "lucide-react";
 import { Badge } from "./ui/badge.jsx";
 import { Button } from "./ui/button.jsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
@@ -74,6 +74,48 @@ const MATCH_REASON_POINTS = {
 // Mirrors the confidence thresholds in calculateSteamCsfloatMatch.
 const MATCH_CONFIDENCE_HIGH_SCORE = 88;
 const MATCH_CONFIDENCE_MEDIUM_SCORE = 68;
+
+const POSITION_SOURCE_LABELS = {
+  steam_inventory: "Steam Sync",
+  csfloat: "CSFloat",
+  skinbaron: "SkinBaron",
+};
+
+function resolvePositionSourceLabel(platform) {
+  return POSITION_SOURCE_LABELS[String(platform || "").toLowerCase()] || "Manuell";
+}
+
+// Ids (steam asset ids + csfloat investment ids) that are part of a resolved
+// Steam<->CSFloat match — used to render the chain badge on both linked positions.
+function buildResolvedMatchIdSet(matchingRows = []) {
+  const resolved = new Set();
+  (Array.isArray(matchingRows) ? matchingRows : []).forEach((row) => {
+    const status = String(row?.status || "").toLowerCase();
+    if (status !== "manual_confirmed" && status !== "auto_linked") {
+      return;
+    }
+    const steamAssetId = String(row?.steamAssetId || "").trim();
+    const csfloatInvestmentId = String(row?.csfloatInvestmentId || "").trim();
+    if (steamAssetId) {
+      resolved.add(steamAssetId);
+    }
+    if (csfloatInvestmentId) {
+      resolved.add(csfloatInvestmentId);
+    }
+  });
+  return resolved;
+}
+
+function isPositionMatchLinked(position, resolvedMatchIds) {
+  if (!resolvedMatchIds || resolvedMatchIds.size === 0) {
+    return false;
+  }
+  const candidates = [position?.steamAssetId, position?.id];
+  return candidates.some((value) => {
+    const normalized = String(value || "").trim();
+    return normalized !== "" && resolvedMatchIds.has(normalized);
+  });
+}
 
 function parseMatchReasons(reason) {
   return String(reason || "")
@@ -242,6 +284,7 @@ export function PortfolioManagementSection({
   handleManagementClusterBucketToggle,
 
   // Matching state
+  matchingRows,
   matchingLoading,
   matchingSearchTerm,
   setMatchingSearchTerm,
@@ -323,6 +366,8 @@ export function PortfolioManagementSection({
   if (!forceMount) {
     return null;
   }
+
+  const resolvedMatchIds = buildResolvedMatchIdSet(matchingRows);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -1462,6 +1507,16 @@ export function PortfolioManagementSection({
                               String(
                                 position.imageUrl || position.iconUrl || "",
                               ).trim() || null;
+                            const positionBuyPrice = Number(
+                              position.buyPriceUsd || 0,
+                            );
+                            const positionPurchasedAt = position.purchasedAt
+                              ? formatDateSafe(position.purchasedAt)
+                              : "";
+                            const positionMatched = isPositionMatchLinked(
+                              position,
+                              resolvedMatchIds,
+                            );
                             return (
                             <div
                               key={position.id}
@@ -1483,15 +1538,40 @@ export function PortfolioManagementSection({
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-medium">
-                                  {position.name || "Unbekannt"}
-                                </p>
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <p className="truncate text-xs font-medium">
+                                    {position.name || "Unbekannt"}
+                                  </p>
+                                  <Badge
+                                    variant="outline"
+                                    className="h-4 shrink-0 px-1.5 text-[9px] font-normal"
+                                  >
+                                    {resolvePositionSourceLabel(position.platform)}
+                                  </Badge>
+                                  {positionMatched ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="h-4 shrink-0 gap-0.5 border-emerald-500/40 px-1.5 text-[9px] font-normal text-emerald-600 dark:text-emerald-400"
+                                    >
+                                      <Link2 className="h-2.5 w-2.5" />
+                                      Gematcht
+                                    </Badge>
+                                  ) : null}
+                                </div>
                                 <p className="mt-0.5 text-[10px] text-muted-foreground">
                                   {position.type || "unbekannt"} ·{" "}
                                   {position.quantity || 1}x ·{" "}
                                   {position.excluded
                                     ? "excluded"
                                     : "aktiv"}
+                                  {" · "}
+                                  {positionPurchasedAt
+                                    ? `Kauf: ${positionPurchasedAt}`
+                                    : "Kaufdatum unbekannt"}
+                                  {" · "}
+                                  {positionBuyPrice > 0
+                                    ? `${positionBuyPrice.toFixed(2)} USD Buy-in`
+                                    : "ohne Buy-in"}
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
