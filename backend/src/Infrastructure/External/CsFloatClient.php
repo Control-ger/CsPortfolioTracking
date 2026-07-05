@@ -122,13 +122,17 @@ final class CsFloatClient
 
     private function snapshotMatchesRequestedName(?array $snapshot, string $marketHashName): bool
     {
-        $returnedName = trim((string) ($snapshot['marketHashName'] ?? ''));
-        if ($returnedName === '') {
-            // Listing payload without an item name: cannot verify, keep legacy behavior.
-            return true;
+        // Strict: only the name the listing payload itself carried counts.
+        // `marketHashName` falls back to the REQUESTED name for name-less listings,
+        // which previously let mismatched prices slip through the guard (observed:
+        // the Dreams & Nightmares Case getting re-poisoned with a ~600 USD price
+        // on every fallback lookup). No verifiable name → no trusted price.
+        $listedName = trim((string) ($snapshot['listedMarketHashName'] ?? ''));
+        if ($listedName === '') {
+            return false;
         }
 
-        return mb_strtolower($returnedName) === mb_strtolower(trim($marketHashName));
+        return mb_strtolower($listedName) === mb_strtolower(trim($marketHashName));
     }
 
     private function findPriceListEntry(string $marketHashName): ?array
@@ -735,8 +739,14 @@ final class CsFloatClient
         $iconPath = (string) ($item['icon_url'] ?? '');
         $priceCents = (float) ($listing['price'] ?? 0.0);
 
+        // Name actually carried by the listing payload (no requested-name fallback):
+        // this is what snapshotMatchesRequestedName verifies. A listing without any
+        // name is unverifiable and must not be trusted for pricing.
+        $listedName = trim((string) ($item['market_hash_name'] ?? $item['name'] ?? ''));
+
         return [
             'priceUsd' => round($priceCents / 100.0, 2),
+            'listedMarketHashName' => $listedName !== '' ? $listedName : null,
             'marketHashName' => (string) ($item['market_hash_name'] ?? $marketHashName),
             'itemType' => isset($item['type']) ? (string) $item['type'] : null,
             'itemTypeLabel' => isset($item['type_name']) ? (string) $item['type_name'] : null,
