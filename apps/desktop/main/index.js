@@ -133,14 +133,29 @@ function getServerConfigFilePath() {
 
 // ── Cache file management ─────────────────────────────────────────
 
+let lastGoodCacheData = null;
+
 async function readCacheFile() {
   const filePath = getCacheFilePath();
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
+    if (parsed && typeof parsed === "object") {
+      lastGoodCacheData = parsed;
+      return parsed;
+    }
     return {};
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      // Fresh install: no cache yet.
+      return {};
+    }
+    // Transient read/parse failure (file locked during an update, AV scan…).
+    // Returning {} here made every consumer believe its data vanished — the
+    // renderer then popped onboarding again and persisted empty payloads over
+    // real data (observed: portfolio groups wiped after an app update).
+    console.warn("[desktop-cache] read failed, serving last known good", error);
+    return lastGoodCacheData || {};
   }
 }
 

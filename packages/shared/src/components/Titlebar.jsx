@@ -10,7 +10,7 @@ export const Titlebar = () => {
 
   return (
     <div
-      className="flex h-8 select-none items-center justify-between border-b border-border/70 bg-card/90 backdrop-blur-md"
+      className="relative z-[130] flex h-8 select-none items-center justify-between border-b border-border/70 bg-card/90 backdrop-blur-md"
       style={{ WebkitAppRegion: 'drag' }}
     >
       <div className="flex items-center gap-2 pl-3">

@@ -867,6 +867,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         setHasSkinBaronImportReady(skinBaronImportReady);
       } catch (journeyError) {
         console.warn("Failed to load onboarding journey state", journeyError);
+        // Fail safe: a transient read error (IPC hiccup right after an update)
+        // must not resurface the onboarding journey on an established install.
+        setJourneyState({ skipped: true });
       } finally {
         setJourneyLoading(false);
       }
@@ -954,7 +957,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           }
         }
 
-        await writeLocalState(storageKey, { groups: nextGroups });
+        // Never persist an EMPTY set over the cache after a failed/absent read:
+        // a transient local-cache read failure (observed right after an app
+        // update) would otherwise permanently wipe groups that only exist in
+        // the local cache. Writing an empty set adds no information anyway.
+        if (nextGroups.length > 0 || stored) {
+          await writeLocalState(storageKey, { groups: nextGroups });
+        }
         if (cancelled) {
           return;
         }
@@ -1558,7 +1567,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     await writeLocalState(storageKey, { groups: normalizedGroups });
     try {
       const remoteResponse = await updatePortfolioGroupsSetting(normalizedGroups);
-      const remoteGroups = normalizePortfolioGroups(remoteResponse?.data?.groups || normalizedGroups);
+      const remoteEcho = remoteResponse?.data?.groups;
+      // Adopt the server echo only when it actually carries groups: a degraded
+      // sidecar fallback or a silently-failed upstream write can echo an empty
+      // list, which must not wipe the set we just saved locally.
+      const remoteGroups =
+        Array.isArray(remoteEcho) && (remoteEcho.length > 0 || normalizedGroups.length === 0)
+          ? normalizePortfolioGroups(remoteEcho)
+          : normalizedGroups;
       setPortfolioGroups(remoteGroups);
       await writeLocalState(storageKey, { groups: remoteGroups });
       return remoteGroups;
@@ -4019,10 +4035,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         renderLocalDesktopSidebar
           ? "lg:h-full lg:min-h-0 lg:overflow-hidden"
           : ""
-      } ${
-        showSetupJourney && useExternalDesktopSidebarShell ? "lg:-ml-6 lg:w-[calc(100%+1.5rem)]" : ""
       } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
-        showSetupJourney ? "steam-startup-shell" : "bg-background"
+        // Same fullscreen overlay treatment as the startup welcome: the journey
+        // shell rendered inside the app grid's main column left dark frames (rail
+        // column, grid gap, app background) around the gradient.
+        showSetupJourney
+          ? "steam-startup-shell steam-startup-shell-overlay overflow-y-auto"
+          : "bg-background"
       }`}
     >
       <div
