@@ -94,10 +94,41 @@ final class CsFloatClient
             ]
         );
 
+        // The listings search can return a DIFFERENT item than requested (e.g. a
+        // knife from the "Dreams & Nightmares" collection when asked for the case).
+        // Persisting such a price poisons item_live_cache/price_history for the
+        // requested item, so a mismatched snapshot must be discarded.
+        if (!$this->snapshotMatchesRequestedName($snapshot, $marketHashName)) {
+            Logger::event(
+                'warning',
+                'external',
+                'external.csfloat.listing_name_mismatch',
+                'CSFloat listing lookup returned a different item; snapshot discarded',
+                [
+                    'provider' => 'csfloat',
+                    'itemName' => $marketHashName,
+                    'returnedName' => (string) ($snapshot['marketHashName'] ?? ''),
+                    'priceUsd' => $snapshot['priceUsd'] ?? null,
+                ]
+            );
+            return ['snapshot' => null, 'error' => null];
+        }
+
         return [
             'snapshot' => $snapshot,
             'error' => null,
         ];
+    }
+
+    private function snapshotMatchesRequestedName(?array $snapshot, string $marketHashName): bool
+    {
+        $returnedName = trim((string) ($snapshot['marketHashName'] ?? ''));
+        if ($returnedName === '') {
+            // Listing payload without an item name: cannot verify, keep legacy behavior.
+            return true;
+        }
+
+        return mb_strtolower($returnedName) === mb_strtolower(trim($marketHashName));
     }
 
     private function findPriceListEntry(string $marketHashName): ?array
@@ -329,6 +360,22 @@ final class CsFloatClient
                     'confidence' => (string) $attempt['confidence'],
                 ]
             );
+
+            if (!$this->snapshotMatchesRequestedName($snapshot, $marketHashName)) {
+                Logger::event(
+                    'warning',
+                    'external',
+                    'external.csfloat.listing_name_mismatch',
+                    'CSFloat comparable lookup returned a different item; attempt skipped',
+                    [
+                        'provider' => 'csfloat',
+                        'itemName' => $marketHashName,
+                        'returnedName' => (string) ($snapshot['marketHashName'] ?? ''),
+                        'strategy' => (string) $attempt['strategy'],
+                    ]
+                );
+                continue;
+            }
 
             return [
                 'snapshot' => $snapshot,
