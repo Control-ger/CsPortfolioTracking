@@ -24,6 +24,13 @@ if (!is_file($bootstrapPath)) {
 
 require_once $bootstrapPath;
 
+// The queue worker is part of the cron-owned price path and must be able to
+// backfill catalog metadata (image/type/wear). Without this scope,
+// persistCatalogEntry silently skips the write: image-less items stay
+// image-less forever while the Steam lookup is repeated on every cycle.
+putenv('ITEMS_CATALOG_WRITE_SCOPE=cron');
+$_ENV['ITEMS_CATALOG_WRITE_SCOPE'] = 'cron';
+
 use App\Application\Service\PriceRefreshQueueService;
 use App\Application\Service\PricingService;
 use App\Application\Support\MarketItemClassifier;

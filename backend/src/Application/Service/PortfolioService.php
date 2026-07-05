@@ -144,8 +144,16 @@ final class PortfolioService
             $netRoiPercent = ($isLive && $costBasisTotal > 0) ? ($netProfitEuro / $costBasisTotal) * 100 : null;
             $breakEvenPriceNet = $this->calculateBreakEvenNetUnitPrice($costBasisUnit, $feeSettings);
 
+            // Desktop-local entity id from the sync payload. Portfolio groups store
+            // memberInvestmentIds as desktop-local ids, so web clients need this
+            // alias to resolve group membership against server rows.
+            $clientId = trim((string) ($investmentPayload['id'] ?? ''));
+
             $rows[] = [
                 'id' => (int) $investment['id'],
+                'clientId' => $clientId !== '' && $clientId !== (string) ((int) $investment['id'])
+                    ? $clientId
+                    : null,
                 'itemId' => $itemId,
                 'name' => $name,
                 'type' => (string) $investment['type'],
@@ -660,7 +668,18 @@ final class PortfolioService
                     'livePriceWeightedSum' => 0.0,
                     'livePriceWeightedQuantity' => 0,
                     'liveQuantity' => 0,
+                    'sourceInvestmentIds' => [],
+                    'sourceClientIds' => [],
                 ];
+            }
+
+            // Keep every contributing row id on the aggregate, index-aligned with its
+            // desktop-local clientId ('' when none), so group membership can be
+            // resolved per source row from either id namespace.
+            $aggregateSourceId = trim((string) ($row['id'] ?? ''));
+            if ($aggregateSourceId !== '') {
+                $groups[$key]['sourceInvestmentIds'][] = $aggregateSourceId;
+                $groups[$key]['sourceClientIds'][] = trim((string) ($row['clientId'] ?? ''));
             }
 
             $groups[$key]['rowCount'] += 1;
@@ -775,6 +794,8 @@ final class PortfolioService
             $resolvedOverpayNote = count($overpayNotes) === 1 ? $overpayNotes[0] : null;
 
             $result[] = array_merge($base, [
+                'sourceInvestmentIds' => array_values((array) ($group['sourceInvestmentIds'] ?? [])),
+                'sourceClientIds' => array_values((array) ($group['sourceClientIds'] ?? [])),
                 'quantity' => $quantity,
                 'buyPrice' => $buyPrice,
                 'baseLivePrice' => $baseLivePrice,

@@ -545,11 +545,18 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
         });
       }
 
+      // External-purchase rows that can duplicate a Steam inventory item. SkinBaron
+      // rows must be candidates too — otherwise a SkinBaron purchase and its Steam
+      // inventory twin stay two active positions forever (double quantity, steam row
+      // without buy price).
       const csfloatCandidates = allInvestments.filter((investment) => {
         const platform = String(investment.platform || investment.source || "").toLowerCase();
+        const investmentId = String(investment.id || "");
         return (
           platform === "csfloat" ||
-          String(investment.id || "").startsWith("csfloat-")
+          platform === "skinbaron" ||
+          investmentId.startsWith("csfloat-") ||
+          investmentId.startsWith("skinbaron-")
         );
       });
 

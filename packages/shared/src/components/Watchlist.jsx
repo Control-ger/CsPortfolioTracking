@@ -21,103 +21,15 @@ import { Button } from "@shared/components/ui/button";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { WatchlistItemModal } from "./WatchlistItemModal";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import {
+  applyBuyOrdersToWatchlistItems,
+  getLoadedWatchlistSnapshot,
+  isWatchlistSnapshotFresh,
+  normalizeNameKey,
+  normalizeNameKeyForBuyOrderMatch,
+  setWatchlistViewSnapshot,
+} from "@shared/lib/watchlistViewSnapshot.js";
 
-let watchlistViewSnapshot = {
-  loaded: false,
-  items: [],
-  buyOrderSummary: [],
-  buyOrderOrders: [],
-  buyOrderDebug: null,
-  warnings: [],
-  updatedAt: 0,
-};
-const WATCHLIST_CACHE_TTL_MS = 2 * 60 * 1000;
-
-function getValidWatchlistSnapshot() {
-  const updatedAt = Number(watchlistViewSnapshot.updatedAt || 0);
-  if (!watchlistViewSnapshot.loaded || !Number.isFinite(updatedAt)) {
-    return null;
-  }
-  if (Date.now() - updatedAt > WATCHLIST_CACHE_TTL_MS) {
-    watchlistViewSnapshot = {
-      loaded: false,
-      items: [],
-      buyOrderSummary: [],
-      buyOrderOrders: [],
-      buyOrderDebug: null,
-      warnings: [],
-      updatedAt: 0,
-    };
-    return null;
-  }
-  return watchlistViewSnapshot;
-}
-
-function normalizeNameKey(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function normalizeNameKeyForBuyOrderMatch(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/\bstattrak(?:™)?\b/gi, "")
-    .replace(/\bsouvenir\b/gi, "")
-    .replace(/[★]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function applyBuyOrdersToWatchlistItems(items = [], summaryRows = []) {
-  const summaryByName = new Map();
-  (Array.isArray(summaryRows) ? summaryRows : []).forEach((row) => {
-    const exactKey = normalizeNameKey(row?.marketHashName);
-    const fuzzyKey = normalizeNameKeyForBuyOrderMatch(row?.marketHashName);
-    if (!exactKey && !fuzzyKey) {
-      return;
-    }
-    if (exactKey) {
-      summaryByName.set(exactKey, row);
-    }
-    if (fuzzyKey) {
-      summaryByName.set(fuzzyKey, row);
-    }
-  });
-
-  return (Array.isArray(items) ? items : []).map((item) => {
-    const rawName = item?.marketHashName || item?.name;
-    const key = normalizeNameKey(rawName);
-    const fuzzyKey = normalizeNameKeyForBuyOrderMatch(rawName);
-    let summary = key ? summaryByName.get(key) : null;
-
-    if (!summary && fuzzyKey) {
-      summary = summaryByName.get(fuzzyKey) || null;
-    }
-
-    if (!summary && fuzzyKey) {
-      summary =
-        (Array.isArray(summaryRows) ? summaryRows : []).find((row) => {
-          const rowKey = normalizeNameKeyForBuyOrderMatch(row?.marketHashName);
-          return (
-            rowKey &&
-            (rowKey.includes(fuzzyKey) || fuzzyKey.includes(rowKey))
-          );
-        }) || null;
-    }
-
-    const buyOrderCount = Number(summary?.orders || 0);
-    const buyOrderQuantity = Number(summary?.quantity || 0);
-    const buyOrderBestPriceUsd = Number(summary?.bestPriceUsd || 0);
-
-    return {
-      ...item,
-      hasBuyOrder: buyOrderCount > 0 && buyOrderBestPriceUsd > 0,
-      buyOrderCount: buyOrderCount > 0 ? buyOrderCount : 0,
-      buyOrderQuantity: buyOrderQuantity > 0 ? buyOrderQuantity : 0,
-      buyOrderBestPriceUsd: buyOrderBestPriceUsd > 0 ? buyOrderBestPriceUsd : null,
-    };
-  });
-}
 
 function resolveBuyOrderItemName(row) {
   return String(
@@ -231,7 +143,7 @@ function WatchlistItemsLoadingSkeleton() {
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const { currency, formatPrice } = useCurrency();
-  const validSnapshot = getValidWatchlistSnapshot();
+  const validSnapshot = getLoadedWatchlistSnapshot();
   const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
   const [_buyOrderSummary, setBuyOrderSummary] = useState(() => validSnapshot?.buyOrderSummary || []);
   const [buyOrderOrders, setBuyOrderOrders] = useState(() => validSnapshot?.buyOrderOrders || []);
@@ -270,29 +182,54 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       }
       setError("");
 
-      // Auto-import the CSFloat watchlist before reading the local watchlist, so
-      // newly added items appear in the same load. Gated by the opt-in toggle;
-      // importCsFloatWatchlistData self-throttles (cooldown) and only forces a
-      // sync when it actually finds new names, so this is safe per load.
+      // Auto-imports run fire-and-forget: they self-throttle (cooldown) and, when
+      // they add items, notify the watchlist mutation bus which re-triggers this
+      // load. Awaiting them here serialized several upstream round-trips in front
+      // of the first paint and made the tab feel stuck on a spinner.
       if (isDesktopRuntime) {
+        void (async () => {
+          try {
+            const prefs = await getPortfolioPreferences();
+            const autoImportPromises = [];
+            if (prefs?.csfloatWatchlistAutoImport) {
+              autoImportPromises.push(importCsFloatWatchlistData());
+            }
+            if (prefs?.csfloatBuyOrderAutoImport) {
+              autoImportPromises.push(importCsFloatBuyOrdersAsWatchlistData());
+            }
+            if (autoImportPromises.length > 0) {
+              await Promise.allSettled(autoImportPromises);
+            }
+          } catch (autoImportError) {
+            console.warn("[watchlist] csfloat auto-import failed", autoImportError);
+          }
+        })();
+      }
+
+      // Fast first paint: serve the local watchlist (no desktop sync, no live
+      // CSFloat refresh) before the heavy live pass below replaces it. Only
+      // worth it when the view has nothing to show yet.
+      if (showLoading && isDesktopRuntime) {
         try {
-          const prefs = await getPortfolioPreferences();
-          const autoImportPromises = [];
-          if (prefs?.csfloatWatchlistAutoImport) {
-            autoImportPromises.push(importCsFloatWatchlistData());
+          const quickResponse = await fetchWatchlistData({
+            syncLive: false,
+            skipDesktopSync: true,
+          });
+          const quickItems = Array.isArray(quickResponse?.data) ? quickResponse.data : [];
+          if (quickItems.length > 0) {
+            setWatchlistItems(applyBuyOrdersToWatchlistItems(quickItems, []));
+            setLoading(false);
           }
-          if (prefs?.csfloatBuyOrderAutoImport) {
-            autoImportPromises.push(importCsFloatBuyOrdersAsWatchlistData());
-          }
-          if (autoImportPromises.length > 0) {
-            await Promise.allSettled(autoImportPromises);
-          }
-        } catch (autoImportError) {
-          console.warn("[watchlist] csfloat auto-import failed", autoImportError);
+        } catch (quickError) {
+          console.warn("[watchlist] quick local paint failed", quickError);
         }
       }
 
-      const response = await fetchWatchlistData({ syncLive: true });
+      // Cache-only read against the homeserver (single source of truth): prices
+      // come from item_live_cache, refreshed solely by the server cron. syncLive
+      // would trigger a per-item CSFloat lookup + 200ms sleep on the server —
+      // that live path is reserved for explicit sync actions.
+      const response = await fetchWatchlistData({ syncLive: false });
       const nextItemsRaw = response?.data || [];
       const nextWarnings = response?.meta?.warnings || [];
       let nextBuyOrderSummary = [];
@@ -373,15 +310,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       setBuyOrderOrders(nextBuyOrderOrders);
       setBuyOrderDebug(nextBuyOrderDebug);
       setWarnings(nextWarnings);
-      watchlistViewSnapshot = {
-        loaded: true,
+      setWatchlistViewSnapshot({
         items: nextItems,
         buyOrderSummary: nextBuyOrderSummary,
         buyOrderOrders: nextBuyOrderOrders,
         buyOrderDebug: nextBuyOrderDebug,
         warnings: nextWarnings,
-        updatedAt: Date.now(),
-      };
+      });
       setSelectedItem((currentSelection) => {
         if (!currentSelection) {
           return null;
@@ -413,8 +348,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
             firstErrorCode: "WATCHLIST_SYNC_FALLBACK",
             firstErrorStatus: 0,
           });
-          watchlistViewSnapshot = {
-            loaded: true,
+          setWatchlistViewSnapshot({
             items: fallbackItems,
             buyOrderSummary: [],
             buyOrderOrders: [],
@@ -436,8 +370,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                 message: "Watchlist wurde ohne Live-Sync geladen. Bitte spaeter erneut versuchen.",
               },
             ],
-            updatedAt: Date.now(),
-          };
+          });
           setWarnings([
             {
               code: "WATCHLIST_SYNC_FALLBACK",
@@ -474,7 +407,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   }, [isDesktopRuntime]);
 
   useEffect(() => {
-    void loadWatchlistData({ showLoading: !getValidWatchlistSnapshot() });
+    // Fresh snapshot (e.g. from the startup prefetch): serve it as-is, no
+    // network. A stale-but-loaded snapshot is already painted via the state
+    // initializers; refresh it in the background without a spinner.
+    if (isWatchlistSnapshotFresh()) {
+      return;
+    }
+    void loadWatchlistData({ showLoading: !getLoadedWatchlistSnapshot() });
   }, [loadWatchlistData]);
 
   // Refetch when a watchlist mutation happens elsewhere (search add, batch

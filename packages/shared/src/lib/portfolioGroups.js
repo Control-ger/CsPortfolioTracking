@@ -59,7 +59,12 @@ function resolveClusterRowKey(row) {
 }
 
 function resolveClusterRowSourceIds(row) {
-  const values = Array.isArray(row?.sourceInvestmentIds) ? row.sourceInvestmentIds : [];
+  const values = [
+    ...(Array.isArray(row?.sourceInvestmentIds) ? row.sourceInvestmentIds : []),
+    // Server-aggregated rows carry desktop-local ids index-aligned in
+    // sourceClientIds; both namespaces are valid membership keys.
+    ...(Array.isArray(row?.sourceClientIds) ? row.sourceClientIds : []),
+  ];
   return uniqueInvestmentIds(values);
 }
 
@@ -234,23 +239,43 @@ export function buildPortfolioGroupSummaries({
     return [];
   }
 
+  // Membership ids can come from either runtime: desktop groups store local ids
+  // (csfloat-…, steam asset ids), web groups store server ids. Index every row
+  // under all of its id aliases so a group resolves regardless of where it was
+  // created and where it is rendered.
+  const resolveRowIdAliases = (row) =>
+    uniqueInvestmentIds([row?.id, row?.clientId, row?.serverId]);
+
+  const registerAlias = (map, key, value) => {
+    const normalized = normalizeInvestmentId(key);
+    if (normalized && !map.has(normalized)) {
+      map.set(normalized, value);
+    }
+  };
+
   const rawById = new Map();
   (Array.isArray(rawInvestments) ? rawInvestments : []).forEach((item) => {
-    const itemId = normalizeInvestmentId(item?.id);
-    if (!itemId) {
-      return;
-    }
-    rawById.set(itemId, item);
+    resolveRowIdAliases(item).forEach((alias) => registerAlias(rawById, alias, item));
   });
 
   const clusterRows = Array.isArray(clusteredInvestments) ? clusteredInvestments : [];
   const clusterBySourceInvestmentId = new Map();
   clusterRows.forEach((clusterRow) => {
-    resolveClusterRowSourceIds(clusterRow).forEach((investmentId) => {
-      if (!clusterBySourceInvestmentId.has(investmentId)) {
-        clusterBySourceInvestmentId.set(investmentId, clusterRow);
+    const sourceIds = resolveClusterRowSourceIds(clusterRow);
+    sourceIds.forEach((investmentId) => {
+      registerAlias(clusterBySourceInvestmentId, investmentId, clusterRow);
+      const rawItem = rawById.get(investmentId);
+      if (rawItem) {
+        resolveRowIdAliases(rawItem).forEach((alias) =>
+          registerAlias(clusterBySourceInvestmentId, alias, clusterRow),
+        );
       }
     });
+    // Server-aggregated web rows carry their own id/clientId instead of
+    // sourceInvestmentIds from local clustering.
+    resolveRowIdAliases(clusterRow).forEach((alias) =>
+      registerAlias(clusterBySourceInvestmentId, alias, clusterRow),
+    );
   });
 
   return normalizedGroups

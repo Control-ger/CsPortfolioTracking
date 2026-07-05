@@ -1876,6 +1876,52 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
   }, [activeTab, compositionRefreshToken, loadDashboardWatchlistItems, portfolioLoading]);
 
+  // Prefetch the watchlist view (data + lazy chunk) once during idle after the
+  // initial dashboard load, so the first Watchlist tab visit paints instantly
+  // from the module snapshot instead of blocking on live fetches.
+  const watchlistPrefetchStartedRef = useRef(false);
+  useEffect(() => {
+    if (portfolioLoading || watchlistPrefetchStartedRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId = null;
+    let idleId = null;
+
+    const runPrefetch = () => {
+      if (cancelled) {
+        return;
+      }
+      watchlistPrefetchStartedRef.current = true;
+      void import("../lib/watchlistViewSnapshot.js")
+        .then((module) => module.prefetchWatchlistViewData?.())
+        .catch((error) => {
+          console.warn("[watchlist-prefetch] scheduling failed", error);
+        });
+    };
+
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(runPrefetch, { timeout: 5000 });
+    } else if (typeof window !== "undefined") {
+      timeoutId = window.setTimeout(runPrefetch, 2000);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null && typeof window !== "undefined") {
+        window.clearTimeout(timeoutId);
+      }
+      if (
+        idleId !== null &&
+        typeof window !== "undefined" &&
+        typeof window.cancelIdleCallback === "function"
+      ) {
+        window.cancelIdleCallback(idleId);
+      }
+    };
+  }, [portfolioLoading]);
+
   useEffect(() => {
     let cancelled = false;
     const loadRecentSearches = async () => {
@@ -2745,7 +2791,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       buildPortfolioGroupSummaries({
         groups: portfolioGroups,
         clusteredInvestments: enrichedInvestments,
-        rawInvestments: managementInvestments,
+        // managementInvestments is desktop-only (local SQLite). On web the
+        // enriched server rows are the raw source — without this fallback,
+        // groups can never resolve members in the web runtime.
+        rawInvestments:
+          managementInvestments.length > 0 ? managementInvestments : enrichedInvestments,
       }),
     [enrichedInvestments, managementInvestments, portfolioGroups],
   );

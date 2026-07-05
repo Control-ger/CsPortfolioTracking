@@ -94,6 +94,22 @@ function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+// Absolute profit/loss for a single position row, mirroring group.totalProfit.
+function resolveItemProfitValue(item) {
+  const direct = Number(item?.profitEuro);
+  if (Number.isFinite(direct)) {
+    return direct;
+  }
+
+  const currentValue = Number(item?.currentValue);
+  const totalInvested = Number(item?.totalInvested);
+  if (Number.isFinite(currentValue) && Number.isFinite(totalInvested)) {
+    return currentValue - totalInvested;
+  }
+
+  return null;
+}
+
 function formatSignedPercentOneDecimal(value) {
   if (!isFiniteNumber(value)) {
     return "-";
@@ -220,7 +236,9 @@ export function InventoryTable({
     return ids;
   }, [groups]);
 
-  const sortedInvestments = useMemo(() => {
+  // Groups and single positions are sorted together in one list, so a group
+  // lands wherever its aggregate value belongs instead of sticking to the top.
+  const sortedRows = useMemo(() => {
     const getLiveSortValue = (item) => {
       if (typeof item.livePrice === "number" && Number.isFinite(item.livePrice)) {
         return item.livePrice;
@@ -233,7 +251,7 @@ export function InventoryTable({
       return 0;
     };
 
-    const getSortValue = (item) => {
+    const getItemSortValue = (item) => {
       switch (sortKey) {
         case "item":
           return String(item.name || "").toLowerCase();
@@ -247,43 +265,79 @@ export function InventoryTable({
       }
     };
 
+    const getGroupSortValue = (group) => {
+      switch (sortKey) {
+        case "item":
+          return String(group.name || "").toLowerCase();
+        case "quantity":
+          return Number(group.totalQuantity || 0);
+        case "livePrice":
+          return Number(group.totalValue || 0);
+        case "roi":
+        default:
+          return Number(group.roiPercent || 0);
+      }
+    };
+
     const visibleInvestments = (Array.isArray(investments) ? investments : []).filter((item) => {
       const sourceIds = Array.isArray(item?.sourceInvestmentIds)
         ? item.sourceInvestmentIds
             .map((entry) => String(entry || "").trim())
             .filter(Boolean)
         : [];
+      const sourceClientIds = Array.isArray(item?.sourceClientIds)
+        ? item.sourceClientIds.map((entry) => String(entry || "").trim())
+        : [];
 
       if (sourceIds.length > 0) {
-        const allMemberIdsGrouped = sourceIds.every((sourceId) => groupedMemberIds.has(sourceId));
+        // A source row counts as grouped when either its server id or its
+        // index-aligned desktop-local clientId is a group member — groups
+        // created on desktop reference local ids, web-created ones server ids.
+        const allMemberIdsGrouped = sourceIds.every((sourceId, index) => {
+          if (groupedMemberIds.has(sourceId)) {
+            return true;
+          }
+          const clientId = sourceClientIds[index] || "";
+          return clientId !== "" && groupedMemberIds.has(clientId);
+        });
         return !allMemberIdsGrouped;
       }
 
-      const itemId = String(item?.id || "").trim();
-      if (!itemId) {
+      const aliasIds = [item?.id, item?.clientId, item?.serverId]
+        .map((entry) => String(entry ?? "").trim())
+        .filter(Boolean);
+      if (aliasIds.length === 0) {
         return true;
       }
-      return !groupedMemberIds.has(itemId);
+      return !aliasIds.some((aliasId) => groupedMemberIds.has(aliasId));
     });
 
-    const sorted = [...visibleInvestments];
+    const rows = [
+      ...(Array.isArray(groups) ? groups : []).map((group) => ({
+        kind: "group",
+        sortValue: getGroupSortValue(group),
+        group,
+      })),
+      ...visibleInvestments.map((item) => ({
+        kind: "item",
+        sortValue: getItemSortValue(item),
+        item,
+      })),
+    ];
 
-    sorted.sort((a, b) => {
-      const aValue = getSortValue(a);
-      const bValue = getSortValue(b);
-
+    rows.sort((a, b) => {
       let comparison = 0;
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        comparison = aValue.localeCompare(bValue, "de");
+      if (typeof a.sortValue === "string" && typeof b.sortValue === "string") {
+        comparison = a.sortValue.localeCompare(b.sortValue, "de");
       } else {
-        comparison = aValue - bValue;
+        comparison = Number(a.sortValue) - Number(b.sortValue);
       }
 
       return sortDirection === "asc" ? comparison : -comparison;
     });
 
-    return sorted;
-  }, [groupedMemberIds, investments, sortDirection, sortKey]);
+    return rows;
+  }, [groupedMemberIds, groups, investments, sortDirection, sortKey]);
 
   const toggleSort = (nextKey) => {
     if (sortKey === nextKey) {
@@ -340,7 +394,76 @@ export function InventoryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {groups.map((group) => {
+            {sortedRows.map((row) => {
+              if (row.kind !== "group") {
+                const item = row.item;
+                const itemProfit = resolveItemProfitValue(item);
+                return (
+                  <TableRow
+                    key={item.id}
+                    className="group cursor-pointer border-border/70 transition-colors hover:bg-accent/40"
+                    onClick={() => onSelectItem(item)}
+                  >
+                    <TableCell className="font-medium text-sm">
+                      <div className="flex items-center gap-3">
+                        <ItemThumbnail imageUrl={item.imageUrl} name={item.name} />
+                        <span className="flex flex-col">
+                          <span className="font-semibold transition-colors group-hover:text-primary">
+                            {item.name}
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                            <span>{item.type}</span>
+                            <Badge variant="outline" className="text-[9px]">
+                              {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
+                            </Badge>
+                          </span>
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                      {item.quantity}x
+                    </TableCell>
+
+                    <TableCell
+                      className={`text-right text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
+                    >
+                      {item.isLive ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span>{formatPrice(item.livePrice)}</span>
+                          {itemProfit !== null ? (
+                            <span className={`text-[10px] ${deltaClassName(itemProfit)}`}>
+                              {formatSignedCurrency(itemProfit, formatPrice)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">
+                              {item.lastPriceUpdateAt || item.freshnessLabel || "unbekannt"}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs text-muted-foreground">Kein Preis verfuegbar</span>
+                        </div>
+                      )}
+                    </TableCell>
+
+                    <TableCell className="text-right">
+                      {item.isLive && isFiniteNumber(item.roi) ? (
+                        <span
+                          className={`text-sm font-bold ${item.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                        >
+                          {formatSignedPercentOneDecimal(item.roi)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground opacity-50">-</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+
+              const group = row.group;
               const isExpanded = Boolean(expandedGroupIds[group.id]);
               const profitClassName = deltaClassName(group.totalProfit);
               const roiClassName = deltaClassName(group.roiPercent);
@@ -384,15 +507,15 @@ export function InventoryTable({
                     >
                       <div className="flex flex-col items-end gap-1">
                         <span>{formatPrice(group.totalValue)}</span>
-                        <span className={`text-[10px] ${roiClassName}`}>
-                          {formatSignedPercentOneDecimal(group.roiPercent)}
+                        <span className={`text-[10px] ${profitClassName}`}>
+                          {formatSignedCurrency(group.totalProfit, formatPrice)}
                         </span>
                       </div>
                     </TableCell>
 
                     <TableCell className="text-right">
-                      <span className={`text-sm font-bold ${profitClassName}`}>
-                        {formatSignedCurrency(group.totalProfit, formatPrice)}
+                      <span className={`text-sm font-bold ${roiClassName}`}>
+                        {formatSignedPercentOneDecimal(group.roiPercent)}
                       </span>
                     </TableCell>
                   </TableRow>
@@ -444,63 +567,6 @@ export function InventoryTable({
               );
             })}
 
-            {sortedInvestments.map((item) => (
-              <TableRow
-                key={item.id}
-                className="group cursor-pointer border-border/70 transition-colors hover:bg-accent/40"
-                onClick={() => onSelectItem(item)}
-              >
-                <TableCell className="font-medium text-sm">
-                  <div className="flex items-center gap-3">
-                    <ItemThumbnail imageUrl={item.imageUrl} name={item.name} />
-                    <span className="flex flex-col">
-                      <span className="font-semibold transition-colors group-hover:text-primary">
-                        {item.name}
-                      </span>
-                      <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                        <span>{item.type}</span>
-                        <Badge variant="outline" className="text-[9px]">
-                          {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
-                        </Badge>
-                      </span>
-                    </span>
-                  </div>
-                </TableCell>
-
-                <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                  {item.quantity}x
-                </TableCell>
-
-                <TableCell
-                  className={`text-right text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
-                >
-                  {item.isLive ? (
-                    <div className="flex flex-col items-end gap-1">
-                      <span>{formatPrice(item.livePrice)}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {item.lastPriceUpdateAt || item.freshnessLabel || "unbekannt"}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-end">
-                      <span className="text-xs text-muted-foreground">Kein Preis verfuegbar</span>
-                    </div>
-                  )}
-                </TableCell>
-
-                <TableCell className="text-right">
-                  {item.isLive && isFiniteNumber(item.roi) ? (
-                    <span
-                      className={`text-sm font-bold ${item.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                    >
-                      {formatSignedPercentOneDecimal(item.roi)}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground opacity-50">-</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
           </TableBody>
         </Table>
       </div>
@@ -543,7 +609,28 @@ export function InventoryTable({
             </div>
           </div>
 
-          {groups.map((group) => {
+          {sortedRows.map((row) => {
+            if (row.kind !== "group") {
+              const item = row.item;
+              const roiValue = isFiniteNumber(item.roi) ? item.roi : null;
+
+              return (
+                <ItemListRow
+                  key={item.id}
+                  item={{
+                    ...item,
+                    currentPrice: item.isLive ? item.livePrice : null,
+                    currentPriceUsd: null,
+                    roi: roiValue,
+                    trend: item.isLive && roiValue !== null ? (roiValue >= 0 ? "up" : "down") : null,
+                    changeLabel: item.isLive ? formatSignedPercentOneDecimal(roiValue) : "-",
+                  }}
+                  onClick={() => onSelectItem(item)}
+                />
+              );
+            }
+
+            const group = row.group;
             const isExpanded = Boolean(expandedGroupIds[group.id]);
             const profitClassName = deltaClassName(group.totalProfit);
             const roiClassName = deltaClassName(group.roiPercent);
@@ -641,24 +728,6 @@ export function InventoryTable({
             );
           })}
 
-          {sortedInvestments.map((item) => {
-            const roiValue = isFiniteNumber(item.roi) ? item.roi : null;
-
-            return (
-              <ItemListRow
-                key={item.id}
-                item={{
-                  ...item,
-                  currentPrice: item.isLive ? item.livePrice : null,
-                  currentPriceUsd: null,
-                  roi: roiValue,
-                  trend: item.isLive && roiValue !== null ? (roiValue >= 0 ? "up" : "down") : null,
-                  changeLabel: item.isLive ? formatSignedPercentOneDecimal(roiValue) : "-",
-                }}
-                onClick={() => onSelectItem(item)}
-              />
-            );
-          })}
         </div>
     </>
   );

@@ -643,6 +643,16 @@ export async function logout() {
     localStorage.removeItem(WEB_AUTH_USER_KEY);
     clearWebCookie(WEB_AUTH_COOKIE_KEY);
   }
+
+  // The watchlist view snapshot is module-global and would otherwise leak the
+  // previous account's data into the next session (60min freshness window).
+  // Dynamic import avoids a static cycle (watchlistViewSnapshot → dataSource → auth).
+  try {
+    const { resetWatchlistViewSnapshot } = await import("./watchlistViewSnapshot.js");
+    resetWatchlistViewSnapshot();
+  } catch {
+    // best-effort cleanup
+  }
 }
 
 /**

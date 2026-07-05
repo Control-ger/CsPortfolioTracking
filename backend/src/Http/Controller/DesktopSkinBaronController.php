@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SkinBaronClient;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
@@ -13,8 +14,29 @@ final class DesktopSkinBaronController
     private const TRANSFER_ITEMS_PAGE_SIZE = 25;
     private const TRANSFER_ITEMS_MAX_PAGES = 50;
 
-    public function __construct(private readonly SkinBaronClient $client)
+    private ?float $usdToEurRate = null;
+
+    public function __construct(
+        private readonly SkinBaronClient $client,
+        private readonly ExchangeRateClient $exchangeRateClient = new ExchangeRateClient(),
+    ) {
+    }
+
+    // SkinBaron purchase prices are EUR; investments persist USD (see CLAUDE.md
+    // currency rule). Rate is fetched once per request and cached in-process.
+    private function usdToEurRate(): float
     {
+        if ($this->usdToEurRate === null) {
+            $rate = $this->exchangeRateClient->usdToEur();
+            $this->usdToEurRate = $rate > 0.0 ? $rate : 0.92;
+        }
+
+        return $this->usdToEurRate;
+    }
+
+    private function convertEurToUsd(float $eurAmount): float
+    {
+        return round($eurAmount / $this->usdToEurRate(), 4);
     }
 
     public function preview(Request $request): void
@@ -356,14 +378,18 @@ final class DesktopSkinBaronController
                 $amount = 1;
             }
 
-            $unitPrice = $this->readNumeric($item, ['price']) ?? 0.0;
-            $totalPrice = $unitPrice * $amount;
+            $unitPriceEur = $this->readNumeric($item, ['price']) ?? 0.0;
+            $unitPrice = $this->convertEurToUsd($unitPriceEur);
+            $totalPrice = round($unitPrice * $amount, 4);
             $offerLink = $this->readString($item, ['offerLink']) ?? '';
+            // The trade id fingerprint must stay on the raw EUR price: a USD value
+            // shifts with the daily exchange rate and would mint new ids (and thus
+            // duplicate rows) for the same purchase on every re-import.
             $externalTradeId = $this->buildPurchaseItemExternalTradeId(
                 $transferId,
                 $offerLink,
                 $marketHashName,
-                $unitPrice,
+                $unitPriceEur,
                 $amount,
                 (int) $itemIndex
             );
@@ -379,6 +405,7 @@ final class DesktopSkinBaronController
                 'buyPrice' => $unitPrice,
                 'buyPriceTotal' => $totalPrice,
                 'buyPriceUsd' => $unitPrice,
+                'buyPriceEur' => round($unitPriceEur, 4),
                 'purchasedAt' => $purchasedAt,
                 'fundingMode' => $paymentOption !== null ? strtolower($paymentOption) : 'wallet_funded',
                 'imageUrl' => $this->readString($item, ['imageUrl']),

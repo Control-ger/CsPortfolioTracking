@@ -72,7 +72,7 @@ PHP autoloader (`backend/src/bootstrap.php`): PSR-4-style, maps `App\` → `back
 - **Item references**: always use `item_id`, never string-based names.
 - **History tables**: no precomputed aggregates — compute values in Services.
 - **Exchange rates**: reference `exchange_rate_id`, never redundant price columns.
-- **`items` catalog**: server-owned and read-only except for CLI cron `backend/sync-prices.php` (requires `ITEMS_CATALOG_WRITE_SCOPE=cron`).
+- **`items` catalog**: server-owned and read-only except for the CLI cron price path — `backend/sync-prices.php` and `backend/sync-price-queue-worker.php` (both require `ITEMS_CATALOG_WRITE_SCOPE=cron`; the worker also backfills catalog metadata like images).
 
 ### Desktop Local-First
 - Desktop is the sole write client for investments and watchlist.
