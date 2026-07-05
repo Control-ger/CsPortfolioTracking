@@ -212,6 +212,37 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
 
     let changed = false;
 
+    // Quantity positions (e.g. 23x patch packs) are the ledger side: they carry
+    // the full quantity and the buy price. Excluding them would erase the pieces
+    // that are NOT in the Steam inventory, so here the STEAM piece is the
+    // duplicate — it gets the unit price for reference and is excluded instead.
+    const csfloatQuantity = Math.max(1, Number(csfloatInvestment.quantity || 1));
+    if (csfloatQuantity > 1) {
+      const steamExcluded = Boolean(steamInvestment.excluded || steamInvestment.isExcluded);
+      const needsPrice =
+        (steamPrice === null || steamPrice <= 0) && csfloatPrice !== null && csfloatPrice > 0;
+      if (!steamExcluded || needsPrice) {
+        upsertInvestment({
+          ...steamInvestment,
+          id: steamInvestment.id,
+          userId: steamInvestment.userId,
+          ...(needsPrice
+            ? {
+                buyPriceUsd: csfloatPrice,
+                buyPrice: csfloatPrice,
+                priceSetMode: "matched_csfloat",
+              }
+            : {}),
+          excluded: true,
+          isExcluded: true,
+          matchedCsfloatInvestmentId: String(csfloatInvestmentId),
+          duplicateResolvedBy: "steam_csfloat_match",
+        });
+        changed = true;
+      }
+      return changed;
+    }
+
     if ((steamPrice === null || steamPrice <= 0) && csfloatPrice !== null && csfloatPrice > 0) {
       upsertInvestment({
         ...steamInvestment,
@@ -606,7 +637,10 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
       });
 
       const assignedSteam = new Set();
-      const assignedCsfloat = new Set();
+      // A quantity position (e.g. 23x patch packs bought on CSFloat) can cover
+      // multiple Steam inventory pieces, so external rows are capacity-counted
+      // instead of consumed by their first match.
+      const assignedCsfloatUses = new Map();
       let matchesSuggested = 0;
       for (const edge of candidateEdges) {
         const steamAssetId = String(edge.steamItem.steamAssetId || "");
@@ -614,7 +648,9 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
         if (!steamAssetId || !csfloatInvestmentId) {
           continue;
         }
-        if (assignedSteam.has(steamAssetId) || assignedCsfloat.has(csfloatInvestmentId)) {
+        const csfloatCapacity = Math.max(1, Number(edge.csfloatItem.quantity || 1));
+        const csfloatUses = assignedCsfloatUses.get(csfloatInvestmentId) || 0;
+        if (assignedSteam.has(steamAssetId) || csfloatUses >= csfloatCapacity) {
           continue;
         }
 
@@ -631,7 +667,7 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
         }
 
         assignedSteam.add(steamAssetId);
-        assignedCsfloat.add(csfloatInvestmentId);
+        assignedCsfloatUses.set(csfloatInvestmentId, csfloatUses + 1);
 
         const status = edge.confidence === "high" ? "auto_linked" : "suggested";
         const reason = edge.reasons.join(",");

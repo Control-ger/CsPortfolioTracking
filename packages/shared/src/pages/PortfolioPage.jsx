@@ -4940,6 +4940,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&
               selectedItemWithLiveAndBuyOrders?.__detailKind !== "group-cluster"
             }
+            canToggleBucket={
+              // Whole groups can be moved between buckets (batch over member ids);
+              // group-clusters remain read-only aggregations.
+              isDesktopRuntime &&
+              selectedItemWithLiveAndBuyOrders?.__detailKind !== "group-cluster"
+            }
             onModalExcludeToggle={handleModalExcludeToggle}
             modals={modals}
             onCloseModal={closeModal}

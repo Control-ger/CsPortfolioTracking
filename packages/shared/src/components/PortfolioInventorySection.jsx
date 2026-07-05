@@ -40,6 +40,7 @@ export function PortfolioInventorySection({
   onExcludeChange,
   onBucketChange,
   canToggleExclude,
+  canToggleBucket,
   onModalExcludeToggle,
   modals,
   onCloseModal,
@@ -87,7 +88,11 @@ export function PortfolioInventorySection({
         >
           <InventoryTable
             investments={inventoryTabItems}
-            groups={portfolioGroupSummaries}
+            groups={(Array.isArray(portfolioGroupSummaries) ? portfolioGroupSummaries : []).filter(
+              (group) =>
+                inventoryScope === "all" ||
+                String(group?.bucket || "investment") === inventoryScope,
+            )}
             onSelectItem={onSelectItem}
             onSelectGroup={onSelectGroup}
             onSelectCluster={onSelectCluster}
@@ -104,6 +109,7 @@ export function PortfolioInventorySection({
             onExcludeChange={isDesktopRuntime ? onExcludeChange : undefined}
             onBucketChange={isDesktopRuntime ? onBucketChange : undefined}
             canToggleExclude={canToggleExclude}
+            canToggleBucket={canToggleBucket}
           />
         </Suspense>
       </div>

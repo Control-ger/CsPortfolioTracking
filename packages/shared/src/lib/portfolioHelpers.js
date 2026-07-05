@@ -368,6 +368,11 @@ export function buildGroupDetailSelection(group) {
     item_id: 0,
     __detailKind: "group",
     topVisuals: Array.isArray(group?.topVisuals) ? group.topVisuals : [],
+    // Member ids let the detail panel's bucket toggle move the WHOLE group via
+    // updateInvestmentBucket's batch path.
+    sourceInvestmentIds: Array.isArray(group?.memberInvestmentIds)
+      ? [...group.memberInvestmentIds]
+      : [],
     name: group?.name || "Gruppe",
     marketHashName: group?.name || "Gruppe",
     displayName: group?.name || "Gruppe",
@@ -381,7 +386,7 @@ export function buildGroupDetailSelection(group) {
     buyPrice: weightedBuyUnitPrice,
     currentPrice: weightedCurrentUnitPrice,
     quantity: totalQuantity,
-    bucket: "investment",
+    bucket: String(group?.bucket || "").toLowerCase() === "inventory" ? "inventory" : "investment",
     type: "group",
   };
 }

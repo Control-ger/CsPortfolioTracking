@@ -128,13 +128,16 @@ export const ItemDetailPanel = ({
   onExcludeChange,
   onBucketChange,
   canToggleExclude = true,
+  // Groups support the bucket toggle (moves all members) but not exclusion,
+  // so the two capabilities are gated separately.
+  canToggleBucket = canToggleExclude,
 }) => {
   const { currency, formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const excludeEnabled = canToggleExclude && typeof onExcludeChange === "function";
-  const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
+  const bucketToggleEnabled = canToggleBucket && typeof onBucketChange === "function";
   const isGroupSelection = item?.__detailKind === "group";
 
   if (!item)

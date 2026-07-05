@@ -287,6 +287,7 @@ export function buildPortfolioGroupSummaries({
       let totalQuantity = 0;
       let totalInvested = 0;
       let totalValue = 0;
+      let inventoryMemberCount = 0;
 
       group.memberInvestmentIds.forEach((investmentId) => {
         const rawItem = rawById.get(investmentId) || null;
@@ -305,6 +306,9 @@ export function buildPortfolioGroupSummaries({
         }
 
         presentMemberIds.push(investmentId);
+        if (String(rawItem?.bucket || clusterRow?.bucket || "").toLowerCase() === "inventory") {
+          inventoryMemberCount += 1;
+        }
 
         const rawQuantity = Math.max(
           1,
@@ -380,6 +384,13 @@ export function buildPortfolioGroupSummaries({
       return {
         ...group,
         memberInvestmentIds: presentMemberIds,
+        // Dominant bucket of the resolved members: only when EVERY member sits in
+        // the inventory bucket does the group count as inventory; mixed groups are
+        // treated as investments (matching the single-row default).
+        bucket:
+          presentMemberIds.length > 0 && inventoryMemberCount === presentMemberIds.length
+            ? "inventory"
+            : "investment",
         totalQuantity,
         totalInvested,
         totalValue,
