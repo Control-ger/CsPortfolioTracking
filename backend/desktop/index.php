@@ -532,6 +532,109 @@ $proxyUpstreamGet = static function (string $endpointPath, array $query = [], ar
     ];
 };
 
+// Shared upstream sender for write methods (PUT/POST). Mirrors $proxyUpstreamGet's
+// TLS handling: the desktop sidecar runs the host's system PHP, which on Windows
+// often has no configured curl CA bundle, so HTTPS verification fails with curl
+// code 0. The GET proxy already retries insecurely on certificate errors; without
+// the same here, EVERY write (settings, groups, refresh-stale, watchlist batch)
+// silently failed and got swallowed as a desktop-local-fallback success.
+$proxyUpstreamSend = static function (
+    string $method,
+    string $endpointPath,
+    string $payloadJson,
+    array $authHeaders = []
+) use ($resolveUpstreamApiBase, $buildUpstreamCandidates): array {
+    $baseUrl = $resolveUpstreamApiBase();
+    if ($baseUrl === '') {
+        return ['ok' => false, 'httpCode' => 0, 'attempts' => []];
+    }
+
+    $upstreamCaBundlePath = trim((string) (getenv('UPSTREAM_CA_BUNDLE_PATH') ?: ($_ENV['UPSTREAM_CA_BUNDLE_PATH'] ?? '')));
+    $allowInsecureTlsFallback = in_array(
+        strtolower(trim((string) (getenv('UPSTREAM_INSECURE_TLS_FALLBACK') ?: ($_ENV['UPSTREAM_INSECURE_TLS_FALLBACK'] ?? '1')))),
+        ['1', 'true', 'yes', 'on'],
+        true
+    );
+
+    $execute = static function (string $url, bool $insecureTls) use ($method, $payloadJson, $authHeaders, $upstreamCaBundlePath): array {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
+        curl_setopt(
+            $ch,
+            CURLOPT_HTTPHEADER,
+            array_merge(['Accept: application/json', 'Content-Type: application/json'], $authHeaders)
+        );
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+        if ($insecureTls) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        } elseif ($upstreamCaBundlePath !== '' && is_file($upstreamCaBundlePath)) {
+            curl_setopt($ch, CURLOPT_CAINFO, $upstreamCaBundlePath);
+        }
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = (string) curl_error($ch);
+        curl_close($ch);
+
+        return ['response' => $response, 'httpCode' => $httpCode, 'curlError' => $curlError];
+    };
+
+    $attempts = [];
+    foreach ($buildUpstreamCandidates($baseUrl, $endpointPath) as $candidate) {
+        $result = $execute($candidate, false);
+        $response = $result['response'];
+        $httpCode = (int) $result['httpCode'];
+        $curlError = (string) $result['curlError'];
+
+        // Retry once insecurely on a TLS/certificate error (or any connect-level
+        // failure that produced no HTTP status), matching the GET proxy.
+        $noHttpStatus = !is_string($response) || trim($response) === '' || $httpCode === 0;
+        $certificateIssue = str_contains(strtolower($curlError), 'certificate')
+            || str_contains(strtolower($curlError), 'ssl');
+        if ($noHttpStatus && ($certificateIssue || $httpCode === 0) && $allowInsecureTlsFallback) {
+            $retry = $execute($candidate, true);
+            if (is_string($retry['response']) && trim($retry['response']) !== '') {
+                $response = $retry['response'];
+                $httpCode = (int) $retry['httpCode'];
+                $curlError = (string) $retry['curlError'];
+            } else {
+                $attempts[] = ['url' => $candidate, 'httpCode' => (int) $retry['httpCode'], 'curlError' => (string) $retry['curlError'], 'insecureTls' => true];
+                continue;
+            }
+        }
+
+        if (!is_string($response) || trim($response) === '') {
+            $attempts[] = ['url' => $candidate, 'httpCode' => $httpCode, 'curlError' => $curlError];
+            continue;
+        }
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            $attempts[] = ['url' => $candidate, 'httpCode' => $httpCode, 'responseType' => 'non_json'];
+            continue;
+        }
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return [
+                'ok' => true,
+                'httpCode' => $httpCode,
+                'data' => isset($decoded['data']) ? $decoded['data'] : $decoded,
+                'meta' => isset($decoded['meta']) && is_array($decoded['meta']) ? $decoded['meta'] : [],
+                'attempts' => $attempts,
+            ];
+        }
+
+        $attempts[] = ['url' => $candidate, 'httpCode' => $httpCode, 'responseType' => 'json_non_2xx'];
+    }
+
+    return ['ok' => false, 'httpCode' => 0, 'attempts' => $attempts];
+};
+
 $summarizeProxyIssue = static function (array $attempts, string $endpointPath = ''): array {
     $attemptedUrls = [];
     $attemptStatuses = [];
@@ -719,24 +822,9 @@ $router->register('GET', '/api/v1/settings/currency', static function (Request $
     );
 });
 
-$router->register('PUT', '/api/v1/settings/currency', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
-    $baseUrl = $resolveUpstreamApiBase();
+$router->register('PUT', '/api/v1/settings/currency', static function (Request $request) use ($proxyUpstreamSend, $resolveUpstreamAuthHeaders): void {
     $currencyRaw = strtoupper(trim((string) ($request->body['currency'] ?? 'EUR')));
     $currency = preg_match('/^[A-Z]{3}$/', $currencyRaw) === 1 ? $currencyRaw : 'EUR';
-
-    if ($baseUrl === '') {
-        JsonResponseFactory::success(
-            [
-                'userId' => 1,
-                'currency' => $currency,
-                'updatedAt' => gmdate('Y-m-d H:i:s'),
-                'source' => 'desktop-local-fallback',
-                'popularCurrencies' => [],
-            ],
-            ['source' => 'desktop-local-fallback']
-        );
-        return;
-    }
 
     $payloadJson = json_encode(['currency' => $currency], JSON_UNESCAPED_SLASHES);
     if (!is_string($payloadJson)) {
@@ -744,40 +832,13 @@ $router->register('PUT', '/api/v1/settings/currency', static function (Request $
         return;
     }
 
-    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/settings/currency') as $candidate) {
-        $ch = curl_init($candidate);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
-        curl_setopt(
-            $ch,
-            CURLOPT_HTTPHEADER,
-            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+    $sent = $proxyUpstreamSend('PUT', '/api/v1/settings/currency', $payloadJson, $resolveUpstreamAuthHeaders($request));
+    if (($sent['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($sent['data'] ?? null) ? $sent['data'] : ['currency' => $currency, 'popularCurrencies' => []],
+            array_merge(is_array($sent['meta'] ?? null) ? $sent['meta'] : [], ['source' => 'upstream'])
         );
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
-
-        $response = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if (!is_string($response) || trim($response) === '') {
-            continue;
-        }
-
-        $decoded = json_decode($response, true);
-        if (!is_array($decoded)) {
-            continue;
-        }
-
-        if ($httpCode >= 200 && $httpCode < 300) {
-            JsonResponseFactory::success(
-                is_array($decoded['data'] ?? null) ? $decoded['data'] : ['currency' => $currency, 'popularCurrencies' => []],
-                array_merge(is_array($decoded['meta'] ?? null) ? $decoded['meta'] : [], ['source' => 'upstream'])
-            );
-            return;
-        }
+        return;
     }
 
     JsonResponseFactory::error(
@@ -814,24 +875,10 @@ $router->register('GET', '/api/v1/settings/portfolio-groups', static function (R
     );
 });
 
-$router->register('PUT', '/api/v1/settings/portfolio-groups', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
-    $baseUrl = $resolveUpstreamApiBase();
+$router->register('PUT', '/api/v1/settings/portfolio-groups', static function (Request $request) use ($proxyUpstreamSend, $resolveUpstreamAuthHeaders): void {
     $groups = $request->body['groups'] ?? [];
     if (!is_array($groups)) {
         JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', 'groups muss ein Array sein.', [], 400);
-        return;
-    }
-
-    if ($baseUrl === '') {
-        JsonResponseFactory::success(
-            [
-                'userId' => 1,
-                'groups' => $groups,
-                'updatedAt' => gmdate('Y-m-d H:i:s'),
-                'source' => 'desktop-local-fallback',
-            ],
-            ['source' => 'desktop-local-fallback']
-        );
         return;
     }
 
@@ -841,44 +888,15 @@ $router->register('PUT', '/api/v1/settings/portfolio-groups', static function (R
         return;
     }
 
-    $attempts = [];
-    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/settings/portfolio-groups') as $candidate) {
-        $ch = curl_init($candidate);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
-        curl_setopt(
-            $ch,
-            CURLOPT_HTTPHEADER,
-            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+    $sent = $proxyUpstreamSend('PUT', '/api/v1/settings/portfolio-groups', $payloadJson, $resolveUpstreamAuthHeaders($request));
+    if (($sent['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($sent['data'] ?? null)
+                ? $sent['data']
+                : ['userId' => 1, 'groups' => $groups, 'updatedAt' => gmdate('Y-m-d H:i:s')],
+            array_merge(is_array($sent['meta'] ?? null) ? $sent['meta'] : [], ['source' => 'upstream'])
         );
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
-
-        $response = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $attempts[] = $httpCode;
-
-        if (!is_string($response) || trim($response) === '') {
-            continue;
-        }
-
-        $decoded = json_decode($response, true);
-        if (!is_array($decoded)) {
-            continue;
-        }
-
-        if ($httpCode >= 200 && $httpCode < 300) {
-            JsonResponseFactory::success(
-                is_array($decoded['data'] ?? null)
-                    ? $decoded['data']
-                    : ['userId' => 1, 'groups' => $groups, 'updatedAt' => gmdate('Y-m-d H:i:s')],
-                array_merge(is_array($decoded['meta'] ?? null) ? $decoded['meta'] : [], ['source' => 'upstream'])
-            );
-            return;
-        }
+        return;
     }
 
     // Upstream unreachable/erroring (CF Access lapse, server down, 5xx). The renderer
@@ -895,29 +913,15 @@ $router->register('PUT', '/api/v1/settings/portfolio-groups', static function (R
         ],
         [
             'source' => 'desktop-local-fallback',
-            'upstreamAttempts' => $attempts,
+            'upstreamAttempts' => array_map(static fn ($a) => is_array($a) ? ($a['httpCode'] ?? 0) : $a, $sent['attempts'] ?? []),
         ]
     );
 });
 
-$router->register('PUT', '/api/v1/settings/price-source', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
-    $baseUrl = $resolveUpstreamApiBase();
+$router->register('PUT', '/api/v1/settings/price-source', static function (Request $request) use ($proxyUpstreamSend, $resolveUpstreamAuthHeaders): void {
     $mode = strtolower(trim((string) ($request->body['mode'] ?? 'auto')));
     if (!in_array($mode, ['auto', 'csfloat', 'steam'], true)) {
         $mode = 'auto';
-    }
-
-    if ($baseUrl === '') {
-        JsonResponseFactory::success(
-            [
-                'userId' => 1,
-                'mode' => $mode,
-                'updatedAt' => gmdate('Y-m-d H:i:s'),
-                'source' => 'desktop-local-fallback',
-            ],
-            ['source' => 'desktop-local-fallback']
-        );
-        return;
     }
 
     $payloadJson = json_encode(['mode' => $mode], JSON_UNESCAPED_SLASHES);
@@ -926,40 +930,13 @@ $router->register('PUT', '/api/v1/settings/price-source', static function (Reque
         return;
     }
 
-    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/settings/price-source') as $candidate) {
-        $ch = curl_init($candidate);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
-        curl_setopt(
-            $ch,
-            CURLOPT_HTTPHEADER,
-            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+    $sent = $proxyUpstreamSend('PUT', '/api/v1/settings/price-source', $payloadJson, $resolveUpstreamAuthHeaders($request));
+    if (($sent['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            is_array($sent['data'] ?? null) ? $sent['data'] : ['mode' => $mode],
+            array_merge(is_array($sent['meta'] ?? null) ? $sent['meta'] : [], ['source' => 'upstream'])
         );
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
-
-        $response = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if (!is_string($response) || trim($response) === '') {
-            continue;
-        }
-
-        $decoded = json_decode($response, true);
-        if (!is_array($decoded)) {
-            continue;
-        }
-
-        if ($httpCode >= 200 && $httpCode < 300) {
-            JsonResponseFactory::success(
-                is_array($decoded['data'] ?? null) ? $decoded['data'] : ['mode' => $mode],
-                array_merge(is_array($decoded['meta'] ?? null) ? $decoded['meta'] : [], ['source' => 'upstream'])
-            );
-            return;
-        }
+        return;
     }
 
     JsonResponseFactory::error(
@@ -1011,7 +988,7 @@ $router->register('GET', '/api/v1/portfolio/investments', static function (Reque
     ]);
 });
 
-$router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
+$router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static function (Request $request) use ($resolveUpstreamApiBase, $proxyUpstreamSend, $resolveUpstreamAuthHeaders): void {
     $baseUrl = $resolveUpstreamApiBase();
     if ($baseUrl === '') {
         JsonResponseFactory::success(
@@ -1043,37 +1020,13 @@ $router->register('POST', '/api/v1/portfolio/prices/refresh-stale', static funct
         return;
     }
 
-    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/portfolio/prices/refresh-stale') as $candidate) {
-        $ch = curl_init($candidate);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-        $headers = array_merge(
-            ['Accept: application/json', 'Content-Type: application/json'],
-            $resolveUpstreamAuthHeaders($request)
+    $sent = $proxyUpstreamSend('POST', '/api/v1/portfolio/prices/refresh-stale', $payload, $resolveUpstreamAuthHeaders($request));
+    if (($sent['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            $sent['data'] ?? [],
+            is_array($sent['meta'] ?? null) && $sent['meta'] !== [] ? $sent['meta'] : ['source' => 'upstream']
         );
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        $response = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if (!is_string($response) || trim($response) === '') {
-            continue;
-        }
-
-        $decoded = json_decode($response, true);
-        if (!is_array($decoded)) {
-            continue;
-        }
-
-        if ($httpCode >= 200 && $httpCode < 300) {
-            JsonResponseFactory::success(
-                isset($decoded['data']) ? $decoded['data'] : $decoded,
-                isset($decoded['meta']) && is_array($decoded['meta']) ? $decoded['meta'] : ['source' => 'upstream']
-            );
-            return;
-        }
+        return;
     }
 
     JsonResponseFactory::error(
@@ -1345,9 +1298,8 @@ $router->register('GET', '/api/v1/items/{id}/price-history', static function (Re
     ]);
 });
 
-$router->register('POST', '/api/v1/watchlist/batch', static function (Request $request) use ($resolveUpstreamApiBase, $buildUpstreamCandidates, $resolveUpstreamAuthHeaders): void {
-    $baseUrl = $resolveUpstreamApiBase();
-    if ($baseUrl === '') {
+$router->register('POST', '/api/v1/watchlist/batch', static function (Request $request) use ($resolveUpstreamApiBase, $proxyUpstreamSend, $resolveUpstreamAuthHeaders): void {
+    if ($resolveUpstreamApiBase() === '') {
         JsonResponseFactory::error('UPSTREAM_NOT_CONFIGURED', 'Server URL nicht konfiguriert.', [], 503);
         return;
     }
@@ -1358,36 +1310,13 @@ $router->register('POST', '/api/v1/watchlist/batch', static function (Request $r
         return;
     }
 
-    foreach ($buildUpstreamCandidates($baseUrl, '/api/v1/watchlist/batch') as $candidate) {
-        $ch = curl_init($candidate);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        curl_setopt(
-            $ch,
-            CURLOPT_HTTPHEADER,
-            array_merge(['Accept: application/json', 'Content-Type: application/json'], $resolveUpstreamAuthHeaders($request))
+    $sent = $proxyUpstreamSend('POST', '/api/v1/watchlist/batch', $body, $resolveUpstreamAuthHeaders($request));
+    if (($sent['ok'] ?? false) === true) {
+        JsonResponseFactory::success(
+            $sent['data'] ?? [],
+            is_array($sent['meta'] ?? null) && $sent['meta'] !== [] ? $sent['meta'] : ['source' => 'upstream']
         );
-        $response = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if (!is_string($response) || trim($response) === '') {
-            continue;
-        }
-        $decoded = json_decode($response, true);
-        if (!is_array($decoded)) {
-            continue;
-        }
-
-        if ($httpCode >= 200 && $httpCode < 300) {
-            JsonResponseFactory::success(
-                isset($decoded['data']) ? $decoded['data'] : $decoded,
-                isset($decoded['meta']) && is_array($decoded['meta']) ? $decoded['meta'] : ['source' => 'upstream']
-            );
-            return;
-        }
+        return;
     }
 
     JsonResponseFactory::error('WATCHLIST_BATCH_UPSTREAM_FAILED', 'Batch-Add konnte nicht an den Server gesendet werden.', [], 502);
