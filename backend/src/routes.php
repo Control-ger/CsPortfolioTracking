@@ -73,6 +73,8 @@ function registerServerApiRoutes(Router $router, array $c): void
     $router->register('PUT',    '/api/v1/settings/price-source',               [$c['settings'], 'updatePriceSourcePreference']);
     $router->register('GET',    '/api/v1/settings/currency',                   [$c['settings'], 'getCurrencyPreference']);
     $router->register('PUT',    '/api/v1/settings/currency',                   [$c['settings'], 'updateCurrencyPreference']);
+    $router->register('GET',    '/api/v1/settings/notifications',              [$c['settings'], 'getNotificationPreference']);
+    $router->register('PUT',    '/api/v1/settings/notifications',              [$c['settings'], 'updateNotificationPreference']);
     $router->register('GET',    '/api/v1/settings/portfolio-groups',           [$c['settings'], 'getPortfolioGroups']);
     $router->register('PUT',    '/api/v1/settings/portfolio-groups',           [$c['settings'], 'updatePortfolioGroups']);
     $router->register('GET',    '/api/v1/settings/csfloat-api-key',            [$c['settings'], 'getCsFloatApiKeyStatus']);

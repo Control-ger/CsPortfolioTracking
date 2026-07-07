@@ -26,7 +26,13 @@ import {
 } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
 import { getCurrentUser } from "@shared/lib/auth";
-import { getPortfolioPreferences, updatePortfolioPreferences, IMPACT_LEVELS } from "@shared/lib/portfolioPreferences";
+import {
+  getPortfolioPreferences,
+  updatePortfolioPreferences,
+  getWebPushNotificationPreferences,
+  updateWebPushNotificationPreferences,
+  IMPACT_LEVELS,
+} from "@shared/lib/portfolioPreferences";
 import { importCsFloatWatchlistData, importCsFloatBuyOrdersAsWatchlistData } from "@shared/lib/dataSource";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
@@ -111,8 +117,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [notifyCsUpdatesDesktop, setNotifyCsUpdatesDesktop] = useState(true);
   const [notifyCsUpdatesDesktopMinLevel, setNotifyCsUpdatesDesktopMinLevel] = useState("medium");
   const [notifySteamSyncDesktop, setNotifySteamSyncDesktop] = useState(true);
-  const [notifyBanWaveWebPush, setNotifyBanWaveWebPush] = useState(false);
-  const [notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel] = useState("medium");
   const [notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush] = useState(false);
   const [notifyCsUpdatesWebPushMinLevel, setNotifyCsUpdatesWebPushMinLevel] = useState("high");
   const [notifySaving, setNotifySaving] = useState(false);
@@ -265,13 +269,19 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         setNotifyCsUpdatesDesktop(prefs?.notifyCsUpdatesDesktop ?? true);
         setNotifyCsUpdatesDesktopMinLevel(prefs?.notifyCsUpdatesDesktopMinLevel ?? "medium");
         setNotifySteamSyncDesktop(prefs?.notifySteamSyncDesktop ?? true);
-        setNotifyBanWaveWebPush(Boolean(prefs?.notifyBanWaveWebPush));
-        setNotifyBanWaveWebPushMinLevel(prefs?.notifyBanWaveWebPushMinLevel ?? "medium");
-        setNotifyCsUpdatesWebPush(Boolean(prefs?.notifyCsUpdatesWebPush));
-        setNotifyCsUpdatesWebPushMinLevel(prefs?.notifyCsUpdatesWebPushMinLevel ?? "high");
       } catch {
         setCsfloatWatchlistAutoImport(false);
         setCsfloatBuyOrderAutoImport(false);
+      }
+
+      // Web-push notification prefs are server-owned on the web/PWA (see
+      // portfolioPreferences.js); load them separately so they persist.
+      try {
+        const webPushPrefs = await getWebPushNotificationPreferences();
+        setNotifyCsUpdatesWebPush(Boolean(webPushPrefs?.notifyCsUpdatesWebPush));
+        setNotifyCsUpdatesWebPushMinLevel(webPushPrefs?.notifyCsUpdatesWebPushMinLevel ?? "high");
+      } catch {
+        setNotifyCsUpdatesWebPush(false);
       }
     };
 
@@ -295,6 +305,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     }
   };
 
+  const WEB_PUSH_NOTIFY_KEYS = ["notifyCsUpdatesWebPush", "notifyCsUpdatesWebPushMinLevel"];
+
   const handleToggleNotifyPref = async (key, currentValue, setter, explicitValue) => {
     const next = explicitValue !== undefined ? explicitValue : !currentValue;
     if (next === currentValue) return;
@@ -302,7 +314,13 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     setNotifySaving(true);
     setNotifyError("");
     try {
-      await updatePortfolioPreferences({ [key]: next });
+      if (WEB_PUSH_NOTIFY_KEYS.includes(key)) {
+        // Server-owned (web) preferences — persisted via the settings API so the
+        // push send-path can honour them; desktop mirrors the localStore blob.
+        await updateWebPushNotificationPreferences({ [key]: next });
+      } else {
+        await updatePortfolioPreferences({ [key]: next });
+      }
     } catch (error) {
       setter(currentValue);
       setNotifyError(error?.message || "Einstellung konnte nicht gespeichert werden.");
@@ -886,38 +904,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             {!isElectronRuntime ? (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
-
-                {/* VAC Ban-Welle — web push */}
-                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">VAC Ban-Welle erkannt</p>
-                      <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei erkannter Ban-Welle.</p>
-                    </div>
-                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPush", notifyBanWaveWebPush, setNotifyBanWaveWebPush)}>
-                      {notifyBanWaveWebPush ? "Deaktivieren" : "Aktivieren"}
-                    </Button>
-                  </div>
-                  {notifyBanWaveWebPush ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
-                      {IMPACT_LEVELS.map((level) => {
-                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
-                        const active = notifyBanWaveWebPushMinLevel === level;
-                        return (
-                          <button
-                            key={level}
-                            disabled={notifySaving}
-                            onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPushMinLevel", notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel, level)}
-                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
-                          >
-                            {labels[level]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
 
                 {/* CS2 Updates — web push */}
                 <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">

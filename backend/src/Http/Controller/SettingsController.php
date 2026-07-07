@@ -9,6 +9,7 @@ use App\Application\Service\FeeSettingsService;
 use App\Application\Service\PricingService;
 use App\Http\Auth\RequestUserScopeResolver;
 use App\Infrastructure\Persistence\Repository\UserCurrencyPreferenceRepository;
+use App\Infrastructure\Persistence\Repository\UserNotificationPreferenceRepository;
 use App\Infrastructure\Persistence\Repository\UserPortfolioGroupsRepository;
 use App\Shared\Http\JsonResponseFactory;
 use App\Shared\Http\Request;
@@ -28,6 +29,7 @@ final class SettingsController
         private readonly PricingService $pricingService,
         private readonly UserCurrencyPreferenceRepository $userCurrencyPreferenceRepository,
         private readonly UserPortfolioGroupsRepository $userPortfolioGroupsRepository,
+        private readonly UserNotificationPreferenceRepository $userNotificationPreferenceRepository,
         private readonly ?RequestUserScopeResolver $userScopeResolver = null,
         string $projectRootPath = __DIR__ . '/../../../'
     ) {
@@ -323,6 +325,55 @@ final class SettingsController
                 'error',
                 'error.http_5xx',
                 'Portfolio groups update request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_SAVE_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function getNotificationPreference(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            JsonResponseFactory::success($this->userNotificationPreferenceRepository->getByUserId($userId));
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Notification preference read request failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_FETCH_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
+    public function updateNotificationPreference(Request $request): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+            $patch = is_array($request->body) ? $request->body : [];
+            $saved = $this->userNotificationPreferenceRepository->upsertByUserId($userId, $patch);
+            JsonResponseFactory::success($saved, statusCode: 200);
+        } catch (InvalidArgumentException $exception) {
+            Logger::event(
+                'warning',
+                'error',
+                'error.validation',
+                'Notification preference validation failed',
+                ['statusCode' => 400, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('SETTINGS_VALIDATION_FAILED', $exception->getMessage(), [], 400);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Notification preference update request failed',
                 ['statusCode' => 500, 'exception' => $exception]
             );
             JsonResponseFactory::error('SETTINGS_SAVE_FAILED', $exception->getMessage(), [], 500);

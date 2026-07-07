@@ -44,6 +44,18 @@ export async function updateCurrencyPreference(currency) {
   });
 }
 
+export async function fetchNotificationPreference() {
+  return requestWithMeta("/api/v1/settings/notifications");
+}
+
+export async function updateNotificationPreference(patch = {}) {
+  return requestWithMeta("/api/v1/settings/notifications", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch && typeof patch === "object" ? patch : {}),
+  });
+}
+
 export async function fetchPortfolioGroupsSetting() {
   return requestWithMeta("/api/v1/settings/portfolio-groups");
 }

@@ -7,7 +7,6 @@ use App\Infrastructure\External\SteamDbPatchnotesClient;
 use App\Infrastructure\External\SteamDbRssClient;
 use App\Infrastructure\External\SteamNewsClient;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
-use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
 use Throwable;
 
 final class CsUpdatesIngestService
@@ -16,9 +15,7 @@ final class CsUpdatesIngestService
         private readonly SteamDbRssClient $steamDbRssClient,
         private readonly SteamNewsClient $steamNewsClient,
         private readonly CsUpdatesFeedRepository $repository,
-        private readonly ?SteamDbPatchnotesClient $steamDbPatchnotesClient = null,
-        private readonly ?WebPushSubscriptionRepository $webPushSubscriptionRepository = null,
-        private readonly ?WebPushService $webPushService = null
+        private readonly ?SteamDbPatchnotesClient $steamDbPatchnotesClient = null
     ) {
     }
 
@@ -85,7 +82,10 @@ final class CsUpdatesIngestService
 
             if ($isInserted || $exists === null) {
                 $inserted++;
-                $this->notifyWebPushSubscribers($entry);
+                // Web-push wakeups are fired only from CsUpdatesAiRatingService, once
+                // the AI impact rating is known, so the per-user min-level filter can
+                // be honoured. Firing here (impact still unknown) would both bypass
+                // that filter and double-notify.
             } else {
                 $updated++;
             }
@@ -480,37 +480,5 @@ final class CsUpdatesIngestService
             return $text;
         }
         return rtrim(mb_substr($text, 0, $maxLength)) . '...';
-    }
-
-    /**
-     * @param array<string,mixed> $entry
-     */
-    private function notifyWebPushSubscribers(array $entry): void
-    {
-        if (!$this->webPushSubscriptionRepository instanceof WebPushSubscriptionRepository) {
-            return;
-        }
-
-        if (!$this->webPushService instanceof WebPushService || !$this->webPushService->isConfigured()) {
-            return;
-        }
-
-        $subscriptions = $this->webPushSubscriptionRepository->listActive(1200);
-        foreach ($subscriptions as $subscription) {
-            $endpoint = trim((string) ($subscription['endpoint'] ?? ''));
-            if ($endpoint === '') {
-                continue;
-            }
-
-            $result = $this->webPushService->sendWakeup($endpoint, 180);
-            if ($result['ok'] === true) {
-                $this->webPushSubscriptionRepository->markDeliverySuccess($endpoint);
-                continue;
-            }
-
-            $statusCode = (int) ($result['statusCode'] ?? 0);
-            $deactivate = in_array($statusCode, [404, 410], true);
-            $this->webPushSubscriptionRepository->markDeliveryFailure($endpoint, $deactivate);
-        }
     }
 }
