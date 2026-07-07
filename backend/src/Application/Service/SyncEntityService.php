@@ -509,20 +509,17 @@ final class SyncEntityService
         $imageUrl = trim((string) ($payload['imageUrl'] ?? ''));
         $resolvedImageUrl = $imageUrl !== '' ? $imageUrl : null;
 
+        // A valid item_id is the canonical foreign key to the catalog — trust it.
         $candidateItemId = $this->extractPositiveInt($payload['itemId'] ?? null);
-        if ($candidateItemId !== null) {
-            $candidateItem = $this->findItemById($candidateItemId);
-            if ($candidateItem !== null) {
-                if ($resolvedImageUrl !== null) {
-                    $canonicalByImage = $this->findItemIdByImageUrl($resolvedImageUrl);
-                    if ($canonicalByImage !== null && $canonicalByImage !== $candidateItemId) {
-                        return $canonicalByImage;
-                    }
-                }
-                return $candidateItemId;
-            }
+        if ($candidateItemId !== null && $this->findItemById($candidateItemId) !== null) {
+            return $candidateItemId;
         }
 
+        // No usable id: resolve by market_hash_name, the item's natural key
+        // (UNIQUE in `items`). Image-based matching is deliberately NOT used to pick
+        // an item — Steam economy image tokens share long prefixes across different
+        // skins, so a fuzzy image match cross-linked distinct items (observed: a
+        // Dreams & Nightmares Case position bound to a Stiletto knife item_id).
         $itemName = trim((string) ($payload['marketHashName'] ?? $payload['name'] ?? $fallbackName));
         if ($itemName === '') {
             $itemName = $fallbackName;
@@ -556,6 +553,11 @@ final class SyncEntityService
         return $this->extractPositiveInt($row['id'] ?? null);
     }
 
+    // Exact image-URL match only. A previous fuzzy fallback matched on the Steam
+    // economy image token via `LIKE '%/economy/image/<token>%'`, but those tokens
+    // share long prefixes across different skins, so it cross-linked distinct items
+    // (a Dreams & Nightmares Case ended up bound to a Stiletto knife item_id). The
+    // item natural key is `market_hash_name`; the image is an attribute, never a key.
     private function findItemIdByImageUrl(string $imageUrl): ?int
     {
         $normalizedUrl = trim($imageUrl);
@@ -568,46 +570,7 @@ final class SyncEntityService
         );
         $stmt->execute([$normalizedUrl]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        $exactId = $row !== false ? $this->extractPositiveInt($row['id'] ?? null) : null;
-        if ($exactId !== null) {
-            return $exactId;
-        }
-
-        $steamImageToken = $this->extractSteamImageToken($normalizedUrl);
-        if ($steamImageToken === null) {
-            return null;
-        }
-
-        $stmt = $this->pdo->prepare(
-            'SELECT id
-             FROM items
-             WHERE image_url IS NOT NULL
-               AND image_url LIKE ?
-             ORDER BY catalog_cached_at DESC, updated_at DESC, id DESC
-             LIMIT 1'
-        );
-        $stmt->execute(['%/economy/image/' . $steamImageToken . '%']);
-        $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $tokenRow !== false ? $this->extractPositiveInt($tokenRow['id'] ?? null) : null;
-    }
-
-    private function extractSteamImageToken(string $imageUrl): ?string
-    {
-        $trimmed = trim($imageUrl);
-        if ($trimmed === '') {
-            return null;
-        }
-
-        if (preg_match('~/economy/image/([^?]+)~i', $trimmed, $matches) !== 1) {
-            return null;
-        }
-
-        $token = trim((string) ($matches[1] ?? ''));
-        if ($token === '') {
-            return null;
-        }
-
-        return $token;
+        return $row !== false ? $this->extractPositiveInt($row['id'] ?? null) : null;
     }
 
     private function findOrCreateItem(string $name, string $type, ?string $imageUrl = null): int
