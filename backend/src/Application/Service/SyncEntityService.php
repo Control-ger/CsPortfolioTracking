@@ -67,7 +67,7 @@ final class SyncEntityService
             ? $this->findInvestmentByIdForUser($userId, $candidateServerId)
             : null;
 
-        $itemId = $this->resolveItemIdForSync($payload, $resolvedName, $resolvedType);
+        $itemId = $this->resolveItemIdForSync($payload, $resolvedName);
         $platform = $this->normalizePlatform((string) ($payload['platform'] ?? $payload['source'] ?? $existingPayload['platform'] ?? 'desktop_sync'));
         $externalTradeId = $this->resolveExternalTradeId($entityId, $payload, $existingPayload);
         $fundingMode = $this->normalizeFundingMode((string) ($payload['fundingMode'] ?? $existingPayload['fundingMode'] ?? 'wallet_funded'));
@@ -333,7 +333,7 @@ final class SyncEntityService
             $resolvedType = 'skin';
         }
 
-        $itemId = $this->resolveItemIdForSync($payload, $resolvedName, $resolvedType);
+        $itemId = $this->resolveItemIdForSync($payload, $resolvedName);
         $resolvedItem = $this->findItemById($itemId);
         $resolvedImageUrl = trim((string) (
             $payload['imageUrl']
@@ -504,32 +504,27 @@ final class SyncEntityService
     //  Item resolution
     // ────────────────────────────────────────────────────────────────
 
-    private function resolveItemIdForSync(array $payload, string $fallbackName, string $fallbackType): int
+    private function resolveItemIdForSync(array $payload, string $fallbackName): int
     {
-        $imageUrl = trim((string) ($payload['imageUrl'] ?? ''));
-        $resolvedImageUrl = $imageUrl !== '' ? $imageUrl : null;
-
         // A valid item_id is the canonical foreign key to the catalog — trust it.
         $candidateItemId = $this->extractPositiveInt($payload['itemId'] ?? null);
         if ($candidateItemId !== null && $this->findItemById($candidateItemId) !== null) {
             return $candidateItemId;
         }
 
-        // No usable id: resolve by market_hash_name, the item's natural key
-        // (UNIQUE in `items`). Image-based matching is deliberately NOT used to pick
-        // an item — Steam economy image tokens share long prefixes across different
-        // skins, so a fuzzy image match cross-linked distinct items (observed: a
-        // Dreams & Nightmares Case position bound to a Stiletto knife item_id).
+        // No usable id: resolve strictly by market_hash_name, the item's natural key
+        // (UNIQUE in `items`). Resolution is purely relational — id (FK) then natural
+        // key, otherwise an error. The `items` catalog is server-owned/read-only on this
+        // path, so a name that matches nothing is a data problem that must surface, never
+        // be silently "rescued" via the image: the image is an attribute, not a key, and
+        // a fuzzy image match once cross-linked a Dreams & Nightmares Case to a Stiletto
+        // knife item_id.
         $itemName = trim((string) ($payload['marketHashName'] ?? $payload['name'] ?? $fallbackName));
         if ($itemName === '') {
             $itemName = $fallbackName;
         }
-        $itemType = trim((string) ($payload['type'] ?? $fallbackType));
-        if ($itemType === '') {
-            $itemType = 'skin';
-        }
 
-        return $this->findOrCreateItem($itemName, $itemType, $resolvedImageUrl);
+        return $this->resolveExistingItemId($itemName);
     }
 
     private function findItemById(int $itemId): ?array
@@ -553,27 +548,13 @@ final class SyncEntityService
         return $this->extractPositiveInt($row['id'] ?? null);
     }
 
-    // Exact image-URL match only. A previous fuzzy fallback matched on the Steam
-    // economy image token via `LIKE '%/economy/image/<token>%'`, but those tokens
-    // share long prefixes across different skins, so it cross-linked distinct items
-    // (a Dreams & Nightmares Case ended up bound to a Stiletto knife item_id). The
-    // item natural key is `market_hash_name`; the image is an attribute, never a key.
-    private function findItemIdByImageUrl(string $imageUrl): ?int
-    {
-        $normalizedUrl = trim($imageUrl);
-        if ($normalizedUrl === '') {
-            return null;
-        }
-
-        $stmt = $this->pdo->prepare(
-            'SELECT id FROM items WHERE image_url = ? LIMIT 1'
-        );
-        $stmt->execute([$normalizedUrl]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row !== false ? $this->extractPositiveInt($row['id'] ?? null) : null;
-    }
-
-    private function findOrCreateItem(string $name, string $type, ?string $imageUrl = null): int
+    // Resolve an EXISTING catalog item id by its natural key (market_hash_name); never
+    // creates. The `items` catalog is server-owned and read-only on the sync path — a
+    // name that matches nothing is a data problem that must surface as an error, not be
+    // papered over. Image-based resolution is deliberately absent: the image is an
+    // attribute, not a key (a fuzzy image match once cross-linked a Dreams & Nightmares
+    // Case to a Stiletto knife item_id).
+    private function resolveExistingItemId(string $name): int
     {
         $normalizedName = trim((string) preg_replace('/\s+/', ' ', $name));
         if ($normalizedName === '') {
@@ -583,13 +564,6 @@ final class SyncEntityService
         $existingByName = $this->findItemIdByName($normalizedName);
         if ($existingByName !== null) {
             return $existingByName;
-        }
-
-        if ($imageUrl !== null && trim($imageUrl) !== '') {
-            $existingByImage = $this->findItemIdByImageUrl($imageUrl);
-            if ($existingByImage !== null) {
-                return $existingByImage;
-            }
         }
 
         throw new \RuntimeException(
