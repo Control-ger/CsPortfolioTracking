@@ -312,6 +312,19 @@ export function CurrencyProvider({ children }) {
     return priceInEur * targetRate;
   }, [currency, exchangeRates]);
 
+  // Convert from the user's active display currency back to USD (exact inverse of
+  // convertFromUsd). Used at the input boundary so manual price entries are stored
+  // in USD — the single source of truth. Mirror convertFromUsd's fallbacks exactly.
+  const convertToUsd = useCallback((priceInDisplayCurrency) => {
+    if (!priceInDisplayCurrency || typeof priceInDisplayCurrency !== "number") {
+      return 0;
+    }
+    const targetRate = exchangeRates[currency] || 1;
+    const priceInEur = priceInDisplayCurrency / targetRate;
+    const usdRate = exchangeRates.USD || FALLBACK_EXCHANGE_RATES.USD;
+    return priceInEur * usdRate;
+  }, [currency, exchangeRates]);
+
   const formatPrice = useCallback((price, options = {}) => {
     const {
       useUsd = false, // If true and buyPriceUsd available, use that.
@@ -341,6 +354,7 @@ export function CurrencyProvider({ children }) {
     setCurrency: setPreferredCurrency,
     convertPrice,
     convertFromUsd,
+    convertToUsd,
     formatPrice,
     exchangeRates,
     ratesLoading,

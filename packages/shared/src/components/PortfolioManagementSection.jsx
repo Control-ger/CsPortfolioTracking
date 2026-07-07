@@ -20,6 +20,7 @@ import {
   uniqueInvestmentIds,
   normalizeInvestmentId,
 } from "../lib/portfolioGroups.js";
+import { useCurrency } from "../contexts/CurrencyContext.jsx";
 
 // Human-readable labels for the match `reason` codes produced by
 // calculateSteamCsfloatMatch (see apps/desktop/src/localStore/utils.js). These are
@@ -363,6 +364,19 @@ export function PortfolioManagementSection({
   suggestedPriceByNameKey,
   priceMissingCount,
 }) {
+  const {
+    currency,
+    currencies,
+    convertFromUsd,
+    convertToUsd,
+    formatPrice,
+    ratesLoading,
+  } = useCurrency();
+  const currencySymbol = currencies?.[currency]?.symbol || currency;
+  // USD stored as source of truth → show the user their active currency instead.
+  const formatUsdInDisplayCurrency = (usdValue) =>
+    formatPrice(Number(usdValue || 0), { useUsd: true, buyPriceUsd: Number(usdValue || 0) });
+
   if (!forceMount) {
     return null;
   }
@@ -652,7 +666,12 @@ export function PortfolioManagementSection({
                         Number.isFinite(suggestedPrice) && suggestedPrice > 0;
                       const draftValue =
                         priceDrafts[item.id] ??
-                        String(currentPrice > 0 ? currentPrice : "");
+                        String(currentPrice > 0 ? convertFromUsd(currentPrice).toFixed(2) : "");
+                      // Live preview of the USD that will actually be stored from
+                      // the (display-currency) draft the user typed.
+                      const draftAsUsd = convertToUsd(Number(draftValue));
+                      const hasDraftPreview =
+                        currency !== "USD" && Number.isFinite(draftAsUsd) && draftAsUsd > 0;
                       const itemImageUrl =
                         String(item.imageUrl || item.iconUrl || "").trim() ||
                         null;
@@ -696,13 +715,13 @@ export function PortfolioManagementSection({
                                 <span>
                                   Aktuell:{" "}
                                   {currentPrice > 0
-                                    ? `${currentPrice.toFixed(2)} USD`
+                                    ? formatUsdInDisplayCurrency(currentPrice)
                                     : "kein Preis gesetzt"}
                                 </span>
                               </div>
                               {hasSuggestion ? (
                                 <p className="mt-1 text-[11px] text-muted-foreground">
-                                  Vorschlag: {suggestedPrice.toFixed(2)} USD (
+                                  Vorschlag: {formatUsdInDisplayCurrency(suggestedPrice)} (
                                   {String(suggestion?.source || "live")})
                                 </p>
                               ) : null}
@@ -722,10 +741,10 @@ export function PortfolioManagementSection({
                                 className="h-9 w-28 rounded-md border border-input bg-background px-2 text-sm"
                                 placeholder={
                                   hasSuggestion
-                                    ? `${suggestedPrice.toFixed(2)} USD`
-                                    : "USD"
+                                    ? convertFromUsd(suggestedPrice).toFixed(2)
+                                    : currencySymbol
                                 }
-                                disabled={savingPriceItemId === item.id}
+                                disabled={savingPriceItemId === item.id || ratesLoading}
                               />
                               <Button
                                 size="sm"
@@ -733,7 +752,7 @@ export function PortfolioManagementSection({
                                 onClick={() =>
                                   void handleSaveSteamItemPrice(item)
                                 }
-                                disabled={savingPriceItemId === item.id}
+                                disabled={savingPriceItemId === item.id || ratesLoading}
                               >
                                 {savingPriceItemId === item.id
                                   ? "Speichert..."
@@ -756,6 +775,13 @@ export function PortfolioManagementSection({
                               ) : null}
                             </div>
                           </div>
+                          <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+                            Eingabe in {currency}.{" "}
+                            {hasDraftPreview
+                              ? `Wird als ${draftAsUsd.toFixed(2)} USD gespeichert (heutiger Kurs). `
+                              : ""}
+                            Der Kurs zum Kaufzeitpunkt ist nicht rekonstruierbar, daher sind kleine Abweichungen normal.
+                          </p>
                         </div>
                       );
                     })}
@@ -1250,16 +1276,16 @@ export function PortfolioManagementSection({
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Einkaufspreis (USD)
+                      Einkaufspreis ({currency})
                     </label>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
-                      value={manualItemDraft.buyPriceUsd}
+                      value={manualItemDraft.buyPriceInput}
                       onChange={(event) =>
                         handleManualItemDraftChange(
-                          "buyPriceUsd",
+                          "buyPriceInput",
                           event.target.value,
                         )
                       }
@@ -1267,6 +1293,23 @@ export function PortfolioManagementSection({
                     />
                   </div>
                 </div>
+                {(() => {
+                  const manualBuyInput = Number(manualItemDraft.buyPriceInput);
+                  const manualBuyAsUsd = convertToUsd(manualBuyInput);
+                  const showManualUsd =
+                    currency !== "USD" &&
+                    Number.isFinite(manualBuyAsUsd) &&
+                    manualBuyAsUsd > 0;
+                  return (
+                    <p className="text-[10px] leading-snug text-muted-foreground">
+                      Preis in deiner Währung ({currency}) eingeben.{" "}
+                      {showManualUsd
+                        ? `Wird als ${manualBuyAsUsd.toFixed(2)} USD gespeichert (heutiger Kurs). `
+                        : ""}
+                      Der Wechselkurs zum Kaufzeitpunkt lässt sich nicht rekonstruieren, daher sind kleine Kursabweichungen normal.
+                    </p>
+                  );
+                })()}
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">
                     Typ
@@ -1316,6 +1359,7 @@ export function PortfolioManagementSection({
                     size="sm"
                     disabled={
                       manualItemSaving ||
+                      ratesLoading ||
                       !String(manualItemDraft.name || "").trim()
                     }
                     onClick={() => void handleCreateManualInvestment()}
@@ -1331,7 +1375,7 @@ export function PortfolioManagementSection({
                       setManualItemDraft({
                         name: "",
                         quantity: 1,
-                        buyPriceUsd: "",
+                        buyPriceInput: "",
                         type: "other",
                         externalUrl: "",
                       })

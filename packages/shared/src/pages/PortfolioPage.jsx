@@ -492,7 +492,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     ),
     [isDesktopRuntime],
   );
-  const { formatPrice } = useCurrency();
+  const { formatPrice, convertToUsd, convertFromUsd } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -606,7 +606,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [savingPriceItemId, setSavingPriceItemId] = useState(null);
   const [manualItemDraft, setManualItemDraft] = useState({
     name: "",
-    buyPriceUsd: "",
+    buyPriceInput: "",
     quantity: "1",
     platform: "manual",
     fundingMode: "wallet_funded",
@@ -3201,13 +3201,24 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }));
   };
 
-  const handleSaveSteamItemPrice = async (item, explicitPrice = null) => {
-    const draftValue = explicitPrice ?? priceDrafts[item.id];
-    const nextPrice = Number(draftValue);
-    if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+  const handleSaveSteamItemPrice = async (item, explicitPriceUsd = null) => {
+    // explicitPriceUsd (e.g. the accepted live suggestion) is already USD and must
+    // NOT be converted. A value typed into the draft field is in the user's active
+    // display currency and is converted to USD here, at the input boundary.
+    let usdPrice;
+    if (explicitPriceUsd !== null && explicitPriceUsd !== undefined) {
+      usdPrice = Number(explicitPriceUsd);
+    } else {
+      const typed = Number(priceDrafts[item.id]);
+      if (!Number.isFinite(typed) || typed < 0) {
+        return;
+      }
+      usdPrice = convertToUsd(typed);
+    }
+    if (!Number.isFinite(usdPrice) || usdPrice < 0) {
       return;
     }
-    const normalizedPrice = Number(nextPrice.toFixed(2));
+    const normalizedPrice = Number(usdPrice.toFixed(2));
 
     setSavingPriceItemId(item.id);
     try {
@@ -3234,7 +3245,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       );
       setPriceDrafts((current) => ({
         ...current,
-        [item.id]: normalizedPrice > 0 ? normalizedPrice.toFixed(2) : "",
+        // Draft field holds the display-currency value, not USD.
+        [item.id]: normalizedPrice > 0 ? convertFromUsd(normalizedPrice).toFixed(2) : "",
       }));
       await refreshPortfolio();
       setCompositionRefreshToken((current) => current + 1);
@@ -3252,9 +3264,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     setPriceDrafts((current) => ({
       ...current,
-      [item.id]: normalizedSuggestion.toFixed(2),
+      // The suggestion is USD; show it in the display currency in the draft field.
+      [item.id]: convertFromUsd(normalizedSuggestion).toFixed(2),
     }));
 
+    // Pass the USD suggestion straight through — it must not be re-converted.
     await handleSaveSteamItemPrice(item, normalizedSuggestion);
   };
   const handleManualItemDraftChange = (key, value) => {
@@ -3306,7 +3320,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       "",
     ).trim();
     const quantity = Number(manualItemDraft.quantity);
-    const buyPriceUsd = Number(manualItemDraft.buyPriceUsd);
+    // buyPriceInput is in the user's active display currency; convert to USD (the
+    // stored source of truth) at this boundary.
+    const buyPriceInput = Number(manualItemDraft.buyPriceInput);
     const bucket = manualItemDraft.bucket === "inventory" ? "inventory" : "investment";
     const platform = String(manualItemDraft.platform || "manual").trim().toLowerCase() || "manual";
     const fundingMode =
@@ -3324,10 +3340,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setManagementError("Bitte eine gueltige Menge > 0 angeben.");
       return;
     }
-    if (!Number.isFinite(buyPriceUsd) || buyPriceUsd < 0) {
-      setManagementError("Bitte einen gueltigen USD-Einkaufspreis angeben.");
+    if (!Number.isFinite(buyPriceInput) || buyPriceInput < 0) {
+      setManagementError("Bitte einen gueltigen Einkaufspreis angeben.");
       return;
     }
+    const buyPriceUsd = Number(convertToUsd(buyPriceInput).toFixed(2));
 
     const user = await getCurrentUser();
     const userId = resolveDesktopRuntimeUserId(user, 1);
@@ -3364,7 +3381,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setCompositionRefreshToken((current) => current + 1);
       setManualItemDraft({
         name: "",
-        buyPriceUsd: "",
+        buyPriceInput: "",
         quantity: "1",
         platform: "manual",
         fundingMode: "wallet_funded",
