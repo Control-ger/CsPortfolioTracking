@@ -19,22 +19,24 @@ function LayeredPreview({ visuals = [], fallbackLabel = "Group" }) {
   const items = Array.isArray(visuals) ? visuals.slice(0, 2) : [];
 
   return (
-    <div className="relative h-16 w-20 shrink-0 sm:h-24 sm:w-28">
+    <div className="relative h-16 w-24 shrink-0 sm:h-24 sm:w-32">
       {items.length === 0 ? (
         <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/75 bg-muted/25 p-1 text-xs font-semibold text-muted-foreground sm:h-24 sm:w-24">
           {String(fallbackLabel || "Group").slice(0, 2).toUpperCase()}
         </div>
       ) : null}
       {items.map((entry, index) => {
-        const offsetClass =
-          index === 0
-            ? "left-0 top-0 z-20 rotate-[-3deg]"
-            : "left-5 top-[0.05rem] z-10 rotate-[4deg] sm:left-8";
-        const cardToneClass = index === 0 ? "bg-muted/20 shadow-sm" : "bg-card/95 shadow-md";
+        const isFront = index === 0;
+        const offsetClass = isFront
+          ? "left-0 top-0 z-20 -rotate-3"
+          : "left-8 top-0.5 z-10 rotate-6";
+        const cardToneClass = isFront
+          ? "border-border/80 bg-card shadow-md"
+          : "border-border/60 bg-muted/25 shadow-sm";
         return (
           <div
             key={entry?.id || `${entry?.name || fallbackLabel}-${index}`}
-            className={`absolute ${offsetClass} flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-border/80 ${cardToneClass} p-1 transition-transform sm:h-24 sm:w-24`}
+            className={`absolute ${offsetClass} flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border ${cardToneClass} p-1 transition-transform sm:h-24 sm:w-24`}
           >
             {entry?.imageUrl ? (
               <img
