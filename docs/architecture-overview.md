@@ -193,6 +193,7 @@ From `apps/web/src/App.jsx`:
 - `backend/sync-prices.php` is the only write-enabled process for `items` and sets `ITEMS_CATALOG_WRITE_SCOPE=cron` explicitly before catalog upserts.
 - **Reads never live-fetch** (see §6.1): passive page reads serve from `item_live_cache`; only the cron and the explicit `refresh-stale` action contact CSFloat.
 - The previous dormant "scaling" mirror tables (`item_price_latest`, `item_price_history_hourly`) and the flag-gated `ScalingShadowReadService` were retired (migration `2026_06_11_001`). The future user-scaling read-model still builds on `user_positions` / `position_events` / `portfolio_snapshots_daily`, which remain.
+- **Price-history read responses expose USD as the source of truth.** `PriceHistoryRepository::findHistoryByItemId` / `findHistoryMapByItemIds` and `PortfolioService::getHistory` return `priceUsd`/`wert` in USD (`priceEur` retained only for back-compat). The frontend `PortfolioChart` is currency-aware: it reads the USD field and converts to the user's display currency at runtime via `CurrencyContext` (`formatPrice(…,{useUsd:true})`) — it never assumes EUR. `WatchlistService::enrichHistoryWithGrowthPercent` keys on `priceUsd` and preserves the raw entry fields. This matches the global rule "persist USD, compute display currency at runtime".
 
 ### 6.5 Ban-stats ingest and ban-wave detection
 

@@ -81,6 +81,13 @@ export function PortfolioCompositionChart({
   isLoading = false,
   totalValueOverride = null,
   totalValueLabel = null,
+  // Currency + label knobs so the chart can be reused outside the portfolio
+  // overview (e.g. cluster weighting inside a group's detail panel). Defaults
+  // keep the overview call site unchanged: its `value`s are USD.
+  valuesAreUsd = true,
+  centerLabel = "Portfolio Wert",
+  shareSuffix = "des Portfolios",
+  assetCountLabel = "Assets",
 }) {
   const { formatPrice } = useCurrency();
   const [hoveredIndex, setHoveredIndex] = useState(null);
@@ -113,6 +120,9 @@ export function PortfolioCompositionChart({
   const sourceAssetCount = normalizedRows.length;
   const hasRenderableChartData = chartData.length > 0;
 
+  const formatSliceValue = (value) =>
+    valuesAreUsd ? formatPrice(value, { useUsd: true, buyPriceUsd: value }) : formatPrice(value);
+
   const renderTooltip = ({ payload }) => {
     if (!payload || !payload[0]) {
       return null;
@@ -123,9 +133,9 @@ export function PortfolioCompositionChart({
         <p className="font-semibold">{name}</p>
         <p className="text-muted-foreground">{count}x verfuegbar</p>
         <p className="font-semibold text-primary">
-          {formatPrice(value, { useUsd: true, buyPriceUsd: value })}
+          {formatSliceValue(value)}
         </p>
-        <p className="text-muted-foreground">{percentage}% des Portfolios</p>
+        <p className="text-muted-foreground">{percentage}% {shareSuffix}</p>
       </div>
     );
   };
@@ -164,11 +174,11 @@ export function PortfolioCompositionChart({
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <div className="text-center">
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase">Portfolio Wert</p>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase">{centerLabel}</p>
                 <p className="text-xl sm:text-2xl font-bold">
-                  {totalValueLabel || formatPrice(totalValue, { useUsd: true, buyPriceUsd: totalValue })}
+                  {totalValueLabel || formatSliceValue(totalValue)}
                 </p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">{sourceAssetCount} Assets</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">{sourceAssetCount} {assetCountLabel}</p>
                 {!hasRenderableChartData ? (
                   <p className="mt-1 text-[10px] text-muted-foreground">Noch keine csfloat-Livewerte</p>
                 ) : null}

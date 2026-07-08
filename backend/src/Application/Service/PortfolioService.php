@@ -319,6 +319,10 @@ final class PortfolioService
             static fn(array $row): array => [
                 'id' => (int) $row['id'],
                 'date' => self::formatSnapshotDate((string) $row['date']),
+                // wert is USD (source of truth). The currency-aware PortfolioChart reads
+                // it as USD and converts to the display currency at runtime. It stays the
+                // field the frontend "all"-scope rescale maintains, so no priceUsd alias
+                // here (that would go stale after rescaling).
                 'wert' => (float) $row['total_value_usd'],
                 'invested' => (float) ($row['invested_value_usd'] ?? 0.0),
                 'growthPercent' => self::calculateGrowthPercent(

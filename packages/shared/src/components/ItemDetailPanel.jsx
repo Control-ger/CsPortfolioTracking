@@ -13,6 +13,7 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 import { Badge } from "./ui/badge";
 import { AlertCircle } from "lucide-react";
 import { PortfolioChart } from "./PortfolioChart";
+import { PortfolioCompositionChart } from "./PortfolioCompositionChart";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 function LayeredPreview({ visuals = [], fallbackLabel = "Group" }) {
@@ -58,29 +59,17 @@ function LayeredPreview({ visuals = [], fallbackLabel = "Group" }) {
   );
 }
 
-function deriveBuyInReferenceValue(item, history = []) {
-  const unitCostBasis = Number(item?.costBasisUnit);
-  if (Number.isFinite(unitCostBasis) && unitCostBasis > 0) {
-    return unitCostBasis;
+function deriveBuyInReferenceValue(item) {
+  // PortfolioChart works internally in USD, so the buy-in reference line must be USD too.
+  // Groups plot total value → reference is the group's total invested (USD).
+  if (item?.__detailKind === "group") {
+    const totalInvestedUsd = Number(item?.totalInvested ?? item?.costBasisTotal);
+    return Number.isFinite(totalInvestedUsd) && totalInvestedUsd > 0 ? totalInvestedUsd : null;
   }
 
-  const buyPriceEur = Number(item?.buyPrice);
-  if (Number.isFinite(buyPriceEur) && buyPriceEur > 0) {
-    return buyPriceEur;
-  }
-
+  // Single items / clusters plot unit price → reference is the unit buy price (USD).
   const buyPriceUsd = Number(item?.buyPriceUsd);
-  if (!Number.isFinite(buyPriceUsd) || buyPriceUsd <= 0 || !Array.isArray(history)) {
-    return null;
-  }
-
-  const exchangeRateEntry = history.find((entry) => Number.isFinite(Number(entry?.exchangeRate)));
-  const usdToEurRate = Number(exchangeRateEntry?.exchangeRate);
-  if (!Number.isFinite(usdToEurRate) || usdToEurRate <= 0) {
-    return null;
-  }
-
-  return buyPriceUsd * usdToEurRate;
+  return Number.isFinite(buyPriceUsd) && buyPriceUsd > 0 ? buyPriceUsd : null;
 }
 
 function deriveBuyInReferenceTimestamp(item) {
@@ -189,9 +178,24 @@ export const ItemDetailPanel = ({
 
   const stats6m = item.details?.stats6m;
   const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
-  const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
+  const buyInReferenceValue = deriveBuyInReferenceValue(item);
   const buyInReferenceTimestamp = deriveBuyInReferenceTimestamp(item);
   const purchaseUnitDisplay = resolvePurchaseUnitDisplay(item, formatPrice);
+
+  // Cluster weighting for the group composition donut. Values follow the group's
+  // display-currency convention (see buildGroupDetailSelection), so the donut is
+  // fed with valuesAreUsd={false} to match the group's stat tiles/table row.
+  const clusterCompositionData =
+    isGroupSelection && Array.isArray(item?.clusters)
+      ? item.clusters
+          .map((cluster) => ({
+            name: cluster?.name || "Cluster",
+            value: Number(cluster?.totalValue || 0),
+            count: Number(cluster?.quantity || 0),
+            type: cluster?.type || "cluster",
+          }))
+          .filter((row) => Number.isFinite(row.value) && row.value > 0)
+      : [];
 
   return (
       <>
@@ -390,6 +394,21 @@ export const ItemDetailPanel = ({
                 ) : null}
               </div>
             </div>
+
+            {/* Cluster weighting donut (group selections only) */}
+            {isGroupSelection && clusterCompositionData.length > 0 ? (
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
+                <h3 className="mb-3 text-sm font-semibold">Cluster-Gewichtung</h3>
+                <PortfolioCompositionChart
+                  data={clusterCompositionData}
+                  valuesAreUsd={false}
+                  totalValueOverride={Number(item?.totalValue ?? item?.currentValue ?? 0)}
+                  centerLabel="Gruppenwert"
+                  shareSuffix="der Gruppe"
+                  assetCountLabel="Cluster"
+                />
+              </div>
+            ) : null}
 
             {/* Price History Chart */}
             {Array.isArray(history) && history.length > 0 && (

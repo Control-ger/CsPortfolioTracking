@@ -86,6 +86,9 @@ final class PriceHistoryRepository
             return array_map(
                 static fn(array $row): array => [
                     'date' => $row['date'],
+                    // Raw USD is the source of truth; the frontend converts to the
+                    // user's display currency at runtime. priceEur kept for back-compat.
+                    'priceUsd' => (float) $row['price_usd'],
                     'priceEur' => (float) $row['price_usd'] * (float) $row['usd_to_eur'],
                 ],
                 $rows
@@ -184,6 +187,8 @@ final class PriceHistoryRepository
                 $map[$itemId] ??= [];
                 $map[$itemId][] = [
                     'date' => (string) ($row['date'] ?? ''),
+                    // Raw USD is the source of truth; frontend converts at runtime.
+                    'priceUsd' => (float) ($row['price_usd'] ?? 0.0),
                     'priceEur' => (float) ($row['price_usd'] ?? 0.0) * (float) ($row['usd_to_eur'] ?? 0.0),
                 ];
             }

@@ -47,29 +47,10 @@ function ChangeMetric({ label, percent, euro, formatPrice }) {
   );
 }
 
-function deriveBuyInReferenceValue(item, history = []) {
-  const unitCostBasis = Number(item?.costBasisUnit);
-  if (Number.isFinite(unitCostBasis) && unitCostBasis > 0) {
-    return unitCostBasis;
-  }
-
-  const buyPriceEur = Number(item?.buyPrice);
-  if (Number.isFinite(buyPriceEur) && buyPriceEur > 0) {
-    return buyPriceEur;
-  }
-
+function deriveBuyInReferenceValue(item) {
+  // PortfolioChart works internally in USD, so the buy-in reference line must be USD.
   const buyPriceUsd = Number(item?.buyPriceUsd);
-  if (!Number.isFinite(buyPriceUsd) || buyPriceUsd <= 0 || !Array.isArray(history)) {
-    return null;
-  }
-
-  const exchangeRateEntry = history.find((entry) => Number.isFinite(Number(entry?.exchangeRate)));
-  const usdToEurRate = Number(exchangeRateEntry?.exchangeRate);
-  if (!Number.isFinite(usdToEurRate) || usdToEurRate <= 0) {
-    return null;
-  }
-
-  return buyPriceUsd * usdToEurRate;
+  return Number.isFinite(buyPriceUsd) && buyPriceUsd > 0 ? buyPriceUsd : null;
 }
 
 function deriveBuyInReferenceTimestamp(item) {
@@ -152,7 +133,7 @@ export function ItemDetailsModal({
   const togglePriceDisplay = () => {
     setShowAbsolute(!showAbsolute);
   };
-  const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
+  const buyInReferenceValue = deriveBuyInReferenceValue(item);
   const buyInReferenceTimestamp = deriveBuyInReferenceTimestamp(item);
   const purchaseUnitDisplay = resolvePurchaseUnitDisplay(item, formatPrice);
 

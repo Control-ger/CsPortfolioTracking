@@ -59,6 +59,7 @@ import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
   PORTFOLIO_GROUPS_STORAGE_KEY,
   buildPortfolioGroupSummaries,
+  buildWeightedGroupHistory,
   buildPortfolioGroupMembershipMap,
   summarizeManagementClusterAssignment,
   createPortfolioGroupDraft,
@@ -1488,54 +1489,140 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   }, [activeTab, isDesktopRuntime]);
 
   useEffect(() => {
+    let cancelled = false;
+    const isDesktopLocal =
+      typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
+
+    // Load one item's price history (desktop-local first, then server). Returns raw
+    // rows carrying priceUsd — the shared loader for single items and group members.
+    const loadItemHistoryRows = async (itemId, name) => {
+      const id = Number(itemId || 0);
+      if (id <= 0) {
+        return [];
+      }
+      if (isDesktopLocal) {
+        try {
+          const local = await window.electronAPI.localStore.listPriceHistory(id);
+          if (Array.isArray(local) && local.length > 0) {
+            return local;
+          }
+        } catch {
+          // fall through to the server read
+        }
+      }
+      const history = await fetchItemPriceHistory(id, { itemName: name });
+      return Array.isArray(history) ? history : [];
+    };
+
+    // Bounded-concurrency map so a group with many clusters does not fan out into
+    // dozens of simultaneous server reads.
+    const mapWithConcurrency = async (items, limit, worker) => {
+      const results = new Array(items.length);
+      let cursor = 0;
+      const runners = new Array(Math.max(1, Math.min(limit, items.length)))
+        .fill(0)
+        .map(async () => {
+          for (;;) {
+            const index = cursor;
+            cursor += 1;
+            if (index >= items.length) {
+              return;
+            }
+            results[index] = await worker(items[index]);
+          }
+        });
+      await Promise.all(runners);
+      return results;
+    };
+
     const loadItemHistory = async () => {
       if (!selectedItemWithLive) {
         setSelectedItemHistory([]);
         setSelectedItemHistoryLoading(false);
         return;
       }
-      if (selectedItemWithLive.__detailKind === "group" || selectedItemWithLive.__detailKind === "group-cluster") {
-        setSelectedItemHistory([]);
-        setSelectedItemHistoryLoading(false);
+
+      const kind = selectedItemWithLive.__detailKind;
+
+      // Group: weighted total-value-over-time from the member clusters' histories.
+      if (kind === "group") {
+        setSelectedItemHistoryLoading(true);
+        try {
+          const clusters = Array.isArray(selectedItemWithLive.clusters)
+            ? selectedItemWithLive.clusters
+            : [];
+          const members = clusters
+            .map((cluster) => ({
+              itemId: Number(cluster?.itemId || 0),
+              quantity: Number(cluster?.quantity || 0),
+              name: cluster?.name,
+            }))
+            .filter((member) => member.itemId > 0 && member.quantity > 0);
+          const withHistory = await mapWithConcurrency(members, 6, async (member) => ({
+            itemId: member.itemId,
+            quantity: member.quantity,
+            history: await loadItemHistoryRows(member.itemId, member.name),
+          }));
+          if (cancelled) {
+            return;
+          }
+          setSelectedItemHistory(buildWeightedGroupHistory(withHistory));
+        } catch (groupHistoryError) {
+          console.error("Fehler beim Laden der Gruppen-Historie:", groupHistoryError);
+          if (!cancelled) {
+            setSelectedItemHistory([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setSelectedItemHistoryLoading(false);
+          }
+        }
         return;
       }
 
+      // Single item or a single group cluster (both resolve to one catalog itemId).
       setSelectedItemHistoryLoading(true);
       try {
-        const isDesktopLocal =
-          typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
         const itemId = Number(selectedItemWithLive.itemId ?? selectedItemWithLive.item_id ?? 0);
 
-        if (isDesktopLocal && itemId > 0) {
-          const history = await window.electronAPI.localStore.listPriceHistory(itemId);
-          if (Array.isArray(history) && history.length > 0) {
-            setSelectedItemHistory(history);
-            return;
-          }
-        }
-
         if (itemId > 0) {
-          const history = await fetchItemPriceHistory(itemId, {
-            itemName: selectedItemWithLive.name,
-          });
-          setSelectedItemHistory(history || []);
+          const history = await loadItemHistoryRows(itemId, selectedItemWithLive.name);
+          if (!cancelled) {
+            setSelectedItemHistory(history);
+          }
           return;
         }
 
-        // Fallback: keep old position-history endpoint for legacy items
-        const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id, {
-          itemName: selectedItemWithLive.name,
-        });
-        setSelectedItemHistory(history || []);
+        // Legacy fallback (real investments only, not synthetic group-cluster ids).
+        if (kind !== "group-cluster") {
+          const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id, {
+            itemName: selectedItemWithLive.name,
+          });
+          if (!cancelled) {
+            setSelectedItemHistory(history || []);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setSelectedItemHistory([]);
+        }
       } catch (historyError) {
         console.error("Fehler beim Laden der Positionshistorie:", historyError);
-        setSelectedItemHistory([]);
+        if (!cancelled) {
+          setSelectedItemHistory([]);
+        }
       } finally {
-        setSelectedItemHistoryLoading(false);
+        if (!cancelled) {
+          setSelectedItemHistoryLoading(false);
+        }
       }
     };
 
     void loadItemHistory();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedItemWithLive]);
 
   const handleTabSelect = useCallback((nextTab) => {

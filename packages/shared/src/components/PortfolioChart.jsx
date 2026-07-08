@@ -5,6 +5,7 @@ import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAx
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { Skeleton } from "./ui/skeleton";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const RANGE_OPTIONS = [
   { key: "7T", label: "7T", days: 7 },
@@ -63,18 +64,6 @@ function formatTooltipDate(timestamp) {
   });
 }
 
-function formatSignedCurrency(value) {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toLocaleString("de-DE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} EUR`;
-}
-
 function formatSignedPercent(value) {
   if (!Number.isFinite(value)) {
     return "-";
@@ -93,17 +82,8 @@ function formatAxisPercent(value) {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function formatAxisAbsolute(value, decimals = 2) {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-
-  return `${value.toLocaleString("de-DE", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })}€`;
-}
-
+// Absolute axis domain is computed in USD (the chart's internal unit); tick labels
+// are converted to the user's display currency by the component (see formatUsdTick).
 function buildAbsoluteAxisConfig(chartData = []) {
   const values = chartData
     .map((entry) => Number(entry?.displayValue))
@@ -127,7 +107,6 @@ function buildAbsoluteAxisConfig(chartData = []) {
 
   return {
     domain: [minValue - pad, maxValue + pad],
-    tickFormatter: (value) => formatAxisAbsolute(value, 2),
     tickCount: 6,
   };
 }
@@ -159,11 +138,13 @@ function normalizeHistory(history) {
   return history
     .map((entry, index) => {
       const timestamp = parseDateToTimestamp(entry?.date);
+      // Internal unit is USD (source of truth). Read USD fields only — priceEur is
+      // deliberately NOT a fallback to avoid silently mixing currencies on the axis.
       const rawValue =
+        entry?.priceUsd ??
+        entry?.price_usd ??
+        entry?.valueUsd ??
         entry?.wert ??
-        entry?.priceEur ??
-        entry?.price_eur ??
-        entry?.price ??
         entry?.value;
       const wert = Number(rawValue);
       const investedValue = Number(
@@ -230,10 +211,30 @@ export const PortfolioChart = ({
   flat = false,
   cardRef = null,
 }) => {
+  const { formatPrice, currency } = useCurrency();
   const [rangeKey, setRangeKey] = useState("90T");
   const hoverAnimationFrameRef = useRef(null);
   const lastHoveredIndexRef = useRef(null);
   const lastHoverSignatureRef = useRef("");
+
+  // Internal chart values are USD; convert to the user's display currency here.
+  const formatUsdTick = useCallback(
+    (usd) =>
+      Number.isFinite(Number(usd))
+        ? formatPrice(Number(usd), { useUsd: true, buyPriceUsd: Number(usd) })
+        : "-",
+    [formatPrice],
+  );
+  const formatSignedUsd = useCallback(
+    (usd) => {
+      if (!Number.isFinite(Number(usd))) {
+        return "-";
+      }
+      const sign = Number(usd) >= 0 ? "+" : "";
+      return `${sign}${formatPrice(Number(usd), { useUsd: true, buyPriceUsd: Number(usd) })}`;
+    },
+    [formatPrice],
+  );
 
   const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
   const visibleHistory = useMemo(
@@ -340,11 +341,11 @@ export const PortfolioChart = ({
   const chartConfig = useMemo(
     () => ({
       growthPercent: {
-        label: showAbsolute ? "Preis (EUR)" : "Zuwachs (%)",
+        label: showAbsolute ? `Preis (${currency})` : "Zuwachs (%)",
         color: trendStats.lineColor,
       },
     }),
-    [trendStats.lineColor, showAbsolute],
+    [trendStats.lineColor, showAbsolute, currency],
   );
 
   const dispatchHoverChange = useCallback(
@@ -583,9 +584,7 @@ export const PortfolioChart = ({
                 width={70}
                 tickMargin={4}
                 tickFormatter={
-                  showAbsolute && absoluteAxisConfig
-                    ? absoluteAxisConfig.tickFormatter
-                    : formatAxisPercent
+                  showAbsolute && absoluteAxisConfig ? formatUsdTick : formatAxisPercent
                 }
               />
               <ChartTooltip
@@ -594,7 +593,7 @@ export const PortfolioChart = ({
                     indicator="line"
                     nameKey="displayValue"
                     labelFormatter={(value) => formatTooltipDate(value)}
-                    formatter={(value) => showAbsolute ? `${Number(value).toLocaleString("de-DE", {minimumFractionDigits: 2, maximumFractionDigits: 2})} EUR` : formatAxisPercent(Number(value))}
+                    formatter={(value) => showAbsolute ? formatUsdTick(Number(value)) : formatAxisPercent(Number(value))}
                   />
                 }
               />
@@ -627,7 +626,7 @@ export const PortfolioChart = ({
         ) : (
           <>
             <div className="flex items-center gap-2 leading-none font-semibold">
-              Performance: {formatSignedCurrency(showAbsolute ? trendStats.deltaValue : trendStats.roiGainEuro)} (
+              Performance: {formatSignedUsd(showAbsolute ? trendStats.deltaValue : trendStats.roiGainEuro)} (
               {formatSignedPercent(trendStats.deltaPercent)})
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             </div>
