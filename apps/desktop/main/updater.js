@@ -19,7 +19,7 @@ export function setLocalStoreRefs(getStore, store) {
   localStoreForUpdater = store;
 }
 
-const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const AUTO_UPDATE_INTERVAL_MS = 10 * 60 * 1000;
 let latestAvailableUpdateInfo = null;
 let updateDownloadInProgress = false;
 let updateCheckTimer = null;
