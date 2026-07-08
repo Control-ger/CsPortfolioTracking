@@ -152,5 +152,29 @@ export function createNotificationStore(
       ).run(nowIso(), normalizedUserId);
       return true;
     },
+
+    // Notifications are an action inbox: reading/acting on one removes it
+    // entirely rather than leaving a greyed-out historical row.
+    deleteNotification(id) {
+      db.prepare(`DELETE FROM sync_notifications WHERE id = ?`).run(String(id));
+      return true;
+    },
+
+    deleteAllNotifications(
+      userId = CANONICAL_LOCAL_USER_ID,
+      category = null,
+    ) {
+      const normalizedUserId = normalizeLocalUserId(userId);
+      if (category) {
+        db.prepare(
+          `DELETE FROM sync_notifications WHERE user_id = ? AND category = ?`,
+        ).run(normalizedUserId, String(category));
+        return true;
+      }
+      db.prepare(
+        `DELETE FROM sync_notifications WHERE user_id = ?`,
+      ).run(normalizedUserId);
+      return true;
+    },
   };
 }

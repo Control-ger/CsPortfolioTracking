@@ -408,6 +408,8 @@ export function registerAllIpcHandlers() {
   safeLocalStoreInvoke("local-store-list-notifications", (store, userId, options) => store.listNotifications(userId, options));
   safeLocalStoreInvoke("local-store-mark-notification-read", (store, id) => store.markNotificationRead(id));
   safeLocalStoreInvoke("local-store-mark-all-notifications-read", (store, userId, category) => store.markAllNotificationsRead(userId, category));
+  safeLocalStoreInvoke("local-store-delete-notification", (store, id) => store.deleteNotification(id));
+  safeLocalStoreInvoke("local-store-delete-all-notifications", (store, userId, category) => store.deleteAllNotifications(userId, category));
   safeLocalStoreInvoke("local-store-mark-operation-applied", (store, id) => store.markOperationApplied(id));
   safeLocalStoreInvoke("local-store-get-portfolio-preferences", (store, userId) => store.getPortfolioPreferences(userId));
   safeLocalStoreInvoke("local-store-update-portfolio-preferences", (store, userId, patch) => store.updatePortfolioPreferences(userId, patch));

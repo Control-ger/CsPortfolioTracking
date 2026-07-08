@@ -165,6 +165,9 @@ const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
+// Actionable, self-clearing notifications derived from portfolio state after a
+// sync: items still needing a manual price / a match confirmation.
+const ACTION_NOTIFICATION_CATEGORIES = ["action_match", "action_price"];
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
 const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
@@ -623,6 +626,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     lastSyncedAt: null,
   });
   const [syncNotifications, setSyncNotifications] = useState([]);
+  // Bumped after each Steam sync so the actionable notifications get re-derived
+  // once the portfolio counts (needs price / needs match) have refreshed. A
+  // token (not a ref) is used because it must trigger the refresh effect; the
+  // "last processed" ref below ensures we only react to a genuine sync, never
+  // to a mere count change (which would create a dismiss/reappear nag loop).
+  const [actionNotificationRefreshToken, setActionNotificationRefreshToken] = useState(0);
+  const lastProcessedActionTokenRef = useRef(0);
   const [uiWarningNotificationsBySource, setUiWarningNotificationsBySource] = useState({});
   const [appUpdateNotification, setAppUpdateNotification] = useState({
     state: "idle",
@@ -807,6 +817,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     const normalizedTab = runtimeTabs.includes(resolvedInitialTab) ? resolvedInitialTab : runtimeTabs[0];
     setActiveTab((current) => (current === normalizedTab ? current : normalizedTab));
   }, [resolvedInitialTab, runtimeTabs]);
+
+  // Allow deep-linking a management sub-section via ?section= (used by the
+  // system-notification bell, e.g. action_price -> prices, action_match -> matching).
+  useEffect(() => {
+    const requestedSection = String(searchParams.get("section") || "").trim().toLowerCase();
+    const allowedSections = ["matching", "prices", "groups", "exclude", "create"];
+    if (allowedSections.includes(requestedSection)) {
+      setManagementSection(requestedSection);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!runtimeTabs.includes(activeTab)) {
@@ -1139,7 +1159,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         const notifications = await window.electronAPI.localStore.listNotifications(userId, { limit: 20 });
         const rows = Array.isArray(notifications) ? notifications : [];
         setSyncNotifications(rows);
-        const unreadCount = rows.filter((row) => row.category === "steam_sync" && row.unread).length;
+        const unreadCount = rows.filter(
+          (row) => ACTION_NOTIFICATION_CATEGORIES.includes(row.category) && row.unread,
+        ).length;
         setSyncNotification((current) => ({
           ...current,
           newItemsCount: unreadCount,
@@ -1259,28 +1281,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
 
       await writeLocalState(STEAM_SYNC_META_KEY, { lastRunAt: syncedAt });
-      if (imported > 0 && notifySteamSyncDesktopRef.current && window.electronAPI?.localStore?.createNotification) {
-        await window.electronAPI.localStore.createNotification({
-          userId,
-          category: "steam_sync",
-          title: "Neue Steam Items",
-          message: `${imported} neue Items durch Steam Sync`,
-          // Keep the dedupe payload stable: a fresh `syncedAt` (or volatile
-          // `updated` count) on every sync made stableSerialize() differ each
-          // time, so the 24h dedupe never matched and an identical "N neue
-          // Items" notification was recreated (unread) on every sync. The
-          // timestamp lives in `createdAt`; identity is the imported count.
-          payload: {
-            imported,
-          },
-          createdAt: syncedAt,
-        });
+      // A sync no longer creates a "N neue Items" log entry. Instead we
+      // re-derive the actionable notifications (items needing a price /
+      // needing match confirmation) once the portfolio counts have refreshed;
+      // see the actionNotificationRefreshToken effect below. The badge count
+      // (newItemsCount) is set there too, so we only track the sync time here.
+      if (notifySteamSyncDesktopRef.current) {
+        setActionNotificationRefreshToken((token) => token + 1);
       }
       if (imported > 0) {
-        setSyncNotification({
-          newItemsCount: imported,
+        setSyncNotification((current) => ({
+          ...current,
           lastSyncedAt: syncedAt,
-        });
+        }));
         if (manual) {
           setManualSteamSyncInfo("");
         }
@@ -1309,18 +1322,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           }, 3000);
         }
       }
-      if (window.electronAPI?.localStore?.listNotifications) {
-        const notifications = await window.electronAPI.localStore.listNotifications(userId, { limit: 20 });
-        const rows = Array.isArray(notifications) ? notifications : [];
-        setSyncNotifications(rows);
-        const unreadCount = rows.filter((row) => row.category === "steam_sync" && row.unread).length;
-        setSyncNotification((current) => ({
-          ...current,
-          newItemsCount: unreadCount,
-          lastSyncedAt: rows[0]?.createdAt || current.lastSyncedAt || null,
-        }));
-      }
-
       if (imported > 0 || updated > 0 || matchesSuggested > 0) {
         await refreshPortfolio();
         setCompositionRefreshToken((current) => current + 1);
@@ -1466,8 +1467,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         if (nextSummary.length === 0) {
           const liveResponse = await fetchCsFloatBuyOrdersData({
             syncNow: true,
-            limit: 200,
-            maxPages: 8,
           });
           nextSummary = Array.isArray(liveResponse?.data?.summaryByMarketHashName)
             ? liveResponse.data.summaryByMarketHashName
@@ -2701,11 +2700,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       } catch {
         // non-critical
       }
-      if (typeof window.Notification !== "undefined" && Notification.permission === "granted") {
-        new window.Notification("VAC Ban-Welle erkannt", {
-          body: itemTitle + " — Marktbewegung möglich",
-        });
-      }
       localStorage.setItem(BAN_WAVE_NOTIFIED_KEY, itemId);
     };
 
@@ -2761,11 +2755,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         }
       } catch {
         // non-critical
-      }
-      if (typeof window.Notification !== "undefined" && Notification.permission === "granted") {
-        new window.Notification("Neues CS2 Update", {
-          body: itemTitle,
-        });
       }
       localStorage.setItem(CS_UPDATE_NOTIFIED_KEY, itemId);
     };
@@ -3238,6 +3227,76 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     const price = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
     return !Number.isFinite(price) || price <= 0;
   }).length;
+
+  // After a Steam sync, re-derive the actionable notifications from the fresh
+  // portfolio counts. Runs once per sync (flag-gated) so it behaves like an
+  // event, not a live mirror: a dismissed item does not instantly reappear.
+  // Notifications self-clear when their count reaches 0.
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    // Only react to a genuine sync (token bump), not to count changes caused by
+    // the user pricing/confirming items — otherwise a just-dismissed item would
+    // instantly reappear.
+    if (actionNotificationRefreshToken === lastProcessedActionTokenRef.current) return;
+    if (portfolioLoading) return; // wait for counts to reflect the sync
+    lastProcessedActionTokenRef.current = actionNotificationRefreshToken;
+
+    void (async () => {
+      const localStore = window.electronAPI?.localStore;
+      if (!localStore?.createNotification) return;
+      try {
+        const user = await getCurrentUser();
+        const userId = resolveDesktopRuntimeUserId(user, 1);
+
+        // Clear the previous action items, then recreate for whatever work
+        // remains. Deleting first keeps counts accurate and avoids stacking.
+        if (localStore.deleteAllNotifications) {
+          await localStore.deleteAllNotifications(userId, "action_match");
+          await localStore.deleteAllNotifications(userId, "action_price");
+        }
+
+        if (matchingSuggestedCount > 0) {
+          await localStore.createNotification({
+            userId,
+            category: "action_match",
+            title: "Matching bestätigen",
+            message: `${matchingSuggestedCount} ${matchingSuggestedCount === 1 ? "Item braucht" : "Items brauchen"} eine Bestätigung`,
+            payload: { count: matchingSuggestedCount },
+          });
+        }
+        if (priceMissingCount > 0) {
+          await localStore.createNotification({
+            userId,
+            category: "action_price",
+            title: "Preis ergänzen",
+            message: `${priceMissingCount} ${priceMissingCount === 1 ? "Item braucht" : "Items brauchen"} einen Preis`,
+            payload: { count: priceMissingCount },
+          });
+        }
+
+        if (localStore.listNotifications) {
+          const rows = await localStore.listNotifications(userId, { limit: 20 });
+          const list = Array.isArray(rows) ? rows : [];
+          setSyncNotifications(list);
+          setSyncNotification((current) => ({
+            ...current,
+            newItemsCount: list.filter(
+              (row) => ACTION_NOTIFICATION_CATEGORIES.includes(row.category) && row.unread,
+            ).length,
+          }));
+        }
+      } catch (error) {
+        console.warn("Failed to refresh action notifications", error);
+      }
+    })();
+  }, [
+    isDesktopRuntime,
+    portfolioLoading,
+    actionNotificationRefreshToken,
+    matchingSuggestedCount,
+    priceMissingCount,
+  ]);
+
   const managementQuickHints = [
     {
       id: "matching",
@@ -3615,48 +3674,39 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     return `${Math.max(0, value)} neu`;
   };
-  const resolveNotificationActionTarget = () => {
-    if (matchingSuggestedCount > 0) {
-      return { section: "matching", label: "Matching" };
-    }
-    if (priceMissingCount > 0) {
-      return { section: "prices", label: "Preise" };
-    }
-    return { section: "matching", label: "Inbox" };
-  };
-  const unreadSteamSyncNotifications = useMemo(
-    () => syncNotifications.filter((entry) => entry.category === "steam_sync" && entry.unread),
+  const unreadActionNotifications = useMemo(
+    () =>
+      syncNotifications.filter(
+        (entry) => ACTION_NOTIFICATION_CATEGORIES.includes(entry.category) && entry.unread,
+      ),
     [syncNotifications],
   );
+  // Acting on an action notification consumes it (read = delete). It reappears
+  // on the next sync only if the underlying work still exists.
   const handleNotificationClick = async (entry) => {
-    if (window.electronAPI?.localStore?.markNotificationRead) {
-      await window.electronAPI.localStore.markNotificationRead(entry.id);
+    if (window.electronAPI?.localStore?.deleteNotification) {
+      await window.electronAPI.localStore.deleteNotification(entry.id);
     }
-    setSyncNotifications((current) =>
-      current.map((item) => (item.id === entry.id ? { ...item, unread: false, readAt: new Date().toISOString() } : item)),
-    );
+    setSyncNotifications((current) => current.filter((item) => item.id !== entry.id));
     setSyncNotification((current) => ({
       ...current,
       newItemsCount: Math.max(0, Number(current.newItemsCount || 0) - 1),
     }));
-    const target = resolveNotificationActionTarget();
+    const section = entry.category === "action_price" ? "prices" : "matching";
     setActiveTab("management");
-    setManagementSection(target.section);
-    navigate("/?tab=management", { replace: true });
+    setManagementSection(section);
+    navigate(`/?tab=management&section=${section}`, { replace: true });
     setCompositionRefreshToken((current) => current + 1);
   };
-  const handleMarkAllSteamNotificationsRead = async () => {
+  const handleClearActionNotifications = async () => {
     const user = await getCurrentUser();
     const userId = resolveDesktopRuntimeUserId(user, 1);
-    if (window.electronAPI?.localStore?.markAllNotificationsRead) {
-      await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
+    if (window.electronAPI?.localStore?.deleteAllNotifications) {
+      await window.electronAPI.localStore.deleteAllNotifications(userId, "action_match");
+      await window.electronAPI.localStore.deleteAllNotifications(userId, "action_price");
     }
     setSyncNotifications((current) =>
-      current.map((entry) =>
-        entry.category === "steam_sync" && entry.unread
-          ? { ...entry, unread: false, readAt: new Date().toISOString() }
-          : entry,
-      ),
+      current.filter((entry) => !ACTION_NOTIFICATION_CATEGORIES.includes(entry.category)),
     );
     setSyncNotification((current) => ({
       ...current,
@@ -3783,10 +3833,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         <div className="rounded-md border p-2">
-          <p className="text-xs font-semibold">Neue Steam Items</p>
-          {syncNotification.newItemsCount > 0 ? (
+          <p className="text-xs font-semibold">Offene Aktionen</p>
+          {unreadActionNotifications.length > 0 ? (
             <div className="mt-1 space-y-1">
-              {unreadSteamSyncNotifications.slice(0, 5).map((entry) => (
+              {unreadActionNotifications.slice(0, 5).map((entry) => (
                   <button
                     key={entry.id}
                     type="button"
@@ -3794,28 +3844,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     className="w-full rounded-md border px-2 py-1 text-left hover:bg-accent"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{entry.message}</p>
-                      <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                        {formatCompactNewCount(entry?.payload?.imported || 0)}
-                      </span>
+                      <p className="text-sm font-medium">{entry.title}</p>
+                      {Number(entry?.payload?.count) > 0 ? (
+                        <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          {formatCompactNewCount(entry.payload.count)}
+                        </span>
+                      ) : null}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Aktion: {resolveNotificationActionTarget().label}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleString("de-DE")}
-                    </p>
+                    <p className="text-[11px] text-muted-foreground">{entry.message}</p>
                   </button>
               ))}
             </div>
-          ) : null}
+          ) : (
+            <p className="mt-1 text-[11px] text-muted-foreground">Alles erledigt – keine offenen Aktionen.</p>
+          )}
           {manualSteamSyncInfo ? (
             <p className="mt-1 text-[11px] text-muted-foreground">{manualSteamSyncInfo}</p>
           ) : null}
-          {unreadSteamSyncNotifications.length > 0 ? (
+          {unreadActionNotifications.length > 0 ? (
             <div className="mt-2">
-              <Button size="sm" variant="ghost" onClick={() => void handleMarkAllSteamNotificationsRead()}>
-                Alle als gelesen
+              <Button size="sm" variant="ghost" onClick={() => void handleClearActionNotifications()}>
+                Alle löschen
               </Button>
             </div>
           ) : null}

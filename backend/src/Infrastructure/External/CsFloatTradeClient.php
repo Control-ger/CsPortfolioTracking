@@ -77,19 +77,23 @@ final class CsFloatTradeClient
 
         return [
             'orders' => $result['rows'],
+            'total' => $result['total'] ?? null,
             'error' => $result['error'],
         ];
     }
 
-    public function fetchWatchlistPage(int $limit = 40): array
+    public function fetchWatchlistPage(int $limit = 40, ?string $cursor = null): array
     {
         // CSFloat's /me/watchlist returns the user's watched listings. The
         // reverse-engineered web client calls it with a small limit; keep it
         // modest to avoid the oversize-page 500s seen on /me/buy-orders.
+        // Pagination is cursor-based: the response carries a top-level `cursor`
+        // that must be passed back (alongside `limit`) to fetch the next page.
         $limit = max(1, min($limit, 40));
-        $query = http_build_query([
+        $query = http_build_query(array_filter([
             'limit' => $limit,
-        ]);
+            'cursor' => $cursor,
+        ], static fn ($value) => $value !== null && $value !== ''));
         $url = 'https://csfloat.com/api/v1/me/watchlist' . ($query !== '' ? '?' . $query : '');
         $result = $this->requestCollectionEndpoint(
             $url,
@@ -97,11 +101,13 @@ final class CsFloatTradeClient
             [
                 'provider' => 'csfloat',
                 'limit' => $limit,
+                'cursor' => $cursor,
             ]
         );
 
         return [
             'items' => $result['rows'],
+            'cursor' => $result['cursor'] ?? null,
             'error' => $result['error'],
         ];
     }
@@ -235,6 +241,15 @@ final class CsFloatTradeClient
         }
 
         $rows = $this->extractRows($json);
+        $cursor = isset($json['cursor']) && is_string($json['cursor']) && $json['cursor'] !== ''
+            ? $json['cursor']
+            : null;
+        // /me/buy-orders paginates by page and exposes a top-level `count` =
+        // total number of orders (not the page size). Watchlist has no `count`
+        // (cursor-based instead), so this stays null there.
+        $total = isset($json['count']) && is_numeric($json['count'])
+            ? (int) $json['count']
+            : null;
         Logger::event(
             'info',
             'external',
@@ -245,12 +260,15 @@ final class CsFloatTradeClient
                 'durationMs' => $durationMs,
                 'success' => true,
                 'rowCount' => count($rows),
+                'hasCursor' => $cursor !== null,
                 ...$context,
             ]
         );
 
         return [
             'rows' => $rows,
+            'cursor' => $cursor,
+            'total' => $total,
             'error' => null,
         ];
     }

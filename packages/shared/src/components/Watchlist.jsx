@@ -263,8 +263,6 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           if (nextBuyOrderSummary.length === 0 || nextBuyOrderOrders.length === 0) {
             const liveBuyOrderResponse = await fetchCsFloatBuyOrdersData({
               syncNow: true,
-              limit: 200,
-              maxPages: 8,
             });
             const liveMeta = liveBuyOrderResponse?.meta || {};
             nextBuyOrderSummary = Array.isArray(liveBuyOrderResponse?.data?.summaryByMarketHashName)
