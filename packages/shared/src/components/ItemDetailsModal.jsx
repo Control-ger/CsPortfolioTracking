@@ -193,7 +193,7 @@ export function ItemDetailsModal({
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">{item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}</p>
             {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
-              <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-400/40 bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+              <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-300 bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
                 Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
                   useUsd: true,
                   buyPriceUsd: Number(item.buyOrderBestPriceUsd),

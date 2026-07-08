@@ -70,7 +70,7 @@ export const ItemListRow = ({
             </p>
           )}
           {hasBuyOrder ? (
-            <Badge variant="outline" className="mt-1 border-sky-400/50 bg-sky-500/20 text-[10px] font-medium text-sky-200">
+            <Badge variant="outline" className="mt-1 border-sky-300 bg-sky-100 text-[10px] font-medium text-sky-800 dark:border-sky-400/50 dark:bg-sky-500/20 dark:text-sky-200">
               {buyOrderLabel}
             </Badge>
           ) : null}

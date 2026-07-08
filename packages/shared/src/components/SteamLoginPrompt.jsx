@@ -794,7 +794,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
     return (
       <Card
-        className="relative mx-auto w-full max-w-lg overflow-hidden border-white/15 bg-slate-950/58 text-slate-100 shadow-2xl backdrop-blur-xl"
+        className="relative mx-auto w-full max-w-lg overflow-hidden border-white/15 bg-slate-950/92 text-slate-100 shadow-2xl backdrop-blur-xl"
         data-keyboard-scope="page"
       >
         <CardHeader className="relative z-10 pb-3">
