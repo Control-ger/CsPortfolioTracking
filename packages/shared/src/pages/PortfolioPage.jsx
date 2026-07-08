@@ -597,7 +597,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [groupSortBy, setGroupSortBy] = useState("name_asc");
   const [priceSearchTerm, setPriceSearchTerm] = useState("");
   const [priceSortBy, setPriceSortBy] = useState("name_asc");
-  const [priceMissingOnly, setPriceMissingOnly] = useState(false);
+  const [priceMissingOnly, setPriceMissingOnly] = useState(true);
   const [matchingSearchTerm, setMatchingSearchTerm] = useState("");
   const [matchingSortBy, setMatchingSortBy] = useState("score_desc");
   const [matchingConfidenceFilter, setMatchingConfidenceFilter] = useState("all");
@@ -2950,7 +2950,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       .slice(0, 8);
   }, [globalSearchTermNormalized, portfolioGroupSummaryById, portfolioGroups]);
   const pendingMatchingRows = matchingRows.filter((row) => row.status === "suggested");
-  const confirmedOrAutoMatchByCsfloatId = new Map();
+  // Every matched steamAssetId must be collected — a Map keyed by csfloatInvestmentId
+  // would drop all but the last steamId when one aggregated CSFloat row (e.g. a
+  // quantity position) is matched against several individual Steam-inventory twins.
+  const confirmedOrAutoMatchedSteamKeys = new Set();
   matchingRows.forEach((row) => {
     const status = String(row?.status || "").toLowerCase();
     if (!["manual_confirmed", "auto_linked"].includes(status)) {
@@ -2961,13 +2964,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!csfloatId || !steamId) {
       return;
     }
-    confirmedOrAutoMatchByCsfloatId.set(csfloatId, steamId);
+    confirmedOrAutoMatchedSteamKeys.add(steamId);
   });
-  const confirmedOrAutoMatchedSteamKeys = new Set(
-    Array.from(confirmedOrAutoMatchByCsfloatId.values())
-      .map((value) => String(value || "").trim())
-      .filter(Boolean),
-  );
   const matchingSearchQuery = normalizeSearchText(matchingSearchTerm);
   const matchingDisplayRows = showMatchedMatchingRows
     ? matchingRows.filter((row) => {
@@ -3128,6 +3126,114 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     return nextMap;
   })();
+  // Group the (already filtered/sorted) price rows by name so identical items
+  // (e.g. many single Steam-inventory copies of the same case) render as one row
+  // with a quantity instead of one row per position.
+  const filteredPriceClusters = (() => {
+    const groups = new Map();
+    filteredPriceItems.forEach((item) => {
+      const key = getItemNameKey(item) || String(item.id || "");
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          name: item.name || item.marketHashName || "Unknown Item",
+          imageUrl: item.imageUrl || item.iconUrl || null,
+          bucket: normalizeBucket(item.bucket, "inventory"),
+          positions: [],
+        });
+      }
+      groups.get(key).positions.push(item);
+    });
+    return Array.from(groups.values()).map((cluster) => {
+      const totalQuantity = cluster.positions.reduce(
+        (sum, position) => sum + Math.max(1, Number(position.quantity || 1)),
+        0,
+      );
+      const prices = cluster.positions.map((position) =>
+        Number(position.buyPriceUsd ?? position.buyPrice ?? 0),
+      );
+      const allSamePrice = prices.every((price) => price === prices[0]);
+      return {
+        ...cluster,
+        totalQuantity,
+        currentPrice: allSamePrice ? prices[0] : null,
+        suggestion: suggestedPriceByNameKey.get(cluster.key) || null,
+      };
+    });
+  })();
+  const handleSaveClusterPrice = async (cluster, explicitPriceUsd = null) => {
+    let usdPrice;
+    if (explicitPriceUsd !== null && explicitPriceUsd !== undefined) {
+      usdPrice = Number(explicitPriceUsd);
+    } else {
+      const typed = Number(priceDrafts[`cluster:${cluster.key}`]);
+      if (!Number.isFinite(typed) || typed < 0) {
+        return;
+      }
+      usdPrice = convertToUsd(typed);
+    }
+    if (!Number.isFinite(usdPrice) || usdPrice < 0) {
+      return;
+    }
+    const normalizedPrice = Number(usdPrice.toFixed(2));
+    const clusterSavingKey = `cluster:${cluster.key}`;
+
+    // Positions in a cluster are identical, fungible items bought together, so one
+    // price applies to all of them. Persist every position first and refresh the
+    // portfolio only ONCE afterwards — delegating to handleSaveSteamItemPrice per
+    // position would trigger N sequential portfolio refreshes for an N-item cluster.
+    setSavingPriceItemId(clusterSavingKey);
+    try {
+      for (const position of cluster.positions) {
+        await window.electronAPI.localStore.upsertInvestment({
+          ...position,
+          id: position.id,
+          buyPriceUsd: normalizedPrice,
+          buyPrice: normalizedPrice,
+          priceSetMode: "user_confirmed",
+          platform: "steam_inventory",
+          source: "steam_inventory",
+        });
+      }
+      const clusterPositionIds = new Set(
+        cluster.positions.map((position) => String(position?.id || "")),
+      );
+      setManagementInvestments((current) =>
+        current.map((entry) =>
+          clusterPositionIds.has(String(entry?.id || ""))
+            ? {
+                ...entry,
+                buyPriceUsd: normalizedPrice,
+                buyPrice: normalizedPrice,
+                priceSetMode: "user_confirmed",
+              }
+            : entry,
+        ),
+      );
+      setPriceDrafts((current) => ({
+        ...current,
+        [clusterSavingKey]:
+          normalizedPrice > 0 ? convertFromUsd(normalizedPrice).toFixed(2) : "",
+      }));
+      await refreshPortfolio();
+      setCompositionRefreshToken((current) => current + 1);
+    } catch (saveError) {
+      console.error("Failed to save cluster buy price", saveError);
+    } finally {
+      setSavingPriceItemId(null);
+    }
+  };
+  const handleAcceptSuggestedClusterPrice = async (cluster, suggestedPriceUsd) => {
+    const normalizedSuggestion = Number(suggestedPriceUsd);
+    if (!Number.isFinite(normalizedSuggestion) || normalizedSuggestion <= 0) {
+      return;
+    }
+    setPriceDrafts((current) => ({
+      ...current,
+      [`cluster:${cluster.key}`]: convertFromUsd(normalizedSuggestion).toFixed(2),
+    }));
+    await handleSaveClusterPrice(cluster, normalizedSuggestion);
+  };
   const priceMissingCount = rawSteamInventoryItems.filter((item) => {
     const price = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
     return !Number.isFinite(price) || price <= 0;
@@ -5054,6 +5160,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             handlePriceDraftChange={handlePriceDraftChange}
             handleSaveSteamItemPrice={handleSaveSteamItemPrice}
             handleAcceptSuggestedPrice={handleAcceptSuggestedPrice}
+            handleSaveClusterPrice={handleSaveClusterPrice}
+            handleAcceptSuggestedClusterPrice={handleAcceptSuggestedClusterPrice}
             manualItemDraft={manualItemDraft}
             setManualItemDraft={setManualItemDraft}
             manualSelectedSuggestion={manualSelectedSuggestion}
@@ -5098,6 +5206,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             matchingSuggestedCount={matchingSuggestedCount}
             matchedSteamInventoryItemsCount={matchedSteamInventoryItemsCount}
             filteredPriceItems={filteredPriceItems}
+            filteredPriceClusters={filteredPriceClusters}
             suggestedPriceByNameKey={suggestedPriceByNameKey}
             priceMissingCount={priceMissingCount}
           />

@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Info, Link2, Search } from "lucide-react";
 import { Badge } from "./ui/badge.jsx";
 import { Button } from "./ui/button.jsx";
@@ -312,6 +312,8 @@ export function PortfolioManagementSection({
   handlePriceDraftChange,
   handleSaveSteamItemPrice,
   handleAcceptSuggestedPrice,
+  handleSaveClusterPrice,
+  handleAcceptSuggestedClusterPrice,
 
   // Manual item
   manualItemDraft,
@@ -361,9 +363,11 @@ export function PortfolioManagementSection({
   matchingSuggestedCount,
   matchedSteamInventoryItemsCount,
   filteredPriceItems,
+  filteredPriceClusters,
   suggestedPriceByNameKey,
   priceMissingCount,
 }) {
+  const [expandedPriceClusters, setExpandedPriceClusters] = useState({});
   const {
     currency,
     currencies,
@@ -376,6 +380,104 @@ export function PortfolioManagementSection({
   // USD stored as source of truth → show the user their active currency instead.
   const formatUsdInDisplayCurrency = (usdValue) =>
     formatPrice(Number(usdValue || 0), { useUsd: true, buyPriceUsd: Number(usdValue || 0) });
+
+  // Single-position price row — reused both for standalone items and for the
+  // individual positions revealed by expanding a multi-position price cluster.
+  function renderPriceItemRow(item) {
+    const currentPrice = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
+    const nameKey = getItemNameKey(item);
+    const suggestion = suggestedPriceByNameKey.get(nameKey) || null;
+    const suggestedPrice = Number(suggestion?.value ?? 0);
+    const hasSuggestion = Number.isFinite(suggestedPrice) && suggestedPrice > 0;
+    const draftValue =
+      priceDrafts[item.id] ??
+      String(currentPrice > 0 ? convertFromUsd(currentPrice).toFixed(2) : "");
+    // Live preview of the USD that will actually be stored from
+    // the (display-currency) draft the user typed.
+    const draftAsUsd = convertToUsd(Number(draftValue));
+    const hasDraftPreview = currency !== "USD" && Number.isFinite(draftAsUsd) && draftAsUsd > 0;
+    const itemImageUrl = String(item.imageUrl || item.iconUrl || "").trim() || null;
+    const bucket = normalizeBucket(item.bucket, "inventory");
+    const quantity = Math.max(1, Number(item.quantity || 1));
+
+    return (
+      <div key={item.id} className="rounded-md border p-2 sm:p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted/30 p-1">
+            {itemImageUrl ? (
+              <img
+                src={itemImageUrl}
+                alt={item.name}
+                className="h-full w-full object-contain"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                N/A
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{item.name}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span>{quantity}x</span>
+              <span>|</span>
+              <span>{bucket === "inventory" ? "Inventar" : "Investment"}</span>
+              <span>|</span>
+              <span>
+                Aktuell:{" "}
+                {currentPrice > 0 ? formatUsdInDisplayCurrency(currentPrice) : "kein Preis gesetzt"}
+              </span>
+            </div>
+            {hasSuggestion ? (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Vorschlag: {formatUsdInDisplayCurrency(suggestedPrice)} (
+                {String(suggestion?.source || "live")})
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={draftValue}
+              onChange={(event) => handlePriceDraftChange(item.id, event.target.value)}
+              className="h-9 w-28 rounded-md border border-input bg-background px-2 text-sm"
+              placeholder={hasSuggestion ? convertFromUsd(suggestedPrice).toFixed(2) : currencySymbol}
+              disabled={savingPriceItemId === item.id || ratesLoading}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleSaveSteamItemPrice(item)}
+              disabled={savingPriceItemId === item.id || ratesLoading}
+            >
+              {savingPriceItemId === item.id ? "Speichert..." : "Speichern"}
+            </Button>
+            {hasSuggestion ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void handleAcceptSuggestedPrice(item, suggestedPrice)}
+                disabled={savingPriceItemId === item.id}
+              >
+                Uebernehmen
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+          Eingabe in {currency}.{" "}
+          {hasDraftPreview
+            ? `Wird als ${draftAsUsd.toFixed(2)} USD gespeichert (heutiger Kurs). `
+            : ""}
+          Der Kurs zum Kaufzeitpunkt ist nicht rekonstruierbar, daher sind kleine Abweichungen normal.
+        </p>
+      </div>
+    );
+  }
 
   if (!forceMount) {
     return null;
@@ -648,47 +750,43 @@ export function PortfolioManagementSection({
                       Noch keine Steam-Inventory-Items vorhanden.
                     </p>
                   )
-                ) : filteredPriceItems.length === 0 ? (
+                ) : filteredPriceClusters.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     Kein Item passt zu Suche/Filter.
                   </p>
                 ) : (
                   <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-                    {filteredPriceItems.map((item) => {
-                      const currentPrice = Number(
-                        item.buyPriceUsd ?? item.buyPrice ?? 0,
-                      );
-                      const nameKey = getItemNameKey(item);
-                      const suggestion =
-                        suggestedPriceByNameKey.get(nameKey) || null;
-                      const suggestedPrice = Number(suggestion?.value ?? 0);
+                    {filteredPriceClusters.map((cluster) => {
+                      if (cluster.positions.length === 1) {
+                        return renderPriceItemRow(cluster.positions[0]);
+                      }
+
                       const hasSuggestion =
-                        Number.isFinite(suggestedPrice) && suggestedPrice > 0;
+                        Number.isFinite(cluster.suggestion?.value) &&
+                        cluster.suggestion.value > 0;
+                      const suggestedPrice = Number(cluster.suggestion?.value ?? 0);
                       const draftValue =
-                        priceDrafts[item.id] ??
-                        String(currentPrice > 0 ? convertFromUsd(currentPrice).toFixed(2) : "");
-                      // Live preview of the USD that will actually be stored from
-                      // the (display-currency) draft the user typed.
-                      const draftAsUsd = convertToUsd(Number(draftValue));
-                      const hasDraftPreview =
-                        currency !== "USD" && Number.isFinite(draftAsUsd) && draftAsUsd > 0;
-                      const itemImageUrl =
-                        String(item.imageUrl || item.iconUrl || "").trim() ||
-                        null;
-                      const bucket = normalizeBucket(item.bucket, "inventory");
-                      const quantity = Math.max(
-                        1,
-                        Number(item.quantity || 1),
-                      );
+                        priceDrafts[`cluster:${cluster.key}`] ??
+                        String(
+                          cluster.currentPrice > 0
+                            ? convertFromUsd(cluster.currentPrice).toFixed(2)
+                            : "",
+                        );
+                      const isExpanded = Boolean(expandedPriceClusters[cluster.key]);
+                      const isSaving =
+                        savingPriceItemId === `cluster:${cluster.key}` ||
+                        cluster.positions.some(
+                          (position) => savingPriceItemId === position.id,
+                        );
 
                       return (
-                        <div key={item.id} className="rounded-md border p-2 sm:p-3">
+                        <div key={cluster.key} className="rounded-md border p-2 sm:p-3">
                           <div className="flex flex-wrap items-center gap-3">
                             <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted/30 p-1">
-                              {itemImageUrl ? (
+                              {cluster.imageUrl ? (
                                 <img
-                                  src={itemImageUrl}
-                                  alt={item.name}
+                                  src={cluster.imageUrl}
+                                  alt={cluster.name}
                                   className="h-full w-full object-contain"
                                   loading="lazy"
                                   decoding="async"
@@ -700,29 +798,29 @@ export function PortfolioManagementSection({
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold">
-                                {item.name}
-                              </p>
+                              <p className="truncate text-sm font-semibold">{cluster.name}</p>
                               <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                <span>{quantity}x</span>
+                                <span>{cluster.totalQuantity}x</span>
+                                <span>|</span>
+                                <span>{cluster.positions.length} Positionen</span>
                                 <span>|</span>
                                 <span>
-                                  {bucket === "inventory"
-                                    ? "Inventar"
-                                    : "Investment"}
+                                  {cluster.bucket === "inventory" ? "Inventar" : "Investment"}
                                 </span>
                                 <span>|</span>
                                 <span>
                                   Aktuell:{" "}
-                                  {currentPrice > 0
-                                    ? formatUsdInDisplayCurrency(currentPrice)
-                                    : "kein Preis gesetzt"}
+                                  {cluster.currentPrice > 0
+                                    ? formatUsdInDisplayCurrency(cluster.currentPrice)
+                                    : cluster.currentPrice === null
+                                      ? "unterschiedlich"
+                                      : "kein Preis gesetzt"}
                                 </span>
                               </div>
                               {hasSuggestion ? (
                                 <p className="mt-1 text-[11px] text-muted-foreground">
                                   Vorschlag: {formatUsdInDisplayCurrency(suggestedPrice)} (
-                                  {String(suggestion?.source || "live")})
+                                  {String(cluster.suggestion?.source || "live")})
                                 </p>
                               ) : null}
                             </div>
@@ -734,7 +832,7 @@ export function PortfolioManagementSection({
                                 value={draftValue}
                                 onChange={(event) =>
                                   handlePriceDraftChange(
-                                    item.id,
+                                    `cluster:${cluster.key}`,
                                     event.target.value,
                                   )
                                 }
@@ -744,44 +842,52 @@ export function PortfolioManagementSection({
                                     ? convertFromUsd(suggestedPrice).toFixed(2)
                                     : currencySymbol
                                 }
-                                disabled={savingPriceItemId === item.id || ratesLoading}
+                                disabled={isSaving || ratesLoading}
                               />
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() =>
-                                  void handleSaveSteamItemPrice(item)
-                                }
-                                disabled={savingPriceItemId === item.id || ratesLoading}
+                                onClick={() => void handleSaveClusterPrice(cluster)}
+                                disabled={isSaving || ratesLoading}
                               >
-                                {savingPriceItemId === item.id
-                                  ? "Speichert..."
-                                  : "Speichern"}
+                                {isSaving ? "Speichert..." : `Speichern (${cluster.positions.length}x)`}
                               </Button>
                               {hasSuggestion ? (
                                 <Button
                                   size="sm"
                                   variant="ghost"
                                   onClick={() =>
-                                    void handleAcceptSuggestedPrice(
-                                      item,
-                                      suggestedPrice,
-                                    )
+                                    void handleAcceptSuggestedClusterPrice(cluster, suggestedPrice)
                                   }
-                                  disabled={savingPriceItemId === item.id}
+                                  disabled={isSaving}
                                 >
                                   Uebernehmen
                                 </Button>
                               ) : null}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setExpandedPriceClusters((current) => ({
+                                    ...current,
+                                    [cluster.key]: !current[cluster.key],
+                                  }))
+                                }
+                              >
+                                {isExpanded ? "Positionen ausblenden" : "Positionen anzeigen"}
+                              </Button>
                             </div>
                           </div>
                           <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
-                            Eingabe in {currency}.{" "}
-                            {hasDraftPreview
-                              ? `Wird als ${draftAsUsd.toFixed(2)} USD gespeichert (heutiger Kurs). `
-                              : ""}
-                            Der Kurs zum Kaufzeitpunkt ist nicht rekonstruierbar, daher sind kleine Abweichungen normal.
+                            Ein Preis pro Stueck fuer alle {cluster.positions.length} Positionen dieser
+                            Gruppe. Eingabe in {currency}. Der Kurs zum Kaufzeitpunkt ist nicht
+                            rekonstruierbar, daher sind kleine Abweichungen normal.
                           </p>
+                          {isExpanded ? (
+                            <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                              {cluster.positions.map((position) => renderPriceItemRow(position))}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })}
