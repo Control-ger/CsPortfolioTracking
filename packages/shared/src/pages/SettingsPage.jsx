@@ -343,9 +343,20 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         setCsfloatWatchlistAutoImport(false);
         setCsfloatBuyOrderAutoImport(false);
       }
+    };
 
-      // Web-push notification prefs are server-owned on the web/PWA (see
-      // portfolioPreferences.js); load them separately so they persist.
+    void loadCsfloatWatchlistPref();
+  }, [desktopRuntime]);
+
+  // Web-push notification prefs are server-owned on the web/PWA (see
+  // portfolioPreferences.js). They must load on web too — not just desktop —
+  // otherwise the enable toggle and min-level stay at their initial defaults
+  // (off / "high") and every saved change appears lost after a reload.
+  useEffect(() => {
+    if (isElectronRuntime) {
+      return;
+    }
+    const loadWebPushNotifyPrefs = async () => {
       try {
         const webPushPrefs = await getWebPushNotificationPreferences();
         setNotifyCsUpdatesWebPush(Boolean(webPushPrefs?.notifyCsUpdatesWebPush));
@@ -355,8 +366,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       }
     };
 
-    void loadCsfloatWatchlistPref();
-  }, [desktopRuntime]);
+    void loadWebPushNotifyPrefs();
+  }, [isElectronRuntime]);
 
   const handleToggleCsfloatWatchlistAutoImport = async () => {
     const next = !csfloatWatchlistAutoImport;
