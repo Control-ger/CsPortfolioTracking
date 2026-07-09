@@ -234,7 +234,7 @@ export function deriveCsUpdateImpact(item) {
       level: "unrated",
       label: "KI Rating ausstehend",
       actionLabel: "Noch keine Bewertung verfuegbar",
-      badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+      badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
     };
   }
 
@@ -247,7 +247,7 @@ export function deriveCsUpdateImpact(item) {
       level: "pending",
       label: "KI Rating laeuft",
       actionLabel: "Eilmeldung jetzt pruefen",
-      badgeClass: "border-cyan-500/30 bg-cyan-500/12 text-cyan-300",
+      badgeClass: "border-cyan-500/30 bg-cyan-500/12 text-cyan-600 dark:text-cyan-300",
     };
   }
 
@@ -256,22 +256,22 @@ export function deriveCsUpdateImpact(item) {
       none: {
         label: "Impact none",
         actionLabel: "Kein akuter Handlungsbedarf",
-        badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+        badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
       },
       low: {
         label: "Impact niedrig",
         actionLabel: "Beobachten",
-        badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+        badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
       },
       medium: {
         label: "Impact mittel",
         actionLabel: "Heute pruefen",
-        badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+        badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-600 dark:text-amber-300",
       },
       high: {
         label: "Impact hoch",
         actionLabel: "Schnell pruefen",
-        badgeClass: "border-red-500/35 bg-red-500/12 text-red-300",
+        badgeClass: "border-red-500/35 bg-red-500/12 text-red-600 dark:text-red-300",
       },
     };
     const mapped = aiMap[aiImpactLevel];
@@ -287,14 +287,14 @@ export function deriveCsUpdateImpact(item) {
       level: "failed",
       label: "KI Rating fehlgeschlagen",
       actionLabel: "Manuell pruefen",
-      badgeClass: "border-red-500/30 bg-red-500/10 text-red-300",
+      badgeClass: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300",
     };
   }
   return {
     level: "unrated",
     label: "KI Rating ausstehend",
     actionLabel: "Noch keine Bewertung verfuegbar",
-    badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+    badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
   };
 }
 

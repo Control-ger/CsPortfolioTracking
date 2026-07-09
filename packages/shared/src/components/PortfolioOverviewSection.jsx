@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowUpRight, TrendingUp, TrendingDown } from "lucide-react";
 
 import { PortfolioChart } from "./PortfolioChart.jsx";
 import { PortfolioCompositionChart } from "./PortfolioCompositionChart.jsx";
@@ -87,19 +87,22 @@ export function PortfolioOverviewSection({
               handleOpenBanWaveFeed();
             }
           }}
-          className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 sm:px-5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50"
+          className="group rounded-2xl border border-border/70 bg-card px-5 py-4 cursor-pointer transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-400/80">
-                VAC Ban-Welle
-              </p>
-              <Badge variant="outline" className="border-amber-400/30 bg-amber-500/10 text-amber-200 text-[10px]">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                <span className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  VAC Ban-Welle
+                </span>
+              </div>
+              <Badge variant="outline" className="shrink-0 border-amber-500/35 bg-amber-500/12 text-amber-600 dark:text-amber-300">
                 aktuell
               </Badge>
             </div>
-            <p className="text-sm font-semibold text-foreground">{freshBanWaveItem.title}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="line-clamp-2 text-base font-semibold text-foreground sm:text-lg">{freshBanWaveItem.title}</p>
+            <p className="text-sm text-muted-foreground">
               Erhöhte Ban-Aktivität erkannt — Marktbewegungen bei Skins und Cases möglich.
             </p>
           </div>
@@ -117,56 +120,58 @@ export function PortfolioOverviewSection({
               handleOpenLatestCsUpdateFeed();
             }
           }}
-          className={`rounded-2xl border px-4 py-4 sm:px-5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${latestCsUpdateBannerTone.wrapper}`}
+          className="group rounded-2xl border border-border/70 bg-card px-5 py-4 cursor-pointer transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${latestCsUpdateBannerTone.eyebrow}`}>
-                  CS Update Alert
-                </p>
-                <p className="mt-1 text-sm font-semibold text-foreground sm:text-base">
-                  Neues CS Update seit {formatRelativeHours(latestCsUpdateAgeHours)}
-                </p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${latestCsUpdateBannerTone.dot}`} />
+                <span className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  CS Update · seit {formatRelativeHours(latestCsUpdateAgeHours)}
+                </span>
+                {hasUnreadCsUpdate ? (
+                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                    neu
+                  </span>
+                ) : null}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className={latestCsUpdateImpact.badgeClass}>
-                  {latestCsUpdateImpact.label}
-                </Badge>
-                <Badge variant="outline" className="border-violet-400/30 bg-violet-500/10 text-violet-200">
-                  KI generiert
-                </Badge>
-              </div>
+              <Badge variant="outline" className={`shrink-0 ${latestCsUpdateImpact.badgeClass}`}>
+                {latestCsUpdateImpact.label}
+              </Badge>
             </div>
 
-            <div className={`rounded-xl border p-3 ${latestCsUpdateBannerTone.panel}`}>
-              <p className="line-clamp-2 text-sm font-semibold text-foreground">{latestCsUpdate.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                KI Aktion: <span className="text-foreground">{latestCsUpdateImpact.actionLabel}</span>
-              </p>
+            <p className="line-clamp-2 text-base font-semibold text-foreground sm:text-lg">
+              {latestCsUpdate.title}
+            </p>
+
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <span className="text-muted-foreground">Aktion</span>
+              <span className="text-foreground">{latestCsUpdateImpact.actionLabel}</span>
               {latestCsUpdate?.aiReasoning ? (
-                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                  KI Begruendung: {latestCsUpdate.aiReasoning}
-                </p>
-              ) : null}
-              {latestCsUpdateAiModelLabel ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">Modell: {latestCsUpdateAiModelLabel}</p>
+                <>
+                  <span className="text-muted-foreground">Grund</span>
+                  <span className="line-clamp-2 text-muted-foreground">{latestCsUpdate.aiReasoning}</span>
+                </>
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-xs text-muted-foreground">
               {latestCsUpdate?.url ? (
-                <Button asChild size="sm" onClick={(event) => event.stopPropagation()}>
-                  <a href={latestCsUpdate.url} target="_blank" rel="noreferrer">
-                    Original Update oeffnen
-                  </a>
-                </Button>
+                <a
+                  href={latestCsUpdate.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                  className="inline-flex items-center gap-1 font-medium text-foreground hover:underline"
+                >
+                  Original Update öffnen
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </a>
               ) : null}
-              {hasUnreadCsUpdate ? (
-                <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-300">
-                  neu
-                </Badge>
-              ) : null}
+              <span className="inline-flex items-center gap-1">
+                {latestCsUpdate?.url ? <span className="text-muted-foreground/50">·</span> : null}
+                KI generiert{latestCsUpdateAiModelLabel ? ` · ${latestCsUpdateAiModelLabel}` : ""}
+              </span>
             </div>
           </div>
         </div>

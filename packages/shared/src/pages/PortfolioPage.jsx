@@ -126,40 +126,19 @@ const ItemSearch = lazy(() =>
 );
 
 
+// Neobroker-clean surface: one neutral card, impact conveyed only by a small
+// accent dot + the impact badge. No gradients, no nested panels, light-safe.
 function getCsUpdateBannerTone(level) {
   if (level === "high") {
-    return {
-      wrapper:
-        "steam-avatar-gradient-banner border-red-500/35 shadow-[0_16px_38px_rgba(127,29,29,0.35)]",
-      eyebrow: "text-red-300",
-      panel: "border-red-500/35 bg-red-950/35",
-    };
+    return { dot: "bg-red-500" };
   }
-
   if (level === "medium") {
-    return {
-      wrapper:
-        "steam-avatar-gradient-banner border-amber-500/35 shadow-[0_14px_30px_rgba(146,64,14,0.22)]",
-      eyebrow: "text-amber-300",
-      panel: "border-amber-500/35 bg-amber-950/30",
-    };
+    return { dot: "bg-amber-500" };
   }
-
   if (level === "pending") {
-    return {
-      wrapper:
-        "steam-avatar-gradient-banner border-cyan-400/30 shadow-[0_12px_26px_rgba(8,47,73,0.25)]",
-      eyebrow: "text-cyan-300",
-      panel: "border-cyan-400/30 bg-cyan-950/30",
-    };
+    return { dot: "bg-sky-500" };
   }
-
-  return {
-    wrapper:
-      "steam-avatar-gradient-banner border-cyan-400/25 shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
-    eyebrow: "text-cyan-300",
-    panel: "border-border/70 bg-card/70",
-  };
+  return { dot: "bg-emerald-500" };
 }
 
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
