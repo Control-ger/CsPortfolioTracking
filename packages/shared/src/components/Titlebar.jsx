@@ -23,27 +23,34 @@ export const Titlebar = () => {
       <div className="flex h-full" style={{ WebkitAppRegion: 'no-drag' }}>
         <button
           onClick={() => window.electronAPI?.minimize()}
-          className="px-4 text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
+          className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
           aria-label="Fenster minimieren"
         >
-          <span className="text-lg">-</span>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" strokeWidth="1" />
+          </svg>
         </button>
 
         <button
           onClick={() => window.electronAPI?.maximize()}
-          className="px-4 text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
+          className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
           title="Maximieren"
           aria-label="Fenster maximieren"
         >
-          <div className="h-3 w-3 rounded-[1px] border border-current" />
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
+          </svg>
         </button>
 
         <button
           onClick={() => window.electronAPI?.close()}
-          className="px-4 text-muted-foreground transition-colors hover:bg-red-500/80 hover:text-white"
+          className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-red-500/80 hover:text-white"
           aria-label="Fenster schliessen"
         >
-          <span className="text-xs">x</span>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" strokeWidth="1" />
+            <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" strokeWidth="1" />
+          </svg>
         </button>
       </div>
     </div>
