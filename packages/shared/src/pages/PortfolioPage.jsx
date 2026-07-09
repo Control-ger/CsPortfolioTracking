@@ -5161,10 +5161,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               }
             }}
             onSelectGroup={(group) => {
-              setSelectedItem(buildGroupDetailSelection(group));
+              const selection = buildGroupDetailSelection(group);
+              setSelectedItem(selection);
+              if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                openModal("itemDetail", { item: selection });
+              }
             }}
             onSelectCluster={(group, cluster) => {
-              setSelectedItem(buildGroupClusterDetailSelection(group, cluster));
+              const selection = buildGroupClusterDetailSelection(group, cluster);
+              setSelectedItem(selection);
+              if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                openModal("itemDetail", { item: selection });
+              }
             }}
             selectedItemWithLiveAndBuyOrders={selectedItemWithLiveAndBuyOrders}
             selectedItem={selectedItem}
