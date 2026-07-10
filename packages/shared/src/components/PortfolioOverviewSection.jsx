@@ -213,7 +213,7 @@ export function PortfolioOverviewSection({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-stretch xl:grid-cols-[minmax(0,1fr)_460px]">
         <div className="min-w-0">
           <PortfolioChart
             cardRef={portfolioChartCardRef}
@@ -445,18 +445,16 @@ export function PortfolioOverviewSection({
         <div className="sm:pt-1">
           <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
           {compositionLoading ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div className="flex justify-center lg:col-span-2">
-                  <Skeleton className="h-55 w-full max-w-sm sm:h-80" />
-                </div>
-                <div className="space-y-2">
-                  {[1, 2, 3, 4].map((entry) => (
-                    <Skeleton key={entry} className="h-14 w-full" />
-                  ))}
-                </div>
+            <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+              <div className="flex flex-col items-center gap-3">
+                <Skeleton className="h-55 w-full max-w-sm sm:h-80" />
+                <Skeleton className="h-16 w-full max-w-sm" />
               </div>
-              <Skeleton className="h-16 w-full" />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {[1, 2, 3, 4, 5, 6].map((entry) => (
+                  <Skeleton key={entry} className="h-14 w-full" />
+                ))}
+              </div>
             </div>
           ) : compositionError ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">

@@ -4996,7 +4996,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             className={`w-full min-w-0 ${renderLocalDesktopSidebar ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
           >
             {useDesktopSidebarShell ? (
-              <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:justify-between lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
+              <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
                 <div className={`flex min-w-0 items-center ${activeTab === "search" ? "w-full justify-center" : "gap-3"}`}>
                   <form
                     className={`relative ${activeTab === "search" ? "w-[min(920px,72vw)]" : "w-[340px] max-w-[46vw]"}`}
@@ -5024,38 +5024,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       className="flex h-11 w-full items-center rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground shadow-none outline-none transition-colors focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
                     />
                   </form>
-                </div>
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => handleTabSelect("overview")}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "overview" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Portfolio
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTabSelect("inventory")}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "inventory" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Inventar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTabSelect("watchlist")}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "watchlist" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Watchlist
-                  </button>
-                  {isDesktopRuntime ? (
-                    <button
-                      type="button"
-                      onClick={() => handleTabSelect("management")}
-                      className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "management" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                    >
-                      Verwaltung
-                    </button>
-                  ) : null}
                 </div>
               </div>
             ) : null}
