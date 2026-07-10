@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
@@ -139,16 +139,14 @@ function formatAxisPercent(value) {
 
 // Absolute axis domain is computed in USD (the chart's internal unit); tick labels
 // are converted to the user's display currency by the component (see formatUsdTick).
-// referenceValue (buy-in) must be part of the domain: the axis uses an explicit
-// domain with allowDataOverflow, which overrides ifOverflow="extendDomain" on the
-// ReferenceLine — without this a buy-in outside the price range is silently clipped.
-function buildAbsoluteAxisConfig(chartData = [], referenceValue = null) {
+// The buy-in level is deliberately NOT folded into the domain: the axis fits the
+// actual price data only, so a large gain/loss keeps full vertical resolution. When
+// the buy-in falls outside this range the dashed line is clipped (ifOverflow="hidden")
+// and an edge label marks its direction instead.
+function buildAbsoluteAxisConfig(chartData = []) {
   const values = chartData
     .map((entry) => Number(entry?.displayValue))
     .filter((value) => Number.isFinite(value));
-  if (Number.isFinite(referenceValue)) {
-    values.push(referenceValue);
-  }
   if (values.length === 0) {
     return null;
   }
@@ -357,16 +355,6 @@ export const PortfolioChart = ({
     Number.isFinite(normalizedReferenceLineValue) &&
     Number.isFinite(referenceDisplayValue) &&
     referenceActiveInRange;
-  // The dot marks the actual purchase moment on the time axis; purchases before the
-  // visible window keep the line but drop the dot.
-  const referenceDotX =
-    showReferenceLine &&
-    hasReferenceTimestamp &&
-    Number.isFinite(Number(visibleMinTimestamp)) &&
-    normalizedReferenceLineTimestamp >= Number(visibleMinTimestamp) &&
-    normalizedReferenceLineTimestamp <= Number(visibleMaxTimestamp)
-      ? normalizedReferenceLineTimestamp
-      : null;
   const visibleSpanDays =
     Number.isFinite(Number(visibleMinTimestamp)) && Number.isFinite(Number(visibleMaxTimestamp))
       ? (Number(visibleMaxTimestamp) - Number(visibleMinTimestamp)) / DAY_MS
@@ -376,15 +364,43 @@ export const PortfolioChart = ({
     [visibleMinTimestamp, visibleMaxTimestamp],
   );
   const absoluteAxisConfig = useMemo(
-    () =>
-      showAbsolute
-        ? buildAbsoluteAxisConfig(
-            chartData,
-            showReferenceLine ? normalizedReferenceLineValue : null,
-          )
-        : null,
-    [chartData, showAbsolute, showReferenceLine, normalizedReferenceLineValue],
+    () => (showAbsolute ? buildAbsoluteAxisConfig(chartData) : null),
+    [chartData, showAbsolute],
   );
+
+  // Vertical extent actually rendered: the explicit padded domain in absolute mode,
+  // else the raw min/max of the plotted values (recharts' auto domain adds a little
+  // padding around these, so treating them as the bounds is a safe approximation).
+  const displayValueBounds = useMemo(() => {
+    const values = chartData
+      .map((entry) => Number(entry?.displayValue))
+      .filter((value) => Number.isFinite(value));
+    if (values.length === 0) {
+      return null;
+    }
+    return { min: Math.min(...values), max: Math.max(...values) };
+  }, [chartData]);
+  const effectiveDomain =
+    showAbsolute && absoluteAxisConfig
+      ? { min: absoluteAxisConfig.domain[0], max: absoluteAxisConfig.domain[1] }
+      : displayValueBounds;
+  // Where the buy-in sits relative to the visible window: "below"/"above" when it is
+  // clipped off the axis (→ edge label), null when it renders inside as a normal line.
+  const referenceEdge =
+    showReferenceLine && effectiveDomain && Number.isFinite(referenceDisplayValue)
+      ? referenceDisplayValue < effectiveDomain.min
+        ? "below"
+        : referenceDisplayValue > effectiveDomain.max
+          ? "above"
+          : null
+      : null;
+  // Latest value vs. buy-in — the "how far off break-even" figure shown on the edge label.
+  const lastVisibleWert = visibleHistory[visibleHistory.length - 1]?.wert;
+  const referenceGainPercent =
+    Number.isFinite(Number(lastVisibleWert)) && normalizedReferenceLineValue > 0
+      ? ((Number(lastVisibleWert) - normalizedReferenceLineValue) / normalizedReferenceLineValue) * 100
+      : null;
+  const showReferenceEdgeLabel = Boolean(referenceEdge) && Number.isFinite(referenceGainPercent);
 
   const trendStats = useMemo(() => {
     if (chartData.length === 0) {
@@ -638,7 +654,7 @@ export const PortfolioChart = ({
                   stroke="hsl(var(--muted-foreground))"
                   strokeOpacity={0.65}
                   strokeDasharray="4 4"
-                  ifOverflow="extendDomain"
+                  ifOverflow="hidden"
                   label={{
                     value: referenceLineLabel,
                     position: "insideTopLeft",
@@ -647,16 +663,17 @@ export const PortfolioChart = ({
                   }}
                 />
               ) : null}
-              {showReferenceLine && Number.isFinite(Number(referenceDotX)) ? (
-                <ReferenceDot
-                  x={referenceDotX}
-                  y={referenceDisplayValue}
-                  r={4}
+              {showReferenceEdgeLabel ? (
+                <ReferenceLine
+                  y={referenceEdge === "below" ? effectiveDomain.min : effectiveDomain.max}
+                  stroke="transparent"
                   ifOverflow="extendDomain"
-                  fill="hsl(var(--muted-foreground))"
-                  stroke="hsl(var(--background))"
-                  strokeWidth={1.25}
-                  isFront
+                  label={{
+                    value: `${referenceEdge === "below" ? "↓" : "↑"} ${referenceLineLabel} ${formatSignedPercent(referenceGainPercent)}`,
+                    position: referenceEdge === "below" ? "insideBottomLeft" : "insideTopLeft",
+                    fill: "hsl(var(--muted-foreground))",
+                    fontSize: 10,
+                  }}
                 />
               ) : null}
               <XAxis
