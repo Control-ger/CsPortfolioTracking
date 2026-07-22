@@ -106,3 +106,82 @@ jobs:
             release/*.exe
             release/*.exe.blockmap
             release/latest*.yml
+
+  build-linux:
+    # Runs after the Windows job so the GitHub release already exists and this
+    # job only appends the Linux assets instead of racing to create the release.
+    needs: build-and-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm run build:web
+
+      - name: Build desktop artifacts
+        run: npx electron-builder --linux AppImage deb --publish never
+
+      - name: Generate checksums for release assets
+        id: checksums
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(release/*.AppImage release/*.deb)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .AppImage or .deb files found in release directory." >&2
+            exit 1
+          fi
+
+          {
+            echo "hash_lines<<EOF"
+            for file in "${files[@]}"; do
+              hash=$(sha256sum "$file" | cut -d' ' -f1)
+              echo "- \`$(basename "$file")\`"
+              echo "  - \`sha256:$hash\`"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create artifact attestation
+        # Best-effort provenance: a sigstore/rekor outage must not block the
+        # release. Marked non-fatal so the release step still publishes the
+        # already-built artifacts.
+        continue-on-error: true
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            release/*.AppImage
+            release/*.deb
+
+      - name: Create or update GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          append_body: true
+          body: |
+            ## Linux download
+
+            - `*.AppImage` — portable, no install needed. Make it executable and run:
+              `chmod +x CS-Investor-Hub-*.AppImage && ./CS-Investor-Hub-*.AppImage`
+              (On Ubuntu 24.04 / Zorin 18 you may need `sudo apt install libfuse2t64`.)
+            - `*.deb` — install with `sudo apt install ./CS-Investor-Hub-*.deb`
+
+            ## SHA256 checksums (Linux)
+
+            ${{ steps.checksums.outputs.hash_lines }}
+          files: |
+            release/*.AppImage
+            release/*.deb
+            release/latest-linux*.yml

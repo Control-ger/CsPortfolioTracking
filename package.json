@@ -2,6 +2,8 @@
   "name": "cs-portfolio-tracking-monorepo",
   "private": true,
   "version": "0.2.87",
+  "description": "CS Investor Hub - desktop app for tracking a CS skin portfolio.",
+  "author": "Control-ger <181518205+Control-ger@users.noreply.github.com>",
   "main": "apps/desktop/main.js",
   "type": "module",
   "repository": {
@@ -23,6 +25,7 @@
     "build:shared": "echo 'Shared is code-only, no build needed'",
     "build:web": "vite build",
     "build:desktop": "vite build && electron-builder",
+    "build:linux": "npm run clean && vite build && electron-builder --linux AppImage deb --publish never",
     "rebuild:desktop-native": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint .",
     "docs:guard": "node scripts/docs-guard.mjs",
@@ -74,6 +77,15 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "artifactName": "CS-Investor-Hub-${version}.${ext}",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Finance",
+      "icon": "build/icon.png"
     }
   },
   "dependencies": {

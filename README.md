@@ -46,3 +46,46 @@ npm run build
 npm run lint
 npm run docs:guard
 ```
+
+## Desktop Builds
+
+Der Build erfolgt jeweils auf dem Zielbetriebssystem (electron-builder erkennt die
+Plattform automatisch). Das native Modul `better-sqlite3` wird dabei fuer die
+jeweilige Plattform neu kompiliert.
+
+### Windows
+
+```bash
+npm run build
+```
+
+Erzeugt den NSIS-Installer (`CS-Investor-Hub-Setup-*.exe`) unter `release/`.
+
+### Linux (AppImage + .deb)
+
+```bash
+npm run build:linux
+```
+
+Erzeugt unter `release/`:
+- `CS-Investor-Hub-*.AppImage` — portabel, ohne Installation. Ausfuehrbar machen und starten:
+  ```bash
+  chmod +x release/CS-Investor-Hub-*.AppImage && ./release/CS-Investor-Hub-*.AppImage
+  ```
+  Auf Ubuntu 24.04 / Zorin OS 18 ggf. `sudo apt install libfuse2t64` (nur zum Ausfuehren, nicht zum Bauen).
+- `CS-Investor-Hub-*.deb` — Installation via `sudo apt install ./release/CS-Investor-Hub-*.deb`.
+
+Falls beim Start ein `better-sqlite3`-ABI-Fehler auftritt, die nativen Module gegen die
+Electron-ABI neu bauen:
+
+```bash
+npm run rebuild:desktop-native
+```
+
+Ein eigenes Linux-Icon kann optional als `build/icon.png` (mind. 512x512) hinterlegt werden;
+ohne diese Datei wird das Standard-Electron-Icon verwendet.
+
+### CI
+
+Der Workflow `.github/workflows/desktop-release.yml` baut bei einem `v*`-Tag automatisch
+Windows- und Linux-Artefakte und haengt sie an das GitHub-Release.
