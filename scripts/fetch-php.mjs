@@ -78,6 +78,28 @@ async function download(url) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+// Extract the downloaded archive into destDir. Uses format-appropriate,
+// always-present tools so it does not depend on which `tar` is on PATH:
+//   - Windows (.zip): PowerShell's built-in Expand-Archive cmdlet
+//   - Linux / macOS (.tar.gz): tar (auto-detects gzip on both GNU tar and bsdtar)
+function extractArchive(archivePath, destDir) {
+  if (process.platform === "win32") {
+    execFileSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `Expand-Archive -LiteralPath '${archivePath}' -DestinationPath '${destDir}' -Force`,
+      ],
+      { stdio: "inherit" },
+    );
+    return;
+  }
+
+  execFileSync("tar", ["-xf", archivePath, "-C", destDir], { stdio: "inherit" });
+}
+
 async function main() {
   const target = resolveTarget();
   if (!target) {
@@ -106,9 +128,8 @@ async function main() {
   fs.writeFileSync(tmpArchive, archiveBuf);
   console.log(`[fetch-php] downloaded ${(archiveBuf.length / 1048576).toFixed(1)} MB`);
 
-  // Each archive contains a single php binary at its root. `tar` handles both
-  // .tar.gz (GNU/bsd tar) and .zip (bsdtar on Windows/macOS).
-  execFileSync("tar", ["-xf", tmpArchive, "-C", destDir], { stdio: "inherit" });
+  // Each archive contains a single php binary at its root.
+  extractArchive(tmpArchive, destDir);
   fs.rmSync(tmpArchive, { force: true });
 
   if (process.platform !== "win32") {
