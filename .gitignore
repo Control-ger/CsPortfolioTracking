@@ -31,6 +31,9 @@ dist/
 release/
 dist_electron/
 
+# Bundled PHP runtime, fetched at build time by scripts/fetch-php.mjs
+resources/php/
+
 # Monorepo dist and node_modules
 apps/*/dist/
 apps/*/node_modules/

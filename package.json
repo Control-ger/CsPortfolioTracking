@@ -25,7 +25,8 @@
     "build:shared": "echo 'Shared is code-only, no build needed'",
     "build:web": "vite build",
     "build:desktop": "vite build && electron-builder",
-    "build:linux": "npm run clean && vite build && electron-builder --linux AppImage deb --publish never",
+    "fetch:php": "node scripts/fetch-php.mjs",
+    "build:linux": "npm run clean && npm run fetch:php && vite build && electron-builder --linux AppImage deb --publish never",
     "rebuild:desktop-native": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint .",
     "docs:guard": "node scripts/docs-guard.mjs",
@@ -85,7 +86,13 @@
         "deb"
       ],
       "category": "Finance",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "extraResources": [
+        {
+          "from": "resources/php/linux",
+          "to": "php/linux"
+        }
+      ]
     }
   },
   "dependencies": {

@@ -99,29 +99,50 @@ function readDotEnvFile(filePath) {
   return values;
 }
 
+// Resolve the PHP binary used to run the sidecar. Prefers a bundled, fully
+// static runtime (resources/php/<platform>/php, fetched by scripts/fetch-php.mjs)
+// so the app works without any system PHP; otherwise falls back to $PHP_BINARY,
+// a bundled Windows php.exe, or `php` on PATH.
+//
+// Returns { binary, isStatic }. `isStatic` marks the bundled static build: it has
+// all required extensions compiled in, so the caller uses php.static.ini (which
+// omits the `extension=` directives a static binary cannot honour).
 function resolvePhpBinary() {
   const explicit = String(process.env.PHP_BINARY || "").trim();
   if (explicit && fsSync.existsSync(explicit)) {
-    return explicit;
+    return { binary: explicit, isStatic: false };
   }
 
-  const candidates = [
-    "C:\\tools\\php85\\php.exe",
-    resolveRuntimePath("php", "php.exe"),
-    path.join(process.resourcesPath || "", "php", "php.exe"),
-    "php",
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate === "php") {
-      return candidate;
-    }
-    if (candidate && fsSync.existsSync(candidate)) {
-      return candidate;
+  // Bundled static runtime (Linux / macOS).
+  if (!isWindows) {
+    const platformDir = isMac ? "mac" : "linux";
+    const bundled = [
+      resolveRuntimePath("php", platformDir, "php"),
+      path.join(app.getAppPath(), "resources", "php", platformDir, "php"),
+    ];
+    for (const candidate of bundled) {
+      if (candidate && fsSync.existsSync(candidate)) {
+        return { binary: candidate, isStatic: true };
+      }
     }
   }
 
-  return "php";
+  // Bundled / well-known Windows php.exe locations.
+  if (isWindows) {
+    const winCandidates = [
+      "C:\\tools\\php85\\php.exe",
+      resolveRuntimePath("php", "php.exe"),
+      path.join(process.resourcesPath || "", "php", "php.exe"),
+    ];
+    for (const candidate of winCandidates) {
+      if (candidate && fsSync.existsSync(candidate)) {
+        return { binary: candidate, isStatic: false };
+      }
+    }
+  }
+
+  // Last resort: rely on `php` being on PATH (system install).
+  return { binary: "php", isStatic: false };
 }
 
 // Resolve the PHP extension directory (the folder holding php_curl.dll etc.)
@@ -253,13 +274,19 @@ export async function startPhpSidecar() {
     return;
   }
 
-  const phpBinary = resolvePhpBinary();
+  const { binary: phpBinary, isStatic: phpIsStatic } = resolvePhpBinary();
   const port = await findFreePort();
   const secret = crypto.randomBytes(32).toString("hex");
   sidecarSecret = secret;
 
   const backendEntry = resolveRuntimePath("backend", "desktop", "index.php");
-  const phpIni = resolveRuntimePath("backend", "desktop", "php.ini");
+  // The bundled static runtime has extensions compiled in and uses an ini
+  // without `extension=` lines; system PHP loads them dynamically via php.ini.
+  const phpIni = resolveRuntimePath(
+    "backend",
+    "desktop",
+    phpIsStatic ? "php.static.ini" : "php.ini",
+  );
 
   if (!fsSync.existsSync(backendEntry)) {
     throw new Error(`Backend entry not found: ${backendEntry}`);

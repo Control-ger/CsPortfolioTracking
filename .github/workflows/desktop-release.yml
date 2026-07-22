@@ -129,6 +129,9 @@ jobs:
       - name: Build web bundle
         run: npm run build:web
 
+      - name: Fetch bundled PHP runtime
+        run: npm run fetch:php
+
       - name: Build desktop artifacts
         run: npx electron-builder --linux AppImage deb --publish never
 
