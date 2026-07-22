@@ -75,12 +75,13 @@ Erzeugt unter `release/`:
   Auf Ubuntu 24.04 / Zorin OS 18 ggf. `sudo apt install libfuse2t64` (nur zum Ausfuehren, nicht zum Bauen).
 - `CS-Investor-Hub-*.deb` — Installation via `sudo apt install ./release/CS-Investor-Hub-*.deb`.
 
-**Kein System-PHP noetig:** Das PHP-Backend (Sidecar) wird als statisch gelinkte
-Runtime mitgeliefert. `build:linux` fuehrt dazu `npm run fetch:php` aus, das ein
-fertiges statisches PHP-Binary (mit `curl`, `openssl`, `mbstring`, `sqlite3`,
-`pdo_sqlite`) von static-php.dev nach `resources/php/linux/` laedt; electron-builder
-bettet es via `extraResources` in die App ein. Das Binary ist bewusst nicht im Git
-(siehe `.gitignore`) und wird bei jedem Build geholt.
+**Kein System-PHP noetig (Windows & Linux):** Das PHP-Backend (Sidecar) wird als
+statisch gelinkte Runtime mitgeliefert. Die Build-Scripts fuehren `npm run fetch:php`
+aus, das ein fertiges statisches PHP-Binary (mit `curl`, `openssl`, `mbstring`,
+`sqlite3`, `pdo_sqlite`) plus ein CA-Bundle (`cacert.pem`) von static-php.dev nach
+`resources/php/<platform>/` laedt; electron-builder bettet es je Plattform via
+`extraResources` in die App ein. Die Binaries sind bewusst nicht im Git
+(siehe `.gitignore`) und werden bei jedem Build geholt.
 
 Falls beim Start ein `better-sqlite3`-ABI-Fehler auftritt, die nativen Module gegen die
 Electron-ABI neu bauen:

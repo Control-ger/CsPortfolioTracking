@@ -21,10 +21,10 @@
     "electron:debug": "set DEBUG=1&& electron .",
     "electron:debug:ps": "powershell -Command \"$env:DEBUG='1'; electron .\"",
     "clean": "rimraf dist release node_modules/.vite",
-    "build": "npm run clean && vite build && electron-builder",
+    "build": "npm run clean && npm run fetch:php && vite build && electron-builder",
     "build:shared": "echo 'Shared is code-only, no build needed'",
     "build:web": "vite build",
-    "build:desktop": "vite build && electron-builder",
+    "build:desktop": "npm run fetch:php && vite build && electron-builder",
     "fetch:php": "node scripts/fetch-php.mjs",
     "build:linux": "npm run clean && npm run fetch:php && vite build && electron-builder --linux AppImage deb --publish never",
     "rebuild:desktop-native": "electron-rebuild -f -w better-sqlite3",
@@ -73,7 +73,13 @@
       "target": [
         "nsis"
       ],
-      "icon": "icon.ico"
+      "icon": "icon.ico",
+      "extraResources": [
+        {
+          "from": "resources/php/win",
+          "to": "php/win"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

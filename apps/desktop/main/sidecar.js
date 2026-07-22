@@ -100,38 +100,37 @@ function readDotEnvFile(filePath) {
 }
 
 // Resolve the PHP binary used to run the sidecar. Prefers a bundled, fully
-// static runtime (resources/php/<platform>/php, fetched by scripts/fetch-php.mjs)
-// so the app works without any system PHP; otherwise falls back to $PHP_BINARY,
-// a bundled Windows php.exe, or `php` on PATH.
+// static runtime (resources/php/<platform>/, fetched by scripts/fetch-php.mjs)
+// so the app works without any system PHP on Linux, macOS and Windows;
+// otherwise falls back to $PHP_BINARY, a legacy Windows php.exe, or `php` on PATH.
 //
 // Returns { binary, isStatic }. `isStatic` marks the bundled static build: it has
 // all required extensions compiled in, so the caller uses php.static.ini (which
-// omits the `extension=` directives a static binary cannot honour).
+// omits the `extension=` directives a static binary cannot honour) and points
+// curl/openssl at the bundled CA file.
 function resolvePhpBinary() {
   const explicit = String(process.env.PHP_BINARY || "").trim();
   if (explicit && fsSync.existsSync(explicit)) {
     return { binary: explicit, isStatic: false };
   }
 
-  // Bundled static runtime (Linux / macOS).
-  if (!isWindows) {
-    const platformDir = isMac ? "mac" : "linux";
-    const bundled = [
-      resolveRuntimePath("php", platformDir, "php"),
-      path.join(app.getAppPath(), "resources", "php", platformDir, "php"),
-    ];
-    for (const candidate of bundled) {
-      if (candidate && fsSync.existsSync(candidate)) {
-        return { binary: candidate, isStatic: true };
-      }
+  // Bundled static runtime (all platforms).
+  const platformDir = isWindows ? "win" : isMac ? "mac" : "linux";
+  const phpFile = isWindows ? "php.exe" : "php";
+  const bundled = [
+    resolveRuntimePath("php", platformDir, phpFile),
+    path.join(app.getAppPath(), "resources", "php", platformDir, phpFile),
+  ];
+  for (const candidate of bundled) {
+    if (candidate && fsSync.existsSync(candidate)) {
+      return { binary: candidate, isStatic: true };
     }
   }
 
-  // Bundled / well-known Windows php.exe locations.
+  // Legacy / well-known Windows php.exe locations (dynamic build, needs php.ini).
   if (isWindows) {
     const winCandidates = [
       "C:\\tools\\php85\\php.exe",
-      resolveRuntimePath("php", "php.exe"),
       path.join(process.resourcesPath || "", "php", "php.exe"),
     ];
     for (const candidate of winCandidates) {
@@ -306,6 +305,16 @@ export async function startPhpSidecar() {
     const phpExtDir = resolvePhpExtensionDir(phpBinary);
     if (phpExtDir) {
       args.push("-d", `extension_dir=${phpExtDir}`);
+    }
+  }
+
+  // The bundled static runtime has no system trust store to fall back on (most
+  // visibly on Windows). Point curl and openssl at the CA bundle we ship next to
+  // the binary so HTTPS (Steam login, external APIs) verifies correctly.
+  if (phpIsStatic) {
+    const caBundle = path.join(path.dirname(phpBinary), "cacert.pem");
+    if (fsSync.existsSync(caBundle)) {
+      args.push("-d", `curl.cainfo=${caBundle}`, "-d", `openssl.cafile=${caBundle}`);
     }
   }
 
