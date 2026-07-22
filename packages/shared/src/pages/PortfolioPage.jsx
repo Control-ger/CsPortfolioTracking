@@ -643,6 +643,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [journeyApiKeyError, setJourneyApiKeyError] = useState("");
   const [journeyApiKeySuccess, setJourneyApiKeySuccess] = useState("");
   const [journeyApiKeyHelper, setJourneyApiKeyHelper] = useState("");
+  const [journeyNotifySaving, setJourneyNotifySaving] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [isSteamSyncing, setIsSteamSyncing] = useState(false);
   const [steamSyncError, setSteamSyncError] = useState("");
@@ -3728,7 +3729,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     },
     {
       id: "push_notifications",
-      label: "Push-Benachrichtigung entschieden",
+      label: "Benachrichtigungen eingerichtet",
       done: Boolean(journeyState?.pushPreferenceSetAt),
     },
     {
@@ -3759,19 +3760,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     !journeyState?.completedAt;
   const showSetupJourney = isDesktopRuntime && showJourneyBanner && activeTab !== "management";
   const showJourneyBannerLegacy = false;
-  const normalizedServerSetupHost = normalizeServerHostInput(serverSetup.serverUrl || "");
-  const mobileCompanionSetupUrl = useMemo(() => {
-    if (!normalizedServerSetupHost) {
-      return "";
-    }
-    const isLocalHost =
-      normalizedServerSetupHost === "localhost" ||
-      normalizedServerSetupHost.startsWith("127.") ||
-      normalizedServerSetupHost.startsWith("192.168.") ||
-      normalizedServerSetupHost.startsWith("10.");
-    const protocol = isLocalHost ? "http" : "https";
-    return `${protocol}://${normalizedServerSetupHost}/#/settings?settingsTab=general&section=push-notifications`;
-  }, [normalizedServerSetupHost]);
   const journeyProgressPercent =
     journeySteps.length > 0 ? Math.round((completedJourneySteps / journeySteps.length) * 100) : 0;
   const updateJourneyState = async (patch) => {
@@ -3882,16 +3870,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       currentStepId: resolveNextJourneyStepId("push_notifications"),
     });
   };
-  const handleOpenMobileCompanionPushSetup = async () => {
-    if (!mobileCompanionSetupUrl) {
-      return;
-    }
-    if (window.electronAPI?.openExternal) {
-      await window.electronAPI.openExternal(mobileCompanionSetupUrl);
-      return;
-    }
-    if (typeof window !== "undefined" && window.open) {
-      window.open(mobileCompanionSetupUrl, "_blank", "noopener,noreferrer");
+  const handleJourneyNotifyPrefChange = async (patch) => {
+    setJourneyNotifySaving(true);
+    try {
+      const updated = await updatePortfolioPreferences(patch);
+      setPortfolioPreferences(updated);
+      notifySteamSyncDesktopRef.current = updated.notifySteamSyncDesktop;
+    } catch (error) {
+      console.warn("Failed to update journey notification preference", error);
+    } finally {
+      setJourneyNotifySaving(false);
     }
   };
   const handleManagementHintsSeen = async () => {
@@ -4524,34 +4512,124 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   {activeJourneyStepId === "push_notifications" ? (
                     <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">5. Push-Benachrichtigungen fuer CS-Updates</p>
+                        <p className="font-semibold text-slate-100">5. Benachrichtigungen einrichten</p>
                         <p className="mt-1 text-xs text-slate-300">
-                          Browser Push ist fuer Mobile gedacht. In Electron reicht der integrierte Feed, daher aktivierst du Push am besten im Mobile Companion.
+                          Lege fest, worueber dich die App per System-Benachrichtigung informiert. Das kannst du spaeter jederzeit in den Einstellungen aendern.
                         </p>
                       </div>
-                      <div className="rounded-md border border-cyan-300/25 bg-cyan-500/10 p-3 text-xs text-cyan-100">
-                        Empfehlung: Server auf dem Handy oeffnen, einloggen und unter Einstellungen - Allgemein Browser Push aktivieren.
-                      </div>
-                      {mobileCompanionSetupUrl ? (
-                        <div className="rounded-md border border-white/15 bg-slate-900/40 p-3 text-xs text-slate-200">
-                          Server-Link fuer Mobile Setup:{" "}
-                          <span className="font-mono text-[11px] text-cyan-200">{mobileCompanionSetupUrl}</span>
+
+                      {/* VAC Ban-Welle */}
+                      <div className="space-y-2 rounded-lg border border-white/12 bg-slate-900/40 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">VAC Ban-Welle erkannt</p>
+                            <p className="text-xs text-slate-400">Systembenachrichtigung bei erhoehter Ban-Aktivitaet in CS2.</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={journeyNotifySaving}
+                            className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                            onClick={() =>
+                              void handleJourneyNotifyPrefChange({
+                                notifyBanWaveDesktop: !portfolioPreferences.notifyBanWaveDesktop,
+                              })
+                            }
+                          >
+                            {portfolioPreferences.notifyBanWaveDesktop ? "Deaktivieren" : "Aktivieren"}
+                          </Button>
                         </div>
-                      ) : null}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button size="sm" onClick={() => void handleSetJourneyPushPreference(false)}>
-                          Ohne Push weiter (Standard)
-                        </Button>
+                        {portfolioPreferences.notifyBanWaveDesktop ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-xs text-slate-400">Mindest-Impact:</p>
+                            {IMPACT_LEVELS.map((level) => {
+                              const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                              const active = portfolioPreferences.notifyBanWaveDesktopMinLevel === level;
+                              return (
+                                <button
+                                  key={level}
+                                  disabled={journeyNotifySaving}
+                                  onClick={() =>
+                                    void handleJourneyNotifyPrefChange({ notifyBanWaveDesktopMinLevel: level })
+                                  }
+                                  className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-cyan-300/50 bg-cyan-500/15 text-slate-100" : "border-white/20 bg-transparent text-slate-400 hover:bg-white/10"}`}
+                                >
+                                  {labels[level]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* CS2 Updates */}
+                      <div className="space-y-2 rounded-lg border border-white/12 bg-slate-900/40 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">CS2 Updates</p>
+                            <p className="text-xs text-slate-400">Systembenachrichtigung bei neuen CS2 Game-Updates im Feed.</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={journeyNotifySaving}
+                            className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                            onClick={() =>
+                              void handleJourneyNotifyPrefChange({
+                                notifyCsUpdatesDesktop: !portfolioPreferences.notifyCsUpdatesDesktop,
+                              })
+                            }
+                          >
+                            {portfolioPreferences.notifyCsUpdatesDesktop ? "Deaktivieren" : "Aktivieren"}
+                          </Button>
+                        </div>
+                        {portfolioPreferences.notifyCsUpdatesDesktop ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-xs text-slate-400">Mindest-Impact:</p>
+                            {IMPACT_LEVELS.map((level) => {
+                              const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+                              const active = portfolioPreferences.notifyCsUpdatesDesktopMinLevel === level;
+                              return (
+                                <button
+                                  key={level}
+                                  disabled={journeyNotifySaving}
+                                  onClick={() =>
+                                    void handleJourneyNotifyPrefChange({ notifyCsUpdatesDesktopMinLevel: level })
+                                  }
+                                  className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-cyan-300/50 bg-cyan-500/15 text-slate-100" : "border-white/20 bg-transparent text-slate-400 hover:bg-white/10"}`}
+                                >
+                                  {labels[level]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Steam Sync — no level selector */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/12 bg-slate-900/40 p-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-100">Steam Sync (neue Items)</p>
+                          <p className="text-xs text-slate-400">Systembenachrichtigung wenn Steam Sync neue Items findet.</p>
+                        </div>
                         <Button
                           size="sm"
                           variant="outline"
+                          disabled={journeyNotifySaving}
                           className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
-                          onClick={async () => {
-                            await handleOpenMobileCompanionPushSetup();
-                            await handleSetJourneyPushPreference(true);
-                          }}
+                          onClick={() =>
+                            void handleJourneyNotifyPrefChange({
+                              notifySteamSyncDesktop: !portfolioPreferences.notifySteamSyncDesktop,
+                            })
+                          }
                         >
-                          Mobile Push einrichten (Server oeffnen)
+                          {portfolioPreferences.notifySteamSyncDesktop ? "Deaktivieren" : "Aktivieren"}
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <Button size="sm" disabled={journeyNotifySaving} onClick={() => void handleSetJourneyPushPreference(true)}>
+                          Weiter
                         </Button>
                       </div>
                     </div>
