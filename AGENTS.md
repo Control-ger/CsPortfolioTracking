@@ -10,7 +10,9 @@ This file provides guidance to agents when working with code in this repository.
 ## Commands
 ```bash
 npm run dev           # Vite build watch + Electron
-npm run build         # clean + vite build + electron-builder
+npm run build         # clean + fetch:php + vite build + electron-builder (current OS)
+npm run build:linux   # clean + fetch:php + vite build + electron-builder --linux (AppImage + .deb)
+npm run fetch:php     # download bundled static PHP runtime + CA bundle → resources/php/<platform>/
 npm run lint          # ESLint 9 flat config (JS/JSX only)
 npm run docs:guard    # Documentation governance check
 npm run preview       # Vite preview
@@ -115,6 +117,11 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 4. Commit: `release: vX.Y.Z` (version bump only, features already committed).
 5. Create tag `vX.Y.Z` (must match `package.json`).
 6. Push branch + tag → triggers `.github/workflows/desktop-release.yml`.
+
+## Desktop Packaging (Windows + Linux)
+- Every desktop release ships **both** targets: Windows (NSIS `.exe`) and Linux (`AppImage` + Debian `.deb`, for Debian/Ubuntu-based distros incl. Zorin OS). CI builds both on each `v*` tag via `desktop-release.yml`.
+- Both platforms are **self-contained**: a fully static PHP runtime is fetched at build time (`npm run fetch:php`, from static-php-cli) and embedded via electron-builder `extraResources`; no system PHP is required. A `cacert.pem` is bundled for HTTPS. The binaries are git-ignored and re-fetched on every build.
+- See `docs/architecture-overview.md` §3.1 for the sidecar/runtime detail (static ini, CA injection, `resolvePhpBinary` fallback).
 
 ## Documentation Governance
 Global changes require same-commit updates to both `AGENTS.md` and `docs/architecture-overview.md`.

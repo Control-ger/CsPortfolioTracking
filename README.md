@@ -73,7 +73,8 @@ Erzeugt unter `release/`:
   chmod +x release/CS-Investor-Hub-*.AppImage && ./release/CS-Investor-Hub-*.AppImage
   ```
   Auf Ubuntu 24.04 / Zorin OS 18 ggf. `sudo apt install libfuse2t64` (nur zum Ausfuehren, nicht zum Bauen).
-- `CS-Investor-Hub-*.deb` — Installation via `sudo apt install ./release/CS-Investor-Hub-*.deb`.
+- `CS-Investor-Hub-*.deb` — fuer Debian/Ubuntu-basierte Distros (inkl. Zorin OS 18):
+  Installation via `sudo apt install ./release/CS-Investor-Hub-*.deb`.
 
 **Kein System-PHP noetig (Windows & Linux):** Das PHP-Backend (Sidecar) wird als
 statisch gelinkte Runtime mitgeliefert. Die Build-Scripts fuehren `npm run fetch:php`

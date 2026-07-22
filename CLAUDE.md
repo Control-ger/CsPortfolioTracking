@@ -12,7 +12,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run dev           # Vite watch + Electron (primary dev command)
 npm run electron      # Run Electron only (no Vite rebuild)
-npm run build         # clean + vite build + electron-builder (NSIS installer → release/)
+npm run build         # clean + fetch:php + vite build + electron-builder (current OS → release/)
+npm run build:linux   # clean + fetch:php + vite build + electron-builder --linux (AppImage + .deb)
+npm run fetch:php     # download bundled static PHP runtime + CA bundle (Windows & Linux self-contained)
 npm run build:web     # Web-only Vite build
 npm run lint          # ESLint 9 flat config (JS/JSX only)
 npm run docs:guard    # Documentation governance check — REQUIRED before every push
