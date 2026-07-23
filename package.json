@@ -1,7 +1,7 @@
 {
   "name": "cs-portfolio-tracking-monorepo",
   "private": true,
-  "version": "0.2.92",
+  "version": "0.2.93",
   "description": "CS Investor Hub - desktop app for tracking a CS skin portfolio.",
   "author": "Control-ger <181518205+Control-ger@users.noreply.github.com>",
   "main": "apps/desktop/main.js",
