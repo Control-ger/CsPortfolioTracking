@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { Skeleton } from "./ui/skeleton";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const RANGE_OPTIONS = [
   { key: "7T", label: "7T", days: 7 },
   { key: "30T", label: "30T", days: 30 },
-  { key: "90T", label: "90T", days: 90 },
-  { key: "180T", label: "180T", days: 180 },
   { key: "1J", label: "1J", days: 365 },
   { key: "MAX", label: "MAX", days: null },
 ];
@@ -35,13 +34,61 @@ function parseDateToTimestamp(value) {
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
-function formatTickDate(timestamp, rangeKey) {
+const DAY_MS = 24 * 60 * 60 * 1000;
+// Above this visible span the X axis switches from day labels to month labels.
+const MONTH_TICKS_THRESHOLD_DAYS = 130;
+
+// Recharts' automatic tick generation on numeric time axes produces very few,
+// oddly placed labels (e.g. 3 ticks on a 30-day range). Build explicit ticks
+// aligned to local midnight (short spans) or the 1st of the month (long spans),
+// targeting ~6-7 labels regardless of range.
+function buildXAxisTicks(minTimestamp, maxTimestamp) {
+  if (
+    !Number.isFinite(minTimestamp) ||
+    !Number.isFinite(maxTimestamp) ||
+    maxTimestamp <= minTimestamp
+  ) {
+    return undefined;
+  }
+
+  const spanDays = (maxTimestamp - minTimestamp) / DAY_MS;
+  const ticks = [];
+
+  if (spanDays <= MONTH_TICKS_THRESHOLD_DAYS) {
+    const stepDays = Math.max(1, Math.ceil(spanDays / 7));
+    const cursor = new Date(minTimestamp);
+    cursor.setHours(0, 0, 0, 0);
+    if (cursor.getTime() < minTimestamp) {
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    while (cursor.getTime() <= maxTimestamp) {
+      ticks.push(cursor.getTime());
+      cursor.setDate(cursor.getDate() + stepDays);
+    }
+  } else {
+    const stepMonths = Math.max(1, Math.ceil(spanDays / 30 / 7));
+    const cursor = new Date(minTimestamp);
+    cursor.setHours(0, 0, 0, 0);
+    cursor.setDate(1);
+    if (cursor.getTime() < minTimestamp) {
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    while (cursor.getTime() <= maxTimestamp) {
+      ticks.push(cursor.getTime());
+      cursor.setMonth(cursor.getMonth() + stepMonths);
+    }
+  }
+
+  return ticks.length >= 2 ? ticks : undefined;
+}
+
+function formatTickDate(timestamp, spanDays) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {
     return "";
   }
 
-  if (rangeKey === "90T" || rangeKey === "180T" || rangeKey === "1J" || rangeKey === "MAX") {
+  if (Number.isFinite(spanDays) && spanDays > MONTH_TICKS_THRESHOLD_DAYS) {
     return date.toLocaleDateString("de-DE", { month: "short", year: "2-digit" });
   }
 
@@ -54,25 +101,22 @@ function formatTooltipDate(timestamp) {
     return "unbekannt";
   }
 
-  return date.toLocaleDateString("de-DE", {
+  const dateLabel = date.toLocaleDateString("de-DE", {
+    weekday: "short",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
-}
 
-function formatSignedCurrency(value) {
-  if (!Number.isFinite(value)) {
-    return "-";
+  // Day-bucketed points sit at local midnight — appending "00:00" is noise.
+  if (date.getHours() === 0 && date.getMinutes() === 0) {
+    return dateLabel;
   }
 
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toLocaleString("de-DE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} EUR`;
+  return `${dateLabel}, ${date.toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
 
 function formatSignedPercent(value) {
@@ -93,17 +137,12 @@ function formatAxisPercent(value) {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function formatAxisAbsolute(value, decimals = 2) {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-
-  return `${value.toLocaleString("de-DE", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })}€`;
-}
-
+// Absolute axis domain is computed in USD (the chart's internal unit); tick labels
+// are converted to the user's display currency by the component (see formatUsdTick).
+// The buy-in level is deliberately NOT folded into the domain: the axis fits the
+// actual price data only, so a large gain/loss keeps full vertical resolution. When
+// the buy-in falls outside this range the dashed line is clipped (ifOverflow="hidden")
+// and an edge label marks its direction instead.
 function buildAbsoluteAxisConfig(chartData = []) {
   const values = chartData
     .map((entry) => Number(entry?.displayValue))
@@ -127,7 +166,6 @@ function buildAbsoluteAxisConfig(chartData = []) {
 
   return {
     domain: [minValue - pad, maxValue + pad],
-    tickFormatter: (value) => formatAxisAbsolute(value, 2),
     tickCount: 6,
   };
 }
@@ -159,11 +197,13 @@ function normalizeHistory(history) {
   return history
     .map((entry, index) => {
       const timestamp = parseDateToTimestamp(entry?.date);
+      // Internal unit is USD (source of truth). Read USD fields only — priceEur is
+      // deliberately NOT a fallback to avoid silently mixing currencies on the axis.
       const rawValue =
+        entry?.priceUsd ??
+        entry?.price_usd ??
+        entry?.valueUsd ??
         entry?.wert ??
-        entry?.priceEur ??
-        entry?.price_eur ??
-        entry?.price ??
         entry?.value;
       const wert = Number(rawValue);
       const investedValue = Number(
@@ -230,10 +270,30 @@ export const PortfolioChart = ({
   flat = false,
   cardRef = null,
 }) => {
-  const [rangeKey, setRangeKey] = useState("90T");
+  const { formatPrice, currency } = useCurrency();
+  const [rangeKey, setRangeKey] = useState("30T");
   const hoverAnimationFrameRef = useRef(null);
   const lastHoveredIndexRef = useRef(null);
   const lastHoverSignatureRef = useRef("");
+
+  // Internal chart values are USD; convert to the user's display currency here.
+  const formatUsdTick = useCallback(
+    (usd) =>
+      Number.isFinite(Number(usd))
+        ? formatPrice(Number(usd), { useUsd: true, buyPriceUsd: Number(usd) })
+        : "-",
+    [formatPrice],
+  );
+  const formatSignedUsd = useCallback(
+    (usd) => {
+      if (!Number.isFinite(Number(usd))) {
+        return "-";
+      }
+      const sign = Number(usd) >= 0 ? "+" : "";
+      return `${sign}${formatPrice(Number(usd), { useUsd: true, buyPriceUsd: Number(usd) })}`;
+    },
+    [formatPrice],
+  );
 
   const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
   const visibleHistory = useMemo(
@@ -269,25 +329,78 @@ export const PortfolioChart = ({
       };
     });
   }, [visibleHistory, showAbsolute]);
+  const normalizedReferenceLineValue = Number(referenceLineValue);
+  const normalizedReferenceLineTimestamp = Number(referenceLineTimestamp);
+  // Number(null) is 0, so a missing timestamp must be detected via > 0.
+  const hasReferenceTimestamp =
+    Number.isFinite(normalizedReferenceLineTimestamp) && normalizedReferenceLineTimestamp > 0;
+  const visibleMinTimestamp = visibleHistory[0]?.timestamp ?? null;
+  const visibleMaxTimestamp = visibleHistory[visibleHistory.length - 1]?.timestamp ?? null;
+  // The buy-in level is relevant in every range the position already existed in
+  // (purchase at/before the window end) — not only when the purchase date itself
+  // falls inside the window. Without a timestamp (groups) it is always relevant.
+  const referenceActiveInRange =
+    !hasReferenceTimestamp ||
+    (Number.isFinite(Number(visibleMaxTimestamp)) &&
+      normalizedReferenceLineTimestamp <= Number(visibleMaxTimestamp));
+  // Percent mode plots growth relative to the first visible point; the buy-in level
+  // is converted onto that same relative scale so the line works in both modes.
+  const referenceBaseValue = visibleHistory[0]?.wert;
+  const referenceDisplayValue = showAbsolute
+    ? normalizedReferenceLineValue
+    : Number.isFinite(referenceBaseValue) && Math.abs(referenceBaseValue) > Number.EPSILON
+      ? ((normalizedReferenceLineValue - referenceBaseValue) / referenceBaseValue) * 100
+      : null;
+  const showReferenceLine =
+    Number.isFinite(normalizedReferenceLineValue) &&
+    Number.isFinite(referenceDisplayValue) &&
+    referenceActiveInRange;
+  const visibleSpanDays =
+    Number.isFinite(Number(visibleMinTimestamp)) && Number.isFinite(Number(visibleMaxTimestamp))
+      ? (Number(visibleMaxTimestamp) - Number(visibleMinTimestamp)) / DAY_MS
+      : null;
+  const xAxisTicks = useMemo(
+    () => buildXAxisTicks(Number(visibleMinTimestamp), Number(visibleMaxTimestamp)),
+    [visibleMinTimestamp, visibleMaxTimestamp],
+  );
   const absoluteAxisConfig = useMemo(
     () => (showAbsolute ? buildAbsoluteAxisConfig(chartData) : null),
     [chartData, showAbsolute],
   );
-  const normalizedReferenceLineValue = Number(referenceLineValue);
-  const normalizedReferenceLineTimestamp = Number(referenceLineTimestamp);
-  const visibleMinTimestamp = visibleHistory[0]?.timestamp ?? null;
-  const visibleMaxTimestamp = visibleHistory[visibleHistory.length - 1]?.timestamp ?? null;
-  const referenceTimestampInVisibleRange =
-    Number.isFinite(normalizedReferenceLineTimestamp) &&
-    Number.isFinite(Number(visibleMinTimestamp)) &&
-    Number.isFinite(Number(visibleMaxTimestamp)) &&
-    normalizedReferenceLineTimestamp >= Number(visibleMinTimestamp) &&
-    normalizedReferenceLineTimestamp <= Number(visibleMaxTimestamp);
-  const showReferenceLine =
-    showAbsolute &&
-    Number.isFinite(normalizedReferenceLineValue) &&
-    referenceTimestampInVisibleRange;
-  const referenceDotX = chartData.length > 0 ? chartData[chartData.length - 1]?.timestamp : null;
+
+  // Vertical extent actually rendered: the explicit padded domain in absolute mode,
+  // else the raw min/max of the plotted values (recharts' auto domain adds a little
+  // padding around these, so treating them as the bounds is a safe approximation).
+  const displayValueBounds = useMemo(() => {
+    const values = chartData
+      .map((entry) => Number(entry?.displayValue))
+      .filter((value) => Number.isFinite(value));
+    if (values.length === 0) {
+      return null;
+    }
+    return { min: Math.min(...values), max: Math.max(...values) };
+  }, [chartData]);
+  const effectiveDomain =
+    showAbsolute && absoluteAxisConfig
+      ? { min: absoluteAxisConfig.domain[0], max: absoluteAxisConfig.domain[1] }
+      : displayValueBounds;
+  // Where the buy-in sits relative to the visible window: "below"/"above" when it is
+  // clipped off the axis (→ edge label), null when it renders inside as a normal line.
+  const referenceEdge =
+    showReferenceLine && effectiveDomain && Number.isFinite(referenceDisplayValue)
+      ? referenceDisplayValue < effectiveDomain.min
+        ? "below"
+        : referenceDisplayValue > effectiveDomain.max
+          ? "above"
+          : null
+      : null;
+  // Latest value vs. buy-in — the "how far off break-even" figure shown on the edge label.
+  const lastVisibleWert = visibleHistory[visibleHistory.length - 1]?.wert;
+  const referenceGainPercent =
+    Number.isFinite(Number(lastVisibleWert)) && normalizedReferenceLineValue > 0
+      ? ((Number(lastVisibleWert) - normalizedReferenceLineValue) / normalizedReferenceLineValue) * 100
+      : null;
+  const showReferenceEdgeLabel = Boolean(referenceEdge) && Number.isFinite(referenceGainPercent);
 
   const trendStats = useMemo(() => {
     if (chartData.length === 0) {
@@ -340,11 +453,11 @@ export const PortfolioChart = ({
   const chartConfig = useMemo(
     () => ({
       growthPercent: {
-        label: showAbsolute ? "Preis (EUR)" : "Zuwachs (%)",
+        label: showAbsolute ? `Preis (${currency})` : "Zuwachs (%)",
         color: trendStats.lineColor,
       },
     }),
-    [trendStats.lineColor, showAbsolute],
+    [trendStats.lineColor, showAbsolute, currency],
   );
 
   const dispatchHoverChange = useCallback(
@@ -537,11 +650,11 @@ export const PortfolioChart = ({
               ) : null}
               {showReferenceLine ? (
                 <ReferenceLine
-                  y={normalizedReferenceLineValue}
+                  y={referenceDisplayValue}
                   stroke="hsl(var(--muted-foreground))"
                   strokeOpacity={0.65}
                   strokeDasharray="4 4"
-                  ifOverflow="extendDomain"
+                  ifOverflow="hidden"
                   label={{
                     value: referenceLineLabel,
                     position: "insideTopLeft",
@@ -550,42 +663,42 @@ export const PortfolioChart = ({
                   }}
                 />
               ) : null}
-              {showReferenceLine && Number.isFinite(Number(referenceDotX)) ? (
-                <ReferenceDot
-                  x={referenceDotX}
-                  y={normalizedReferenceLineValue}
-                  r={4}
+              {showReferenceEdgeLabel ? (
+                <ReferenceLine
+                  y={referenceEdge === "below" ? effectiveDomain.min : effectiveDomain.max}
+                  stroke="transparent"
                   ifOverflow="extendDomain"
-                  fill="hsl(var(--muted-foreground))"
-                  stroke="hsl(var(--background))"
-                  strokeWidth={1.25}
-                  isFront
+                  label={{
+                    value: `${referenceEdge === "below" ? "↓" : "↑"} ${referenceLineLabel} ${formatSignedPercent(referenceGainPercent)}`,
+                    position: referenceEdge === "below" ? "insideBottomLeft" : "insideTopLeft",
+                    fill: "hsl(var(--muted-foreground))",
+                    fontSize: 10,
+                  }}
                 />
               ) : null}
               <XAxis
                 dataKey="timestamp"
                 type="number"
                 domain={["dataMin", "dataMax"]}
+                ticks={xAxisTicks}
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                minTickGap={rangeKey === "7T" || rangeKey === "30T" ? 18 : 28}
-                tickFormatter={(value) => formatTickDate(value, rangeKey)}
+                minTickGap={12}
+                tickFormatter={(value) => formatTickDate(value, visibleSpanDays)}
               />
               <YAxis
                 dataKey="displayValue"
                 orientation="right"
                 domain={showAbsolute && absoluteAxisConfig ? absoluteAxisConfig.domain : ["auto", "auto"]}
                 allowDataOverflow={Boolean(showAbsolute && absoluteAxisConfig)}
-                tickCount={showAbsolute && absoluteAxisConfig ? absoluteAxisConfig.tickCount : undefined}
+                tickCount={showAbsolute && absoluteAxisConfig ? absoluteAxisConfig.tickCount : 7}
                 tickLine={false}
                 axisLine={false}
                 width={70}
                 tickMargin={4}
                 tickFormatter={
-                  showAbsolute && absoluteAxisConfig
-                    ? absoluteAxisConfig.tickFormatter
-                    : formatAxisPercent
+                  showAbsolute && absoluteAxisConfig ? formatUsdTick : formatAxisPercent
                 }
               />
               <ChartTooltip
@@ -594,7 +707,40 @@ export const PortfolioChart = ({
                     indicator="line"
                     nameKey="displayValue"
                     labelFormatter={(value) => formatTooltipDate(value)}
-                    formatter={(value) => showAbsolute ? `${Number(value).toLocaleString("de-DE", {minimumFractionDigits: 2, maximumFractionDigits: 2})} EUR` : formatAxisPercent(Number(value))}
+                    formatter={(value, name, item, index, dataPoint) => {
+                      const wert = Number(dataPoint?.wert);
+                      const growth = Number(dataPoint?.growthPercent);
+                      const growthClassName =
+                        Number.isFinite(growth) && growth < 0 ? "text-red-500" : "text-emerald-500";
+                      return (
+                        <div className="flex w-full flex-col gap-1">
+                          <div className="flex w-full items-center justify-between gap-4">
+                            <span className="text-muted-foreground">{valueLabel}</span>
+                            <span className="font-mono font-medium tabular-nums text-foreground">
+                              {formatUsdTick(wert)}
+                            </span>
+                          </div>
+                          <div className="flex w-full items-center justify-between gap-4">
+                            <span className="text-muted-foreground">Zuwachs</span>
+                            <span className={`font-mono font-medium tabular-nums ${growthClassName}`}>
+                              {formatSignedPercent(growth)}
+                            </span>
+                          </div>
+                          {showReferenceLine && normalizedReferenceLineValue > 0 ? (
+                            <div className="flex w-full items-center justify-between gap-4">
+                              <span className="text-muted-foreground">vs. {referenceLineLabel}</span>
+                              <span className="font-mono font-medium tabular-nums text-foreground">
+                                {formatSignedPercent(
+                                  ((wert - normalizedReferenceLineValue) /
+                                    normalizedReferenceLineValue) *
+                                    100,
+                                )}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    }}
                   />
                 }
               />
@@ -627,7 +773,7 @@ export const PortfolioChart = ({
         ) : (
           <>
             <div className="flex items-center gap-2 leading-none font-semibold">
-              Performance: {formatSignedCurrency(showAbsolute ? trendStats.deltaValue : trendStats.roiGainEuro)} (
+              Performance: {formatSignedUsd(showAbsolute ? trendStats.deltaValue : trendStats.roiGainEuro)} (
               {formatSignedPercent(trendStats.deltaPercent)})
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             </div>

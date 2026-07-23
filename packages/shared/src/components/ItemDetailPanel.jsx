@@ -13,28 +13,31 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 import { Badge } from "./ui/badge";
 import { AlertCircle } from "lucide-react";
 import { PortfolioChart } from "./PortfolioChart";
+import { PortfolioCompositionChart } from "./PortfolioCompositionChart";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 function LayeredPreview({ visuals = [], fallbackLabel = "Group" }) {
   const items = Array.isArray(visuals) ? visuals.slice(0, 2) : [];
 
   return (
-    <div className="relative h-16 w-20 shrink-0 sm:h-24 sm:w-28">
+    <div className="relative h-16 w-24 shrink-0 sm:h-24 sm:w-32">
       {items.length === 0 ? (
         <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/75 bg-muted/25 p-1 text-xs font-semibold text-muted-foreground sm:h-24 sm:w-24">
           {String(fallbackLabel || "Group").slice(0, 2).toUpperCase()}
         </div>
       ) : null}
       {items.map((entry, index) => {
-        const offsetClass =
-          index === 0
-            ? "left-0 top-0 z-20 rotate-[-3deg]"
-            : "left-5 top-[0.05rem] z-10 rotate-[4deg] sm:left-8";
-        const cardToneClass = index === 0 ? "bg-muted/20 shadow-sm" : "bg-card/95 shadow-md";
+        const isFront = index === 0;
+        const offsetClass = isFront
+          ? "left-0 top-0 z-20 -rotate-3"
+          : "left-8 top-0.5 z-10 rotate-6";
+        const cardToneClass = isFront
+          ? "border-border/80 bg-card shadow-md"
+          : "border-border/60 bg-muted/25 shadow-sm";
         return (
           <div
             key={entry?.id || `${entry?.name || fallbackLabel}-${index}`}
-            className={`absolute ${offsetClass} flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-border/80 ${cardToneClass} p-1 transition-transform sm:h-24 sm:w-24`}
+            className={`absolute ${offsetClass} flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border ${cardToneClass} p-1 transition-transform sm:h-24 sm:w-24`}
           >
             {entry?.imageUrl ? (
               <img
@@ -56,29 +59,17 @@ function LayeredPreview({ visuals = [], fallbackLabel = "Group" }) {
   );
 }
 
-function deriveBuyInReferenceValue(item, history = []) {
-  const unitCostBasis = Number(item?.costBasisUnit);
-  if (Number.isFinite(unitCostBasis) && unitCostBasis > 0) {
-    return unitCostBasis;
+function deriveBuyInReferenceValue(item) {
+  // PortfolioChart works internally in USD, so the buy-in reference line must be USD too.
+  // Groups plot total value → reference is the group's total invested (USD).
+  if (item?.__detailKind === "group") {
+    const totalInvestedUsd = Number(item?.totalInvested ?? item?.costBasisTotal);
+    return Number.isFinite(totalInvestedUsd) && totalInvestedUsd > 0 ? totalInvestedUsd : null;
   }
 
-  const buyPriceEur = Number(item?.buyPrice);
-  if (Number.isFinite(buyPriceEur) && buyPriceEur > 0) {
-    return buyPriceEur;
-  }
-
+  // Single items / clusters plot unit price → reference is the unit buy price (USD).
   const buyPriceUsd = Number(item?.buyPriceUsd);
-  if (!Number.isFinite(buyPriceUsd) || buyPriceUsd <= 0 || !Array.isArray(history)) {
-    return null;
-  }
-
-  const exchangeRateEntry = history.find((entry) => Number.isFinite(Number(entry?.exchangeRate)));
-  const usdToEurRate = Number(exchangeRateEntry?.exchangeRate);
-  if (!Number.isFinite(usdToEurRate) || usdToEurRate <= 0) {
-    return null;
-  }
-
-  return buyPriceUsd * usdToEurRate;
+  return Number.isFinite(buyPriceUsd) && buyPriceUsd > 0 ? buyPriceUsd : null;
 }
 
 function deriveBuyInReferenceTimestamp(item) {
@@ -187,9 +178,24 @@ export const ItemDetailPanel = ({
 
   const stats6m = item.details?.stats6m;
   const roiValue = Number.isFinite(Number(item.roi)) ? Number(item.roi) : null;
-  const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
+  const buyInReferenceValue = deriveBuyInReferenceValue(item);
   const buyInReferenceTimestamp = deriveBuyInReferenceTimestamp(item);
   const purchaseUnitDisplay = resolvePurchaseUnitDisplay(item, formatPrice);
+
+  // Cluster weighting for the group composition donut. Values follow the group's
+  // display-currency convention (see buildGroupDetailSelection), so the donut is
+  // fed with valuesAreUsd={false} to match the group's stat tiles/table row.
+  const clusterCompositionData =
+    isGroupSelection && Array.isArray(item?.clusters)
+      ? item.clusters
+          .map((cluster) => ({
+            name: cluster?.name || "Cluster",
+            value: Number(cluster?.totalValue || 0),
+            count: Number(cluster?.quantity || 0),
+            type: cluster?.type || "cluster",
+          }))
+          .filter((row) => Number.isFinite(row.value) && row.value > 0)
+      : [];
 
   return (
       <>
@@ -285,7 +291,7 @@ export const ItemDetailPanel = ({
                     {item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}
                   </p>
                   {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
-                    <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-400/40 bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+                    <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-300 bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
                       Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
                         useUsd: true,
                         buyPriceUsd: Number(item.buyOrderBestPriceUsd),
@@ -388,6 +394,21 @@ export const ItemDetailPanel = ({
                 ) : null}
               </div>
             </div>
+
+            {/* Cluster weighting donut (group selections only) */}
+            {isGroupSelection && clusterCompositionData.length > 0 ? (
+              <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
+                <h3 className="mb-3 text-sm font-semibold">Cluster-Gewichtung</h3>
+                <PortfolioCompositionChart
+                  data={clusterCompositionData}
+                  valuesAreUsd={false}
+                  totalValueOverride={Number(item?.totalValue ?? item?.currentValue ?? 0)}
+                  centerLabel="Gruppenwert"
+                  shareSuffix="der Gruppe"
+                  assetCountLabel="Cluster"
+                />
+              </div>
+            ) : null}
 
             {/* Price History Chart */}
             {Array.isArray(history) && history.length > 0 && (

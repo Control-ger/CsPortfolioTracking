@@ -23,6 +23,7 @@ use App\Config\DatabaseConfig;
 use App\Infrastructure\External\GeminiUpdateRaterClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
+use App\Infrastructure\Persistence\Repository\UserNotificationPreferenceRepository;
 use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
 
 $startedAt = microtime(true);
@@ -40,7 +41,8 @@ try {
         new CsUpdatesFeedRepository($pdo),
         $client,
         $webPushSubscriptionRepository,
-        WebPushService::fromEnv()
+        WebPushService::fromEnv(),
+        new UserNotificationPreferenceRepository($pdo)
     );
 
     $limit = (int) (getenv('CS_UPDATES_AI_BATCH_SIZE') ?: 12);

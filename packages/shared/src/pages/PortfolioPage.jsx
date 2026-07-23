@@ -59,6 +59,7 @@ import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
   PORTFOLIO_GROUPS_STORAGE_KEY,
   buildPortfolioGroupSummaries,
+  buildWeightedGroupHistory,
   buildPortfolioGroupMembershipMap,
   summarizeManagementClusterAssignment,
   createPortfolioGroupDraft,
@@ -125,46 +126,28 @@ const ItemSearch = lazy(() =>
 );
 
 
+// Neobroker-clean surface: one neutral card, impact conveyed only by a small
+// accent dot + the impact badge. No gradients, no nested panels, light-safe.
 function getCsUpdateBannerTone(level) {
   if (level === "high") {
-    return {
-      wrapper:
-        "steam-avatar-gradient-banner border-red-500/35 shadow-[0_16px_38px_rgba(127,29,29,0.35)]",
-      eyebrow: "text-red-300",
-      panel: "border-red-500/35 bg-red-950/35",
-    };
+    return { dot: "bg-red-500" };
   }
-
   if (level === "medium") {
-    return {
-      wrapper:
-        "steam-avatar-gradient-banner border-amber-500/35 shadow-[0_14px_30px_rgba(146,64,14,0.22)]",
-      eyebrow: "text-amber-300",
-      panel: "border-amber-500/35 bg-amber-950/30",
-    };
+    return { dot: "bg-amber-500" };
   }
-
   if (level === "pending") {
-    return {
-      wrapper:
-        "steam-avatar-gradient-banner border-cyan-400/30 shadow-[0_12px_26px_rgba(8,47,73,0.25)]",
-      eyebrow: "text-cyan-300",
-      panel: "border-cyan-400/30 bg-cyan-950/30",
-    };
+    return { dot: "bg-sky-500" };
   }
-
-  return {
-    wrapper:
-      "steam-avatar-gradient-banner border-cyan-400/25 shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
-    eyebrow: "text-cyan-300",
-    panel: "border-border/70 bg-card/70",
-  };
+  return { dot: "bg-emerald-500" };
 }
 
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
 const STEAM_SYNC_META_KEY = "steam:sync:meta:v1";
 const STEAM_SYNC_PREF_KEY = "steam:sync:auto-enabled:v1";
 const STEAM_SYNC_COOLDOWN_MS = 1000 * 60 * 30;
+// Actionable, self-clearing notifications derived from portfolio state after a
+// sync: items still needing a manual price / a match confirmation.
+const ACTION_NOTIFICATION_CATEGORIES = ["action_match", "action_price"];
 const STARTUP_WELCOME_DISMISS_KEY = "startup:welcome:dismissed:v1";
 const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
@@ -492,7 +475,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     ),
     [isDesktopRuntime],
   );
-  const { formatPrice } = useCurrency();
+  const { formatPrice, convertToUsd, convertFromUsd } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -597,7 +580,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [groupSortBy, setGroupSortBy] = useState("name_asc");
   const [priceSearchTerm, setPriceSearchTerm] = useState("");
   const [priceSortBy, setPriceSortBy] = useState("name_asc");
-  const [priceMissingOnly, setPriceMissingOnly] = useState(false);
+  const [priceMissingOnly, setPriceMissingOnly] = useState(true);
   const [matchingSearchTerm, setMatchingSearchTerm] = useState("");
   const [matchingSortBy, setMatchingSortBy] = useState("score_desc");
   const [matchingConfidenceFilter, setMatchingConfidenceFilter] = useState("all");
@@ -606,7 +589,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [savingPriceItemId, setSavingPriceItemId] = useState(null);
   const [manualItemDraft, setManualItemDraft] = useState({
     name: "",
-    buyPriceUsd: "",
+    buyPriceInput: "",
     quantity: "1",
     platform: "manual",
     fundingMode: "wallet_funded",
@@ -623,6 +606,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     lastSyncedAt: null,
   });
   const [syncNotifications, setSyncNotifications] = useState([]);
+  // Bumped after each Steam sync so the actionable notifications get re-derived
+  // once the portfolio counts (needs price / needs match) have refreshed. A
+  // token (not a ref) is used because it must trigger the refresh effect; the
+  // "last processed" ref below ensures we only react to a genuine sync, never
+  // to a mere count change (which would create a dismiss/reappear nag loop).
+  const [actionNotificationRefreshToken, setActionNotificationRefreshToken] = useState(0);
+  const lastProcessedActionTokenRef = useRef(0);
   const [uiWarningNotificationsBySource, setUiWarningNotificationsBySource] = useState({});
   const [appUpdateNotification, setAppUpdateNotification] = useState({
     state: "idle",
@@ -807,6 +797,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     const normalizedTab = runtimeTabs.includes(resolvedInitialTab) ? resolvedInitialTab : runtimeTabs[0];
     setActiveTab((current) => (current === normalizedTab ? current : normalizedTab));
   }, [resolvedInitialTab, runtimeTabs]);
+
+  // Allow deep-linking a management sub-section via ?section= (used by the
+  // system-notification bell, e.g. action_price -> prices, action_match -> matching).
+  useEffect(() => {
+    const requestedSection = String(searchParams.get("section") || "").trim().toLowerCase();
+    const allowedSections = ["matching", "prices", "groups", "exclude", "create"];
+    if (allowedSections.includes(requestedSection)) {
+      setManagementSection(requestedSection);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!runtimeTabs.includes(activeTab)) {
@@ -1139,7 +1139,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         const notifications = await window.electronAPI.localStore.listNotifications(userId, { limit: 20 });
         const rows = Array.isArray(notifications) ? notifications : [];
         setSyncNotifications(rows);
-        const unreadCount = rows.filter((row) => row.category === "steam_sync" && row.unread).length;
+        const unreadCount = rows.filter(
+          (row) => ACTION_NOTIFICATION_CATEGORIES.includes(row.category) && row.unread,
+        ).length;
         setSyncNotification((current) => ({
           ...current,
           newItemsCount: unreadCount,
@@ -1259,28 +1261,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
 
       await writeLocalState(STEAM_SYNC_META_KEY, { lastRunAt: syncedAt });
-      if (imported > 0 && notifySteamSyncDesktopRef.current && window.electronAPI?.localStore?.createNotification) {
-        await window.electronAPI.localStore.createNotification({
-          userId,
-          category: "steam_sync",
-          title: "Neue Steam Items",
-          message: `${imported} neue Items durch Steam Sync`,
-          // Keep the dedupe payload stable: a fresh `syncedAt` (or volatile
-          // `updated` count) on every sync made stableSerialize() differ each
-          // time, so the 24h dedupe never matched and an identical "N neue
-          // Items" notification was recreated (unread) on every sync. The
-          // timestamp lives in `createdAt`; identity is the imported count.
-          payload: {
-            imported,
-          },
-          createdAt: syncedAt,
-        });
+      // A sync no longer creates a "N neue Items" log entry. Instead we
+      // re-derive the actionable notifications (items needing a price /
+      // needing match confirmation) once the portfolio counts have refreshed;
+      // see the actionNotificationRefreshToken effect below. The badge count
+      // (newItemsCount) is set there too, so we only track the sync time here.
+      if (notifySteamSyncDesktopRef.current) {
+        setActionNotificationRefreshToken((token) => token + 1);
       }
       if (imported > 0) {
-        setSyncNotification({
-          newItemsCount: imported,
+        setSyncNotification((current) => ({
+          ...current,
           lastSyncedAt: syncedAt,
-        });
+        }));
         if (manual) {
           setManualSteamSyncInfo("");
         }
@@ -1309,18 +1302,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           }, 3000);
         }
       }
-      if (window.electronAPI?.localStore?.listNotifications) {
-        const notifications = await window.electronAPI.localStore.listNotifications(userId, { limit: 20 });
-        const rows = Array.isArray(notifications) ? notifications : [];
-        setSyncNotifications(rows);
-        const unreadCount = rows.filter((row) => row.category === "steam_sync" && row.unread).length;
-        setSyncNotification((current) => ({
-          ...current,
-          newItemsCount: unreadCount,
-          lastSyncedAt: rows[0]?.createdAt || current.lastSyncedAt || null,
-        }));
-      }
-
       if (imported > 0 || updated > 0 || matchesSuggested > 0) {
         await refreshPortfolio();
         setCompositionRefreshToken((current) => current + 1);
@@ -1466,8 +1447,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         if (nextSummary.length === 0) {
           const liveResponse = await fetchCsFloatBuyOrdersData({
             syncNow: true,
-            limit: 200,
-            maxPages: 8,
           });
           nextSummary = Array.isArray(liveResponse?.data?.summaryByMarketHashName)
             ? liveResponse.data.summaryByMarketHashName
@@ -1489,54 +1468,140 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   }, [activeTab, isDesktopRuntime]);
 
   useEffect(() => {
+    let cancelled = false;
+    const isDesktopLocal =
+      typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
+
+    // Load one item's price history (desktop-local first, then server). Returns raw
+    // rows carrying priceUsd — the shared loader for single items and group members.
+    const loadItemHistoryRows = async (itemId, name) => {
+      const id = Number(itemId || 0);
+      if (id <= 0) {
+        return [];
+      }
+      if (isDesktopLocal) {
+        try {
+          const local = await window.electronAPI.localStore.listPriceHistory(id);
+          if (Array.isArray(local) && local.length > 0) {
+            return local;
+          }
+        } catch {
+          // fall through to the server read
+        }
+      }
+      const history = await fetchItemPriceHistory(id, { itemName: name });
+      return Array.isArray(history) ? history : [];
+    };
+
+    // Bounded-concurrency map so a group with many clusters does not fan out into
+    // dozens of simultaneous server reads.
+    const mapWithConcurrency = async (items, limit, worker) => {
+      const results = new Array(items.length);
+      let cursor = 0;
+      const runners = new Array(Math.max(1, Math.min(limit, items.length)))
+        .fill(0)
+        .map(async () => {
+          for (;;) {
+            const index = cursor;
+            cursor += 1;
+            if (index >= items.length) {
+              return;
+            }
+            results[index] = await worker(items[index]);
+          }
+        });
+      await Promise.all(runners);
+      return results;
+    };
+
     const loadItemHistory = async () => {
       if (!selectedItemWithLive) {
         setSelectedItemHistory([]);
         setSelectedItemHistoryLoading(false);
         return;
       }
-      if (selectedItemWithLive.__detailKind === "group" || selectedItemWithLive.__detailKind === "group-cluster") {
-        setSelectedItemHistory([]);
-        setSelectedItemHistoryLoading(false);
+
+      const kind = selectedItemWithLive.__detailKind;
+
+      // Group: weighted total-value-over-time from the member clusters' histories.
+      if (kind === "group") {
+        setSelectedItemHistoryLoading(true);
+        try {
+          const clusters = Array.isArray(selectedItemWithLive.clusters)
+            ? selectedItemWithLive.clusters
+            : [];
+          const members = clusters
+            .map((cluster) => ({
+              itemId: Number(cluster?.itemId || 0),
+              quantity: Number(cluster?.quantity || 0),
+              name: cluster?.name,
+            }))
+            .filter((member) => member.itemId > 0 && member.quantity > 0);
+          const withHistory = await mapWithConcurrency(members, 6, async (member) => ({
+            itemId: member.itemId,
+            quantity: member.quantity,
+            history: await loadItemHistoryRows(member.itemId, member.name),
+          }));
+          if (cancelled) {
+            return;
+          }
+          setSelectedItemHistory(buildWeightedGroupHistory(withHistory));
+        } catch (groupHistoryError) {
+          console.error("Fehler beim Laden der Gruppen-Historie:", groupHistoryError);
+          if (!cancelled) {
+            setSelectedItemHistory([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setSelectedItemHistoryLoading(false);
+          }
+        }
         return;
       }
 
+      // Single item or a single group cluster (both resolve to one catalog itemId).
       setSelectedItemHistoryLoading(true);
       try {
-        const isDesktopLocal =
-          typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
         const itemId = Number(selectedItemWithLive.itemId ?? selectedItemWithLive.item_id ?? 0);
 
-        if (isDesktopLocal && itemId > 0) {
-          const history = await window.electronAPI.localStore.listPriceHistory(itemId);
-          if (Array.isArray(history) && history.length > 0) {
-            setSelectedItemHistory(history);
-            return;
-          }
-        }
-
         if (itemId > 0) {
-          const history = await fetchItemPriceHistory(itemId, {
-            itemName: selectedItemWithLive.name,
-          });
-          setSelectedItemHistory(history || []);
+          const history = await loadItemHistoryRows(itemId, selectedItemWithLive.name);
+          if (!cancelled) {
+            setSelectedItemHistory(history);
+          }
           return;
         }
 
-        // Fallback: keep old position-history endpoint for legacy items
-        const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id, {
-          itemName: selectedItemWithLive.name,
-        });
-        setSelectedItemHistory(history || []);
+        // Legacy fallback (real investments only, not synthetic group-cluster ids).
+        if (kind !== "group-cluster") {
+          const history = await fetchPortfolioInvestmentHistory(selectedItemWithLive.id, {
+            itemName: selectedItemWithLive.name,
+          });
+          if (!cancelled) {
+            setSelectedItemHistory(history || []);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setSelectedItemHistory([]);
+        }
       } catch (historyError) {
         console.error("Fehler beim Laden der Positionshistorie:", historyError);
-        setSelectedItemHistory([]);
+        if (!cancelled) {
+          setSelectedItemHistory([]);
+        }
       } finally {
-        setSelectedItemHistoryLoading(false);
+        if (!cancelled) {
+          setSelectedItemHistoryLoading(false);
+        }
       }
     };
 
     void loadItemHistory();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedItemWithLive]);
 
   const handleTabSelect = useCallback((nextTab) => {
@@ -2701,11 +2766,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       } catch {
         // non-critical
       }
-      if (typeof window.Notification !== "undefined" && Notification.permission === "granted") {
-        new window.Notification("VAC Ban-Welle erkannt", {
-          body: itemTitle + " — Marktbewegung möglich",
-        });
-      }
       localStorage.setItem(BAN_WAVE_NOTIFIED_KEY, itemId);
     };
 
@@ -2761,11 +2821,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         }
       } catch {
         // non-critical
-      }
-      if (typeof window.Notification !== "undefined" && Notification.permission === "granted") {
-        new window.Notification("Neues CS2 Update", {
-          body: itemTitle,
-        });
       }
       localStorage.setItem(CS_UPDATE_NOTIFIED_KEY, itemId);
     };
@@ -2950,7 +3005,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       .slice(0, 8);
   }, [globalSearchTermNormalized, portfolioGroupSummaryById, portfolioGroups]);
   const pendingMatchingRows = matchingRows.filter((row) => row.status === "suggested");
-  const confirmedOrAutoMatchByCsfloatId = new Map();
+  // Every matched steamAssetId must be collected — a Map keyed by csfloatInvestmentId
+  // would drop all but the last steamId when one aggregated CSFloat row (e.g. a
+  // quantity position) is matched against several individual Steam-inventory twins.
+  const confirmedOrAutoMatchedSteamKeys = new Set();
   matchingRows.forEach((row) => {
     const status = String(row?.status || "").toLowerCase();
     if (!["manual_confirmed", "auto_linked"].includes(status)) {
@@ -2961,13 +3019,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (!csfloatId || !steamId) {
       return;
     }
-    confirmedOrAutoMatchByCsfloatId.set(csfloatId, steamId);
+    confirmedOrAutoMatchedSteamKeys.add(steamId);
   });
-  const confirmedOrAutoMatchedSteamKeys = new Set(
-    Array.from(confirmedOrAutoMatchByCsfloatId.values())
-      .map((value) => String(value || "").trim())
-      .filter(Boolean),
-  );
   const matchingSearchQuery = normalizeSearchText(matchingSearchTerm);
   const matchingDisplayRows = showMatchedMatchingRows
     ? matchingRows.filter((row) => {
@@ -3128,10 +3181,188 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     return nextMap;
   })();
+  // Group the (already filtered/sorted) price rows by name so identical items
+  // (e.g. many single Steam-inventory copies of the same case) render as one row
+  // with a quantity instead of one row per position.
+  const filteredPriceClusters = (() => {
+    const groups = new Map();
+    filteredPriceItems.forEach((item) => {
+      const key = getItemNameKey(item) || String(item.id || "");
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          name: item.name || item.marketHashName || "Unknown Item",
+          imageUrl: item.imageUrl || item.iconUrl || null,
+          bucket: normalizeBucket(item.bucket, "inventory"),
+          positions: [],
+        });
+      }
+      groups.get(key).positions.push(item);
+    });
+    return Array.from(groups.values()).map((cluster) => {
+      const totalQuantity = cluster.positions.reduce(
+        (sum, position) => sum + Math.max(1, Number(position.quantity || 1)),
+        0,
+      );
+      const prices = cluster.positions.map((position) =>
+        Number(position.buyPriceUsd ?? position.buyPrice ?? 0),
+      );
+      const allSamePrice = prices.every((price) => price === prices[0]);
+      return {
+        ...cluster,
+        totalQuantity,
+        currentPrice: allSamePrice ? prices[0] : null,
+        suggestion: suggestedPriceByNameKey.get(cluster.key) || null,
+      };
+    });
+  })();
+  const handleSaveClusterPrice = async (cluster, explicitPriceUsd = null) => {
+    let usdPrice;
+    if (explicitPriceUsd !== null && explicitPriceUsd !== undefined) {
+      usdPrice = Number(explicitPriceUsd);
+    } else {
+      const typed = Number(priceDrafts[`cluster:${cluster.key}`]);
+      if (!Number.isFinite(typed) || typed < 0) {
+        return;
+      }
+      usdPrice = convertToUsd(typed);
+    }
+    if (!Number.isFinite(usdPrice) || usdPrice < 0) {
+      return;
+    }
+    const normalizedPrice = Number(usdPrice.toFixed(2));
+    const clusterSavingKey = `cluster:${cluster.key}`;
+
+    // Positions in a cluster are identical, fungible items bought together, so one
+    // price applies to all of them. Persist every position first and refresh the
+    // portfolio only ONCE afterwards — delegating to handleSaveSteamItemPrice per
+    // position would trigger N sequential portfolio refreshes for an N-item cluster.
+    setSavingPriceItemId(clusterSavingKey);
+    try {
+      for (const position of cluster.positions) {
+        await window.electronAPI.localStore.upsertInvestment({
+          ...position,
+          id: position.id,
+          buyPriceUsd: normalizedPrice,
+          buyPrice: normalizedPrice,
+          priceSetMode: "user_confirmed",
+          platform: "steam_inventory",
+          source: "steam_inventory",
+        });
+      }
+      const clusterPositionIds = new Set(
+        cluster.positions.map((position) => String(position?.id || "")),
+      );
+      setManagementInvestments((current) =>
+        current.map((entry) =>
+          clusterPositionIds.has(String(entry?.id || ""))
+            ? {
+                ...entry,
+                buyPriceUsd: normalizedPrice,
+                buyPrice: normalizedPrice,
+                priceSetMode: "user_confirmed",
+              }
+            : entry,
+        ),
+      );
+      setPriceDrafts((current) => ({
+        ...current,
+        [clusterSavingKey]:
+          normalizedPrice > 0 ? convertFromUsd(normalizedPrice).toFixed(2) : "",
+      }));
+      await refreshPortfolio();
+      setCompositionRefreshToken((current) => current + 1);
+    } catch (saveError) {
+      console.error("Failed to save cluster buy price", saveError);
+    } finally {
+      setSavingPriceItemId(null);
+    }
+  };
+  const handleAcceptSuggestedClusterPrice = async (cluster, suggestedPriceUsd) => {
+    const normalizedSuggestion = Number(suggestedPriceUsd);
+    if (!Number.isFinite(normalizedSuggestion) || normalizedSuggestion <= 0) {
+      return;
+    }
+    setPriceDrafts((current) => ({
+      ...current,
+      [`cluster:${cluster.key}`]: convertFromUsd(normalizedSuggestion).toFixed(2),
+    }));
+    await handleSaveClusterPrice(cluster, normalizedSuggestion);
+  };
   const priceMissingCount = rawSteamInventoryItems.filter((item) => {
     const price = Number(item.buyPriceUsd ?? item.buyPrice ?? 0);
     return !Number.isFinite(price) || price <= 0;
   }).length;
+
+  // After a Steam sync, re-derive the actionable notifications from the fresh
+  // portfolio counts. Runs once per sync (flag-gated) so it behaves like an
+  // event, not a live mirror: a dismissed item does not instantly reappear.
+  // Notifications self-clear when their count reaches 0.
+  useEffect(() => {
+    if (!isDesktopRuntime) return;
+    // Only react to a genuine sync (token bump), not to count changes caused by
+    // the user pricing/confirming items — otherwise a just-dismissed item would
+    // instantly reappear.
+    if (actionNotificationRefreshToken === lastProcessedActionTokenRef.current) return;
+    if (portfolioLoading) return; // wait for counts to reflect the sync
+    lastProcessedActionTokenRef.current = actionNotificationRefreshToken;
+
+    void (async () => {
+      const localStore = window.electronAPI?.localStore;
+      if (!localStore?.createNotification) return;
+      try {
+        const user = await getCurrentUser();
+        const userId = resolveDesktopRuntimeUserId(user, 1);
+
+        // Clear the previous action items, then recreate for whatever work
+        // remains. Deleting first keeps counts accurate and avoids stacking.
+        if (localStore.deleteAllNotifications) {
+          await localStore.deleteAllNotifications(userId, "action_match");
+          await localStore.deleteAllNotifications(userId, "action_price");
+        }
+
+        if (matchingSuggestedCount > 0) {
+          await localStore.createNotification({
+            userId,
+            category: "action_match",
+            title: "Matching bestätigen",
+            message: `${matchingSuggestedCount} ${matchingSuggestedCount === 1 ? "Item braucht" : "Items brauchen"} eine Bestätigung`,
+            payload: { count: matchingSuggestedCount },
+          });
+        }
+        if (priceMissingCount > 0) {
+          await localStore.createNotification({
+            userId,
+            category: "action_price",
+            title: "Preis ergänzen",
+            message: `${priceMissingCount} ${priceMissingCount === 1 ? "Item braucht" : "Items brauchen"} einen Preis`,
+            payload: { count: priceMissingCount },
+          });
+        }
+
+        if (localStore.listNotifications) {
+          const rows = await localStore.listNotifications(userId, { limit: 20 });
+          const list = Array.isArray(rows) ? rows : [];
+          setSyncNotifications(list);
+          setSyncNotification((current) => ({
+            ...current,
+            newItemsCount: list.filter(
+              (row) => ACTION_NOTIFICATION_CATEGORIES.includes(row.category) && row.unread,
+            ).length,
+          }));
+        }
+      } catch (error) {
+        console.warn("Failed to refresh action notifications", error);
+      }
+    })();
+  }, [
+    isDesktopRuntime,
+    portfolioLoading,
+    actionNotificationRefreshToken,
+    matchingSuggestedCount,
+    priceMissingCount,
+  ]);
+
   const managementQuickHints = [
     {
       id: "matching",
@@ -3201,13 +3432,24 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }));
   };
 
-  const handleSaveSteamItemPrice = async (item, explicitPrice = null) => {
-    const draftValue = explicitPrice ?? priceDrafts[item.id];
-    const nextPrice = Number(draftValue);
-    if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+  const handleSaveSteamItemPrice = async (item, explicitPriceUsd = null) => {
+    // explicitPriceUsd (e.g. the accepted live suggestion) is already USD and must
+    // NOT be converted. A value typed into the draft field is in the user's active
+    // display currency and is converted to USD here, at the input boundary.
+    let usdPrice;
+    if (explicitPriceUsd !== null && explicitPriceUsd !== undefined) {
+      usdPrice = Number(explicitPriceUsd);
+    } else {
+      const typed = Number(priceDrafts[item.id]);
+      if (!Number.isFinite(typed) || typed < 0) {
+        return;
+      }
+      usdPrice = convertToUsd(typed);
+    }
+    if (!Number.isFinite(usdPrice) || usdPrice < 0) {
       return;
     }
-    const normalizedPrice = Number(nextPrice.toFixed(2));
+    const normalizedPrice = Number(usdPrice.toFixed(2));
 
     setSavingPriceItemId(item.id);
     try {
@@ -3234,7 +3476,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       );
       setPriceDrafts((current) => ({
         ...current,
-        [item.id]: normalizedPrice > 0 ? normalizedPrice.toFixed(2) : "",
+        // Draft field holds the display-currency value, not USD.
+        [item.id]: normalizedPrice > 0 ? convertFromUsd(normalizedPrice).toFixed(2) : "",
       }));
       await refreshPortfolio();
       setCompositionRefreshToken((current) => current + 1);
@@ -3252,9 +3495,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     setPriceDrafts((current) => ({
       ...current,
-      [item.id]: normalizedSuggestion.toFixed(2),
+      // The suggestion is USD; show it in the display currency in the draft field.
+      [item.id]: convertFromUsd(normalizedSuggestion).toFixed(2),
     }));
 
+    // Pass the USD suggestion straight through — it must not be re-converted.
     await handleSaveSteamItemPrice(item, normalizedSuggestion);
   };
   const handleManualItemDraftChange = (key, value) => {
@@ -3306,7 +3551,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       "",
     ).trim();
     const quantity = Number(manualItemDraft.quantity);
-    const buyPriceUsd = Number(manualItemDraft.buyPriceUsd);
+    // buyPriceInput is in the user's active display currency; convert to USD (the
+    // stored source of truth) at this boundary.
+    const buyPriceInput = Number(manualItemDraft.buyPriceInput);
     const bucket = manualItemDraft.bucket === "inventory" ? "inventory" : "investment";
     const platform = String(manualItemDraft.platform || "manual").trim().toLowerCase() || "manual";
     const fundingMode =
@@ -3324,10 +3571,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setManagementError("Bitte eine gueltige Menge > 0 angeben.");
       return;
     }
-    if (!Number.isFinite(buyPriceUsd) || buyPriceUsd < 0) {
-      setManagementError("Bitte einen gueltigen USD-Einkaufspreis angeben.");
+    if (!Number.isFinite(buyPriceInput) || buyPriceInput < 0) {
+      setManagementError("Bitte einen gueltigen Einkaufspreis angeben.");
       return;
     }
+    const buyPriceUsd = Number(convertToUsd(buyPriceInput).toFixed(2));
 
     const user = await getCurrentUser();
     const userId = resolveDesktopRuntimeUserId(user, 1);
@@ -3364,7 +3612,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setCompositionRefreshToken((current) => current + 1);
       setManualItemDraft({
         name: "",
-        buyPriceUsd: "",
+        buyPriceInput: "",
         quantity: "1",
         platform: "manual",
         fundingMode: "wallet_funded",
@@ -3492,48 +3740,39 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     return `${Math.max(0, value)} neu`;
   };
-  const resolveNotificationActionTarget = () => {
-    if (matchingSuggestedCount > 0) {
-      return { section: "matching", label: "Matching" };
-    }
-    if (priceMissingCount > 0) {
-      return { section: "prices", label: "Preise" };
-    }
-    return { section: "matching", label: "Inbox" };
-  };
-  const unreadSteamSyncNotifications = useMemo(
-    () => syncNotifications.filter((entry) => entry.category === "steam_sync" && entry.unread),
+  const unreadActionNotifications = useMemo(
+    () =>
+      syncNotifications.filter(
+        (entry) => ACTION_NOTIFICATION_CATEGORIES.includes(entry.category) && entry.unread,
+      ),
     [syncNotifications],
   );
+  // Acting on an action notification consumes it (read = delete). It reappears
+  // on the next sync only if the underlying work still exists.
   const handleNotificationClick = async (entry) => {
-    if (window.electronAPI?.localStore?.markNotificationRead) {
-      await window.electronAPI.localStore.markNotificationRead(entry.id);
+    if (window.electronAPI?.localStore?.deleteNotification) {
+      await window.electronAPI.localStore.deleteNotification(entry.id);
     }
-    setSyncNotifications((current) =>
-      current.map((item) => (item.id === entry.id ? { ...item, unread: false, readAt: new Date().toISOString() } : item)),
-    );
+    setSyncNotifications((current) => current.filter((item) => item.id !== entry.id));
     setSyncNotification((current) => ({
       ...current,
       newItemsCount: Math.max(0, Number(current.newItemsCount || 0) - 1),
     }));
-    const target = resolveNotificationActionTarget();
+    const section = entry.category === "action_price" ? "prices" : "matching";
     setActiveTab("management");
-    setManagementSection(target.section);
-    navigate("/?tab=management", { replace: true });
+    setManagementSection(section);
+    navigate(`/?tab=management&section=${section}`, { replace: true });
     setCompositionRefreshToken((current) => current + 1);
   };
-  const handleMarkAllSteamNotificationsRead = async () => {
+  const handleClearActionNotifications = async () => {
     const user = await getCurrentUser();
     const userId = resolveDesktopRuntimeUserId(user, 1);
-    if (window.electronAPI?.localStore?.markAllNotificationsRead) {
-      await window.electronAPI.localStore.markAllNotificationsRead(userId, "steam_sync");
+    if (window.electronAPI?.localStore?.deleteAllNotifications) {
+      await window.electronAPI.localStore.deleteAllNotifications(userId, "action_match");
+      await window.electronAPI.localStore.deleteAllNotifications(userId, "action_price");
     }
     setSyncNotifications((current) =>
-      current.map((entry) =>
-        entry.category === "steam_sync" && entry.unread
-          ? { ...entry, unread: false, readAt: new Date().toISOString() }
-          : entry,
-      ),
+      current.filter((entry) => !ACTION_NOTIFICATION_CATEGORIES.includes(entry.category)),
     );
     setSyncNotification((current) => ({
       ...current,
@@ -3660,10 +3899,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         <div className="rounded-md border p-2">
-          <p className="text-xs font-semibold">Neue Steam Items</p>
-          {syncNotification.newItemsCount > 0 ? (
+          <p className="text-xs font-semibold">Offene Aktionen</p>
+          {unreadActionNotifications.length > 0 ? (
             <div className="mt-1 space-y-1">
-              {unreadSteamSyncNotifications.slice(0, 5).map((entry) => (
+              {unreadActionNotifications.slice(0, 5).map((entry) => (
                   <button
                     key={entry.id}
                     type="button"
@@ -3671,28 +3910,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     className="w-full rounded-md border px-2 py-1 text-left hover:bg-accent"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{entry.message}</p>
-                      <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                        {formatCompactNewCount(entry?.payload?.imported || 0)}
-                      </span>
+                      <p className="text-sm font-medium">{entry.title}</p>
+                      {Number(entry?.payload?.count) > 0 ? (
+                        <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          {formatCompactNewCount(entry.payload.count)}
+                        </span>
+                      ) : null}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Aktion: {resolveNotificationActionTarget().label}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleString("de-DE")}
-                    </p>
+                    <p className="text-[11px] text-muted-foreground">{entry.message}</p>
                   </button>
               ))}
             </div>
-          ) : null}
+          ) : (
+            <p className="mt-1 text-[11px] text-muted-foreground">Alles erledigt – keine offenen Aktionen.</p>
+          )}
           {manualSteamSyncInfo ? (
             <p className="mt-1 text-[11px] text-muted-foreground">{manualSteamSyncInfo}</p>
           ) : null}
-          {unreadSteamSyncNotifications.length > 0 ? (
+          {unreadActionNotifications.length > 0 ? (
             <div className="mt-2">
-              <Button size="sm" variant="ghost" onClick={() => void handleMarkAllSteamNotificationsRead()}>
-                Alle als gelesen
+              <Button size="sm" variant="ghost" onClick={() => void handleClearActionNotifications()}>
+                Alle löschen
               </Button>
             </div>
           ) : null}
@@ -4758,7 +4996,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             className={`w-full min-w-0 ${renderLocalDesktopSidebar ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
           >
             {useDesktopSidebarShell ? (
-              <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:justify-between lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
+              <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
                 <div className={`flex min-w-0 items-center ${activeTab === "search" ? "w-full justify-center" : "gap-3"}`}>
                   <form
                     className={`relative ${activeTab === "search" ? "w-[min(920px,72vw)]" : "w-[340px] max-w-[46vw]"}`}
@@ -4786,38 +5024,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       className="flex h-11 w-full items-center rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground shadow-none outline-none transition-colors focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
                     />
                   </form>
-                </div>
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => handleTabSelect("overview")}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "overview" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Portfolio
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTabSelect("inventory")}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "inventory" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Inventar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTabSelect("watchlist")}
-                    className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "watchlist" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                  >
-                    Watchlist
-                  </button>
-                  {isDesktopRuntime ? (
-                    <button
-                      type="button"
-                      onClick={() => handleTabSelect("management")}
-                      className={`rounded-lg px-3 py-1.5 transition-colors ${activeTab === "management" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/70"}`}
-                    >
-                      Verwaltung
-                    </button>
-                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -4923,10 +5129,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               }
             }}
             onSelectGroup={(group) => {
-              setSelectedItem(buildGroupDetailSelection(group));
+              const selection = buildGroupDetailSelection(group);
+              setSelectedItem(selection);
+              if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                openModal("itemDetail", { item: selection });
+              }
             }}
             onSelectCluster={(group, cluster) => {
-              setSelectedItem(buildGroupClusterDetailSelection(group, cluster));
+              const selection = buildGroupClusterDetailSelection(group, cluster);
+              setSelectedItem(selection);
+              if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                openModal("itemDetail", { item: selection });
+              }
             }}
             selectedItemWithLiveAndBuyOrders={selectedItemWithLiveAndBuyOrders}
             selectedItem={selectedItem}
@@ -5037,6 +5251,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             handlePriceDraftChange={handlePriceDraftChange}
             handleSaveSteamItemPrice={handleSaveSteamItemPrice}
             handleAcceptSuggestedPrice={handleAcceptSuggestedPrice}
+            handleSaveClusterPrice={handleSaveClusterPrice}
+            handleAcceptSuggestedClusterPrice={handleAcceptSuggestedClusterPrice}
             manualItemDraft={manualItemDraft}
             setManualItemDraft={setManualItemDraft}
             manualSelectedSuggestion={manualSelectedSuggestion}
@@ -5081,6 +5297,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             matchingSuggestedCount={matchingSuggestedCount}
             matchedSteamInventoryItemsCount={matchedSteamInventoryItemsCount}
             filteredPriceItems={filteredPriceItems}
+            filteredPriceClusters={filteredPriceClusters}
             suggestedPriceByNameKey={suggestedPriceByNameKey}
             priceMissingCount={priceMissingCount}
           />

@@ -116,7 +116,16 @@ export function PortfolioInventorySection({
 
       {modals.map((modal) =>
         modal.type === "itemDetail" ? (() => {
-          const liveModalItem = resolveLiveClusterItem(modal?.data?.item, enrichedInvestments) || modal?.data?.item || null;
+          const rawModalItem = modal?.data?.item;
+          // Group selections must NOT be resolved against enrichedInvestments: their
+          // sourceInvestmentIds (mapped from memberInvestmentIds) overlap real rows and
+          // would return a single member instead of the group aggregate.
+          const isGroupModalItem =
+            rawModalItem?.__detailKind === "group" ||
+            rawModalItem?.__detailKind === "group-cluster";
+          const liveModalItem = isGroupModalItem
+            ? rawModalItem
+            : resolveLiveClusterItem(rawModalItem, enrichedInvestments) || rawModalItem || null;
           const modalItemWithBuyOrders = withBuyOrderFields(liveModalItem, inventoryBuyOrderSummary);
           return (
             <Suspense key={modal.id} fallback={null}>

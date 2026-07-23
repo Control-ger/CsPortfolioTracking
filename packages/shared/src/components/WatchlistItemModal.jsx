@@ -114,7 +114,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
                 {item.changeLabel || "-"}
               </Badge>
               {hasBuyOrder ? (
-                <Badge variant="outline" className="border-sky-400/35 bg-sky-500/12 text-[10px] text-sky-300">
+                <Badge variant="outline" className="border-sky-300 bg-sky-100 text-[10px] text-sky-800 dark:border-sky-400/35 dark:bg-sky-500/12 dark:text-sky-300">
                   CSFloat Buyorder{" "}
                   {formatCurrencyPrice(Number(item.buyOrderBestPriceUsd), {
                     useUsd: true,
@@ -235,7 +235,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
                 <tbody>
                   {buyOrderRows.slice(0, 12).map((row, index) => (
                     <tr key={`${row.priceUsd}-${index}`} className="border-t border-border/50">
-                      <td className="px-2.5 py-2 text-sky-300">
+                      <td className="px-2.5 py-2 text-sky-700 dark:text-sky-300">
                         {formatCurrencyPrice(Number(row.priceUsd), {
                           useUsd: true,
                           buyPriceUsd: Number(row.priceUsd),

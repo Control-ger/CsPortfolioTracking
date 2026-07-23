@@ -374,19 +374,21 @@ final class WatchlistService
             return [];
         }
 
-        $firstPrice = $priceHistory[0]['wert'] ?? null;
+        // History entries are keyed on priceUsd (USD source of truth). Preserve every
+        // field (priceUsd/priceEur/date) and only add growthPercent, so the currency-aware
+        // frontend chart still receives priceUsd.
+        $firstPrice = $priceHistory[0]['priceUsd'] ?? null;
         if ($firstPrice === null || $firstPrice == 0) {
             return $priceHistory;
         }
 
         return array_map(
             static function (array $entry) use ($firstPrice): array {
-                $currentPrice = $entry['wert'] ?? 0;
+                $currentPrice = $entry['priceUsd'] ?? 0;
                 $growthPercent = (($currentPrice - $firstPrice) / $firstPrice) * 100;
 
                 return [
-                    'date' => $entry['date'],
-                    'wert' => $currentPrice,
+                    ...$entry,
                     'growthPercent' => $growthPercent,
                 ];
             },

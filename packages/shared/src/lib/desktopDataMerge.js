@@ -124,13 +124,33 @@ export function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRo
     const liveDisplayPrice = Number(upstream.displayPrice ?? upstream.livePrice);
     const hasLiveDisplayPrice = Number.isFinite(liveDisplayPrice) && liveDisplayPrice > 0;
     const mergedDisplayPrice = hasLiveDisplayPrice ? liveDisplayPrice : fallbackDisplayPrice;
-    const mergedCurrentValue = Number.isFinite(Number(upstream.currentValue))
-      ? Number(upstream.currentValue)
-      : mergedDisplayPrice * quantity;
+
+    // The upstream row is the SERVER's aggregate for this item (grouped by `bucket:name`
+    // in PortfolioService::aggregateInvestmentsByName). That aggregate can cover MORE
+    // pieces than this local row whenever the server still holds an orphaned duplicate for
+    // the same item — e.g. a legacy Steam-sync investment that a marketplace import
+    // (CSFloat/SkinBaron) already represents but that was never pulled into the local DB,
+    // so the Steam↔CSFloat matcher never excluded it. Desktop is the write owner, so the
+    // LOCAL quantity is authoritative: keep only per-unit values (price, unit cost, ROI %,
+    // break-even) from upstream and re-derive every quantity-scaled TOTAL against the local
+    // quantity. When the quantities already agree (the common case) scale === 1 and the
+    // merged totals are identical to before — no regression for normal rows.
+    const upstreamQuantity = Number(upstream.quantity);
+    const quantityScale =
+      Number.isFinite(upstreamQuantity) && upstreamQuantity > 0 ? quantity / upstreamQuantity : 1;
+    const scaleUpstreamTotal = (value) =>
+      Number.isFinite(Number(value)) ? Number(value) * quantityScale : null;
+
+    const mergedCurrentValue =
+      scaleUpstreamTotal(upstream.currentValue) ?? mergedDisplayPrice * quantity;
     const computedProfitEuro = mergedCurrentValue - fallbackTotalInvested;
     const computedRoi = fallbackTotalInvested > 0
       ? (computedProfitEuro / fallbackTotalInvested) * 100
       : 0;
+    const mergedProfitEuro =
+      !isLooseMatch && scaleUpstreamTotal(upstream.profitEuro) !== null
+        ? scaleUpstreamTotal(upstream.profitEuro)
+        : computedProfitEuro;
 
     return {
       ...row,
@@ -140,8 +160,8 @@ export function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRo
         ? (Number.isFinite(mergedCurrentValue) ? mergedCurrentValue : fallbackCurrentValue)
         : 0,
       totalInvested:
-        !isLooseMatch && Number.isFinite(Number(upstream.totalInvested))
-          ? Number(upstream.totalInvested)
+        !isLooseMatch && scaleUpstreamTotal(upstream.totalInvested) !== null
+          ? scaleUpstreamTotal(upstream.totalInvested)
           : fallbackTotalInvested,
       isLive: sourceIsCsfloat && (upstream.isLive === true || row.isLive === true),
       pricingStatus: sourceIsCsfloat
@@ -153,16 +173,8 @@ export function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRo
             ? Number(upstream.roi)
             : computedRoi)
         : null,
-      profitEuro: sourceIsCsfloat
-        ? (!isLooseMatch && Number.isFinite(Number(upstream.profitEuro))
-            ? Number(upstream.profitEuro)
-            : computedProfitEuro)
-        : null,
-      isProfitPositive: sourceIsCsfloat
-        ? (!isLooseMatch && typeof upstream.isProfitPositive === "boolean"
-            ? upstream.isProfitPositive
-            : computedProfitEuro >= 0)
-        : null,
+      profitEuro: sourceIsCsfloat ? mergedProfitEuro : null,
+      isProfitPositive: sourceIsCsfloat ? mergedProfitEuro >= 0 : null,
       change24hEuro: upstream.change24hEuro ?? row.change24hEuro,
       change24hPercent: upstream.change24hPercent ?? row.change24hPercent,
       change7dEuro: upstream.change7dEuro ?? row.change7dEuro,
@@ -196,10 +208,10 @@ export function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRo
         null,
       overpayApplied: toBooleanFlag(upstream.overpayApplied ?? row.overpayApplied ?? false),
       overpayNote: String(upstream.overpayNote ?? row.overpayNote ?? "").trim() || null,
-      costBasisTotal: upstream.costBasisTotal ?? row.costBasisTotal,
+      costBasisTotal: scaleUpstreamTotal(upstream.costBasisTotal) ?? row.costBasisTotal,
       costBasisUnit: upstream.costBasisUnit ?? row.costBasisUnit,
-      netPositionValue: upstream.netPositionValue ?? row.netPositionValue,
-      netProfitEuro: upstream.netProfitEuro ?? row.netProfitEuro,
+      netPositionValue: scaleUpstreamTotal(upstream.netPositionValue) ?? row.netPositionValue,
+      netProfitEuro: scaleUpstreamTotal(upstream.netProfitEuro) ?? row.netProfitEuro,
       netRoiPercent: upstream.netRoiPercent ?? row.netRoiPercent,
       breakEvenPriceNet: upstream.breakEvenPriceNet ?? row.breakEvenPriceNet,
       appliedFees: upstream.appliedFees ?? row.appliedFees,

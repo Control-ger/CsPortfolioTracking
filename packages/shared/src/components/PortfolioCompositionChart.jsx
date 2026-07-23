@@ -81,6 +81,13 @@ export function PortfolioCompositionChart({
   isLoading = false,
   totalValueOverride = null,
   totalValueLabel = null,
+  // Currency + label knobs so the chart can be reused outside the portfolio
+  // overview (e.g. cluster weighting inside a group's detail panel). Defaults
+  // keep the overview call site unchanged: its `value`s are USD.
+  valuesAreUsd = true,
+  centerLabel = "Portfolio Wert",
+  shareSuffix = "des Portfolios",
+  assetCountLabel = "Assets",
 }) {
   const { formatPrice } = useCurrency();
   const [hoveredIndex, setHoveredIndex] = useState(null);
@@ -113,6 +120,9 @@ export function PortfolioCompositionChart({
   const sourceAssetCount = normalizedRows.length;
   const hasRenderableChartData = chartData.length > 0;
 
+  const formatSliceValue = (value) =>
+    valuesAreUsd ? formatPrice(value, { useUsd: true, buyPriceUsd: value }) : formatPrice(value);
+
   const renderTooltip = ({ payload }) => {
     if (!payload || !payload[0]) {
       return null;
@@ -123,83 +133,77 @@ export function PortfolioCompositionChart({
         <p className="font-semibold">{name}</p>
         <p className="text-muted-foreground">{count}x verfuegbar</p>
         <p className="font-semibold text-primary">
-          {formatPrice(value, { useUsd: true, buyPriceUsd: value })}
+          {formatSliceValue(value)}
         </p>
-        <p className="text-muted-foreground">{percentage}% des Portfolios</p>
+        <p className="text-muted-foreground">{percentage}% {shareSuffix}</p>
       </div>
     );
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-3 lg:items-start">
-        <div className="flex justify-center lg:col-span-2 lg:items-start">
-          <div className="relative h-[220px] w-full max-w-sm sm:h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                {hasRenderableChartData ? (
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={isSmallScreen ? 70 : 100}
-                    innerRadius={isSmallScreen ? 45 : 60}
-                    dataKey="value"
-                    onMouseEnter={(_, index) => setHoveredIndex(index)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.displayColor}
-                        stroke="none"
-                        opacity={hoveredIndex === null || hoveredIndex === index ? 1 : 0.3}
-                      />
-                    ))}
-                  </Pie>
-                ) : null}
-                <Tooltip content={renderTooltip} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-center">
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase">Portfolio Wert</p>
-                <p className="text-xl sm:text-2xl font-bold">
-                  {totalValueLabel || formatPrice(totalValue, { useUsd: true, buyPriceUsd: totalValue })}
-                </p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">{sourceAssetCount} Assets</p>
-                {!hasRenderableChartData ? (
-                  <p className="mt-1 text-[10px] text-muted-foreground">Noch keine csfloat-Livewerte</p>
-                ) : null}
-              </div>
+    <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+      <div className="flex flex-col items-center gap-3">
+        <div className="relative h-[220px] w-full max-w-sm sm:h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              {hasRenderableChartData ? (
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  outerRadius={isSmallScreen ? 70 : 100}
+                  innerRadius={isSmallScreen ? 45 : 60}
+                  dataKey="value"
+                  onMouseEnter={(_, index) => setHoveredIndex(index)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.displayColor}
+                      stroke="none"
+                      opacity={hoveredIndex === null || hoveredIndex === index ? 1 : 0.3}
+                    />
+                  ))}
+                </Pie>
+              ) : null}
+              <Tooltip content={renderTooltip} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="text-center">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase">{centerLabel}</p>
+              <p className="text-xl sm:text-2xl font-bold">
+                {totalValueLabel || formatSliceValue(totalValue)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">{sourceAssetCount} {assetCountLabel}</p>
+              {!hasRenderableChartData ? (
+                <p className="mt-1 text-[10px] text-muted-foreground">Noch keine csfloat-Livewerte</p>
+              ) : null}
             </div>
           </div>
         </div>
-        <div className="flex flex-col lg:col-span-1 lg:justify-start">
-          <div className="max-h-52 space-y-2 overflow-y-auto pr-1 sm:max-h-64 lg:h-[320px] lg:max-h-[320px]">
-            {displayData.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/70 bg-card/65 p-2 text-xs transition-colors hover:bg-accent/45 sm:text-sm"
-                onMouseEnter={() => setHoveredIndex(idx)}
-                onMouseLeave={() => setHoveredIndex(null)}
-              >
-                <div className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: item.displayColor }} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">{item.percentage}%</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-2">
-        <div className="rounded-xl border border-border/70 bg-card/65 p-2 text-center sm:p-3">
+        <div className="w-full max-w-sm rounded-xl border border-border/70 bg-card/65 p-2 text-center sm:p-3">
           <p className="text-[9px] font-semibold uppercase text-muted-foreground">Items</p>
           <p className="text-base font-bold sm:text-lg">{displayData.reduce((sum, item) => sum + item.count, 0)}</p>
         </div>
+      </div>
+      <div className="grid grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 sm:max-h-64 lg:max-h-[420px] xl:grid-cols-3">
+        {displayData.map((item, idx) => (
+          <div
+            key={idx}
+            className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/70 bg-card/65 p-2 text-xs transition-colors hover:bg-accent/45 sm:text-sm"
+            onMouseEnter={() => setHoveredIndex(idx)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          >
+            <div className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: item.displayColor }} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{item.name}</p>
+              <p className="text-xs text-muted-foreground">{item.percentage}%</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Bell, Check, CheckCheck, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package, Search } from "lucide-react";
+import { AlertTriangle, Bell, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package, Search, Trash2, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -121,17 +121,21 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
         }
         const rows = Array.isArray(notifications) ? notifications : [];
         const staleAppUpdates = rows.filter((entry) => isStaleAppUpdateEntry(entry, installedVersion));
-        if (staleAppUpdates.length > 0 && window.electronAPI?.localStore?.markNotificationRead) {
+        if (staleAppUpdates.length > 0 && window.electronAPI?.localStore?.deleteNotification) {
           await Promise.allSettled(
             staleAppUpdates
-              .filter((entry) => entry?.unread && entry?.id)
-              .map((entry) => window.electronAPI.localStore.markNotificationRead(entry.id)),
+              .filter((entry) => entry?.id)
+              .map((entry) => window.electronAPI.localStore.deleteNotification(entry.id)),
           );
         }
 
-        const visibleRows = rows.filter((entry) => !isStaleAppUpdateEntry(entry, installedVersion));
+        // The bell is an action inbox: only outstanding (unread) items are
+        // shown. Reading/acting deletes them, so anything still here is live.
+        const visibleRows = rows.filter(
+          (entry) => entry?.unread && !isStaleAppUpdateEntry(entry, installedVersion),
+        );
         setSyncNotifications(visibleRows);
-        setUnreadNotificationCount(visibleRows.filter((entry) => entry?.unread).length);
+        setUnreadNotificationCount(visibleRows.length);
       } catch (error) {
         if (!cancelled) {
           console.warn("Failed to load rail notifications", error);
@@ -148,50 +152,41 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
     };
   }, [desktopRuntime]);
 
-  const markEntryReadLocally = (entryId) => {
-    setSyncNotifications((current) =>
-      current.map((item) => (item.id === entryId ? { ...item, unread: false } : item)),
-    );
-  };
-
-  // Mark a single notification as read WITHOUT triggering its action/navigation,
-  // so the user can clear the unread badge without being taken elsewhere.
-  const handleMarkNotificationRead = async (event, entry) => {
-    event.stopPropagation();
-    if (!entry?.unread) {
-      return;
-    }
-    if (window.electronAPI?.localStore?.markNotificationRead && entry?.id) {
-      await window.electronAPI.localStore.markNotificationRead(entry.id);
-    }
-    markEntryReadLocally(entry.id);
+  const removeEntryLocally = (entryId) => {
+    setSyncNotifications((current) => current.filter((item) => item.id !== entryId));
     setUnreadNotificationCount((current) => Math.max(0, current - 1));
   };
 
-  const handleMarkAllNotificationsRead = async () => {
+  // Dismiss a single notification WITHOUT triggering its action/navigation,
+  // so the user can clear it without being taken elsewhere. Read = delete.
+  const handleDismissNotification = async (event, entry) => {
+    event.stopPropagation();
+    if (window.electronAPI?.localStore?.deleteNotification && entry?.id) {
+      await window.electronAPI.localStore.deleteNotification(entry.id);
+    }
+    removeEntryLocally(entry.id);
+  };
+
+  const handleDeleteAllNotifications = async () => {
     try {
       const user = await getCurrentUser();
       const userId = resolveDesktopLocalUserId(user, 1);
-      if (window.electronAPI?.localStore?.markAllNotificationsRead) {
-        await window.electronAPI.localStore.markAllNotificationsRead(userId);
+      if (window.electronAPI?.localStore?.deleteAllNotifications) {
+        await window.electronAPI.localStore.deleteAllNotifications(userId);
       }
     } catch (error) {
-      console.warn("Failed to mark all notifications read", error);
+      console.warn("Failed to delete all notifications", error);
     }
-    setSyncNotifications((current) => current.map((item) => ({ ...item, unread: false })));
+    setSyncNotifications([]);
     setUnreadNotificationCount(0);
   };
 
   const handleNotificationClick = async (entry) => {
-    const wasUnread = Boolean(entry?.unread);
-    if (window.electronAPI?.localStore?.markNotificationRead && entry?.id) {
-      await window.electronAPI.localStore.markNotificationRead(entry.id);
+    // Acting on a notification consumes it: delete rather than mark read.
+    if (window.electronAPI?.localStore?.deleteNotification && entry?.id) {
+      await window.electronAPI.localStore.deleteNotification(entry.id);
     }
-
-    markEntryReadLocally(entry.id);
-    if (wasUnread) {
-      setUnreadNotificationCount((current) => Math.max(0, current - 1));
-    }
+    removeEntryLocally(entry.id);
 
     const category = String(entry?.category || "").trim().toLowerCase();
     if (category === "app_update") {
@@ -244,6 +239,16 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
       if (state === "error") {
         window.alert(String(entry?.message || "Update-Status konnte nicht geladen werden."));
       }
+      return;
+    }
+
+    if (category === "action_match") {
+      navigate("/?tab=management&section=matching", { replace: true });
+      return;
+    }
+
+    if (category === "action_price") {
+      navigate("/?tab=management&section=prices", { replace: true });
       return;
     }
 
@@ -303,11 +308,11 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
                 {desktopRuntime && unreadNotificationCount > 0 ? (
                   <button
                     type="button"
-                    onClick={() => void handleMarkAllNotificationsRead()}
+                    onClick={() => void handleDeleteAllNotifications()}
                     className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
-                    <CheckCheck className="h-3.5 w-3.5" />
-                    Alle gelesen
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Alle löschen
                   </button>
                 ) : null}
               </div>
@@ -318,7 +323,6 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
                     {syncNotifications.length > 0 ? (
                       syncNotifications.slice(0, 8).map((entry) => {
                         const isError = isErrorNotification(entry);
-                        const isUnread = Boolean(entry?.unread);
                         return (
                           <div
                             key={entry.id}
@@ -334,18 +338,14 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
                             className={`group flex w-full cursor-pointer items-start gap-2 rounded-md border p-2 text-left text-xs transition-colors hover:bg-accent ${
                               isError
                                 ? "border-destructive/50 bg-destructive/5"
-                                : isUnread
-                                  ? "border-primary/30 bg-primary/5"
-                                  : "border-transparent opacity-70"
+                                : "border-primary/30 bg-primary/5"
                             }`}
                           >
                             <span className="mt-0.5 shrink-0">
                               {isError ? (
                                 <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                              ) : isUnread ? (
-                                <span className="inline-block h-2 w-2 rounded-full bg-primary" />
                               ) : (
-                                <span className="inline-block h-2 w-2" />
+                                <span className="inline-block h-2 w-2 rounded-full bg-primary" />
                               )}
                             </span>
                             <div className="min-w-0 flex-1">
@@ -357,17 +357,15 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
                                 {entry.createdAt ? new Date(entry.createdAt).toLocaleString("de-DE") : ""}
                               </p>
                             </div>
-                            {isUnread ? (
-                              <button
-                                type="button"
-                                onClick={(event) => void handleMarkNotificationRead(event, entry)}
-                                title="Als gelesen markieren"
-                                aria-label="Als gelesen markieren"
-                                className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100"
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                            ) : null}
+                            <button
+                              type="button"
+                              onClick={(event) => void handleDismissNotification(event, entry)}
+                              title="Entfernen"
+                              aria-label="Entfernen"
+                              className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         );
                       })

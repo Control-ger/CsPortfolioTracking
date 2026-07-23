@@ -18,28 +18,23 @@ if (!is_file($bootstrapPath)) {
 require_once $bootstrapPath;
 
 use App\Application\Service\CsUpdatesIngestService;
-use App\Application\Service\WebPushService;
 use App\Infrastructure\External\SteamDbPatchnotesClient;
 use App\Config\DatabaseConfig;
 use App\Infrastructure\External\SteamDbRssClient;
 use App\Infrastructure\External\SteamNewsClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
-use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
 
 $startedAt = microtime(true);
 
 try {
     $pdo = (new DatabaseConnectionFactory(new DatabaseConfig()))->create();
     $repository = new CsUpdatesFeedRepository($pdo);
-    $webPushSubscriptionRepository = new WebPushSubscriptionRepository($pdo);
     $service = new CsUpdatesIngestService(
         new SteamDbRssClient(),
         new SteamNewsClient(),
         $repository,
-        new SteamDbPatchnotesClient(),
-        $webPushSubscriptionRepository,
-        WebPushService::fromEnv()
+        new SteamDbPatchnotesClient()
     );
 
     $result = $service->ingest();

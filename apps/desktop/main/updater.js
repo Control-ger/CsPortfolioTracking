@@ -1,6 +1,6 @@
 /* eslint-disable */
 
-import { app, BrowserWindow, dialog, Notification, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
@@ -19,8 +19,7 @@ export function setLocalStoreRefs(getStore, store) {
   localStoreForUpdater = store;
 }
 
-const AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
-const notifiedUpdateVersions = new Set();
+const AUTO_UPDATE_INTERVAL_MS = 10 * 60 * 1000;
 let latestAvailableUpdateInfo = null;
 let updateDownloadInProgress = false;
 let updateCheckTimer = null;
@@ -103,33 +102,6 @@ export async function promptForUpdateDownload(info = latestAvailableUpdateInfo) 
   return await startUpdateDownload(info);
 }
 
-function showUpdateAvailableNotification(info) {
-  if (!Notification.isSupported()) {
-    return false;
-  }
-
-  const versionLabel = normalizeUpdateVersionLabel(info);
-  try {
-    const notification = new Notification({
-      title: "Update verfuegbar",
-      body: `${versionLabel} ist verfuegbar. Klick fuer "Jetzt updaten" oder "Spaeter".`,
-      silent: false,
-    });
-
-    notification.on("click", () => {
-      void promptForUpdateDownload(info);
-    });
-    notification.on("failed", (_event, error) => {
-      console.warn("[updater] native notification failed:", error);
-    });
-    notification.show();
-    return true;
-  } catch (error) {
-    console.warn("[updater] unable to show native notification:", error?.message || error);
-    return false;
-  }
-}
-
 function createSystemNotificationEntry({
   category = "app_update",
   title = "App Update",
@@ -185,14 +157,8 @@ export function setupAutoUpdater() {
       },
     });
 
-    const versionKey = String(info?.version || "unknown");
-    if (!notifiedUpdateVersions.has(versionKey)) {
-      notifiedUpdateVersions.add(versionKey);
-      const shown = showUpdateAvailableNotification(info);
-      if (!shown) {
-        bringMainWindowToFront();
-      }
-    }
+    // Updates surface exclusively in the in-app system-notification bell
+    // (persisted above). We intentionally no longer raise a native OS toast.
   });
 
   autoUpdater.on("update-not-available", () => {

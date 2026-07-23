@@ -113,6 +113,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-mark-notification-read", id),
     markAllNotificationsRead: (userId, category) =>
       ipcRenderer.invoke("local-store-mark-all-notifications-read", userId, category),
+    deleteNotification: (id) =>
+      ipcRenderer.invoke("local-store-delete-notification", id),
+    deleteAllNotifications: (userId, category) =>
+      ipcRenderer.invoke("local-store-delete-all-notifications", userId, category),
     markOperationApplied: (id) =>
       ipcRenderer.invoke("local-store-mark-operation-applied", id),
     getPortfolioPreferences: (userId) =>

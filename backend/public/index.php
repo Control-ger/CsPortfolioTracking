@@ -44,6 +44,7 @@ use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\UserCurrencyPreferenceRepository;
 use App\Infrastructure\Persistence\Repository\UserPortfolioGroupsRepository;
+use App\Infrastructure\Persistence\Repository\UserNotificationPreferenceRepository;
 use App\Infrastructure\Persistence\Repository\UserPriceSourcePreferenceRepository;
 use App\Infrastructure\Persistence\Repository\WatchlistRepository;
 use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
@@ -654,6 +655,7 @@ try {
     $userCurrencyPreferenceRepository = new UserCurrencyPreferenceRepository($pdo);
     $userPortfolioGroupsRepository = new UserPortfolioGroupsRepository($pdo);
     $userPriceSourcePreferenceRepository = new UserPriceSourcePreferenceRepository($pdo);
+    $userNotificationPreferenceRepository = new UserNotificationPreferenceRepository($pdo);
     $userRepository = new UserRepository($pdo);
     $userRepository->ensureDefaultUser();
     // Ensure core schema in a deterministic order on fresh databases.
@@ -729,6 +731,7 @@ try {
         $pricingService,
         $userCurrencyPreferenceRepository,
         $userPortfolioGroupsRepository,
+        $userNotificationPreferenceRepository,
         $userScopeResolver
     );
 

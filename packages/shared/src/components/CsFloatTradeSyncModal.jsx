@@ -121,8 +121,6 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
       try {
         await fetchCsFloatBuyOrdersData({
           syncNow: true,
-          limit: 200,
-          maxPages: 8,
         });
       } catch (buyOrderSyncError) {
         console.warn("[csfloat-sync] buyorders refresh failed", buyOrderSyncError);

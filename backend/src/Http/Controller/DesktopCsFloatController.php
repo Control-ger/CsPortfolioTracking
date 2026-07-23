@@ -113,47 +113,67 @@ final class DesktopCsFloatController
 
     public function buyOrders(Request $request): void
     {
-        $limit = $this->readInt($request, 'limit', 500, 1, 500);
-        $maxPages = $this->readInt($request, 'maxPages', 8, 1, 20);
-        // /me/buy-orders is capped to 50 per page upstream (larger sizes 500).
-        // Keep the loop's end-of-data check aligned with the real page size, or
-        // pagination would always break after page 0 and drop orders past 50.
-        $buyOrderLimit = min($limit, 50);
+        // /me/buy-orders paginates by `page` (0-indexed, confirmed) and reports a
+        // top-level `count` = total number of orders. Upstream caps the page size
+        // at 50 (larger sizes 500), so we walk pages of 50 until we've collected
+        // every order. Unlike /me/watchlist there is NO cursor here.
+        $pageSize = 50;
+        // Anti-runaway bound only: 200 * 50 = 10000 orders, far beyond any real
+        // account. `count` normally ends the loop long before this.
+        $maxPages = 200;
 
         $orders = [];
+        $seenIds = [];
         $pageStats = [];
         $errors = [];
         $source = 'buy-orders';
-        $buyOrdersPageBase = 0;
+        $expectedTotal = null;
         $buyOrdersError = null;
 
-        for ($attempt = 0; $attempt < 2; $attempt++) {
-            $orders = [];
-            $pageStats = [];
-            $errors = [];
-            $buyOrdersPageBase = $attempt === 0 ? 0 : 1;
-
-            for ($page = 0; $page < $maxPages; $page++) {
-                $response = $this->tradeClient->fetchBuyOrdersPage($buyOrderLimit, $page + $buyOrdersPageBase);
-                if (!empty($response['error'])) {
-                    $errors[] = $response['error'];
-                    break;
-                }
-
-                $pageOrders = is_array($response['orders'] ?? null) ? $response['orders'] : [];
-                $pageCount = count($pageOrders);
-                $pageStats[] = [
-                    'page' => $page + $buyOrdersPageBase,
-                    'count' => $pageCount,
-                ];
-                $orders = array_merge($orders, $pageOrders);
-
-                if ($pageCount < $buyOrderLimit) {
-                    break;
-                }
+        for ($page = 0; $page < $maxPages; $page++) {
+            $response = $this->tradeClient->fetchBuyOrdersPage($pageSize, $page);
+            if (!empty($response['error'])) {
+                $errors[] = $response['error'];
+                break;
             }
 
-            if ($orders !== [] || $errors !== [] || $attempt > 0) {
+            $pageOrders = is_array($response['orders'] ?? null) ? $response['orders'] : [];
+            if (is_int($response['total'] ?? null)) {
+                $expectedTotal = $response['total'];
+            }
+
+            // Dedup by stable order id so an overlapping/repeated page can never
+            // inflate results or spin the loop; ids are present on every order.
+            $newCount = 0;
+            foreach ($pageOrders as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+                $id = isset($entry['id']) && is_scalar($entry['id']) ? (string) $entry['id'] : null;
+                if ($id !== null) {
+                    if (isset($seenIds[$id])) {
+                        continue;
+                    }
+                    $seenIds[$id] = true;
+                }
+                $orders[] = $entry;
+                $newCount++;
+            }
+
+            $pageStats[] = [
+                'page' => $page,
+                'count' => count($pageOrders),
+                'new' => $newCount,
+            ];
+
+            // Stop when the page added nothing new (empty or fully overlapping),
+            // when we've reached the reported total (>=, as it may drift while
+            // orders change mid-fetch), or when the page was short (last page).
+            if (
+                $newCount === 0
+                || ($expectedTotal !== null && count($orders) >= $expectedTotal)
+                || count($pageOrders) < $pageSize
+            ) {
                 break;
             }
         }
@@ -166,8 +186,12 @@ final class DesktopCsFloatController
             $buyOrdersError = is_array($errors[0] ?? null) ? $errors[0] : null;
             $errors = [];
             $pageStats = [];
-            for ($page = 0; $page < $maxPages; $page++) {
-                $response = $this->tradeClient->fetchTradesPage($limit, $page, 'buy');
+            // Trades endpoint accepts larger pages; keep its own bound so removing
+            // the buy-orders cap does not orphan this fallback loop.
+            $fallbackPageSize = 500;
+            $fallbackMaxPages = 20;
+            for ($page = 0; $page < $fallbackMaxPages; $page++) {
+                $response = $this->tradeClient->fetchTradesPage($fallbackPageSize, $page, 'buy');
                 if (!empty($response['error'])) {
                     $errors[] = $response['error'];
                     break;
@@ -181,7 +205,7 @@ final class DesktopCsFloatController
                 ];
                 $orders = array_merge($orders, $pageTrades);
 
-                if ($pageCount < $limit) {
+                if ($pageCount < $fallbackPageSize) {
                     break;
                 }
             }
@@ -277,10 +301,11 @@ final class DesktopCsFloatController
             [
                 'source' => $source,
                 'requested' => [
-                    'limit' => $limit,
+                    'pageSize' => $pageSize,
                     'maxPages' => $maxPages,
-                    'buyOrdersPageBase' => $buyOrdersPageBase,
                 ],
+                'reportedTotal' => $expectedTotal,
+                'uniqueCollected' => count($orders),
                 'pagesFetched' => count($pageStats),
                 'pageStats' => $pageStats,
                 'errors' => $errors,
@@ -292,18 +317,37 @@ final class DesktopCsFloatController
     public function watchlist(Request $request): void
     {
         $limit = $this->readInt($request, 'limit', 40, 1, 40);
+        // Hard anti-runaway bound: 40 items/page * 200 pages = 8000 watched
+        // listings, far beyond any realistic account. Pagination normally ends
+        // long before this when CSFloat stops returning a cursor.
+        $maxPages = 200;
 
         $items = [];
         $errors = [];
         $rawCount = 0;
+        $cursor = null;
+        $pagesFetched = 0;
 
-        $response = $this->tradeClient->fetchWatchlistPage($limit);
-        if (!empty($response['error'])) {
-            $errors[] = $response['error'];
-        } else {
+        for ($page = 0; $page < $maxPages; $page++) {
+            $response = $this->tradeClient->fetchWatchlistPage($limit, $cursor);
+            if (!empty($response['error'])) {
+                $errors[] = $response['error'];
+                break;
+            }
+
             $rows = is_array($response['items'] ?? null) ? $response['items'] : [];
-            $rawCount = count($rows);
-            $items = $rows;
+            $pagesFetched++;
+            $rawCount += count($rows);
+            $items = array_merge($items, $rows);
+
+            // Stop when the page is empty or CSFloat returns no next cursor —
+            // the absent cursor is the authoritative end-of-data signal.
+            $cursor = is_string($response['cursor'] ?? null) && $response['cursor'] !== ''
+                ? $response['cursor']
+                : null;
+            if ($rows === [] || $cursor === null) {
+                break;
+            }
         }
 
         $normalized = [];
@@ -330,7 +374,8 @@ final class DesktopCsFloatController
             ],
             [
                 'source' => 'watchlist',
-                'requested' => ['limit' => $limit],
+                'requested' => ['limit' => $limit, 'maxPages' => $maxPages],
+                'pagesFetched' => $pagesFetched,
                 'rawCount' => $rawCount,
                 'mappedCount' => count($normalized),
                 'errors' => $errors,

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { PortfolioChart } from "./PortfolioChart";
 import { ItemListRow } from "./ItemListRow";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, ArrowDownUp } from "lucide-react";
 import {
   fetchCsFloatBuyOrdersData,
   deleteWatchlistItemData,
@@ -108,6 +108,60 @@ function buildBuyOrderRowsForItem(item, orders = []) {
   });
 }
 
+const WATCHLIST_SORT_OPTIONS = [
+  { key: "name", label: "Name" },
+  { key: "roi", label: "ROI %" },
+  { key: "price", label: "Preis" },
+];
+
+function getWatchlistSortValue(item, key) {
+  if (key === "name") {
+    return String(item?.name || "").toLowerCase();
+  }
+  if (key === "price") {
+    const usd = Number(item?.currentPriceUsd);
+    if (Number.isFinite(usd)) {
+      return usd;
+    }
+    const price = Number(item?.currentPrice);
+    return Number.isFinite(price) ? price : Number.NEGATIVE_INFINITY;
+  }
+  // roi / percentage change
+  const roi = Number(item?.roi);
+  if (Number.isFinite(roi)) {
+    return roi;
+  }
+  const change = Number(item?.changePercent);
+  return Number.isFinite(change) ? change : Number.NEGATIVE_INFINITY;
+}
+
+function sortWatchlistItems(items, sortKey, sortDirection) {
+  const factor = sortDirection === "asc" ? 1 : -1;
+  return [...items].sort((left, right) => {
+    const leftValue = getWatchlistSortValue(left, sortKey);
+    const rightValue = getWatchlistSortValue(right, sortKey);
+
+    let comparison;
+    if (typeof leftValue === "string" || typeof rightValue === "string") {
+      comparison = String(leftValue).localeCompare(String(rightValue), "de", {
+        numeric: true,
+        sensitivity: "base",
+      });
+    } else {
+      comparison = leftValue === rightValue ? 0 : leftValue < rightValue ? -1 : 1;
+    }
+
+    if (comparison !== 0) {
+      return comparison * factor;
+    }
+
+    // Stable tie-break by name so order stays deterministic across renders.
+    return String(left?.name || "").localeCompare(String(right?.name || ""), "de", {
+      sensitivity: "base",
+    });
+  });
+}
+
 function WatchlistItemsLoadingSkeleton() {
   return (
     <Card>
@@ -156,6 +210,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const [sortKey, setSortKey] = useState("name");
+  const [sortDirection, setSortDirection] = useState("asc");
   const [watchlistMutationVersion, setWatchlistMutationVersion] = useState(getWatchlistMutationVersion);
   const handledMutationVersionRef = useRef(getWatchlistMutationVersion());
   const itemRefs = useRef(new Map());
@@ -166,6 +222,21 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     () => buildBuyOrderRowsForItem(selectedItem, buyOrderOrders),
     [selectedItem, buyOrderOrders],
   );
+  const sortedWatchlistItems = useMemo(
+    () => sortWatchlistItems(watchlistItems, sortKey, sortDirection),
+    [watchlistItems, sortKey, sortDirection],
+  );
+  const handleSortKeyChange = useCallback((nextKey) => {
+    setSortKey((currentKey) => {
+      if (currentKey === nextKey) {
+        setSortDirection((currentDirection) => (currentDirection === "asc" ? "desc" : "asc"));
+        return currentKey;
+      }
+      // Names read best ascending (A→Z); numeric metrics best descending (highest first).
+      setSortDirection(nextKey === "name" ? "asc" : "desc");
+      return nextKey;
+    });
+  }, []);
   const selectedItemWithBuyOrderRows = useMemo(() => (
     selectedItem
       ? {
@@ -263,8 +334,6 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           if (nextBuyOrderSummary.length === 0 || nextBuyOrderOrders.length === 0) {
             const liveBuyOrderResponse = await fetchCsFloatBuyOrdersData({
               syncNow: true,
-              limit: 200,
-              maxPages: 8,
             });
             const liveMeta = liveBuyOrderResponse?.meta || {};
             nextBuyOrderSummary = Array.isArray(liveBuyOrderResponse?.data?.summaryByMarketHashName)
@@ -527,11 +596,37 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
            <div className="space-y-3 sm:space-y-4">
              <Card>
                <CardHeader className="pb-2 sm:pb-4">
-                 <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
+                 <div className="flex flex-wrap items-center justify-between gap-2">
+                   <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
+                   <div className="flex items-center gap-1">
+                     <ArrowDownUp className="h-3.5 w-3.5 text-muted-foreground" />
+                     {WATCHLIST_SORT_OPTIONS.map((option) => {
+                       const isActive = sortKey === option.key;
+                       return (
+                         <button
+                           key={option.key}
+                           type="button"
+                           onClick={() => handleSortKeyChange(option.key)}
+                           className={`inline-flex items-center gap-0.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                             isActive
+                               ? "bg-primary/10 text-primary"
+                               : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                           }`}
+                           aria-pressed={isActive}
+                         >
+                           {option.label}
+                           {isActive ? (
+                             <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                           ) : null}
+                         </button>
+                       );
+                     })}
+                   </div>
+                 </div>
                </CardHeader>
                <CardContent>
                  <div className="space-y-2 sm:space-y-3">
-                   {watchlistItems.map((item) => (
+                   {sortedWatchlistItems.map((item) => (
                      <div
                        key={item.id}
                        ref={(node) => {
@@ -593,7 +688,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                               Aktuell: {formatPrice(Number(selectedItemWithBuyOrderRows.currentPrice))}
                             </p>
                             {selectedItemWithBuyOrderRows?.hasBuyOrder && Number(selectedItemWithBuyOrderRows?.buyOrderBestPriceUsd || 0) > 0 ? (
-                              <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 font-medium text-sky-300">
+                              <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-100 px-2 py-0.5 font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
                                 Meine Buyorder: {formatPrice(Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd), {
                                   useUsd: true,
                                   buyPriceUsd: Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd),
@@ -657,14 +752,14 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   )}
                   <div className={`mt-4 rounded-xl border p-4 ${
                     selectedItemBuyOrderRows.length > 0
-                      ? "border-sky-400/40 bg-sky-400/5"
+                      ? "border-sky-300 bg-sky-100/50 dark:border-sky-400/40 dark:bg-sky-400/5"
                       : "border-border/70 bg-card/65"
                   }`}>
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h4 className="flex items-center gap-2 text-sm font-semibold">
                         Meine Buyorders (CSFloat)
                         {selectedItemBuyOrderRows.length > 0 ? (
-                          <span className="rounded-full border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-300">
+                          <span className="rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
                             Aktiv
                           </span>
                         ) : null}
@@ -693,7 +788,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                           <tbody>
                             {selectedItemBuyOrderRows.slice(0, 12).map((row, index) => (
                               <tr key={`${row.priceUsd}-${index}`} className="border-t border-border/50">
-                                <td className="px-3 py-2 text-sky-300">
+                                <td className="px-3 py-2 text-sky-700 dark:text-sky-300">
                                   {formatPrice(Number(row.priceUsd), {
                                     useUsd: true,
                                     buyPriceUsd: Number(row.priceUsd),

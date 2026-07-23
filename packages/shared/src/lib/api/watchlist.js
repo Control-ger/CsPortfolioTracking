@@ -15,20 +15,10 @@ export async function fetchWatchlist(options = {}) {
   );
 }
 
-export async function fetchCsFloatBuyOrders(options = {}) {
-  const limit = Number.isFinite(Number(options.limit))
-    ? Math.max(1, Math.min(Math.trunc(Number(options.limit)), 500))
-    : 200;
-  const maxPages = Number.isFinite(Number(options.maxPages))
-    ? Math.max(1, Math.min(Math.trunc(Number(options.maxPages)), 20))
-    : 8;
-
-  return requestWithMeta(
-    buildPath("/api/v1/csfloat/buy-orders", {
-      limit,
-      maxPages,
-    }),
-  );
+export async function fetchCsFloatBuyOrders() {
+  // Pagination is fully server-driven: the backend walks all pages via the
+  // upstream `count` total, so no limit/maxPages params are sent here.
+  return requestWithMeta("/api/v1/csfloat/buy-orders");
 }
 
 export async function fetchCsFloatWatchlist(options = {}) {

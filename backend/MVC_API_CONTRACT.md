@@ -312,6 +312,25 @@ Body:
 Returns same payload shape as `GET /settings/currency` including `popularCurrencies[]`.
 `popularCurrencies[]` is anonymized aggregate data and contains no user identifiers.
 
+### `GET /settings/notifications`
+
+Returns server-owned web-push notification preferences (per-user):
+- `userId`
+- `notifyCsUpdatesWebPush` (bool; default `true`)
+- `notifyCsUpdatesWebPushMinLevel` (`none` | `low` | `medium` | `high`; default `high`)
+- `updatedAt`
+- `source` (`db` | `defaults`)
+
+Only web-push preferences live here — desktop system-notification toggles are stored client-side in the Electron SQLite preference blob. The CS-updates web-push send-path (`CsUpdatesAiRatingService`) reads these to decide which subscriptions to wake.
+
+### `PUT /settings/notifications`
+
+Body (partial patch; only provided keys are written):
+- `notifyCsUpdatesWebPush: bool`
+- `notifyCsUpdatesWebPushMinLevel: "none" | "low" | "medium" | "high"`
+
+Returns the same payload shape as `GET /settings/notifications`.
+
 ### `GET /settings/csfloat-api-key`
 
 Returns key status (`configured`, `lastFour`).

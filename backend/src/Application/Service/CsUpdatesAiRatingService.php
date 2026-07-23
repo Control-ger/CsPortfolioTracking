@@ -5,6 +5,7 @@ namespace App\Application\Service;
 
 use App\Infrastructure\External\GeminiUpdateRaterClient;
 use App\Infrastructure\Persistence\Repository\CsUpdatesFeedRepository;
+use App\Infrastructure\Persistence\Repository\UserNotificationPreferenceRepository;
 use App\Infrastructure\Persistence\Repository\WebPushSubscriptionRepository;
 use Throwable;
 
@@ -14,7 +15,8 @@ final class CsUpdatesAiRatingService
         private readonly CsUpdatesFeedRepository $repository,
         private readonly GeminiUpdateRaterClient $client,
         private readonly ?WebPushSubscriptionRepository $webPushSubscriptionRepository = null,
-        private readonly ?WebPushService $webPushService = null
+        private readonly ?WebPushService $webPushService = null,
+        private readonly ?UserNotificationPreferenceRepository $notificationPreferenceRepository = null
     ) {
     }
 
@@ -44,7 +46,7 @@ final class CsUpdatesAiRatingService
                     $rating = $this->client->classify($row, $banWaveContext);
                 }
                 $this->repository->saveAiRating($id, $rating);
-                $this->notifyHighImpactWebPush($rating);
+                $this->notifyWebPushSubscribers($rating);
                 $ratedCount++;
             } catch (Throwable $exception) {
                 $this->repository->markAiRatingFailed($id, $this->truncateError($exception->getMessage()));
@@ -149,13 +151,20 @@ final class CsUpdatesAiRatingService
     }
 
     /**
+     * Wakes web-push subscribers for a freshly-rated CS update, honouring each
+     * user's per-user preference (on/off + minimum impact level). This is the
+     * single authoritative web-push send site: it runs only once the AI impact
+     * rating is known, so the min-level filter can actually be applied.
+     *
      * @param array<string,mixed> $rating
      */
-    private function notifyHighImpactWebPush(array $rating): void
+    private function notifyWebPushSubscribers(array $rating): void
     {
-        $impactLevel = strtolower(trim((string) ($rating['impact_level'] ?? '')));
-        if ($impactLevel !== 'high') {
-            return;
+        $impactIndex = UserNotificationPreferenceRepository::impactIndex(
+            $rating['impact_level'] ?? null
+        );
+        if ($impactIndex < 0) {
+            return; // Unrated / unknown impact — nothing to threshold against.
         }
 
         if (!$this->webPushSubscriptionRepository instanceof WebPushSubscriptionRepository) {
@@ -167,9 +176,19 @@ final class CsUpdatesAiRatingService
         }
 
         $subscriptions = $this->webPushSubscriptionRepository->listActive(1200);
+        $eligibilityByUser = [];
+
         foreach ($subscriptions as $subscription) {
             $endpoint = trim((string) ($subscription['endpoint'] ?? ''));
             if ($endpoint === '') {
+                continue;
+            }
+
+            $userId = (int) ($subscription['user_id'] ?? 0);
+            if (!array_key_exists($userId, $eligibilityByUser)) {
+                $eligibilityByUser[$userId] = $this->isUserEligibleForCsUpdate($userId, $impactIndex);
+            }
+            if ($eligibilityByUser[$userId] !== true) {
                 continue;
             }
 
@@ -183,5 +202,25 @@ final class CsUpdatesAiRatingService
             $deactivate = in_array($statusCode, [404, 410], true);
             $this->webPushSubscriptionRepository->markDeliveryFailure($endpoint, $deactivate);
         }
+    }
+
+    private function isUserEligibleForCsUpdate(int $userId, int $impactIndex): bool
+    {
+        // No preference repo wired (e.g. legacy call sites): fall back to the
+        // historical "high impact wakes everyone" behaviour so nobody is lost.
+        if (!$this->notificationPreferenceRepository instanceof UserNotificationPreferenceRepository) {
+            return $impactIndex >= UserNotificationPreferenceRepository::impactIndex('high');
+        }
+
+        $pref = $this->notificationPreferenceRepository->getByUserId($userId);
+        if (($pref['notifyCsUpdatesWebPush'] ?? false) !== true) {
+            return false;
+        }
+
+        $minIndex = UserNotificationPreferenceRepository::impactIndex(
+            $pref['notifyCsUpdatesWebPushMinLevel'] ?? 'high'
+        );
+
+        return $impactIndex >= $minIndex;
     }
 }

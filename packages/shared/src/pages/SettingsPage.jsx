@@ -26,7 +26,13 @@ import {
 } from "@shared/lib/apiClient";
 import { isEncryptionConfigured } from "@shared/lib/encryption";
 import { getCurrentUser } from "@shared/lib/auth";
-import { getPortfolioPreferences, updatePortfolioPreferences, IMPACT_LEVELS } from "@shared/lib/portfolioPreferences";
+import {
+  getPortfolioPreferences,
+  updatePortfolioPreferences,
+  getWebPushNotificationPreferences,
+  updateWebPushNotificationPreferences,
+  IMPACT_LEVELS,
+} from "@shared/lib/portfolioPreferences";
 import { importCsFloatWatchlistData, importCsFloatBuyOrdersAsWatchlistData } from "@shared/lib/dataSource";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
 import {
@@ -104,6 +110,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [webPushSuccess, setWebPushSuccess] = useState("");
   const [currencySearchTerm, setCurrencySearchTerm] = useState("");
   const [appVersion, setAppVersion] = useState("");
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(null);
+  const [updateDownloading, setUpdateDownloading] = useState(false);
   const [csfloatWatchlistAutoImport, setCsfloatWatchlistAutoImport] = useState(false);
   const [csfloatWatchlistSaving, setCsfloatWatchlistSaving] = useState(false);
   const [notifyBanWaveDesktop, setNotifyBanWaveDesktop] = useState(true);
@@ -111,8 +120,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [notifyCsUpdatesDesktop, setNotifyCsUpdatesDesktop] = useState(true);
   const [notifyCsUpdatesDesktopMinLevel, setNotifyCsUpdatesDesktopMinLevel] = useState("medium");
   const [notifySteamSyncDesktop, setNotifySteamSyncDesktop] = useState(true);
-  const [notifyBanWaveWebPush, setNotifyBanWaveWebPush] = useState(false);
-  const [notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel] = useState("medium");
   const [notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush] = useState(false);
   const [notifyCsUpdatesWebPushMinLevel, setNotifyCsUpdatesWebPushMinLevel] = useState("high");
   const [notifySaving, setNotifySaving] = useState(false);
@@ -251,6 +258,73 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     void loadAppVersion();
   }, []);
 
+  // Reflect updater status pushed from the main process (covers both manual checks
+  // and the periodic auto-check), so the "Über die App" card shows availability,
+  // download progress, and errors live.
+  useEffect(() => {
+    if (!window.electronAPI?.updater?.onStatus) {
+      return undefined;
+    }
+    const unsubscribe = window.electronAPI.updater.onStatus((payload) => {
+      setUpdateStatus(payload || null);
+      const state = payload?.state;
+      if (state === "downloading") {
+        setUpdateDownloading(true);
+      } else if (state === "downloaded" || state === "error" || state === "not-available") {
+        setUpdateDownloading(false);
+      }
+    });
+    return () => {
+      try {
+        unsubscribe?.();
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
+  const handleCheckForUpdates = async () => {
+    if (!window.electronAPI?.updater?.check) {
+      return;
+    }
+    setUpdateChecking(true);
+    try {
+      const result = await window.electronAPI.updater.check();
+      if (!result?.ok) {
+        setUpdateStatus(
+          result?.reason === "not-packaged"
+            ? { state: "dev" }
+            : { state: "error", message: result?.error || "Update-Suche fehlgeschlagen." },
+        );
+      }
+      // On success the main process emits app-updater-status (available / not-available),
+      // which the subscription above turns into the displayed state.
+    } catch (checkError) {
+      setUpdateStatus({ state: "error", message: checkError?.message || "Update-Suche fehlgeschlagen." });
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    if (!window.electronAPI?.updater?.download) {
+      return;
+    }
+    setUpdateDownloading(true);
+    try {
+      await window.electronAPI.updater.download();
+    } catch {
+      setUpdateDownloading(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!window.electronAPI?.updater?.install) {
+      return;
+    }
+    await window.electronAPI.updater.install();
+  };
+
   useEffect(() => {
     if (!desktopRuntime) {
       return;
@@ -265,10 +339,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         setNotifyCsUpdatesDesktop(prefs?.notifyCsUpdatesDesktop ?? true);
         setNotifyCsUpdatesDesktopMinLevel(prefs?.notifyCsUpdatesDesktopMinLevel ?? "medium");
         setNotifySteamSyncDesktop(prefs?.notifySteamSyncDesktop ?? true);
-        setNotifyBanWaveWebPush(Boolean(prefs?.notifyBanWaveWebPush));
-        setNotifyBanWaveWebPushMinLevel(prefs?.notifyBanWaveWebPushMinLevel ?? "medium");
-        setNotifyCsUpdatesWebPush(Boolean(prefs?.notifyCsUpdatesWebPush));
-        setNotifyCsUpdatesWebPushMinLevel(prefs?.notifyCsUpdatesWebPushMinLevel ?? "high");
       } catch {
         setCsfloatWatchlistAutoImport(false);
         setCsfloatBuyOrderAutoImport(false);
@@ -277,6 +347,27 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
     void loadCsfloatWatchlistPref();
   }, [desktopRuntime]);
+
+  // Web-push notification prefs are server-owned on the web/PWA (see
+  // portfolioPreferences.js). They must load on web too — not just desktop —
+  // otherwise the enable toggle and min-level stay at their initial defaults
+  // (off / "high") and every saved change appears lost after a reload.
+  useEffect(() => {
+    if (isElectronRuntime) {
+      return;
+    }
+    const loadWebPushNotifyPrefs = async () => {
+      try {
+        const webPushPrefs = await getWebPushNotificationPreferences();
+        setNotifyCsUpdatesWebPush(Boolean(webPushPrefs?.notifyCsUpdatesWebPush));
+        setNotifyCsUpdatesWebPushMinLevel(webPushPrefs?.notifyCsUpdatesWebPushMinLevel ?? "high");
+      } catch {
+        setNotifyCsUpdatesWebPush(false);
+      }
+    };
+
+    void loadWebPushNotifyPrefs();
+  }, [isElectronRuntime]);
 
   const handleToggleCsfloatWatchlistAutoImport = async () => {
     const next = !csfloatWatchlistAutoImport;
@@ -295,6 +386,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     }
   };
 
+  const WEB_PUSH_NOTIFY_KEYS = ["notifyCsUpdatesWebPush", "notifyCsUpdatesWebPushMinLevel"];
+
   const handleToggleNotifyPref = async (key, currentValue, setter, explicitValue) => {
     const next = explicitValue !== undefined ? explicitValue : !currentValue;
     if (next === currentValue) return;
@@ -302,7 +395,13 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     setNotifySaving(true);
     setNotifyError("");
     try {
-      await updatePortfolioPreferences({ [key]: next });
+      if (WEB_PUSH_NOTIFY_KEYS.includes(key)) {
+        // Server-owned (web) preferences — persisted via the settings API so the
+        // push send-path can honour them; desktop mirrors the localStore blob.
+        await updateWebPushNotificationPreferences({ [key]: next });
+      } else {
+        await updatePortfolioPreferences({ [key]: next });
+      }
     } catch (error) {
       setter(currentValue);
       setNotifyError(error?.message || "Einstellung konnte nicht gespeichert werden.");
@@ -887,38 +986,6 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
 
-                {/* VAC Ban-Welle — web push */}
-                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">VAC Ban-Welle erkannt</p>
-                      <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei erkannter Ban-Welle.</p>
-                    </div>
-                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPush", notifyBanWaveWebPush, setNotifyBanWaveWebPush)}>
-                      {notifyBanWaveWebPush ? "Deaktivieren" : "Aktivieren"}
-                    </Button>
-                  </div>
-                  {notifyBanWaveWebPush ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
-                      {IMPACT_LEVELS.map((level) => {
-                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
-                        const active = notifyBanWaveWebPushMinLevel === level;
-                        return (
-                          <button
-                            key={level}
-                            disabled={notifySaving}
-                            onClick={() => void handleToggleNotifyPref("notifyBanWaveWebPushMinLevel", notifyBanWaveWebPushMinLevel, setNotifyBanWaveWebPushMinLevel, level)}
-                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
-                          >
-                            {labels[level]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-
                 {/* CS2 Updates — web push */}
                 <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1073,13 +1140,68 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                 Installierte Version der Desktop-App.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <div className="flex items-center justify-between rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
                 <p className="text-sm text-muted-foreground">Version</p>
                 <Badge variant="outline" className="border-border/70 font-mono text-foreground">
                   {appVersion ? `v${appVersion}` : "unbekannt"}
                 </Badge>
               </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleCheckForUpdates()}
+                  disabled={updateChecking || updateStatus?.state === "checking"}
+                >
+                  {updateChecking || updateStatus?.state === "checking"
+                    ? "Suche nach Updates..."
+                    : "Nach Updates suchen"}
+                </Button>
+
+                {updateStatus?.state === "available" ? (
+                  <Button
+                    size="sm"
+                    onClick={() => void handleDownloadUpdate()}
+                    disabled={updateDownloading}
+                  >
+                    {updateDownloading ? "Wird heruntergeladen..." : "Jetzt herunterladen"}
+                  </Button>
+                ) : null}
+
+                {updateStatus?.state === "downloaded" ? (
+                  <Button size="sm" onClick={() => void handleInstallUpdate()}>
+                    Neustarten &amp; installieren
+                  </Button>
+                ) : null}
+              </div>
+
+              {updateStatus ? (
+                <p
+                  className={`text-xs ${
+                    updateStatus.state === "error"
+                      ? "text-amber-400"
+                      : updateStatus.state === "available" || updateStatus.state === "downloaded"
+                        ? "text-emerald-400"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {updateStatus.state === "available"
+                    ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}.`
+                    : updateStatus.state === "downloading"
+                      ? `Wird heruntergeladen... ${Math.round(Number(updateStatus.percent || 0))}%`
+                      : updateStatus.state === "downloaded"
+                        ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} bereit zur Installation.`
+                        : updateStatus.state === "not-available"
+                          ? "Du hast die neueste Version."
+                          : updateStatus.state === "dev"
+                            ? "Update-Suche ist nur in der installierten App verfügbar."
+                            : updateStatus.state === "error"
+                              ? updateStatus.message || "Update-Suche fehlgeschlagen."
+                              : ""}
+                </p>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}

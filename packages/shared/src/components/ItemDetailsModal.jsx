@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BaseModal } from "@shared/components/BaseModal";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
+import { ItemDetailPanel } from "@shared/components/ItemDetailPanel";
 import { Badge } from "@shared/components/ui/badge";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
@@ -47,29 +48,17 @@ function ChangeMetric({ label, percent, euro, formatPrice }) {
   );
 }
 
-function deriveBuyInReferenceValue(item, history = []) {
-  const unitCostBasis = Number(item?.costBasisUnit);
-  if (Number.isFinite(unitCostBasis) && unitCostBasis > 0) {
-    return unitCostBasis;
-  }
-
-  const buyPriceEur = Number(item?.buyPrice);
-  if (Number.isFinite(buyPriceEur) && buyPriceEur > 0) {
-    return buyPriceEur;
+function deriveBuyInReferenceValue(item) {
+  // PortfolioChart works internally in USD, so the buy-in reference line must be USD.
+  // Groups plot total value → reference is the group's total invested, not the
+  // weighted unit buy price (mirrors ItemDetailPanel.deriveBuyInReferenceValue).
+  if (item?.__detailKind === "group") {
+    const totalInvestedUsd = Number(item?.totalInvested ?? item?.costBasisTotal);
+    return Number.isFinite(totalInvestedUsd) && totalInvestedUsd > 0 ? totalInvestedUsd : null;
   }
 
   const buyPriceUsd = Number(item?.buyPriceUsd);
-  if (!Number.isFinite(buyPriceUsd) || buyPriceUsd <= 0 || !Array.isArray(history)) {
-    return null;
-  }
-
-  const exchangeRateEntry = history.find((entry) => Number.isFinite(Number(entry?.exchangeRate)));
-  const usdToEurRate = Number(exchangeRateEntry?.exchangeRate);
-  if (!Number.isFinite(usdToEurRate) || usdToEurRate <= 0) {
-    return null;
-  }
-
-  return buyPriceUsd * usdToEurRate;
+  return Number.isFinite(buyPriceUsd) && buyPriceUsd > 0 ? buyPriceUsd : null;
 }
 
 function deriveBuyInReferenceTimestamp(item) {
@@ -129,6 +118,28 @@ export function ItemDetailsModal({
 
   if (!item) return null;
 
+  // Group / group-cluster selections reuse the shared ItemDetailPanel (which knows how to
+  // render aggregates + composition donut) instead of the single-item layout below, so the
+  // mobile modal matches the desktop side panel exactly. Exclusion never applies to groups;
+  // whole groups may be moved between buckets, group-clusters stay read-only.
+  const isGroupSelection =
+    item.__detailKind === "group" || item.__detailKind === "group-cluster";
+
+  if (isGroupSelection) {
+    return (
+      <BaseModal isOpen={isOpen} onClose={onClose} title={item.name} size="3xl" className="w-full md:hidden">
+        <ItemDetailPanel
+          item={item}
+          history={history}
+          historyLoading={historyLoading}
+          onBucketChange={onBucketChange}
+          canToggleExclude={false}
+          canToggleBucket={canToggleExclude && item.__detailKind !== "group-cluster"}
+        />
+      </BaseModal>
+    );
+  }
+
   const handleToggleExclude = async () => {
     if (!excludeEnabled) {
       return;
@@ -152,7 +163,7 @@ export function ItemDetailsModal({
   const togglePriceDisplay = () => {
     setShowAbsolute(!showAbsolute);
   };
-  const buyInReferenceValue = deriveBuyInReferenceValue(item, history);
+  const buyInReferenceValue = deriveBuyInReferenceValue(item);
   const buyInReferenceTimestamp = deriveBuyInReferenceTimestamp(item);
   const purchaseUnitDisplay = resolvePurchaseUnitDisplay(item, formatPrice);
 
@@ -212,7 +223,7 @@ export function ItemDetailsModal({
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">{item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}</p>
             {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
-              <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-400/40 bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+              <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-300 bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
                 Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
                   useUsd: true,
                   buyPriceUsd: Number(item.buyOrderBestPriceUsd),

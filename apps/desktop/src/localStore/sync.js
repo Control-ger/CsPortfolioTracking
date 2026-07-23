@@ -603,8 +603,13 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
           .map((row) => String(row.steam_asset_id || "")),
       );
 
+      // Match against every known Steam-sourced investment, not just the items
+      // currently present in the live inventory (`incoming`). Consumables (patch
+      // packs, stickers, music kits, ...) get applied/opened and leave the Steam
+      // inventory shortly after purchase — if candidates were limited to `incoming`
+      // those items would never get a matching pass and would sit unpriced forever.
       const candidateEdges = [];
-      for (const steamItem of incoming) {
+      for (const steamItem of steamInvestments) {
         if (blockedSteamAssetIds.has(String(steamItem.steamAssetId || ""))) {
           continue;
         }

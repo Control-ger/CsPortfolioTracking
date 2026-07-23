@@ -1,6 +1,10 @@
 import { getCurrentUser } from "./auth.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { resolveDesktopLocalUserId as resolveDesktopRuntimeUserId } from "./userIdentity.js";
+import {
+  fetchNotificationPreference,
+  updateNotificationPreference,
+} from "./api/settings.js";
 
 export const DEFAULT_PORTFOLIO_PREFERENCES = Object.freeze({
   steamImportBucket: "inventory",
@@ -161,4 +165,40 @@ export async function updatePortfolioPreferences(patch = {}) {
     "local-store-update-portfolio-preferences",
   );
   return normalizePortfolioPreferences(raw || {});
+}
+
+// --- Web-push notification preferences -------------------------------------
+//
+// Unlike the rest of the preference blob (import buckets, metrics mode, desktop
+// system-notification toggles) these must live on the SERVER, because the server
+// decides which subscriptions to wake for a CS update. On the web/PWA they are
+// persisted via /api/v1/settings/notifications; on desktop the web-push section
+// is not shown, so we simply mirror the localStore blob for parity.
+
+function pickWebPushNotificationFields(source = {}) {
+  return {
+    notifyCsUpdatesWebPush: normalizeBoolean(source.notifyCsUpdatesWebPush, true),
+    notifyCsUpdatesWebPushMinLevel: normalizeImpactLevel(
+      source.notifyCsUpdatesWebPushMinLevel,
+      "high",
+    ),
+  };
+}
+
+export async function getWebPushNotificationPreferences() {
+  if (isDesktopLocalStoreRuntime()) {
+    return pickWebPushNotificationFields(await getPortfolioPreferences());
+  }
+
+  const { data } = await fetchNotificationPreference();
+  return pickWebPushNotificationFields(data || {});
+}
+
+export async function updateWebPushNotificationPreferences(patch = {}) {
+  if (isDesktopLocalStoreRuntime()) {
+    return pickWebPushNotificationFields(await updatePortfolioPreferences(patch));
+  }
+
+  const { data } = await updateNotificationPreference(patch || {});
+  return pickWebPushNotificationFields(data || {});
 }

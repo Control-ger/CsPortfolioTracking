@@ -234,7 +234,7 @@ export function deriveCsUpdateImpact(item) {
       level: "unrated",
       label: "KI Rating ausstehend",
       actionLabel: "Noch keine Bewertung verfuegbar",
-      badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+      badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
     };
   }
 
@@ -247,7 +247,7 @@ export function deriveCsUpdateImpact(item) {
       level: "pending",
       label: "KI Rating laeuft",
       actionLabel: "Eilmeldung jetzt pruefen",
-      badgeClass: "border-cyan-500/30 bg-cyan-500/12 text-cyan-300",
+      badgeClass: "border-cyan-500/30 bg-cyan-500/12 text-cyan-600 dark:text-cyan-300",
     };
   }
 
@@ -256,22 +256,22 @@ export function deriveCsUpdateImpact(item) {
       none: {
         label: "Impact none",
         actionLabel: "Kein akuter Handlungsbedarf",
-        badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+        badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
       },
       low: {
         label: "Impact niedrig",
         actionLabel: "Beobachten",
-        badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+        badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
       },
       medium: {
         label: "Impact mittel",
         actionLabel: "Heute pruefen",
-        badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-300",
+        badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-600 dark:text-amber-300",
       },
       high: {
         label: "Impact hoch",
         actionLabel: "Schnell pruefen",
-        badgeClass: "border-red-500/35 bg-red-500/12 text-red-300",
+        badgeClass: "border-red-500/35 bg-red-500/12 text-red-600 dark:text-red-300",
       },
     };
     const mapped = aiMap[aiImpactLevel];
@@ -287,14 +287,14 @@ export function deriveCsUpdateImpact(item) {
       level: "failed",
       label: "KI Rating fehlgeschlagen",
       actionLabel: "Manuell pruefen",
-      badgeClass: "border-red-500/30 bg-red-500/10 text-red-300",
+      badgeClass: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300",
     };
   }
   return {
     level: "unrated",
     label: "KI Rating ausstehend",
     actionLabel: "Noch keine Bewertung verfuegbar",
-    badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+    badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
   };
 }
 
@@ -362,12 +362,18 @@ export function buildGroupDetailSelection(group) {
   const roiPercent = Number(group?.roiPercent || 0);
   const totalInvested = Number(group?.totalInvested || 0);
 
+  const liveClusterCount = Number(group?.liveClusterCount || 0);
+  const clusterCount = Number(group?.clusterCount || (Array.isArray(group?.clusters) ? group.clusters.length : 0));
+  const isLive = liveClusterCount > 0;
+
   return {
     id: `group-${group?.id || "unknown"}`,
     itemId: 0,
     item_id: 0,
     __detailKind: "group",
     topVisuals: Array.isArray(group?.topVisuals) ? group.topVisuals : [],
+    // Cluster aggregates power the composition donut in the detail panel.
+    clusters: Array.isArray(group?.clusters) ? group.clusters : [],
     // Member ids let the detail panel's bucket toggle move the WHOLE group via
     // updateInvestmentBucket's batch path.
     sourceInvestmentIds: Array.isArray(group?.memberInvestmentIds)
@@ -386,6 +392,20 @@ export function buildGroupDetailSelection(group) {
     buyPrice: weightedBuyUnitPrice,
     currentPrice: weightedCurrentUnitPrice,
     quantity: totalQuantity,
+    // Aliases mapping the group's aggregates onto the field names the shared
+    // ItemDetailPanel reads, so grouped selections fill the same stat tiles as a
+    // single item instead of rendering N/A. Values follow the display-currency
+    // convention InventoryTable already uses for these aggregates (plain formatPrice).
+    currentValue: totalValue,
+    displayPrice: weightedCurrentUnitPrice,
+    livePrice: weightedCurrentUnitPrice,
+    isLive,
+    costBasisTotal: totalInvested,
+    profitEuro: totalProfit,
+    isProfitPositive: totalProfit >= 0,
+    roi: roiPercent,
+    freshnessLabel:
+      clusterCount > 0 ? `${liveClusterCount}/${clusterCount} Cluster live` : null,
     bucket: String(group?.bucket || "").toLowerCase() === "inventory" ? "inventory" : "investment",
     type: "group",
   };
@@ -395,18 +415,26 @@ export function buildGroupDetailSelection(group) {
  * Build a detail selection object for a cluster within a portfolio group.
  */
 export function buildGroupClusterDetailSelection(group, cluster) {
-  const totalQuantity = Number(cluster?.totalQuantity || cluster?.itemCount || 0);
-  const weightedBuyUnitPrice = Number(cluster?.weightedBuyUnitPrice || 0);
-  const weightedCurrentUnitPrice = Number(cluster?.weightedCurrentUnitPrice || 0);
+  // finalizeClusterAggregate exposes quantity/buyUnitPrice/currentUnitPrice — the
+  // earlier weighted*/totalQuantity names never existed on the cluster and read as 0.
+  const totalQuantity = Number(cluster?.quantity || cluster?.itemCount || 0);
+  const weightedBuyUnitPrice = Number(cluster?.buyUnitPrice || 0);
+  const weightedCurrentUnitPrice = Number(cluster?.currentUnitPrice || 0);
   const totalValue = Number(cluster?.totalValue || 0);
-  const totalProfit = Number(cluster?.totalProfit || 0);
-  const roiPercent = Number(cluster?.roiPercent || 0);
   const totalInvested = Number(cluster?.totalInvested || 0);
+  const totalProfit = Number(
+    cluster?.totalProfit != null ? cluster.totalProfit : totalValue - totalInvested,
+  );
+  const roiPercent = Number(cluster?.roiPercent || 0);
+  const isLive = Boolean(cluster?.isLive);
+
+  const clusterItemId = Number(cluster?.itemId || 0) || 0;
 
   return {
     id: `group-cluster-${group?.id || "unknown"}-${cluster?.id || cluster?.name || "unknown"}`,
-    itemId: 0,
-    item_id: 0,
+    // Real catalog id (when known) so the cluster detail can load its price history.
+    itemId: clusterItemId,
+    item_id: clusterItemId,
     __detailKind: "group-cluster",
     imageUrl: cluster?.imageUrl || null,
     name: `${group?.name || "Gruppe"} > ${cluster?.name || "Cluster"}`,
@@ -422,6 +450,16 @@ export function buildGroupClusterDetailSelection(group, cluster) {
     buyPrice: weightedBuyUnitPrice,
     currentPrice: weightedCurrentUnitPrice,
     quantity: totalQuantity,
+    // Aliases onto the shared ItemDetailPanel field names (see buildGroupDetailSelection).
+    currentValue: totalValue,
+    displayPrice: weightedCurrentUnitPrice,
+    livePrice: weightedCurrentUnitPrice,
+    isLive,
+    costBasisTotal: totalInvested,
+    profitEuro: totalProfit,
+    isProfitPositive: totalProfit >= 0,
+    roi: roiPercent,
+    freshnessLabel: cluster?.freshnessLabel || null,
     bucket: "investment",
     type: "group-cluster",
   };

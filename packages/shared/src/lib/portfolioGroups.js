@@ -86,6 +86,9 @@ function resolveClusterUnitCurrentValue(clusterRow, fallbackQuantity = 1) {
 function createEmptyClusterAggregate({ clusterKey, clusterRow, rawItem }) {
   return {
     id: normalizeText(clusterRow?.id || clusterKey || rawItem?.id || rawItem?.name),
+    // Numeric catalog item id — needed to fetch per-member price history for the
+    // group's weighted value-over-time chart. First non-zero member id wins.
+    itemId: Number(clusterRow?.itemId ?? clusterRow?.item_id ?? rawItem?.itemId ?? rawItem?.item_id ?? 0) || 0,
     clusterKey,
     sourceInvestmentIds: [],
     name:
@@ -345,6 +348,14 @@ export function buildPortfolioGroupSummaries({
         if (!aggregate.currentUnitPrice && currentUnitPrice > 0) {
           aggregate.currentUnitPrice = currentUnitPrice;
         }
+        if (!aggregate.itemId) {
+          const memberItemId = Number(
+            clusterRow?.itemId ?? clusterRow?.item_id ?? rawItem?.itemId ?? rawItem?.item_id ?? 0,
+          );
+          if (Number.isFinite(memberItemId) && memberItemId > 0) {
+            aggregate.itemId = memberItemId;
+          }
+        }
         if (clusterRow?.isLive) {
           aggregate.isLive = true;
           liveClusterKeys.add(clusterKey);
@@ -407,6 +418,116 @@ export function buildPortfolioGroupSummaries({
     })
     .filter(Boolean)
     .sort((left, right) => right.totalValue - left.totalValue || left.name.localeCompare(right.name, "de"));
+}
+
+/**
+ * Reduce a price-history entry's date to a UTC day bucket (YYYY-MM-DD).
+ * PortfolioChart.parseDateToTimestamp already understands this format.
+ */
+function toDayBucket(dateValue) {
+  const raw = normalizeText(dateValue);
+  if (!raw) {
+    return "";
+  }
+  // Fast path: already starts with YYYY-MM-DD (ISO date or "YYYY-MM-DD HH:MM:SS").
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(raw);
+  if (match) {
+    return match[1];
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return parsed.toISOString().slice(0, 10);
+}
+
+/**
+ * Collapse a member's raw price history into a sorted, de-duplicated series of
+ * daily USD unit prices. Last value per day wins.
+ * Input entries: { date, priceUsd } (priceUsd falls back to price_usd).
+ */
+function normalizeMemberDailySeries(history) {
+  const perDay = new Map();
+  (Array.isArray(history) ? history : []).forEach((entry) => {
+    const day = toDayBucket(entry?.date);
+    if (!day) {
+      return;
+    }
+    const priceUsd = Number(entry?.priceUsd ?? entry?.price_usd);
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) {
+      return;
+    }
+    perDay.set(day, priceUsd); // later entries override earlier same-day ones
+  });
+  return Array.from(perDay.entries())
+    .map(([day, priceUsd]) => ({ day, priceUsd }))
+    .sort((left, right) => (left.day < right.day ? -1 : left.day > right.day ? 1 : 0));
+}
+
+/**
+ * Build a weighted total-value-over-time series for a portfolio group, valuing the
+ * CURRENT basket (fixed quantity per cluster) at historical daily prices:
+ *   value(day) = Σ quantity_i × unitPriceUsd_i(day)
+ *
+ * Gap handling ("common overlap"): the series starts only once EVERY member has
+ * price data (latest first-day among members) and each member's price is
+ * forward-filled (last known ≤ bucket) within the window.
+ *
+ * @param {Array<{ itemId:number, quantity:number, history:Array<{date,priceUsd}> }>} members
+ * @returns {Array<{ date: string, priceUsd: number }>} ascending by date; USD.
+ */
+export function buildWeightedGroupHistory(members) {
+  const prepared = (Array.isArray(members) ? members : [])
+    .map((member) => ({
+      quantity: Math.max(0, toFiniteNumber(member?.quantity, 0)),
+      series: normalizeMemberDailySeries(member?.history),
+    }))
+    .filter((member) => member.quantity > 0 && member.series.length > 0);
+
+  if (prepared.length === 0) {
+    return [];
+  }
+
+  // Common-overlap start = the latest first-day across members; end = latest last-day.
+  const startDay = prepared
+    .map((member) => member.series[0].day)
+    .reduce((max, day) => (day > max ? day : max));
+  const endDay = prepared
+    .map((member) => member.series[member.series.length - 1].day)
+    .reduce((max, day) => (day > max ? day : max));
+
+  // Union of real buckets within [startDay, endDay] keeps the point count bounded.
+  const bucketSet = new Set();
+  prepared.forEach((member) => {
+    member.series.forEach(({ day }) => {
+      if (day >= startDay && day <= endDay) {
+        bucketSet.add(day);
+      }
+    });
+  });
+  const buckets = Array.from(bucketSet).sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  );
+  if (buckets.length === 0) {
+    return [];
+  }
+
+  // Forward-fill each member across the buckets via an advancing cursor.
+  const cursors = prepared.map(() => 0);
+  return buckets.map((day) => {
+    let total = 0;
+    prepared.forEach((member, index) => {
+      const series = member.series;
+      let cursor = cursors[index];
+      while (cursor + 1 < series.length && series[cursor + 1].day <= day) {
+        cursor += 1;
+      }
+      cursors[index] = cursor;
+      // At/after startDay every member has a value ≤ day by construction.
+      total += member.quantity * series[cursor].priceUsd;
+    });
+    return { date: day, priceUsd: total };
+  });
 }
 
 export function summarizeManagementClusterAssignment(cluster, membershipMap, groupsById) {
