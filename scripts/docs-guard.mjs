@@ -229,7 +229,8 @@ const packageJsonVersionOnly = changedPaths.includes("package.json") && isVersio
 const packageLockVersionOnly =
   changedPaths.includes("package-lock.json") && isVersionOnlyJsonDiff("package-lock.json");
 
-const globalTriggerPatterns = [
+// DevOps/build/tooling triggers → require docs/devops.md (+ AGENTS.md).
+const devopsTriggerPatterns = [
   /^package\.json$/,
   /^package-lock\.json$/,
   /^jsconfig\.json$/,
@@ -238,6 +239,13 @@ const globalTriggerPatterns = [
   /^eslint\.config\.js$/,
   /^docker-compose\.yml$/,
   /^Dockerfile$/,
+  /^\.github\/workflows\//,
+  /^scripts\//,
+];
+
+// Architecture-relevant triggers (runtime boundaries, ownership) →
+// require docs/architecture-overview.md (+ AGENTS.md).
+const architectureTriggerPatterns = [
   /^apps\/desktop\/main\.js$/,
   /^apps\/desktop\/preload\.js$/,
   /^apps\/web\/src\/App\.jsx$/,
@@ -297,7 +305,8 @@ const knownTopLevel = new Set([
   "vite.config.js",
 ]);
 
-const globalTriggers = [];
+const architectureTriggers = [];
+const devopsTriggers = [];
 
 for (const path of changedPaths) {
   if (path === "package.json" && packageJsonVersionOnly) {
@@ -307,11 +316,18 @@ for (const path of changedPaths) {
     continue;
   }
 
-  if (matchesAny(path, globalTriggerPatterns)) {
-    globalTriggers.push(path);
+  if (matchesAny(path, architectureTriggerPatterns)) {
+    architectureTriggers.push(path);
     continue;
   }
 
+  if (matchesAny(path, devopsTriggerPatterns)) {
+    devopsTriggers.push(path);
+    continue;
+  }
+
+  // New/removed/renamed files under an unrecognized top-level dir (e.g. build/,
+  // resources/) are treated as DevOps/tooling triggers.
   const topLevel = path.split("/")[0] || "";
   const entry = entries.find((candidate) => candidate.path === path);
   if (
@@ -320,12 +336,13 @@ for (const path of changedPaths) {
     topLevel &&
     !knownTopLevel.has(topLevel)
   ) {
-    globalTriggers.push(path);
+    devopsTriggers.push(path);
   }
 }
 
 const hasAgentsUpdate = changedPaths.includes("AGENTS.md");
 const hasArchitectureUpdate = changedPaths.includes("docs/architecture-overview.md");
+const hasDevopsUpdate = changedPaths.includes("docs/devops.md");
 
 const agentsContent = fs.readFileSync("AGENTS.md", "utf8");
 const activeDocPaths = parseActiveDocsTablePaths(agentsContent);
@@ -349,7 +366,7 @@ const missingAgentsDocRows = newMarkdownEntries
 
 const errors = [];
 
-if (globalTriggers.length > 0) {
+if (architectureTriggers.length > 0) {
   if (!hasAgentsUpdate || !hasArchitectureUpdate) {
     const missing = [];
     if (!hasAgentsUpdate) {
@@ -360,10 +377,30 @@ if (globalTriggers.length > 0) {
     }
     errors.push(
       [
-        "Global change detected but governance docs were not both updated.",
+        "Architecture-relevant change detected but governance docs were not both updated.",
         "Missing updates: " + missing.join(", "),
         "Triggers:",
-        ...globalTriggers.map((trigger) => `- ${trigger}`),
+        ...architectureTriggers.map((trigger) => `- ${trigger}`),
+      ].join("\n"),
+    );
+  }
+}
+
+if (devopsTriggers.length > 0) {
+  if (!hasAgentsUpdate || !hasDevopsUpdate) {
+    const missing = [];
+    if (!hasAgentsUpdate) {
+      missing.push("AGENTS.md");
+    }
+    if (!hasDevopsUpdate) {
+      missing.push("docs/devops.md");
+    }
+    errors.push(
+      [
+        "DevOps/build change detected but governance docs were not both updated.",
+        "Missing updates: " + missing.join(", "),
+        "Triggers:",
+        ...devopsTriggers.map((trigger) => `- ${trigger}`),
       ].join("\n"),
     );
   }
@@ -389,9 +426,15 @@ if (errors.length > 0) {
 }
 
 console.log("[docs-guard] OK");
-if (globalTriggers.length > 0) {
-  console.log("[docs-guard] Global triggers:");
-  for (const trigger of globalTriggers) {
+if (architectureTriggers.length > 0) {
+  console.log("[docs-guard] Architecture triggers:");
+  for (const trigger of architectureTriggers) {
+    console.log(`- ${trigger}`);
+  }
+}
+if (devopsTriggers.length > 0) {
+  console.log("[docs-guard] DevOps triggers:");
+  for (const trigger of devopsTriggers) {
     console.log(`- ${trigger}`);
   }
 }

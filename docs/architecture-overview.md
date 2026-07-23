@@ -46,7 +46,7 @@ This document tracks:
 - Starts local PHP sidecar on `127.0.0.1` with dynamic port + per-start secret.
 - Sidecar runs a **bundled, fully static PHP runtime** shipped inside the app (`resources/php/<platform>/php[.exe]`, fetched at build time by `scripts/fetch-php.mjs` from static-php-cli), with `curl`, `openssl`, `mbstring`, `sqlite3`, `pdo_sqlite` compiled in — so **no system PHP is required on Windows or Linux**. `resolvePhpBinary()` (`apps/desktop/main/sidecar.js`) prefers the bundled binary (marked `isStatic`) and falls back to `$PHP_BINARY` or a system `php` on PATH. The backend still requires the `mbstring`, `curl`, and `json` extensions; `backend/desktop/index.php` fails fast with a `PHP_EXTENSION_MISSING` JSON error when any are absent, instead of fataling deep inside a route (which previously surfaced only as empty/non-JSON responses).
 - For the static runtime the sidecar loads `backend/desktop/php.static.ini` (no `extension=` lines — extensions are compiled in) and injects `curl.cainfo`/`openssl.cafile` pointing at a bundled `cacert.pem`, so HTTPS (Steam OpenID, upstream APIs) verifies without relying on a host trust store. System PHP instead uses `backend/desktop/php.ini` with dynamically loaded extensions.
-- Desktop packaging ships **both** platforms on every `v*` tag via `.github/workflows/desktop-release.yml`: Windows (NSIS `.exe`) and Linux (`AppImage` + Debian `.deb`, for Debian/Ubuntu-based distros incl. Zorin OS). The static PHP runtime + CA bundle are embedded per platform via electron-builder `extraResources`; the binaries are git-ignored and re-fetched at build time.
+- Desktop build/packaging (which artifacts ship, how the static PHP runtime + CA bundle are fetched and embedded, CI/release) is a DevOps concern documented in `docs/devops.md`, not here.
 - Sidecar secret is mandatory for desktop renderer/API traffic; only `GET /api/v1/auth/steam/callback` is public to allow the external Steam OpenID browser redirect.
 - Renderer never reads SQLite directly.
 - Renderer uses `window.electronAPI.localStore` for local persistence.
@@ -230,6 +230,7 @@ Health legend:
 | File | AGENTS status | Health | Notes |
 |---|---|---|---|
 | `docs/architecture-overview.md` | FINAL | CURRENT | Central architecture source. |
+| `docs/devops.md` | FINAL | CURRENT | Build/packaging/CI/release (DevOps). |
 | `docs/local-db-schema.md` | FINAL | CURRENT | Updated to current local-store read path (no automatic server seeding). |
 | `docs/sync-api.md` | IN PROGRESS | CURRENT | Pull/push contract aligns with current routes and flow. |
 | `docs/archive/repo-restructure-plan.md` | HISTORICAL | HISTORICAL | Migration plan artifact. |
@@ -266,6 +267,7 @@ Health legend:
 ## 9. Maintenance Rules
 
 - If runtime boundaries or ownership change, update this file and `AGENTS.md` in the same commit.
+- Build/CI/packaging changes are DevOps and belong in `docs/devops.md` (+ `AGENTS.md`), not here. `docs-guard.mjs` routes triggers by category.
 - Run `npm run docs:guard` before push for global changes.
 - Keep architecture content out of `README.md`.
 - Do not add new architecture markdown files without AGENTS table entry.

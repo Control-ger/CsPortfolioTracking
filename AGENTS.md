@@ -121,10 +121,13 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 ## Desktop Packaging (Windows + Linux)
 - Every desktop release ships **both** targets: Windows (NSIS `.exe`) and Linux (`AppImage` + Debian `.deb`, for Debian/Ubuntu-based distros incl. Zorin OS). CI builds both on each `v*` tag via `desktop-release.yml`.
 - Both platforms are **self-contained**: a fully static PHP runtime is fetched at build time (`npm run fetch:php`, from static-php-cli) and embedded via electron-builder `extraResources`; no system PHP is required. A `cacert.pem` is bundled for HTTPS. The binaries are git-ignored and re-fetched on every build.
-- See `docs/architecture-overview.md` §3.1 for the sidecar/runtime detail (static ini, CA injection, `resolvePhpBinary` fallback).
+- Canonical build/packaging/CI/release detail: `docs/devops.md`. Sidecar/runtime detail (static ini, CA injection, `resolvePhpBinary` fallback): `docs/architecture-overview.md` §3.1.
 
 ## Documentation Governance
-Global changes require same-commit updates to both `AGENTS.md` and `docs/architecture-overview.md`.
+`scripts/docs-guard.mjs` routes changes by category (same-commit doc updates required):
+- **Architecture** triggers (runtime/ownership: `apps/desktop/main.js`, `backend/**` services/controllers/front-controllers, `dataSource.js`/`desktopSync.js`, …) → `AGENTS.md` + `docs/architecture-overview.md`.
+- **DevOps/build** triggers (`package.json`, build config, `scripts/**`, `.github/workflows/**`, new top-level dirs like `build/`/`resources/`) → `AGENTS.md` + `docs/devops.md`.
+
 Run `npm run docs:guard` before push. CI enforces via `.github/workflows/docs-governance.yml`.
 No new `.md` files without entry in the Active Docs table (see `docs/architecture-overview.md` §7).
 
@@ -132,6 +135,7 @@ No new `.md` files without entry in the Active Docs table (see `docs/architectur
 | File | Status | Purpose |
 |---|---|---|
 | `docs/architecture-overview.md` | FINAL | Central architecture + doc navigator |
+| `docs/devops.md` | FINAL | Build/packaging/CI/release (DevOps) |
 | `docs/local-db-schema.md` | FINAL | SQLite schema |
 | `docs/sync-api.md` | IN PROGRESS | Sync API contract |
 | `backend/MVC_API_CONTRACT.md` | FINAL | Backend API contract |
