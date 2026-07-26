@@ -1,7 +1,7 @@
 # Architecture Overview (Central Reference)
 
 Status: FINAL
-Last updated: 2026-06-22
+Last updated: 2026-07-27
 
 Use this file as the first architecture entrypoint, then jump into detail docs via the navigator table.
 
@@ -69,6 +69,7 @@ This document tracks:
 
 ### 3.3 Server runtime
 
+- **Secrets management**: `app_secrets` table (`AppSecretsRepository`, `AppSecretsService`) stores application secrets including ENCRYPTION_KEY. The encryption key is auto-generated (256-bit random, base64-encoded) on first API request if missing from `.env`, persisted in the database, and loaded on every startup. No manual server configuration needed for new users; key persists across restarts.
 - Owns sync API (`/api/v1/sync/pull`, `/api/v1/sync/push`). `SyncService` owns the `sync_entities`/`sync_idempotency` tables and revision/idempotency logic; `SyncEntityService` owns domain projection into `items`/`investments`/`watchlist` (including their DDL) via `applyDomainChange`. The desktop reaches these directly and routes through `/api/index.php/api/v1/...` (the bare `/api/v1/...` path is not served by the front edge); `buildSyncEndpointCandidates` tries the `/api/index.php` form first and falls back to the others.
 - Sync/portfolio/watchlist endpoints can resolve `steamId` to the server's numeric `users.id`; desktop clients may send Steam identity when no server numeric user id is present.
 - Explicit request scopes (`userId`, `steamId`) are only valid when they match the authenticated Steam session; otherwise the server returns `401/403` instead of accepting foreign scopes.

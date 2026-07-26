@@ -37,6 +37,14 @@ No test suite is configured (Playwright exists as devDep but no `test` script).
 **PHP autoloader** (`backend/src/bootstrap.php`): PSR-4-like, maps `App\` → `backend/src/`.
 No Composer. No framework (custom Router, DI, Logger).
 
+**Secrets Management** (`app_secrets` table, `AppSecretsRepository`, `AppSecretsService`):
+- `app_secrets` table stores application secrets (encryption keys, API tokens, etc.) persistently in the database
+- `AppSecretsService::getEncryptionKey()` retrieves or auto-generates the ENCRYPTION_KEY on first call
+- ENCRYPTION_KEY is auto-generated (256-bit random, base64-encoded) on first API request if missing from `.env`
+- Key is persisted in `app_secrets` table — no manual server configuration needed for new users
+- `backend/public/index.php` calls `ensureTable()` and loads the key from DB after PDO connection
+- Key persists across server restarts; all session tokens remain valid
+
 **Import aliases** (configured in all `vite.config.js` + `jsconfig.json`):
 - `@shared/*` → `packages/shared/src/*`
 - `@/*` → `packages/shared/src/*` (same target!)
