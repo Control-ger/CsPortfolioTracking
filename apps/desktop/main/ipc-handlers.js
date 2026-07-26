@@ -187,6 +187,9 @@ export function registerAllIpcHandlers() {
   // ── App version ───────────────────────────────────────────────
   ipcMain.handle("app-get-version", () => app.getVersion());
 
+  // ── Platform detection ─────────────────────────────────────────
+  ipcMain.handle("get-platform", () => process.platform);
+
   // ── Cloudflare Access login ───────────────────────────────────
   ipcMain.handle("cloudflare-access-login", async (event, serverUrl, cfLoginUrl) => {
     try {
