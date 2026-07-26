@@ -13,6 +13,7 @@ use App\Application\Service\WebPushService;
 use App\Application\Service\FeeCalculationService;
 use App\Application\Service\SyncEntityService;
 use App\Application\Service\SyncService;
+use App\Application\Service\AppSecretsService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
 use App\Http\Auth\RequestUserScopeResolver;
@@ -32,6 +33,7 @@ use App\Infrastructure\External\CsFloatTradeClient;
 use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
+use App\Infrastructure\Persistence\Repository\AppSecretsRepository;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
 use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
@@ -634,6 +636,32 @@ try {
             );
         }
         throw $dbException;
+    }
+
+    // Initialize app secrets (encryption key) before other repositories
+    $appSecretsRepository = new AppSecretsRepository($pdo);
+    $appSecretsRepository->ensureTable();
+
+    if (!isset($_ENV['ENCRYPTION_KEY']) || $_ENV['ENCRYPTION_KEY'] === '') {
+        try {
+            $appSecretsService = new AppSecretsService($appSecretsRepository);
+            $appSecretsService->ensureEncryptionKeyExists();
+            $encryptionKey = $appSecretsService->getEncryptionKey();
+            $_ENV['ENCRYPTION_KEY'] = $encryptionKey;
+            putenv('ENCRYPTION_KEY=' . $encryptionKey);
+            if ($emitStartupEvents) {
+                Logger::event(
+                    'info',
+                    'system',
+                    'system.encryption.key_loaded',
+                    'Encryption key loaded from app_secrets',
+                    ['source' => 'database']
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('[startup] Failed to load encryption key from app_secrets: ' . $e->getMessage());
+            throw new \RuntimeException('Failed to initialize encryption key', 0, $e);
+        }
     }
 
     $observabilityRepository = new ObservabilityEventRepository(
