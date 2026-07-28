@@ -8,6 +8,10 @@
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { normalizeDesktopLocalUserId } from "./userIdentity.js";
 import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
+import {
+  reportSessionHealthy,
+  reportSessionLocalOnly,
+} from "./sessionHealthBus.js";
 
 // Resolve configured API base URL - handle Electron file:// origin gracefully
 function resolveConfiguredApiBase() {
@@ -306,12 +310,18 @@ async function initiateDesktopSteamLogin() {
     try {
       const serverResult = await initiateDesktopServerSteamLogin(remoteBase);
       console.log("[auth] Variante C server login succeeded — token is sync-valid");
+      reportSessionHealthy();
       return serverResult;
     } catch (error) {
       // Loud on purpose: a silent fallback to the sidecar token reproduces the
       // exact original symptom (login OK, sync AUTH_REQUIRED). This line is the
       // signal that Variante C did not complete.
       console.error("[auth] Variante C server login FAILED — falling back to sidecar (sync will not work):", error);
+      // A console line nobody reads is not enough: the fallback token is signed
+      // with a machine-local key, so sync stays broken until the user logs in
+      // again. Surface it so the UI can say so instead of showing a healthy
+      // looking app that silently never syncs.
+      reportSessionLocalOnly(error?.message || String(error));
     }
   }
 

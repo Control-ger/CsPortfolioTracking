@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Lock, UserRound } from "lucide-react";
 
 import { CurrencyProvider } from "@shared/contexts";
-import { BottomNavigation, DesktopSidebarRail, Titlebar } from "@shared/components";
+import { BottomNavigation, DesktopSidebarRail, SessionHealthBanner, Titlebar } from "@shared/components";
 import { Button } from "@shared/components/ui/button";
 import { Input } from "@shared/components/ui/input";
 import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
@@ -541,6 +541,9 @@ export default function App() {
 
         {/* Nur in Electron anzeigen! */}
         {isElectron && <Titlebar />}
+
+        {/* Renders only when the session cannot sync — see sessionHealthBus.js */}
+        <SessionHealthBanner />
 
         <div
           className={`flex flex-1 min-h-0 flex-col lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 ${

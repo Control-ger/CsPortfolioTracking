@@ -38,6 +38,7 @@ export { SkinBaronApiKeySection } from './SkinBaronApiKeySection.jsx';
 export { SkinBaronSalesSyncModal } from './SkinBaronSalesSyncModal.jsx';
 export { ThemeToggle } from './ThemeToggle.jsx';
 export { Titlebar } from './Titlebar.jsx';
+export { SessionHealthBanner } from './SessionHealthBanner.jsx';
 export { UserMenu } from './UserMenu.jsx';
 export { Watchlist } from './Watchlist.jsx';
 export { WebPushSettingsSection } from './WebPushSettingsSection.jsx';

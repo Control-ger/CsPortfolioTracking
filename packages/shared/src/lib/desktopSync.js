@@ -1,4 +1,5 @@
-import { getSession, validateSession } from "./auth.js";
+import { getSession, logout, validateSession } from "./auth.js";
+import { reportSessionRejected } from "./sessionHealthBus.js";
 import { get as cacheGet, set as cacheSet } from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
@@ -301,6 +302,50 @@ async function fetchWithCloudflareAccess(url, options, serverBaseUrl) {
 
 function unwrapApiData(payload) {
   return payload?.data && typeof payload.data === "object" ? payload.data : payload;
+}
+
+// A 401 carrying one of these codes means the stored token is definitively
+// unusable against this server — not a transient outage. Keeping it would
+// reproduce the original failure mode: the app looks logged in and every sync
+// call 401s forever, with no path back to a working session.
+// USER_SCOPE_FORBIDDEN (403) is deliberately NOT listed: that is a scope
+// mismatch on an otherwise valid session and must not log the user out.
+const DEAD_SESSION_ERROR_CODES = new Set(["AUTH_REQUIRED", "INVALID_SESSION", "MISSING_TOKEN"]);
+
+// Guard so a burst of parallel sync calls triggers exactly one recovery.
+// Reset after every successful sync — a session that works now can still be
+// rejected later (expiry, server key rotation).
+let deadSessionHandled = false;
+
+async function handleDeadSessionResponse(response, bodyText) {
+  if (!response || response.status !== 401) {
+    return false;
+  }
+
+  let code = "";
+  try {
+    code = String(JSON.parse(bodyText)?.error?.code || "");
+  } catch {
+    // Non-JSON body (e.g. a Cloudflare page) — not an authoritative auth verdict.
+    return false;
+  }
+
+  if (!DEAD_SESSION_ERROR_CODES.has(code)) {
+    return false;
+  }
+
+  if (!deadSessionHandled) {
+    deadSessionHandled = true;
+    console.warn("[desktop-sync] server rejected the stored session, clearing it", { code });
+    try {
+      await logout();
+    } catch (error) {
+      console.warn("[desktop-sync] failed to clear the rejected session", error);
+    }
+    reportSessionRejected(code);
+  }
+
+  return true;
 }
 
 function resolveSteamIdFromUser(user) {
@@ -607,6 +652,11 @@ async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localSt
   if (!response || !response.ok) {
     const status = response?.status ?? "unknown";
     const body = response ? await response.text().catch(() => "") : "";
+    if (await handleDeadSessionResponse(response, body)) {
+      throw new Error(
+        "Sync push abgebrochen: Der Server hat die gespeicherte Session abgelehnt. Sie wurde verworfen — bitte neu anmelden.",
+      );
+    }
     throw new Error(`Sync push failed with status ${status}${body ? ` response: ${body}` : ""}`);
   }
 
@@ -787,6 +837,11 @@ async function pullServerChanges(serverBaseUrl, syncIdentity, token, localStore,
   if (!response || !response.ok) {
     const status = response?.status ?? "unknown";
     const body = response ? await response.text().catch(() => "") : "";
+    if (await handleDeadSessionResponse(response, body)) {
+      throw new Error(
+        "Sync pull abgebrochen: Der Server hat die gespeicherte Session abgelehnt. Sie wurde verworfen — bitte neu anmelden.",
+      );
+    }
     throw new Error(`Sync pull failed with status ${status}${body ? ` response: ${body}` : ""}`);
   }
 
@@ -855,6 +910,7 @@ export async function runDesktopSyncNowIfDue(options = {}) {
       await pullServerChanges(serverBaseUrl, syncIdentity, session.token, localStore, localUserId);
 
       lastSyncAtMs = Date.now();
+      deadSessionHandled = false;
       return { skipped: false, reason: "ok" };
     } finally {
       inFlightSyncPromise = null;
