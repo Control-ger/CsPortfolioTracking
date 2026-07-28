@@ -35,6 +35,7 @@ import {
 } from "@shared/lib/portfolioPreferences";
 import { importCsFloatWatchlistData, importCsFloatBuyOrdersAsWatchlistData } from "@shared/lib/dataSource";
 import { normalizeServerHostInput } from "@shared/lib/serverConfig";
+import { openAppReleasesPage } from "@shared/lib/appUpdateActions";
 import {
   DEFAULT_FORM,
   toInputValue,
@@ -294,7 +295,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         setUpdateStatus(
           result?.reason === "not-packaged"
             ? { state: "dev" }
-            : { state: "error", message: result?.error || "Update-Suche fehlgeschlagen." },
+            : {
+                state: "error",
+                message: result?.error || "Update-Suche fehlgeschlagen.",
+                url: result?.url,
+              },
         );
       }
       // On success the main process emits app-updater-status (available / not-available),
@@ -1170,6 +1175,18 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                   </Button>
                 ) : null}
 
+                {/* This install cannot update itself, or the updater failed -
+                    the release page is the only remaining route. */}
+                {updateStatus?.state === "manual" || updateStatus?.state === "error" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void openAppReleasesPage(updateStatus?.url)}
+                  >
+                    Auf GitHub herunterladen
+                  </Button>
+                ) : null}
+
                 {updateStatus?.state === "downloaded" ? (
                   <Button size="sm" onClick={() => void handleInstallUpdate()}>
                     Neustarten &amp; installieren
@@ -1182,13 +1199,17 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                   className={`text-xs ${
                     updateStatus.state === "error"
                       ? "text-amber-400"
-                      : updateStatus.state === "available" || updateStatus.state === "downloaded"
+                      : updateStatus.state === "manual"
+                        ? "text-amber-400"
+                        : updateStatus.state === "available" || updateStatus.state === "downloaded"
                         ? "text-emerald-400"
                         : "text-muted-foreground"
                   }`}
                 >
                   {updateStatus.state === "available"
                     ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}.`
+                    : updateStatus.state === "manual"
+                    ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}. Diese Installation kann sich nicht selbst aktualisieren — bitte manuell von GitHub laden.`
                     : updateStatus.state === "downloading"
                       ? `Wird heruntergeladen... ${Math.round(Number(updateStatus.percent || 0))}%`
                       : updateStatus.state === "downloaded"
@@ -1198,7 +1219,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                           : updateStatus.state === "dev"
                             ? "Update-Suche ist nur in der installierten App verfügbar."
                             : updateStatus.state === "error"
-                              ? updateStatus.message || "Update-Suche fehlgeschlagen."
+                              ? `${updateStatus.message || "Update-Suche fehlgeschlagen."} Alternativ manuell von GitHub laden.`
                               : ""}
                 </p>
               ) : null}

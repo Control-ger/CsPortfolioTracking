@@ -1,9 +1,15 @@
 /* eslint-disable */
 
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
+
+// Kept in sync with build.publish in package.json.
+const GITHUB_OWNER = "Control-ger";
+const GITHUB_REPO = "CsPortfolioTracking";
+export const RELEASES_PAGE_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
+const RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
 // These are set by main/index.js after import
 export let mainWindowForUpdater = null;
@@ -51,6 +57,117 @@ let latestAvailableUpdateInfo = null;
 let updateDownloadInProgress = false;
 let updateCheckTimer = null;
 
+// Not every install can replace itself: an AppImage started without the
+// APPIMAGE env var, a Snap, or an unpacked build. electron-updater answers
+// that via isUpdaterActive() and then silently does nothing — so we ask first
+// and fall back to "download it yourself from GitHub" instead of going quiet.
+export function resolveSelfUpdateSupport() {
+  if (!app.isPackaged) {
+    return { supported: false, reason: "not-packaged" };
+  }
+  try {
+    if (typeof autoUpdater.isUpdaterActive === "function" && !autoUpdater.isUpdaterActive()) {
+      return { supported: false, reason: process.env.SNAP ? "snap" : "unsupported-install" };
+    }
+  } catch (error) {
+    console.warn("[updater] isUpdaterActive check failed:", error?.message || error);
+  }
+  return { supported: true, reason: null };
+}
+
+export function describeSelfUpdateReason(reason) {
+  if (reason === "snap") {
+    return "Snap-Installation, Updates laufen ueber den Snap Store";
+  }
+  if (reason === "not-packaged") {
+    return "Entwicklungsmodus";
+  }
+  return "z. B. AppImage ohne APPIMAGE-Umgebungsvariable oder entpackter Build";
+}
+
+export async function openReleasesPage() {
+  await shell.openExternal(RELEASES_PAGE_URL);
+  return true;
+}
+
+function compareVersions(left, right) {
+  const parse = (value) =>
+    String(value || "")
+      .trim()
+      .replace(/^v/i, "")
+      .split("-")[0]
+      .split(".")
+      .map((part) => Number.parseInt(part, 10) || 0);
+  const a = parse(left);
+  const b = parse(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const diff = (a[index] || 0) - (b[index] || 0);
+    if (diff !== 0) {
+      return diff > 0 ? 1 : -1;
+    }
+  }
+  return 0;
+}
+
+// Version probe for installs that cannot self-update. electron-updater refuses
+// to even fetch the feed in that case, so we read the GitHub release directly.
+async function fetchLatestPublishedVersion() {
+  const response = await fetch(RELEASES_API_URL, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": `${GITHUB_REPO}-desktop`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub Release-Feed antwortete mit ${response.status}`);
+  }
+  const data = await response.json();
+  const version = String(data?.tag_name || "").trim().replace(/^v/i, "");
+  if (!version) {
+    throw new Error("GitHub Release-Feed enthielt keine Version.");
+  }
+  return version;
+}
+
+// Emits the same "available" shape as the self-update path, but flagged
+// manual: the UI must send the user to GitHub instead of offering a download.
+export async function checkForManualUpdate(reason = "unsupported-install") {
+  try {
+    const latestVersion = await fetchLatestPublishedVersion();
+    if (compareVersions(latestVersion, app.getVersion()) <= 0) {
+      emitUpdaterStatus({ state: "not-available", manual: true, reason });
+      return { ok: true, updateAvailable: false };
+    }
+
+    const info = { version: latestVersion };
+    latestAvailableUpdateInfo = info;
+    emitUpdaterStatus({
+      state: "manual",
+      version: latestVersion,
+      info,
+      reason,
+      url: RELEASES_PAGE_URL,
+    });
+    createSystemNotificationEntry({
+      category: "app_update",
+      title: "Update verfuegbar (manuell)",
+      message: `${normalizeUpdateVersionLabel(info)} steht bereit. Diese Installation kann sich nicht selbst aktualisieren — auf GitHub herunterladen.`,
+      payload: {
+        state: "manual",
+        version: latestVersion,
+        reason,
+        url: RELEASES_PAGE_URL,
+      },
+    });
+    return { ok: true, updateAvailable: true, version: latestVersion, url: RELEASES_PAGE_URL };
+  } catch (error) {
+    const message = error?.message || String(error);
+    console.warn("[updater] manual update check failed:", message);
+    emitUpdaterStatus({ state: "error", message, manual: true, url: RELEASES_PAGE_URL });
+    return { ok: false, error: message, url: RELEASES_PAGE_URL };
+  }
+}
+
 function emitUpdaterStatus(payload) {
   if (!mainWindowForUpdater || mainWindowForUpdater.isDestroyed()) {
     return;
@@ -78,6 +195,10 @@ export async function startUpdateDownload(info = latestAvailableUpdateInfo) {
   if (!app.isPackaged) {
     return { ok: false, reason: "not-packaged" };
   }
+  const support = resolveSelfUpdateSupport();
+  if (!support.supported) {
+    return { ok: false, reason: support.reason, url: RELEASES_PAGE_URL };
+  }
   if (updateDownloadInProgress) {
     return { ok: true, alreadyDownloading: true };
   }
@@ -94,8 +215,10 @@ export async function startUpdateDownload(info = latestAvailableUpdateInfo) {
     updateDownloadInProgress = false;
     const message = error?.message || String(error);
     console.warn("[updater] manual download failed:", message);
-    emitUpdaterStatus({ state: "error", message });
-    return { ok: false, error: message };
+    // A failed download is a dead end for the user unless we point somewhere:
+    // always carry the releases page along.
+    emitUpdaterStatus({ state: "error", message, url: RELEASES_PAGE_URL });
+    return { ok: false, error: message, url: RELEASES_PAGE_URL };
   }
 }
 
@@ -109,6 +232,28 @@ export async function promptForUpdateDownload(info = latestAvailableUpdateInfo) 
 
   const versionLabel = normalizeUpdateVersionLabel(info);
   bringMainWindowToFront();
+
+  const support = resolveSelfUpdateSupport();
+  if (!support.supported) {
+    const manualResponse = await dialog.showMessageBox(mainWindowForUpdater, {
+      type: "info",
+      buttons: ["Auf GitHub oeffnen", "Spaeter"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: "Update verfuegbar",
+      message: `${versionLabel} ist verfuegbar.`,
+      detail:
+        "Diese Installation kann sich nicht selbst aktualisieren "
+        + `(${describeSelfUpdateReason(support.reason)}). `
+        + "Du kannst die neue Version direkt von GitHub herunterladen.",
+    });
+    if (manualResponse.response === 0) {
+      await openReleasesPage();
+      return { ok: true, manual: true, opened: true, url: RELEASES_PAGE_URL };
+    }
+    return { ok: true, manual: true, deferred: true, url: RELEASES_PAGE_URL };
+  }
 
   const response = await dialog.showMessageBox(mainWindowForUpdater, {
     type: "question",
@@ -161,6 +306,20 @@ export function setupAutoUpdater() {
     return;
   }
 
+  // Installs that cannot replace themselves never reach the electron-updater
+  // events below (checkForUpdates() returns null without touching the network),
+  // so they get their own GitHub-backed check + "download it manually" path.
+  const selfUpdateSupport = resolveSelfUpdateSupport();
+  if (!selfUpdateSupport.supported) {
+    console.log(
+      `[updater] self-update unavailable (${selfUpdateSupport.reason}); falling back to manual GitHub check`,
+    );
+    const runManualCheck = () => void checkForManualUpdate(selfUpdateSupport.reason);
+    setTimeout(runManualCheck, 15000);
+    updateCheckTimer = setInterval(runManualCheck, AUTO_UPDATE_INTERVAL_MS);
+    return;
+  }
+
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
@@ -210,14 +369,15 @@ export function setupAutoUpdater() {
     const errorMessage = error?.message || String(error);
     console.error("[updater] error:", errorMessage);
     updateDownloadInProgress = false;
-    emitUpdaterStatus({ state: "error", message: errorMessage });
+    emitUpdaterStatus({ state: "error", message: errorMessage, url: RELEASES_PAGE_URL });
     createSystemNotificationEntry({
       category: "app_update",
       title: "Update-Fehler",
-      message: errorMessage || "Beim Update ist ein Fehler aufgetreten.",
+      message: `${errorMessage || "Beim Update ist ein Fehler aufgetreten."} Die neue Version laesst sich auf GitHub manuell herunterladen.`,
       payload: {
         state: "error",
         error: errorMessage,
+        url: RELEASES_PAGE_URL,
       },
       // Avoid spamming identical transient errors (e.g. offline) on every retry.
       dedupeWindowHours: 6,

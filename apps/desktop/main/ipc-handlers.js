@@ -35,6 +35,8 @@ import {
   isUpdateDownloadInProgress,
   setMainWindow,
   setActiveNotificationUserId,
+  resolveSelfUpdateSupport,
+  RELEASES_PAGE_URL,
 } from "./updater.js";
 
 // ── Shared references set by main/index.js ────────────────────────
@@ -233,9 +235,24 @@ export function registerAllIpcHandlers() {
   });
 
   // ── App updater ───────────────────────────────────────────────
+  ipcMain.handle("app-updater-releases-url", async () => RELEASES_PAGE_URL);
+
+  ipcMain.handle("app-updater-open-releases", async () => {
+    const { openReleasesPage } = await import("./updater.js");
+    return await openReleasesPage();
+  });
+
   ipcMain.handle("app-updater-check", async () => {
     if (!app.isPackaged) {
-      return { ok: false, reason: "not-packaged" };
+      return { ok: false, reason: "not-packaged", url: RELEASES_PAGE_URL };
+    }
+    // Installs that cannot self-update would get a silent null back from
+    // electron-updater; answer them from the GitHub release feed instead.
+    const support = resolveSelfUpdateSupport();
+    if (!support.supported) {
+      const { checkForManualUpdate } = await import("./updater.js");
+      const result = await checkForManualUpdate(support.reason);
+      return { ...result, manual: true, reason: support.reason, url: RELEASES_PAGE_URL };
     }
     try {
       const result = await autoUpdater.checkForUpdates();
@@ -254,7 +271,14 @@ export function registerAllIpcHandlers() {
 
   ipcMain.handle("app-updater-download", async () => {
     if (!app.isPackaged) {
-      return { ok: false, reason: "not-packaged" };
+      return { ok: false, reason: "not-packaged", url: RELEASES_PAGE_URL };
+    }
+    const support = resolveSelfUpdateSupport();
+    if (!support.supported) {
+      // No in-place install possible — send the user to the release page.
+      const { openReleasesPage } = await import("./updater.js");
+      await openReleasesPage();
+      return { ok: true, manual: true, opened: true, reason: support.reason, url: RELEASES_PAGE_URL };
     }
     if (isUpdateDownloadInProgress()) {
       return { ok: true, alreadyDownloading: true };
@@ -268,12 +292,12 @@ export function registerAllIpcHandlers() {
       } catch (error) {
         const message = error?.message || String(error);
         console.warn("[updater] download requested but check failed:", message);
-        return { ok: false, error: message };
+        return { ok: false, error: message, url: RELEASES_PAGE_URL };
       }
     }
 
     if (!info) {
-      return { ok: false, reason: "no-update-info" };
+      return { ok: false, reason: "no-update-info", url: RELEASES_PAGE_URL };
     }
 
     const { promptForUpdateDownload } = await import("./updater.js");

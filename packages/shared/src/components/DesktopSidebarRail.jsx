@@ -12,7 +12,7 @@ import {
 import { Button } from "@shared/components/ui/button";
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
-import { getCurrentUser, resolveDesktopLocalUserId } from "@shared/lib";
+import { getCurrentUser, resolveDesktopLocalUserId, runAppUpdateAction } from "@shared/lib";
 
 const DESKTOP_SIDEBAR_ITEMS = [
   { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/" },
@@ -191,54 +191,7 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
     const category = String(entry?.category || "").trim().toLowerCase();
     if (category === "app_update") {
       const payload = entry?.payload && typeof entry.payload === "object" ? entry.payload : {};
-      const state = String(payload?.state || "").trim().toLowerCase();
-      const version = String(payload?.version || "").trim();
-      const versionLabel = version ? `v${version}` : "Das Update";
-      const runUpdateDownload = async () => {
-        if (!window.electronAPI?.updater?.download) {
-          window.alert(`${versionLabel} ist verfuegbar.`);
-          return;
-        }
-        const result = await window.electronAPI.updater.download();
-        if (!result || result.ok !== false) {
-          return;
-        }
-        if (result.reason === "no-update-info") {
-          window.alert(
-            `${versionLabel}: Updater-Metadaten sind noch nicht bereit. Bitte in ein paar Sekunden erneut versuchen.`,
-          );
-          return;
-        }
-        if (result.reason === "not-packaged") {
-          window.alert("Updates sind nur in der installierten Desktop-App verfuegbar.");
-          return;
-        }
-        window.alert(String(result.error || "Update-Download konnte nicht gestartet werden."));
-      };
-
-      if (state === "downloaded") {
-        const shouldInstallNow = window.confirm(
-          `${versionLabel} wurde heruntergeladen. Jetzt neu starten und installieren?`,
-        );
-        if (shouldInstallNow && window.electronAPI?.updater?.install) {
-          await window.electronAPI.updater.install();
-        }
-        return;
-      }
-
-      if (state === "available") {
-        await runUpdateDownload();
-        return;
-      }
-
-      if (state === "downloading") {
-        await runUpdateDownload();
-        return;
-      }
-
-      if (state === "error") {
-        window.alert(String(entry?.message || "Update-Status konnte nicht geladen werden."));
-      }
+      await runAppUpdateAction({ message: entry?.message, ...payload });
       return;
     }
 

@@ -49,6 +49,7 @@ import {
   updateCsFloatApiKey,
   toggleExcludeInvestment,
   updatePortfolioPreferences,
+  runAppUpdateAction,
 } from "@shared/lib";
 import { BREAKPOINTS } from "@shared/lib";
 import { useKeyboard } from "@shared/hooks";
@@ -1180,7 +1181,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }));
 
       const nextState = String(payload.state || "");
-      if (["available", "downloading", "downloaded", "error"].includes(nextState)) {
+      if (["available", "manual", "downloading", "downloaded", "error"].includes(nextState)) {
         setAppUpdateUnread(true);
       }
       if (nextState === "not-available") {
@@ -3640,6 +3641,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (appUpdateState === "available") {
       return `${appUpdateVersionLabel} verfuegbar`;
     }
+    if (appUpdateState === "manual") {
+      return `${appUpdateVersionLabel} verfuegbar (manueller Download)`;
+    }
     if (appUpdateState === "downloading") {
       const percent = Number(appUpdateNotification?.percent || 0);
       return `Download laeuft (${Math.max(0, Math.min(100, Math.round(percent)))}%)`;
@@ -3662,7 +3666,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (appUpdateState === "downloading") {
       return "w-full rounded-xl border border-blue-400/35 bg-blue-500/12 px-2 py-2 text-left hover:bg-blue-500/18";
     }
-    if (appUpdateState === "available") {
+    if (appUpdateState === "available" || appUpdateState === "manual") {
       return "w-full rounded-xl border border-amber-400/35 bg-amber-500/12 px-2 py-2 text-left hover:bg-amber-500/18";
     }
     if (appUpdateState === "error") {
@@ -3680,14 +3684,17 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (appUpdateState === "available") {
       return "Klick: Jetzt updaten oder spaeter.";
     }
+    if (appUpdateState === "manual") {
+      return "Klick: Auf GitHub herunterladen.";
+    }
     if (appUpdateState === "error") {
-      return "Klick: Fehlerdetails ansehen.";
+      return "Klick: Fehlerdetails und manueller Download.";
     }
     return "Klick: Update-Status ansehen.";
   })();
-  const hasVisibleAppUpdateNotification = ["available", "downloading", "downloaded", "error"].includes(appUpdateState);
-  const hasUnreadAppUpdate =
-    appUpdateUnread && ["available", "downloading", "downloaded", "error"].includes(appUpdateState);
+  const APP_UPDATE_VISIBLE_STATES = ["available", "manual", "downloading", "downloaded", "error"];
+  const hasVisibleAppUpdateNotification = APP_UPDATE_VISIBLE_STATES.includes(appUpdateState);
+  const hasUnreadAppUpdate = appUpdateUnread && APP_UPDATE_VISIBLE_STATES.includes(appUpdateState);
   const handleUiWarningsChange = useCallback((sourceKey, sourceLabel, nextWarnings = []) => {
     const mappedNotifications = mapWarningsToNotifications(nextWarnings, {
       sourceKey,
@@ -3780,57 +3787,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }));
     setCompositionRefreshToken((current) => current + 1);
   };
-  const handleAppUpdateInstall = async () => {
-    if (!window.electronAPI?.updater?.install) {
-      return;
-    }
-    await window.electronAPI.updater.install();
-  };
-  const runAppUpdateDownload = async () => {
-    if (!window.electronAPI?.updater?.download) {
-      window.alert(`${appUpdateVersionLabel} ist verfuegbar.`);
-      return;
-    }
-
-    const result = await window.electronAPI.updater.download();
-    if (!result || result.ok !== false) {
-      return;
-    }
-    if (result.reason === "no-update-info") {
-      window.alert(
-        `${appUpdateVersionLabel}: Updater-Metadaten sind noch nicht bereit. Bitte in ein paar Sekunden erneut versuchen.`,
-      );
-      return;
-    }
-    if (result.reason === "not-packaged") {
-      window.alert("Updates sind nur in der installierten Desktop-App verfuegbar.");
-      return;
-    }
-    window.alert(String(result.error || "Update-Download konnte nicht gestartet werden."));
-  };
   const handleAppUpdateNotificationClick = async () => {
-    if (appUpdateState === "downloaded") {
-      const shouldInstallNow = window.confirm(
-        `${appUpdateVersionLabel} ist heruntergeladen. Jetzt neu starten und installieren?`,
-      );
-      if (shouldInstallNow) {
-        await handleAppUpdateInstall();
-        return;
-      }
-      setAppUpdateUnread(false);
-      return;
-    }
-
-    if (appUpdateState === "available" || appUpdateState === "downloading") {
-      await runAppUpdateDownload();
-      setAppUpdateUnread(false);
-      return;
-    }
-
-    if (appUpdateState === "error") {
-      window.alert(appUpdateStatusLabel);
-      setAppUpdateUnread(false);
-    }
+    await runAppUpdateAction({
+      state: appUpdateState,
+      version: appUpdateNotification?.version,
+      url: appUpdateNotification?.url,
+      message: appUpdateStatusLabel,
+    });
+    setAppUpdateUnread(false);
   };
   const renderNotificationsDropdownContent = () => (
     <>
