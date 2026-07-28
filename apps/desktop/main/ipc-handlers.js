@@ -34,6 +34,7 @@ import {
   getUpdaterLatestInfo,
   isUpdateDownloadInProgress,
   setMainWindow,
+  setActiveNotificationUserId,
 } from "./updater.js";
 
 // ── Shared references set by main/index.js ────────────────────────
@@ -408,7 +409,12 @@ export function registerAllIpcHandlers() {
   safeLocalStoreInvoke("local-store-list-steam-csfloat-matches", (store, userId, status, limit) => store.listSteamCsfloatMatches(userId, status, limit));
   safeLocalStoreInvoke("local-store-update-steam-csfloat-match-status", (store, matchId, status) => store.updateSteamCsfloatMatchStatus(matchId, status));
   safeLocalStoreInvoke("local-store-create-notification", (store, payload) => store.createNotification(payload));
-  safeLocalStoreInvoke("local-store-list-notifications", (store, userId, options) => store.listNotifications(userId, options));
+  // The renderer polls this with its resolved scope; remember it so background
+  // writers (app updater) create notifications the bell will actually read.
+  safeLocalStoreInvoke("local-store-list-notifications", (store, userId, options) => {
+    setActiveNotificationUserId(userId);
+    return store.listNotifications(userId, options);
+  });
   safeLocalStoreInvoke("local-store-mark-notification-read", (store, id) => store.markNotificationRead(id));
   safeLocalStoreInvoke("local-store-mark-all-notifications-read", (store, userId, category) => store.markAllNotificationsRead(userId, category));
   safeLocalStoreInvoke("local-store-delete-notification", (store, id) => store.deleteNotification(id));

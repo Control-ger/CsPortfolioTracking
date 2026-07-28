@@ -19,6 +19,33 @@ export function setLocalStoreRefs(getStore, store) {
   localStoreForUpdater = store;
 }
 
+// The renderer reads notifications under the Steam-derived scope
+// (`steam-<steamId>`), so background writes from here must target the same
+// scope or they stay invisible in the bell. The renderer reports it on every
+// notification poll; until then we fall back to the local database.
+let activeNotificationUserId = null;
+
+export function setActiveNotificationUserId(userId) {
+  const normalized = String(userId ?? "").trim();
+  if (normalized) {
+    activeNotificationUserId = normalized;
+  }
+}
+
+function resolveNotificationUserId(store) {
+  if (activeNotificationUserId) {
+    return activeNotificationUserId;
+  }
+  if (store && typeof store.resolveActiveLocalUserId === "function") {
+    try {
+      return store.resolveActiveLocalUserId();
+    } catch (error) {
+      console.warn("[updater] failed to resolve active user scope:", error?.message || error);
+    }
+  }
+  return 1;
+}
+
 const AUTO_UPDATE_INTERVAL_MS = 10 * 60 * 1000;
 let latestAvailableUpdateInfo = null;
 let updateDownloadInProgress = false;
@@ -116,7 +143,7 @@ function createSystemNotificationEntry({
     }
 
     store.createNotification({
-      userId: 1,
+      userId: resolveNotificationUserId(store),
       category,
       title,
       message,

@@ -24,8 +24,55 @@ function legacyRowsExist(db) {
   const inventoryStateCount = db
     .prepare("SELECT COUNT(*) AS count FROM steam_inventory_state WHERE user_id = ?")
     .get(CANONICAL_LOCAL_USER_ID).count;
+  // Notifications count too: a background writer (e.g. the app updater) can
+  // create legacy-scoped rows long after the portfolio tables were migrated.
+  // Without this they would stay stranded under "1" and never reach the bell.
+  const notificationCount = db
+    .prepare("SELECT COUNT(*) AS count FROM sync_notifications WHERE user_id = ?")
+    .get(CANONICAL_LOCAL_USER_ID).count;
 
-  return Number(investmentCount || 0) + Number(watchlistCount || 0) + Number(inventoryStateCount || 0) > 0;
+  return (
+    Number(investmentCount || 0)
+    + Number(watchlistCount || 0)
+    + Number(inventoryStateCount || 0)
+    + Number(notificationCount || 0)
+    > 0
+  );
+}
+
+// Best-effort answer to "which user scope is this installation actually using?"
+// for background writers in the Electron main process that have no renderer
+// session at hand. Falls back to the canonical legacy scope.
+function resolveActiveLocalUserIdFromDb(db) {
+  const row = db
+    .prepare(
+      `SELECT user_id, MAX(updated_at) AS last_seen
+       FROM investments
+       WHERE user_id LIKE 'steam-%'
+       GROUP BY user_id
+       ORDER BY last_seen DESC
+       LIMIT 1`,
+    )
+    .get();
+  if (row?.user_id) {
+    return String(row.user_id);
+  }
+
+  const notificationRow = db
+    .prepare(
+      `SELECT user_id, MAX(created_at) AS last_seen
+       FROM sync_notifications
+       WHERE user_id LIKE 'steam-%'
+       GROUP BY user_id
+       ORDER BY last_seen DESC
+       LIMIT 1`,
+    )
+    .get();
+  if (notificationRow?.user_id) {
+    return String(notificationRow.user_id);
+  }
+
+  return CANONICAL_LOCAL_USER_ID;
 }
 
 function rewritePendingOperationsUserId(db, fromUserId, toUserId) {
@@ -370,6 +417,10 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
 
   return {
     maybeMigrateLegacyUserRows,
+
+    resolveActiveLocalUserId() {
+      return resolveActiveLocalUserIdFromDb(db);
+    },
 
     syncSteamInventory(items = [], userId = CANONICAL_LOCAL_USER_ID) {
       const normalizedUserId = normalizeLocalUserId(userId);
