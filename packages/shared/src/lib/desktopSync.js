@@ -585,6 +585,11 @@ async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localSt
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      // Cloudflare Access strips Authorization on the way to the origin, so the
+      // server sees no token at all (observed: MISSING_TOKEN / AUTH_REQUIRED on
+      // every sync call). X-Auth-Token survives the tunnel; both the validate
+      // route and RequestUserScopeResolver already accept it as an alternative.
+      "X-Auth-Token": token,
     },
     body: JSON.stringify({
       ...buildSyncIdentityPayload(syncIdentity.userId, syncIdentity.steamId),
@@ -773,6 +778,8 @@ async function pullServerChanges(serverBaseUrl, syncIdentity, token, localStore,
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
+        // See push above: Cloudflare Access drops Authorization, X-Auth-Token survives.
+        "X-Auth-Token": token,
       },
     },
   );

@@ -361,7 +361,7 @@ if ($requestOrigin !== '') {
     header('Vary: Origin');
 }
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Request-Id');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Request-Id');
 
 function obs_resolve_client_ip(array $headers): string
 {

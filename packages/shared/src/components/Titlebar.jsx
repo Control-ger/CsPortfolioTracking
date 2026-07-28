@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import appIcon from '/icon.ico?url';
 
+// Linux is the fallback branch at the end — no explicit flag needed.
 const WindowControlIcons = ({ platform }) => {
   const isWindows = platform === 'win32';
   const isMac = platform === 'darwin';
-  const isLinux = platform === 'linux';
 
   if (isWindows) {
     return (
@@ -125,10 +125,29 @@ export const Titlebar = () => {
   const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
   const [platform, setPlatform] = useState(null);
 
+  // platform() goes through ipcRenderer.invoke and therefore resolves a Promise.
+  // Writing it into state directly stored the Promise object itself, so every
+  // `platform === 'win32'` check failed and Windows/macOS fell through to the
+  // Linux fallback icons.
   useEffect(() => {
-    if (isElectron && window.electronAPI?.platform) {
-      setPlatform(window.electronAPI.platform());
+    if (!isElectron || typeof window.electronAPI?.platform !== 'function') {
+      return undefined;
     }
+
+    let cancelled = false;
+    Promise.resolve(window.electronAPI.platform())
+      .then((resolved) => {
+        if (!cancelled) {
+          setPlatform(resolved);
+        }
+      })
+      .catch(() => {
+        // Keep the fallback icons when the platform cannot be resolved.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [isElectron]);
 
   if (!isElectron) {
