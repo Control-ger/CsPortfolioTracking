@@ -82,6 +82,7 @@ export default function App() {
   const [setupPasswordConfirm, setSetupPasswordConfirm] = useState("");
   const [vaultActionRunning, setVaultActionRunning] = useState(false);
   const [vaultLoginUser, setVaultLoginUser] = useState(null);
+  const [desktopSessionChecked, setDesktopSessionChecked] = useState(false);
   const [vaultShellPalette, setVaultShellPalette] = useState(DEFAULT_STEAM_SHELL_PALETTE);
   const [isProcessingAuthCallback, setIsProcessingAuthCallback] = useState(() => {
     if (isElectron || typeof window === "undefined") {
@@ -122,7 +123,12 @@ export default function App() {
   }, [shouldUseVaultGate]);
 
   const isVaultUnlocked = !shouldUseVaultGate || (vaultStatus?.configured === true && vaultStatus?.unlocked === true);
-  const showVaultGate = shouldUseVaultGate && (vaultLoading || !vaultStatus || !isVaultUnlocked);
+  // Steam kommt vor dem App-Passwort: ohne verbundene Session waere "App entsperren"
+  // der falsche erste Schritt (z. B. direkt nach dem Abmelden). Dann uebernimmt der
+  // SteamLoginPrompt aus PortfolioPage, und der Vault-Gate greift erst danach.
+  const hasDesktopSteamSession = Boolean(resolveSteamIdFromUser(vaultLoginUser));
+  const showVaultGate =
+    shouldUseVaultGate && hasDesktopSteamSession && (vaultLoading || !vaultStatus || !isVaultUnlocked);
 
   useEffect(() => {
     void refreshVaultStatus();
@@ -189,6 +195,7 @@ export default function App() {
   useEffect(() => {
     if (!shouldUseVaultGate || !window.electronAPI?.getSession) {
       setVaultLoginUser(null);
+      setDesktopSessionChecked(true);
       return;
     }
 
@@ -199,19 +206,37 @@ export default function App() {
         const user = session?.user && typeof session.user === "object" ? session.user : null;
         if (!cancelled) {
           setVaultLoginUser(user);
+          setDesktopSessionChecked(true);
         }
       } catch {
         if (!cancelled) {
           setVaultLoginUser(null);
+          setDesktopSessionChecked(true);
         }
       }
     };
 
     void loadVaultLoginUser();
+
+    if (hasDesktopSteamSession) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Der Steam-Login laeuft in der Route (SteamLoginPrompt) und meldet sich nicht
+    // an App zurueck -- bis eine Session da ist, nachfragen.
+    const intervalId = window.setInterval(() => {
+      void loadVaultLoginUser();
+    }, 3000);
+    window.addEventListener("focus", loadVaultLoginUser);
+
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", loadVaultLoginUser);
     };
-  }, [shouldUseVaultGate]);
+  }, [shouldUseVaultGate, hasDesktopSteamSession]);
 
   useEffect(() => {
     if (!shouldUseVaultGate) {
@@ -249,6 +274,14 @@ export default function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
         <p className="text-sm text-muted-foreground">Anmeldung wird abgeschlossen...</p>
+      </div>
+    );
+  }
+
+  if (shouldUseVaultGate && !desktopSessionChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <p className="text-sm text-muted-foreground">Sitzung wird geprueft...</p>
       </div>
     );
   }
