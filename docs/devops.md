@@ -34,6 +34,21 @@ needed on any platform.
 - Runtime selection (`resolvePhpBinary` → `isStatic`), the static `php.static.ini`, and the
   injected `curl.cainfo`/`openssl.cafile` are described in `docs/architecture-overview.md` §3.1.
 
+## Server image PHP extensions
+
+The web container (`Dockerfile`, `php:8.2-apache`) installs:
+
+- `pdo`, `pdo_mysql`, `curl` — application baseline.
+- `apcu` (via `pecl`) — shared-memory backend for the HTTP rate limiter, configured in
+  `/usr/local/etc/php/conf.d/apcu-ratelimit.ini` (`apc.enabled=1`, `apc.enable_cli=0`,
+  `apc.shm_size=32M`).
+
+APCu is a **performance** dependency, not a correctness one: without it `RequestRateLimiter`
+falls back to a locked JSON file, which still enforces the same limits but serializes every
+limited request on one exclusive lock. `apc.enable_cli` stays off because the CLI crons do not
+rate-limit; the store probes `apcu_enabled()` and falls back accordingly. If the extension is
+dropped from the image, rate limiting keeps working — it just gets slower under concurrency.
+
 ## Icons
 
 - Windows: `icon.ico` (repo root). Linux: `build/icon.png` (≥256×256, extracted from `icon.ico`;

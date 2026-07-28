@@ -3,11 +3,19 @@ declare(strict_types=1);
 
 namespace App\Http\Auth;
 
-use App\Http\Controller\SteamAuthController;
 use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Shared\Http\Request;
 use App\Shared\Http\UserScopeAuthorizationException;
+use App\Shared\Logger;
 
+/**
+ * Maps a request onto the numeric user id its data may be read/written under.
+ *
+ * The authenticated identity is resolved once per request by RequestAuthenticator
+ * and injected here; this class only compares an explicitly requested scope
+ * against it. It never validates a token itself and never derives identity from
+ * client-supplied headers.
+ */
 final class RequestUserScopeResolver
 {
     private const STEAM_ID_PATTERN = '/^[1-9]\d{10,}$/';
@@ -16,15 +24,15 @@ final class RequestUserScopeResolver
 
     public function __construct(
         private readonly UserRepository $userRepository,
-        private readonly SteamAuthController $steamAuthController
+        private readonly RequestIdentity $identity,
+        private readonly bool $authEnforced,
     ) {
     }
 
     public function resolve(Request $request): int
     {
-        $authenticatedUser = $this->resolveAuthenticatedUser($request);
-        $authenticatedSteamId = $this->normalizeSteamId($authenticatedUser['steamId'] ?? null);
-        $authenticatedUserId = $this->normalizeNumericUserId($authenticatedUser['userId'] ?? null);
+        $authenticatedSteamId = $this->identity->steamId;
+        $authenticatedUserId = $this->identity->userId;
         $requestedSteamId = $this->extractRequestedSteamId($request);
         $requestedUserId = $this->extractRequestedUserId($request);
 
@@ -76,31 +84,41 @@ final class RequestUserScopeResolver
             return $this->userRepository->findOrCreateBySteamId($authenticatedSteamId);
         }
 
+        return $this->resolveUnauthenticated($request);
+    }
+
+    /**
+     * No session and no explicit scope.
+     *
+     * Historically this silently returned user 1, which handed a caller without
+     * any credential the default account's portfolio, watchlist and settings. With
+     * the auth gate enforced such a request never reaches a controller, so this is
+     * a hard 401. While the gate is still in observe-only mode the legacy fallback
+     * remains, but it is logged as the security event it is.
+     */
+    private function resolveUnauthenticated(Request $request): int
+    {
+        if ($this->authEnforced) {
+            throw new UserScopeAuthorizationException(
+                'AUTH_REQUIRED',
+                'Authentifizierte Session erforderlich.',
+                401
+            );
+        }
+
+        Logger::event(
+            'warning',
+            'security',
+            'security.auth.anonymous_default_scope',
+            'Unauthenticated request resolved to legacy default user scope',
+            [
+                'method' => $request->method,
+                'route' => $request->path,
+                'credentialPresent' => $this->identity->tokenPresent,
+            ]
+        );
+
         return 1;
-    }
-
-    private function resolveAuthenticatedUser(Request $request): ?array
-    {
-        $token = $this->extractSessionToken($request);
-        if ($token === '') {
-            return null;
-        }
-
-        return $this->steamAuthController->validateSession($token);
-    }
-
-    private function extractSessionToken(Request $request): string
-    {
-        $authHeader = trim((string) ($request->headers['authorization'] ?? $request->headers['x-auth-token'] ?? ''));
-        if ($authHeader === '') {
-            return '';
-        }
-
-        if (str_starts_with(strtolower($authHeader), 'bearer ')) {
-            return trim(substr($authHeader, 7));
-        }
-
-        return $authHeader;
     }
 
     private function extractRequestedSteamId(Request $request): ?string

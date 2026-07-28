@@ -163,6 +163,19 @@ function registerServerApiRoutes(Router $router, array $c): void
         JsonResponseFactory::success($result, [], $result['success'] ? 200 : 400);
     });
 
+    // Revokes the presented session server-side. Public by design: a client that
+    // wants to log out may well be holding a token the server already rejects,
+    // and it must still be able to clean up. Always answers 200 so the client can
+    // clear local state unconditionally.
+    $router->register('POST', '/api/v1/auth/logout', function () use ($c) {
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
+        $sessionToken = trim(str_replace('Bearer ', '', $authHeader));
+
+        $revoked = $sessionToken !== '' && $c['steamAuth']->revokeSession($sessionToken);
+
+        JsonResponseFactory::success(['revoked' => $revoked]);
+    });
+
     $router->register('GET', '/api/v1/auth/session/validate', function () use ($c) {
         $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
 
@@ -172,7 +185,9 @@ function registerServerApiRoutes(Router $router, array $c): void
         }
 
         $sessionToken = str_replace('Bearer ', '', $authHeader);
-        $user = $c['steamAuth']->validateSession($sessionToken);
+        // Profile-enriching variant: this endpoint exists so clients can refresh
+        // name/avatar, so the outbound Steam lookup is wanted here (and only here).
+        $user = $c['steamAuth']->validateSessionWithProfile($sessionToken);
 
         if (!$user) {
             JsonResponseFactory::error('INVALID_SESSION', 'Session expired or invalid', [], 401);

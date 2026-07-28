@@ -16,7 +16,13 @@ use App\Application\Service\SyncService;
 use App\Application\Service\AppSecretsService;
 use App\Application\Support\MarketItemClassifier;
 use App\Config\DatabaseConfig;
+use App\Http\Auth\ClientIpResolver;
+use App\Http\Auth\RequestAuthenticator;
+use App\Http\Auth\RequestIdentity;
 use App\Http\Auth\RequestUserScopeResolver;
+use App\Http\Auth\RouteAccessPolicy;
+use App\Http\Security\RateLimitGuard;
+use App\Http\Security\RateLimitPolicy;
 use App\Http\Controller\CsFloatSyncController;
 use App\Http\Controller\CsUpdatesController;
 use App\Http\Controller\DebugController;
@@ -42,6 +48,7 @@ use App\Infrastructure\Persistence\Repository\PortfolioHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PositionHistoryRepository;
 use App\Infrastructure\Persistence\Repository\PriceHistoryRepository;
 use App\Infrastructure\Persistence\Repository\UserRepository;
+use App\Infrastructure\Persistence\Repository\UserSessionRepository;
 use App\Infrastructure\Persistence\Repository\SyncStatusRepository;
 use App\Infrastructure\Persistence\Repository\UserFeeSettingsRepository;
 use App\Infrastructure\Persistence\Repository\UserCurrencyPreferenceRepository;
@@ -363,157 +370,137 @@ if ($requestOrigin !== '') {
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Request-Id');
 
-function obs_resolve_client_ip(array $headers): string
+/**
+ * Pepper for the rate-limit subject hashes.
+ *
+ * The hashes never leave the server; the pepper only stops someone with read
+ * access to the limiter store or the security log from brute-forcing the (small)
+ * Steam ID / IP space back out of them. Resolved once per request so both stages
+ * key identically.
+ */
+function obs_rate_limit_pepper(): string
 {
-    $candidates = [];
-
-    foreach (['cf-connecting-ip', 'x-real-ip'] as $headerKey) {
-        $value = trim((string) ($headers[$headerKey] ?? ''));
-        if ($value !== '') {
-            $candidates[] = $value;
-        }
+    static $pepper = null;
+    if (is_string($pepper)) {
+        return $pepper;
     }
 
-    $forwardedFor = trim((string) ($headers['x-forwarded-for'] ?? ''));
-    if ($forwardedFor !== '') {
-        $parts = array_map('trim', explode(',', $forwardedFor));
-        foreach ($parts as $part) {
-            if ($part !== '') {
-                $candidates[] = $part;
-            }
-        }
+    $configured = obs_env_string('RATE_LIMIT_PEPPER');
+    if ($configured !== null) {
+        $pepper = $configured;
+
+        return $pepper;
     }
 
-    $remoteAddr = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
-    if ($remoteAddr !== '') {
-        $candidates[] = $remoteAddr;
-    }
+    // Fallback keeps bucket keys stable without extra configuration. A dedicated
+    // RATE_LIMIT_PEPPER is preferred; this is defense in depth, not an auth boundary.
+    $pepper = hash('sha256', 'csportfolio-rate-limit|' . (obs_env_string('ENCRYPTION_KEY') ?? 'unconfigured'));
 
-    foreach ($candidates as $candidate) {
-        if (filter_var($candidate, FILTER_VALIDATE_IP) !== false) {
-            return $candidate;
-        }
-    }
-
-    return 'unknown';
+    return $pepper;
 }
 
-function obs_resolve_rate_limit_identity(Request $request): string
+function obs_client_ip_resolver(): ClientIpResolver
 {
-    $userId = null;
-
-    foreach (['x-user-id', 'user-id'] as $header) {
-        $value = $request->headers[$header] ?? null;
-        if (is_numeric($value)) {
-            $userId = (int) $value;
-            break;
-        }
+    static $resolver = null;
+    if (!$resolver instanceof ClientIpResolver) {
+        // Default on: the origin sits behind a Cloudflare Zero Trust tunnel that
+        // terminates every request, so CF-Connecting-IP is authoritative. Turn this
+        // off for any deployment where the origin is reachable directly — there the
+        // proxy headers are attacker-controlled and would hand out a fresh
+        // rate-limit bucket per forged value.
+        $resolver = new ClientIpResolver(obs_env_flag('TRUST_PROXY_HEADERS', true));
     }
 
-    if ($userId === null) {
-        foreach (['userId', 'user_id'] as $key) {
-            $bodyValue = $request->body[$key] ?? null;
-            if (is_numeric($bodyValue)) {
-                $userId = (int) $bodyValue;
-                break;
-            }
-
-            $queryValue = $request->query[$key] ?? null;
-            if (is_numeric($queryValue)) {
-                $userId = (int) $queryValue;
-                break;
-            }
-        }
-    }
-
-    $identityParts = [];
-    if ($userId !== null && $userId > 0) {
-        $identityParts[] = 'user:' . $userId;
-    }
-    $identityParts[] = 'ip:' . obs_resolve_client_ip($request->headers);
-
-    return implode('|', $identityParts);
+    return $resolver;
 }
 
-function obs_apply_security_rate_limit(Request $request): void
+function obs_rate_limit_guard(): RateLimitGuard
 {
-    if (!obs_env_flag('SECURITY_RATE_LIMIT_ENABLED', true)) {
-        return;
-    }
-
-    $rules = [
-        ['method' => 'POST', 'path' => '/api/v1/sync/push', 'limit' => obs_env_int_range('RATE_LIMIT_SYNC_PUSH_PER_MINUTE', 60, 0, 2000), 'window' => 60],
-        ['method' => 'GET', 'path' => '/api/v1/sync/pull', 'limit' => obs_env_int_range('RATE_LIMIT_SYNC_PULL_PER_MINUTE', 180, 0, 5000), 'window' => 60],
-        ['method' => 'POST', 'path' => '/api/v1/auth/steam/login', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_LOGIN_PER_MINUTE', 20, 0, 300), 'window' => 60],
-        ['method' => 'GET', 'path' => '/api/v1/auth/steam/login', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_LOGIN_PER_MINUTE', 20, 0, 300), 'window' => 60],
-        ['method' => 'GET', 'path' => '/api/v1/auth/steam/callback', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_CALLBACK_PER_MINUTE', 40, 0, 300), 'window' => 60],
-        ['method' => 'GET', 'path' => '/api/v1/auth/session/validate', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_VALIDATE_PER_MINUTE', 240, 0, 5000), 'window' => 60],
-        ['method' => 'GET', 'path' => '/api/v1/auth/steam/inventory', 'limit' => obs_env_int_range('RATE_LIMIT_AUTH_INVENTORY_PER_MINUTE', 60, 0, 1000), 'window' => 60],
-        ['method' => 'POST', 'path' => '/api/v1/push/subscribe', 'limit' => obs_env_int_range('RATE_LIMIT_PUSH_SUBSCRIBE_PER_MINUTE', 30, 0, 600), 'window' => 60],
-        ['method' => 'POST', 'path' => '/api/v1/push/unsubscribe', 'limit' => obs_env_int_range('RATE_LIMIT_PUSH_UNSUBSCRIBE_PER_MINUTE', 30, 0, 600), 'window' => 60],
-    ];
-
-    $matchedRule = null;
-    foreach ($rules as $rule) {
-        if ($request->method === $rule['method'] && $request->path === $rule['path']) {
-            $matchedRule = $rule;
-            break;
-        }
-    }
-
-    if (!is_array($matchedRule)) {
-        return;
-    }
-
-    static $limiter = null;
-    if (!$limiter instanceof RequestRateLimiter) {
-        $limiter = new RequestRateLimiter(obs_env_string('SECURITY_RATE_LIMIT_STORE_FILE'));
-    }
-
-    $limit = (int) ($matchedRule['limit'] ?? 0);
-    if ($limit <= 0) {
-        return;
-    }
-
-    $windowSeconds = max(1, (int) ($matchedRule['window'] ?? 60));
-    $identity = obs_resolve_rate_limit_identity($request);
-    $bucketKey = strtolower($request->method) . ':' . $request->path . ':' . $identity;
-    $result = $limiter->consume($bucketKey, $limit, $windowSeconds);
-
-    if (($result['allowed'] ?? false) !== true) {
-        $retryAfter = max(1, (int) ($result['retryAfter'] ?? 1));
-        header('Retry-After: ' . $retryAfter);
-        header('X-RateLimit-Limit: ' . $limit);
-        header('X-RateLimit-Remaining: 0');
-
-        Logger::event(
-            'warning',
-            'security',
-            'security.rate_limit.blocked',
-            'Request blocked by HTTP rate limit',
-            [
-                'statusCode' => 429,
-                'method' => $request->method,
-                'route' => $request->path,
-                'identity' => $identity,
-                'retryAfterSeconds' => $retryAfter,
-                'limit' => $limit,
-                'windowSeconds' => $windowSeconds,
-            ]
+    static $guard = null;
+    if (!$guard instanceof RateLimitGuard) {
+        $guard = new RateLimitGuard(
+            new RequestRateLimiter(obs_env_string('SECURITY_RATE_LIMIT_STORE_FILE')),
+            new RateLimitPolicy('obs_env_int_range'),
+            obs_rate_limit_pepper(),
+            obs_env_flag('SECURITY_RATE_LIMIT_ENABLED', true)
         );
-
-        JsonResponseFactory::error(
-            'RATE_LIMITED',
-            'Zu viele Anfragen. Bitte spaeter erneut versuchen.',
-            ['retryAfterSeconds' => $retryAfter],
-            429
-        );
-        exit;
     }
 
-    header('X-RateLimit-Limit: ' . (int) ($result['limit'] ?? $limit));
-    header('X-RateLimit-Remaining: ' . max(0, (int) ($result['remaining'] ?? 0)));
+    return $guard;
 }
+
+function obs_apply_rate_limit(string $stage, Request $request, RequestIdentity $identity): void
+{
+    $blocked = obs_rate_limit_guard()->check($stage, $request, $identity);
+    if ($blocked === null) {
+        return;
+    }
+
+    JsonResponseFactory::error(
+        'RATE_LIMITED',
+        'Zu viele Anfragen. Bitte spaeter erneut versuchen.',
+        ['retryAfterSeconds' => $blocked['retryAfter']],
+        429
+    );
+    exit;
+}
+
+function obs_auth_enforced(): bool
+{
+    return obs_env_flag('AUTH_REQUIRED_ENFORCED', false);
+}
+
+/**
+ * Deny-by-default authentication gate.
+ *
+ * Without this, a request carrying no credential at all fell through to the
+ * legacy default user scope and was served that account's data. Runs in
+ * observe-only mode until AUTH_REQUIRED_ENFORCED is set, so the blocked set can
+ * be reviewed in the logs before it starts returning 401.
+ */
+function obs_apply_auth_gate(Request $request, RequestIdentity $identity): void
+{
+    static $policy = null;
+    if (!$policy instanceof RouteAccessPolicy) {
+        $policy = new RouteAccessPolicy();
+    }
+
+    if ($identity->isAuthenticated() || $policy->isPublic($request->method, $request->path)) {
+        return;
+    }
+
+    $enforced = obs_auth_enforced();
+    $reason = $identity->tokenPresent ? 'INVALID_OR_EXPIRED_TOKEN' : 'MISSING_TOKEN';
+
+    Logger::event(
+        $enforced ? 'warning' : 'info',
+        'security',
+        'security.auth.request_denied',
+        $enforced
+            ? 'Request rejected: no authenticated session'
+            : 'Request would be rejected without a session (auth gate in observe mode)',
+        [
+            'statusCode' => $enforced ? 401 : 200,
+            'method' => $request->method,
+            'route' => $request->path,
+            'enforced' => $enforced,
+            'reason' => $reason,
+        ]
+    );
+
+    if (!$enforced) {
+        return;
+    }
+
+    JsonResponseFactory::error(
+        'AUTH_REQUIRED',
+        'Authentifizierte Session erforderlich.',
+        ['reason' => $reason],
+        401
+    );
+    exit;
+}
+
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
@@ -586,7 +573,14 @@ Logger::event(
     ]
 );
 
-obs_apply_security_rate_limit($request);
+// Stage 1: pre-database, IP-keyed. The session token cannot be decrypted yet
+// (ENCRYPTION_KEY may still be sitting in app_secrets), so this stage exists to
+// keep a flood from ever reaching the DB connection and to cap the pre-session
+// auth endpoints. The identity-aware stage follows once the token is validated.
+$edgeIdentity = RequestIdentity::anonymous(
+    obs_client_ip_resolver()->resolve($request->headers, $_SERVER['REMOTE_ADDR'] ?? null)
+);
+obs_apply_rate_limit(RateLimitPolicy::STAGE_EDGE, $request, $edgeIdentity);
 
 if ($request->jsonDecodeError !== null) {
     Logger::event(
@@ -751,8 +745,27 @@ try {
     $syncEntityService = new SyncEntityService($pdo);
     $syncService = new SyncService($pdo, $syncEntityService);
 
-    $steamAuthController = new SteamAuthController($pdo, $userRepository);
-    $userScopeResolver = new RequestUserScopeResolver($userRepository, $steamAuthController);
+    $userSessionRepository = new UserSessionRepository($pdo);
+    $userSessionRepository->ensureTable();
+
+    $steamAuthController = new SteamAuthController(
+        $pdo,
+        $userRepository,
+        $userSessionRepository,
+        obs_env_flag('SESSION_LEGACY_TOKENS_ALLOWED', true)
+    );
+
+    // ENCRYPTION_KEY is available from here on, so the session token can be
+    // decrypted. Everything identity-related hangs off this single resolution:
+    // the gate, the session-keyed rate limit and the user scope all read the same
+    // verified identity instead of re-deriving one from request headers.
+    $requestAuthenticator = new RequestAuthenticator($steamAuthController, obs_client_ip_resolver());
+    $requestIdentity = $requestAuthenticator->authenticate($request, $_SERVER['REMOTE_ADDR'] ?? null);
+
+    obs_apply_auth_gate($request, $requestIdentity);
+    obs_apply_rate_limit(RateLimitPolicy::STAGE_SESSION, $request, $requestIdentity);
+
+    $userScopeResolver = new RequestUserScopeResolver($userRepository, $requestIdentity, obs_auth_enforced());
 
     $settingsController = new SettingsController(
         $feeSettingsService,

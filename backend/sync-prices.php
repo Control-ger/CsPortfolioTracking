@@ -277,6 +277,19 @@ try {
         $errorMessage
     );
 
+    // Housekeeping: drop session-revocation rows whose tokens expired long ago.
+    // Kept well past expiry so a just-expired token still resolves to "revoked"
+    // rather than "unknown". Failure here must not fail the price sync.
+    try {
+        $prunedSessions = (new \App\Infrastructure\Persistence\Repository\UserSessionRepository($pdo))
+            ->pruneExpired(7);
+        if ($prunedSessions > 0) {
+            fwrite(STDOUT, "  Pruned {$prunedSessions} expired session rows\n");
+        }
+    } catch (Throwable $sessionPruneError) {
+        fwrite(STDERR, "  Session prune skipped: " . $sessionPruneError->getMessage() . "\n");
+    }
+
     exit(0);
 
 } catch (Throwable $e) {

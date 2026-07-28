@@ -35,8 +35,19 @@ RUN echo '<VirtualHost *:80>\n\
 RUN apt-get update && \
     apt-get install -y libcurl4-openssl-dev supervisor && \
     docker-php-ext-install pdo pdo_mysql curl && \
+    pecl install apcu && \
+    docker-php-ext-enable apcu && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Shared-memory backend for the HTTP rate limiter. Without it the limiter falls
+# back to a locked JSON file, which serializes every limited request on one
+# exclusive lock. apc.enable_cli stays off: the CLI crons do not rate-limit.
+RUN { \
+      echo 'apc.enabled=1'; \
+      echo 'apc.enable_cli=0'; \
+      echo 'apc.shm_size=32M'; \
+    } > /usr/local/etc/php/conf.d/apcu-ratelimit.ini
 
 RUN mkdir -p /var/log/supervisor
 

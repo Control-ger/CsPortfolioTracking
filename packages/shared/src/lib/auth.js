@@ -643,7 +643,57 @@ export async function getCurrentUser() {
 /**
  * Logout user
  */
+/**
+ * Revoke the session server-side so the (stateless, 30-day) token cannot be
+ * replayed after logout. Best-effort: local state is cleared either way, since a
+ * user who wants to log out must not be blocked by an unreachable server.
+ */
+async function revokeSessionOnServer() {
+  let token = null;
+  try {
+    const session = await getSession();
+    token = session?.token || null;
+  } catch {
+    return;
+  }
+
+  if (!token) {
+    return;
+  }
+
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+    "X-Auth-Token": token,
+  };
+
+  // Desktop holds a server-issued token (Variante C) that only the remote server
+  // can decrypt — the local sidecar cannot revoke it.
+  if (isDesktopApp()) {
+    const remoteBase = await resolveRemoteServerBase().catch(() => null);
+    if (remoteBase) {
+      const ok = await remoteFetchWithCloudflareAccess(remoteBase, "/api/v1/auth/logout", {
+        method: "POST",
+        headers,
+      })
+        .then((response) => response.ok)
+        .catch(() => false);
+      if (ok) {
+        return;
+      }
+    }
+  }
+
+  try {
+    await fetchWithDesktopRetry("/api/v1/auth/logout", { method: "POST", headers });
+  } catch (error) {
+    console.warn("[auth] server-side session revocation failed", error);
+  }
+}
+
 export async function logout() {
+  await revokeSessionOnServer();
+
   if (isDesktopApp()) {
     await window.electronAPI.clearSession();
   } else {

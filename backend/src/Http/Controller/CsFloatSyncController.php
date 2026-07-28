@@ -17,7 +17,7 @@ final class CsFloatSyncController
     public function __construct(
         private readonly CsFloatTradeSyncService $syncService,
         private readonly SyncStatusRepository $syncStatusRepository,
-        private readonly ?RequestUserScopeResolver $userScopeResolver = null
+        private readonly RequestUserScopeResolver $userScopeResolver
     ) {
     }
 
@@ -180,26 +180,7 @@ final class CsFloatSyncController
 
     private function resolveUserId(Request $request): int
     {
-        if ($this->userScopeResolver !== null) {
-            return $this->userScopeResolver->resolve($request);
-        }
-
-        foreach (['x-user-id', 'user-id'] as $header) {
-            if (isset($request->headers[$header]) && is_numeric($request->headers[$header])) {
-                return max(1, (int) $request->headers[$header]);
-            }
-        }
-
-        foreach (['userId', 'user_id'] as $key) {
-            if (isset($request->body[$key]) && is_numeric($request->body[$key])) {
-                return max(1, (int) $request->body[$key]);
-            }
-            if (isset($request->query[$key]) && is_numeric($request->query[$key])) {
-                return max(1, (int) $request->query[$key]);
-            }
-        }
-
-        return 1;
+        return $this->userScopeResolver->resolve($request);
     }
 }
 

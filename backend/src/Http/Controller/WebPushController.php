@@ -16,7 +16,7 @@ final class WebPushController
     public function __construct(
         private readonly WebPushSubscriptionRepository $repository,
         private readonly WebPushService $webPushService,
-        private readonly ?RequestUserScopeResolver $userScopeResolver = null
+        private readonly RequestUserScopeResolver $userScopeResolver
     ) {
     }
 
@@ -113,19 +113,6 @@ final class WebPushController
 
     private function resolveUserId(Request $request): int
     {
-        if ($this->userScopeResolver !== null) {
-            return $this->userScopeResolver->resolve($request);
-        }
-
-        $candidate = $request->query['userId']
-            ?? $request->body['userId']
-            ?? 1;
-        $userId = (int) $candidate;
-
-        if ($userId <= 0) {
-            throw new \InvalidArgumentException('Invalid userId. Expected positive integer.');
-        }
-
-        return $userId;
+        return $this->userScopeResolver->resolve($request);
     }
 }

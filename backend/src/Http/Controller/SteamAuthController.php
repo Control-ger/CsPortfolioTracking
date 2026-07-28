@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Infrastructure\Persistence\Repository\UserRepository;
+use App\Infrastructure\Persistence\Repository\UserSessionRepository;
 use PDO;
 
 /**
@@ -19,11 +20,26 @@ final class SteamAuthController
     
     private PDO $pdo;
     private UserRepository $userRepository;
-    
-    public function __construct(PDO $pdo, UserRepository $userRepository)
-    {
+    private ?UserSessionRepository $sessionRepository;
+    private bool $allowLegacyTokensWithoutJti;
+
+    /**
+     * @param bool $allowLegacyTokensWithoutJti Tokens issued before the revocation
+     *        registry existed carry no `jti` and cannot be checked against it.
+     *        Accepting them keeps existing logins alive through the rollout; they
+     *        age out on their own within the 30-day token lifetime, after which
+     *        this should be turned off (SESSION_LEGACY_TOKENS_ALLOWED=false).
+     */
+    public function __construct(
+        PDO $pdo,
+        UserRepository $userRepository,
+        ?UserSessionRepository $sessionRepository = null,
+        bool $allowLegacyTokensWithoutJti = true
+    ) {
         $this->pdo = $pdo;
         $this->userRepository = $userRepository;
+        $this->sessionRepository = $sessionRepository;
+        $this->allowLegacyTokensWithoutJti = $allowLegacyTokensWithoutJti;
     }
     
     /**
@@ -169,11 +185,62 @@ final class SteamAuthController
     }
     
     /**
-     * Validates session token and returns user
+     * Validates a session token.
+     *
+     * Hot path: pure decrypt + expiry check, no outbound calls. Every authenticated
+     * request runs through this (auth gate, rate limiter, scope resolver), so it
+     * must not touch the network. Use validateSessionWithProfile() when the caller
+     * actually needs fresh profile fields.
      */
     public function validateSession(string $token): ?array
     {
         $payload = $this->decryptSessionToken($token);
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        return $this->isSessionRevoked($payload) ? null : $payload;
+    }
+
+    /**
+     * Revocation check against the session registry.
+     *
+     * A decryptable, unexpired token is not sufficient on its own — it must still
+     * be listed as active, otherwise logout and "sign out everywhere" would have
+     * no effect on a stateless token.
+     */
+    private function isSessionRevoked(array $payload): bool
+    {
+        if ($this->sessionRepository === null) {
+            return false;
+        }
+
+        $jti = (string) ($payload['jti'] ?? '');
+        if ($jti === '') {
+            // Pre-registry token: cannot be checked. Allowed only during rollout.
+            return !$this->allowLegacyTokensWithoutJti;
+        }
+
+        try {
+            return !$this->sessionRepository->isActive($jti);
+        } catch (\Throwable $exception) {
+            // A registry outage must not log everyone out; the token is still
+            // cryptographically valid and unexpired.
+            error_log('[auth] Session revocation check failed: ' . $exception->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Validates a session token and backfills missing profile fields from Steam.
+     *
+     * Only for the explicit session-validate endpoint, where the client asks for
+     * refreshed profile data — this can issue an outbound Steam request.
+     */
+    public function validateSessionWithProfile(string $token): ?array
+    {
+        $payload = $this->validateSession($token);
         if (!is_array($payload)) {
             return null;
         }
@@ -711,18 +778,60 @@ final class SteamAuthController
     
     private function generateSessionToken(array $user): string
     {
+        $expiresAt = time() + (30 * 24 * 60 * 60); // 30 days
+        $jti = bin2hex(random_bytes(16));
+
         $payload = [
             'userId' => $user['id'],
             'steamId' => $user['steam_id'],
             'name' => $user['steam_name'] ?? null,
             'avatar' => $user['steam_avatar'] ?? null,
             'animatedAvatar' => $user['animatedAvatar'] ?? null,
-            'exp' => time() + (30 * 24 * 60 * 60), // 30 days
+            'exp' => $expiresAt,
             'iat' => time(),
+            'jti' => $jti,
             'type' => 'session'
         ];
-        
+
+        // Register before handing the token out: a token whose row is missing is
+        // treated as revoked, so failing to record must not produce a live token.
+        if ($this->sessionRepository !== null) {
+            $this->sessionRepository->record(
+                $jti,
+                (int) $user['id'],
+                isset($user['steam_id']) ? (string) $user['steam_id'] : null,
+                $expiresAt
+            );
+        }
+
         return $this->encryptToken($payload);
+    }
+
+    /**
+     * Revokes the session behind a token. Idempotent; returns false when the
+     * token is undecryptable, carries no jti, or was already revoked.
+     */
+    public function revokeSession(string $token): bool
+    {
+        if ($this->sessionRepository === null) {
+            return false;
+        }
+
+        $payload = $this->decryptSessionToken($token);
+        $jti = is_array($payload) ? (string) ($payload['jti'] ?? '') : '';
+        if ($jti === '') {
+            return false;
+        }
+
+        return $this->sessionRepository->revoke($jti);
+    }
+
+    /**
+     * Revokes every active session of a user ("sign out everywhere").
+     */
+    public function revokeAllSessions(int $userId): int
+    {
+        return $this->sessionRepository?->revokeAllForUser($userId) ?? 0;
     }
     
     private function encryptToken(array $payload): string

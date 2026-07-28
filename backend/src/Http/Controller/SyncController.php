@@ -14,7 +14,7 @@ final class SyncController
 {
     public function __construct(
         private readonly SyncService $syncService,
-        private readonly ?RequestUserScopeResolver $userScopeResolver = null
+        private readonly RequestUserScopeResolver $userScopeResolver
     ) {
     }
 
@@ -95,27 +95,6 @@ final class SyncController
 
     private function resolveUserId(Request $request): int
     {
-        if ($this->userScopeResolver !== null) {
-            return $this->userScopeResolver->resolve($request);
-        }
-
-        $candidate = $request->query['userId']
-            ?? $request->body['userId']
-            ?? null;
-        if (is_numeric($candidate)) {
-            $userId = (int) $candidate;
-
-            if ($userId <= 0) {
-                throw new \InvalidArgumentException('Invalid userId. Expected positive integer.');
-            }
-
-            return $userId;
-        }
-
-        if ($candidate !== null && trim((string) $candidate) !== '') {
-            throw new \InvalidArgumentException('Invalid userId. Expected positive integer.');
-        }
-
-        return 1;
+        return $this->userScopeResolver->resolve($request);
     }
 }
