@@ -144,6 +144,7 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 ## Desktop Packaging (Windows + Linux)
 - Every desktop release ships **both** targets: Windows (NSIS `.exe`) and Linux (`AppImage` + Debian `.deb`, for Debian/Ubuntu-based distros incl. Zorin OS). CI builds both on each `v*` tag via `desktop-release.yml`.
 - Both platforms are **self-contained**: a fully static PHP runtime is fetched at build time (`npm run fetch:php`, from static-php-cli) and embedded via electron-builder `extraResources`; no system PHP is required. A `cacert.pem` is bundled for HTTPS. The binaries are git-ignored and re-fetched on every build.
+- `npm run fetch:php` retries the runtime download (3 attempts, linear backoff; 4xx aborts at once). The platform release jobs are independent, so a single flaky download previously skipped every Linux step while the Windows job still published the tag — that Windows-only release becomes "latest" and its missing `latest-linux.yml` breaks auto-update for all existing Linux users (observed on `v0.2.103`). Never let this step fail silently for one platform only.
 - Canonical build/packaging/CI/release detail: `docs/devops.md`. Sidecar/runtime detail (static ini, CA injection, `resolvePhpBinary` fallback): `docs/architecture-overview.md` §3.1.
 
 ## Documentation Governance

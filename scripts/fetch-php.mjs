@@ -70,12 +70,50 @@ function resolveTarget() {
   return null;
 }
 
+// A single flaky download used to cost the whole platform release: when this
+// step failed in CI, every later step was skipped (no AppImage, no .deb, no
+// latest-linux.yml) while the other platform's job still published the tag.
+// The half-empty release then became "latest" and broke auto-update for every
+// existing user on the missing platform. Retrying here is far cheaper than
+// that blast radius. 5xx and network errors are retried; a 404 is not, because
+// a wrong pinned version will not fix itself.
+const DOWNLOAD_ATTEMPTS = 3;
+const DOWNLOAD_RETRY_BASE_MS = 2000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function download(url) {
-  const response = await fetch(url); // follows CDN redirects automatically
-  if (!response.ok) {
-    throw new Error(`Download failed: HTTP ${response.status} for ${url}`);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url); // follows CDN redirects automatically
+      if (response.ok) {
+        return Buffer.from(await response.arrayBuffer());
+      }
+
+      const error = new Error(`Download failed: HTTP ${response.status} for ${url}`);
+      if (response.status >= 400 && response.status < 500) {
+        throw error;
+      }
+      lastError = error;
+    } catch (error) {
+      if (String(error?.message || "").includes("HTTP 4")) {
+        throw error;
+      }
+      lastError = error;
+    }
+
+    if (attempt < DOWNLOAD_ATTEMPTS) {
+      const delayMs = DOWNLOAD_RETRY_BASE_MS * attempt;
+      console.warn(
+        `[fetch-php] attempt ${attempt}/${DOWNLOAD_ATTEMPTS} failed (${lastError?.message || lastError}); retrying in ${delayMs}ms`,
+      );
+      await sleep(delayMs);
+    }
   }
-  return Buffer.from(await response.arrayBuffer());
+
+  throw lastError ?? new Error(`Download failed for ${url}`);
 }
 
 // Extract the downloaded archive into destDir. Uses format-appropriate,

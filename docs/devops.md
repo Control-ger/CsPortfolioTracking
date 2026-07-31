@@ -29,6 +29,12 @@ needed on any platform.
   - Linux/macOS: `common` build (`.tar.gz`), extracted with `tar`.
   - Windows: `spc-max` build (`.zip`, a single static `php.exe`), extracted with PowerShell `Expand-Archive`.
   - Extensions compiled in: `curl`, `openssl`, `mbstring`, `sqlite3`, `pdo_sqlite`.
+  - The download retries up to 3 times with linear backoff on network/5xx errors; a 4xx
+    aborts immediately, since a wrong pinned version cannot fix itself by retrying.
+    Rationale: the release jobs are per-platform and independent. When this step failed
+    once (observed on `v0.2.103`), every later Linux step was skipped while the Windows
+    job still published the tag — the resulting Windows-only release became "latest" and
+    its missing `latest-linux.yml` broke auto-update for **all** existing Linux users.
 - electron-builder embeds it per platform via `linux.extraResources` / `win.extraResources`.
 - The binaries are git-ignored (`resources/php/`) and re-fetched on every build.
 - Runtime selection (`resolvePhpBinary` → `isStatic`), the static `php.static.ini`, and the
