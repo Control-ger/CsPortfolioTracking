@@ -67,4 +67,14 @@ RUN touch /var/www/html/.env
 RUN mkdir -p /var/www/html/logs \
     && chown -R www-data:www-data /var/www/html/logs
 
+# The chown above only covers the image layer. When the deployment bind-mounts a
+# host directory over /var/www/html/logs — which it does, so app.log survives the
+# container replacement of every Watchtower update — that host directory's
+# ownership wins, and a root-created app.log locks www-data out again. The
+# entrypoint therefore repeats the correction at start against whatever is
+# actually mounted, before any writer runs.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]

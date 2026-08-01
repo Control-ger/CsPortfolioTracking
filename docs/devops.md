@@ -80,6 +80,14 @@ API calls with frontend HTML at status 200. It belongs in the image rather than 
 mount: `create_host_path: true` silently creates a *directory* when the source file is missing,
 and a directory mounted over `.htaccess` disables the rule while looking configured.
 
+The build-time `chown` alone is not sufficient once that bind mount exists: the host directory's
+ownership overlays the image layer. Worse, two processes append to the same file with different
+uids — Apache/PHP as `www-data`, the supervisord crons as root — and whichever creates `app.log`
+first owns it. A root-created file locks `www-data` out again, silently. `docker-entrypoint.sh`
+therefore runs as root at container start, creates the file if missing and chowns directory and
+file to `www-data`, before any writer runs. Owning it as `www-data` satisfies both writers, since
+root ignores file permissions.
+
 Two follow-ups from that:
 
 - `FileSink` reports an unwritable log path once per process via `error_log`, so the failure is
