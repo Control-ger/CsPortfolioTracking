@@ -74,6 +74,20 @@ services:
               target: /var/www/html/.env
               bind:
                 create_host_path: true
+            # app.log liegt sonst nur im Container und ist nach jedem
+            # Watchtower-Update weg — eine Beobachtungsphase ueber Tage waere
+            # damit unmoeglich.
+            # ACHTUNG: Das Host-Verzeichnis muss www-data (UID 33) gehoeren.
+            # Der Mount ueberlagert die Rechte aus dem Image; ein root-eigenes
+            # Verzeichnis reproduziert exakt den Fehler, den der chown im
+            # Dockerfile behebt (Web-Requests koennen nicht loggen, der
+            # root-Cron schon — das Log sieht dann gesund aus und ist es nicht):
+            #   mkdir -p ${PROJECT_ROOT_PATH}/logs && chown 33:33 ${PROJECT_ROOT_PATH}/logs
+            - type: bind
+              source: ${PROJECT_ROOT_PATH}/logs
+              target: /var/www/html/logs
+              bind:
+                create_host_path: true
     watchtower:
         image: containrrr/watchtower:1.7.1
         cpu_shares: 90

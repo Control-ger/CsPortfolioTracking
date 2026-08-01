@@ -1,0 +1,16 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /api/
+
+    # Routes the bare /api/v1/... form to the front controller. The desktop
+    # client tries /api/index.php/... first and never needs this, which is why
+    # deleting it looked harmless — but without it Apache falls through to the
+    # SPA rewrite at the document root and answers API calls with the frontend
+    # HTML at status 200. Shipping it in the image beats bind-mounting it from
+    # the host: `create_host_path: true` silently creates a *directory* when the
+    # source file is missing, and a directory mounted here disables the rule
+    # while looking configured.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>

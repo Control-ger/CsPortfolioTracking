@@ -68,6 +68,18 @@ consequence: the auth gate's observe mode reported zero `security.auth.request_d
 which was read as "no unauthenticated traffic" when in truth nothing web-facing was being logged
 at all.
 
+`docker-compose.yml` bind-mounts `${PROJECT_ROOT_PATH}/logs` so `app.log` survives the container
+replacement that every Watchtower update performs — otherwise no observation window can span more
+than one image pull. **The host directory must be owned by UID 33 (`www-data`)**: a bind mount
+overlays the image's ownership, so a root-owned host directory reproduces exactly the failure the
+Dockerfile `chown` fixes.
+
+`backend/.htaccess` ships in the image and routes the bare `/api/v1/...` form to the front
+controller. Without it Apache falls through to the SPA rewrite at the document root and answers
+API calls with frontend HTML at status 200. It belongs in the image rather than in a host bind
+mount: `create_host_path: true` silently creates a *directory* when the source file is missing,
+and a directory mounted over `.htaccess` disables the rule while looking configured.
+
 Two follow-ups from that:
 
 - `FileSink` reports an unwritable log path once per process via `error_log`, so the failure is
