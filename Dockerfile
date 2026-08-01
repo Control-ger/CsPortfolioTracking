@@ -59,4 +59,12 @@ COPY apps/web/public/.htaccess /var/www/html/.htaccess
 # Die Runtime-Konfiguration kommt bei Deployment ueber bind-mount /var/www/html/.env.
 RUN touch /var/www/html/.env
 
+# The observability FileSink appends to /var/www/html/logs/app.log. Apache serves
+# as www-data while every COPY above lands root-owned, so the sink's silenced
+# @file_put_contents failed for *every web request* — all request-scoped events
+# (including the auth gate's denials) were dropped. The root-owned CLI crons kept
+# appending, which made the log look perfectly healthy and hid this for a while.
+RUN mkdir -p /var/www/html/logs \
+    && chown -R www-data:www-data /var/www/html/logs
+
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]

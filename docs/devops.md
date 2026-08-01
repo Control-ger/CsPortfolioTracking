@@ -55,6 +55,27 @@ limited request on one exclusive lock. `apc.enable_cli` stays off because the CL
 rate-limit; the store probes `apcu_enabled()` and falls back accordingly. If the extension is
 dropped from the image, rate limiting keeps working — it just gets slower under concurrency.
 
+## Server image logging
+
+The observability `FileSink` appends to `/var/www/html/logs/app.log`. The Dockerfile creates that
+directory and chowns it to `www-data`, because every `COPY` lands root-owned while Apache serves
+as `www-data`.
+
+This is not cosmetic. Without the chown, the sink's silenced `@file_put_contents` fails for
+**every web request**, so no request-scoped event is ever recorded — while the root-owned CLI
+crons keep appending to the same file, leaving a log that looks perfectly healthy. Observed
+consequence: the auth gate's observe mode reported zero `security.auth.request_denied` entries,
+which was read as "no unauthenticated traffic" when in truth nothing web-facing was being logged
+at all.
+
+Two follow-ups from that:
+
+- `FileSink` reports an unwritable log path once per process via `error_log`, so the failure is
+  no longer invisible.
+- `php://stderr` from mod_php does **not** surface in `docker logs` in this image. `app.log` is
+  the only usable source; grep it inside the container:
+  `docker exec csportfolio-web grep … /var/www/html/logs/app.log`.
+
 ## Icons
 
 - Windows: `icon.ico` (repo root). Linux: `build/icon.png` (≥256×256, extracted from `icon.ico`;
