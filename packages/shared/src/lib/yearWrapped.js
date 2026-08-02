@@ -218,16 +218,22 @@ function buildPlatformStats(datedRows) {
     group.spentUsd += entry.spendUsd;
   });
 
-  const entries = Array.from(groups.values()).sort((a, b) => b.count - a.count);
+  // Ranked and weighted by spend, not by purchase count: a platform used for a
+  // handful of expensive buys dominates the portfolio even though it loses a
+  // count-based ranking to a platform used for many cheap ones.
+  const entries = Array.from(groups.values()).sort((a, b) => b.spentUsd - a.spentUsd);
   const totalCount = entries.reduce((sum, entry) => sum + entry.count, 0);
+  const totalSpentUsd = entries.reduce((sum, entry) => sum + entry.spentUsd, 0);
 
   return {
     available: entries.length > 0,
     entries: entries.map((entry) => ({
       ...entry,
-      percentage: totalCount > 0 ? (entry.count / totalCount) * 100 : 0,
+      percentage: totalSpentUsd > 0 ? (entry.spentUsd / totalSpentUsd) * 100 : 0,
+      countPercentage: totalCount > 0 ? (entry.count / totalCount) * 100 : 0,
     })),
     totalCount,
+    totalSpentUsd,
   };
 }
 

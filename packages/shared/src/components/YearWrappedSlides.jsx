@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   XAxis,
 } from "recharts";
+import { useEffect, useState } from "react";
 import { CalendarRange, Eye, Flame, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
@@ -28,6 +29,9 @@ const STEAM_CHART_COLORS = [
   "var(--wrapped-chart-d, hsl(32, 60%, 54%))",
   "var(--wrapped-chart-c, hsl(39, 66%, 56%))",
 ];
+
+// 12 months x 250ms = a ~3s run-up across the year.
+const MONTH_BAR_STEP_MS = 250;
 
 function useUsdFormatter() {
   const { formatPrice } = useCurrency();
@@ -112,7 +116,9 @@ function ItemTile({ label, name, imageUrl, primary, secondary }) {
         <div className="h-16 w-16 shrink-0 rounded-xl bg-muted" />
       )}
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
+        {label ? (
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
+        ) : null}
         <span className="truncate text-base font-semibold text-foreground">{name}</span>
         <span className="text-sm text-muted-foreground">{primary}</span>
         {secondary ? <span className="text-xs text-muted-foreground">{secondary}</span> : null}
@@ -194,6 +200,22 @@ export function WrappedPurchasesSlide({ year, purchases }) {
 export function WrappedMonthlySlide({ year, monthly }) {
   const formatUsd = useUsdFormatter();
   const peakLabel = MONTH_LABELS[monthly.peakMonth?.month ?? 0];
+  // Recharts grows every bar at once, so the months are revealed by feeding the
+  // chart one more real value per step — that is what makes them come up in
+  // sequence instead of as a single block.
+  const [revealedMonths, setRevealedMonths] = useState(0);
+
+  useEffect(() => {
+    if (revealedMonths >= monthly.buckets.length) {
+      return undefined;
+    }
+    const timer = setTimeout(() => setRevealedMonths((current) => current + 1), MONTH_BAR_STEP_MS);
+    return () => clearTimeout(timer);
+  }, [revealedMonths, monthly.buckets.length]);
+
+  const revealedBuckets = monthly.buckets.map((bucket, index) =>
+    index < revealedMonths ? bucket : { ...bucket, count: 0 },
+  );
 
   return (
     <WrappedSlideShell
@@ -212,7 +234,7 @@ export function WrappedMonthlySlide({ year, monthly }) {
       </div>
       <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={monthly.buckets} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+          <BarChart data={revealedBuckets} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
             <XAxis
               dataKey="label"
               tickLine={false}
@@ -220,7 +242,13 @@ export function WrappedMonthlySlide({ year, monthly }) {
               tick={{ fontSize: 11, fill: "currentColor" }}
               className="text-muted-foreground"
             />
-            <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+            <Bar
+              dataKey="count"
+              radius={[6, 6, 0, 0]}
+              isAnimationActive
+              animationDuration={MONTH_BAR_STEP_MS}
+              animationEasing="ease-out"
+            >
               {monthly.buckets.map((bucket) => (
                 <Cell
                   key={bucket.month}
@@ -276,6 +304,7 @@ export function WrappedPlatformsSlide({ year, platforms }) {
     <WrappedSlideShell
       eyebrow={`Plattform-Mix ${year}`}
       title={leader ? `Am meisten ueber ${leader.label}` : "Deine Plattformen"}
+      footnote="Anteile nach Ausgaben, nicht nach Anzahl der Kaeufe."
       icon={Sparkles}
     >
       <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -284,7 +313,7 @@ export function WrappedPlatformsSlide({ year, platforms }) {
             <PieChart>
               <Pie
                 data={platforms.entries}
-                dataKey="count"
+                dataKey="spentUsd"
                 nameKey="label"
                 innerRadius="62%"
                 outerRadius="94%"
@@ -306,10 +335,12 @@ export function WrappedPlatformsSlide({ year, platforms }) {
           </ResponsiveContainer>
           {/* Centre label — the hole was the emptiest part of the slide. */}
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-3xl font-semibold tabular-nums text-foreground">
-              {platforms.totalCount}
+            <span className="text-2xl font-semibold tabular-nums text-foreground">
+              {formatUsd(platforms.totalSpentUsd)}
             </span>
-            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Kaeufe</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              {platforms.totalCount} Kaeufe
+            </span>
           </div>
         </div>
         <ul className="flex flex-col gap-3">
@@ -322,8 +353,8 @@ export function WrappedPlatformsSlide({ year, platforms }) {
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
                     <span className="truncate font-medium text-foreground">{entry.label}</span>
                   </span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {entry.count} · {entry.percentage.toFixed(0)} %
+                  <span className="shrink-0 tabular-nums font-medium text-foreground">
+                    {formatUsd(entry.spentUsd)} · {entry.percentage.toFixed(0)} %
                   </span>
                 </div>
                 {/* Share bar: gives the legend visual weight instead of leaving
@@ -335,7 +366,7 @@ export function WrappedPlatformsSlide({ year, platforms }) {
                   />
                 </div>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {formatUsd(entry.spentUsd)}
+                  {entry.count} Kaeufe · {entry.countPercentage.toFixed(0)} % der Kaeufe
                 </span>
               </li>
             );
@@ -414,6 +445,59 @@ export function WrappedExtremesSlide({ year, extremes }) {
   );
 }
 
+const PERFORMER_COUNT_DURATION_MS = 1600;
+
+/**
+ * Staged reveal: headline first, then the ROI counts up, and only once it has
+ * landed does the position itself appear. Naming the item up front would give
+ * away the punchline the counter is building to.
+ */
+function PerformerReveal({ headline, performer, tone, delayMs, formatUsd }) {
+  const [phase, setPhase] = useState(0);
+
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setPhase(1), delayMs + 400),
+      setTimeout(() => setPhase(2), delayMs + 400 + PERFORMER_COUNT_DURATION_MS),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [delayMs]);
+
+  const roi = useCountUp(performer.roi, {
+    active: phase >= 1,
+    duration: PERFORMER_COUNT_DURATION_MS,
+    sound: true,
+  });
+  const toneClass =
+    tone === "negative" ? "text-rose-500 dark:text-rose-400" : "text-emerald-500 dark:text-emerald-400";
+
+  return (
+    <div className="flex flex-col gap-3">
+      <span
+        className="wrapped-reveal text-sm font-medium text-muted-foreground"
+        style={{ "--wrapped-reveal-delay": `${delayMs}ms` }}
+      >
+        {headline}
+      </span>
+      <span className={`text-4xl font-semibold tabular-nums sm:text-6xl ${toneClass}`}>
+        {formatPercent(phase >= 1 ? roi : 0)}
+      </span>
+      {phase >= 2 ? (
+        <div className="wrapped-reveal" style={{ "--wrapped-reveal-delay": "0ms" }}>
+          <ItemTile
+            name={performer.name}
+            imageUrl={performer.imageUrl}
+            primary={formatUsd(performer.profitUsd)}
+          />
+        </div>
+      ) : (
+        // Placeholder keeps the slide from jumping when the tile lands.
+        <div className="h-[6.5rem]" aria-hidden="true" />
+      )}
+    </div>
+  );
+}
+
 export function WrappedPerformersSlide({ year, performers }) {
   const formatUsd = useUsdFormatter();
 
@@ -424,20 +508,20 @@ export function WrappedPerformersSlide({ year, performers }) {
       icon={TrendingUp}
       footnote="Unrealisierte Entwicklung der aktuell gehaltenen Positionen."
     >
-      <div className="flex flex-col gap-3">
-        <ItemTile
-          label="Bester Performer"
-          name={performers.best.name}
-          imageUrl={performers.best.imageUrl}
-          primary={formatPercent(performers.best.roi)}
-          secondary={formatUsd(performers.best.profitUsd)}
+      <div className="flex flex-col gap-6">
+        <PerformerReveal
+          headline="Hier hast du am meisten Profit gemacht"
+          performer={performers.best}
+          tone="positive"
+          delayMs={0}
+          formatUsd={formatUsd}
         />
-        <ItemTile
-          label="Schwaechster Performer"
-          name={performers.worst.name}
-          imageUrl={performers.worst.imageUrl}
-          primary={formatPercent(performers.worst.roi)}
-          secondary={formatUsd(performers.worst.profitUsd)}
+        <PerformerReveal
+          headline="Und hier hat es am meisten wehgetan"
+          performer={performers.worst}
+          tone="negative"
+          delayMs={900}
+          formatUsd={formatUsd}
         />
       </div>
     </WrappedSlideShell>
