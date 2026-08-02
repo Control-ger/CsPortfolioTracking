@@ -59,7 +59,6 @@ export function PortfolioOverviewSection({
   handleTabSelect,
   compositionData,
   compositionLoading,
-  compositionError,
   portfolioTotalValueForDisplay,
   portfolioValueLabel,
 }) {
@@ -517,10 +516,6 @@ export function PortfolioOverviewSection({
                   <Skeleton key={entry} className="h-14 w-full" />
                 ))}
               </div>
-            </div>
-          ) : compositionError ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              {compositionError}
             </div>
           ) : (
             <PortfolioCompositionChart

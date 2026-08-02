@@ -61,14 +61,6 @@ export async function fetchPortfolioHistory(options = {}) {
   });
 }
 
-export async function fetchPortfolioComposition(options = {}) {
-  const userQuery = await resolveCurrentUserQuery(options);
-  return request(buildPath("/api/v1/portfolio/composition", {
-    ...userQuery,
-    scope: options.scope,
-  }));
-}
-
 export async function savePortfolioDailyValue(totalValue) {
   const userQuery = await resolveCurrentUserQuery();
   return request("/api/v1/portfolio/daily-value", {

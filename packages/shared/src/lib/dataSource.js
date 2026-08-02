@@ -12,7 +12,6 @@ import {
   deleteWatchlistItem as deleteApiWatchlistItem,
   fetchCsFloatBuyOrders as fetchApiCsFloatBuyOrders,
   fetchCsFloatWatchlist as fetchApiCsFloatWatchlist,
-  fetchPortfolioComposition as fetchApiPortfolioComposition,
   fetchPortfolioHistory as fetchApiPortfolioHistory,
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
   fetchWatchlist as fetchApiWatchlist,
@@ -28,18 +27,14 @@ import { resolveDesktopLocalUserId as resolveDesktopUserId } from "./userIdentit
 
 import {
   calculatePortfolioSummary,
-  clusterDesktopInvestments,
   enforceCsfloatOnlyRow,
   filterRowsByScope,
-  isExcludedRow,
-  buildPortfolioCompositionFromRows,
   DEFAULT_STATS,
 } from "./portfolioCalculations.js";
 
 import {
   getDesktopLocalStore,
   isAbortLikeError,
-  enrichDesktopRowsWithUpstreamLiveData,
   enrichDesktopWatchlistWithUpstreamMetrics,
   fetchDesktopPortfolioData,
   CSFLOAT_BUYORDERS_CACHE_KEY,
@@ -118,43 +113,6 @@ export async function fetchPortfolioData(options = {}) {
   }
 
   return fetchApiPortfolioData({ ...options });
-}
-
-export async function fetchPortfolioCompositionData(options = {}) {
-  const localStore = getDesktopLocalStore();
-  if (!localStore) {
-    return fetchApiPortfolioComposition({ scope: options.scope });
-  }
-
-  const user = await getCurrentUser();
-  const userId = resolveDesktopUserId(user, 1);
-  const rawRows = unwrapLocalStoreResult(
-    await localStore.listInvestments(userId),
-    "local-store-list-investments",
-  );
-  const scopedRows = filterRowsByScope(rawRows, options.scope);
-  const activeRows = scopedRows.filter((row) => !isExcludedRow(row));
-  let clusteredRows = clusterDesktopInvestments(activeRows);
-
-  try {
-    const upstreamRowsResponse = await fetchApiPortfolioInvestments({
-      signal: options.signal,
-      scope: options.scope,
-    });
-    const upstreamRows = Array.isArray(upstreamRowsResponse?.data)
-      ? upstreamRowsResponse.data
-      : [];
-
-    if (upstreamRows.length > 0) {
-      clusteredRows = enrichDesktopRowsWithUpstreamLiveData(clusteredRows, upstreamRows);
-    }
-  } catch (error) {
-    if (!isAbortLikeError(error)) {
-      console.warn("[desktop-composition] upstream investments unavailable", error);
-    }
-  }
-
-  return buildPortfolioCompositionFromRows(clusteredRows.map(enforceCsfloatOnlyRow));
 }
 
 export async function fetchWatchlistData(options = {}) {

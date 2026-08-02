@@ -23,7 +23,7 @@ import {
 } from "@shared/components";
 import { Skeleton } from "@shared/components";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@shared/components";
-import { usePortfolio, usePortfolioComposition } from "@shared/hooks";
+import { usePortfolio } from "@shared/hooks";
 import {
   fetchItemPriceHistory,
   fetchPortfolioGroupsSetting,
@@ -34,6 +34,7 @@ import {
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
+  buildPortfolioCompositionFromRows,
   fetchCS2Inventory,
   fetchCsFloatBuyOrdersData,
   fetchWatchlistData,
@@ -530,12 +531,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     meta: csUpdatesMeta,
     isLoading: csUpdatesLoading,
   } = useCsUpdatesFeed();
+  // Kept as a general "portfolio data changed" signal for the side-loads below;
+  // the composition itself no longer needs it — it derives from the rows.
   const [compositionRefreshToken, setCompositionRefreshToken] = useState(0);
-  const {
-    data: compositionData,
-    loading: compositionLoading,
-    error: compositionError,
-  } = usePortfolioComposition(compositionRefreshToken, { scope: metricsScope });
+  // Derived, not fetched: the donut is a pure aggregation of the very rows the
+  // KPI cards already use, so a second identical investments request (and a
+  // second cache policy) bought nothing. Passing metricsScope explicitly also
+  // fixes the donut ignoring the "Alles" scope — the old path let
+  // buildPortfolioCompositionFromRows fall back to its "investments" default.
+  const compositionData = useMemo(
+    () => buildPortfolioCompositionFromRows(enrichedInvestments, { scope: metricsScope }),
+    [enrichedInvestments, metricsScope],
+  );
+  const compositionLoading = statsPending;
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
@@ -5130,7 +5138,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             handleTabSelect={handleTabSelect}
             compositionData={compositionData}
             compositionLoading={compositionLoading}
-            compositionError={compositionError}
             portfolioTotalValueForDisplay={portfolioTotalValueForDisplay}
             portfolioValueLabel={portfolioValueLabel}
           />
