@@ -1,11 +1,21 @@
 # DevOps (Build, Packaging, CI, Release)
 
 Status: FINAL
-Last updated: 2026-07-23
+Last updated: 2026-08-02
 
 Home for **build, packaging, CI and release** concerns. Runtime/architecture behavior lives
 in `docs/architecture-overview.md`; this file owns *how the app is built, bundled, and shipped*.
 `scripts/docs-guard.mjs` routes DevOps/build triggers (see below) to this doc.
+
+## Frontend runtime dependencies
+
+The UI primitives in `packages/shared/src/components/ui/` are Radix-backed. The set grew with the
+design-token work; these ship in the renderer bundle (chunked as `vendor-radix` by
+`vite.config.js`) and need no build-step or packaging changes:
+
+`@radix-ui/react-dialog`, `-switch`, `-checkbox`, `-progress`, `-label`, `-slider`, alongside the
+pre-existing `-accordion`, `-alert-dialog`, `-dropdown-menu`, `-scroll-area`, `-select`,
+`-separator`, `-slot`, `-tabs`, `-tooltip`.
 
 ## Desktop build matrix
 

@@ -58,8 +58,34 @@ NEVER: architecture plans, sync strategies, DB schemas, roadmaps, technical deci
 ### Frontend Visual Rule
 All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived Steam palette:
 - Source: `packages/shared/src/components/SteamLoginPrompt.jsx` (`deriveSteamPaletteFromUser`)
-- CSS variables: `--steam-shell-color-a` through `--steam-shell-color-d`
+- CSS variables: `--steam-shell-color-a` through `--steam-shell-color-d`, declared with their
+  fallback values in `:root` and overwritten at runtime as inline styles on the root element.
 - Static fallback gradients only when avatar data is unavailable.
+
+### Design Tokens
+Everything that is not a Steam-palette gradient MUST use the semantic token scale defined in
+`apps/web/src/index.css`. **No hardcoded Tailwind palette classes** (`text-slate-300`,
+`bg-emerald-500/12`, `border-white/15`, ...) — the repo contains zero of them, keep it that way.
+- Surfaces/text: `background`, `foreground`, `card`, `popover`, `muted`, `accent`, `border`, `input`, `ring`
+- Status comes in **two roles, do not mix them up**:
+  - `<token>` — on-surface tone for `text-<token>` and the tint idiom. Flips per theme.
+  - `<token>-solid` + `<token>-foreground` — the fill pair for buttons, badges and status dots.
+    Theme-independent: a destructive button is the same red in light and dark.
+  - Using the on-surface tone as a fill is the mistake to avoid — it makes dark-mode buttons
+    pastel and forces dark label text onto them.
+- A token already flips between light and dark, so a `dark:` variant of the *same* token is dead
+  weight. `bg-white/10` on a dark surface is `bg-foreground/10`.
+- Tinted boxes use the `border-<token>/35 bg-<token>/12 text-<token>` idiom.
+- Light-mode status lightness is contrast-bound: `text-<token>` on `bg-<token>/12` must clear
+  4.5:1, which caps them near `oklch(0.52 …)`. Raising them breaks WCAG AA — measure, don't guess.
+
+### UI Primitives
+Prefer `packages/shared/src/components/ui/*` over hand-rolled controls; they carry the focus ring
+(`ring-ring`), disabled handling and `type="button"`. Structural elements (navigation, segmented
+controls, sortable table headers, whole-row click targets, window controls) legitimately stay raw
+`<button>`. `BaseModal` wraps Radix Dialog and keeps the bottom-sheet/fullscreen layout that Radix
+has no opinion on — callers pass `md:hidden` for mobile-only modals, so overlay and content must
+stay inside one positioned wrapper.
 
 ### Backend Data Rules
 - **Currency**: USD persisted, EUR computed at runtime.

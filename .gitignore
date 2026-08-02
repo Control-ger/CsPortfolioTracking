@@ -39,3 +39,6 @@ apps/*/dist/
 apps/*/node_modules/
 packages/*/dist/
 packages/*/node_modules/
+
+# Local Claude Code dev-server config
+.claude/
