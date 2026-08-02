@@ -266,7 +266,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     if (!window.electronAPI?.updater?.onStatus) {
       return undefined;
     }
-    const unsubscribe = window.electronAPI.updater.onStatus((payload) => {
+    const applyStatus = (payload) => {
       setUpdateStatus(payload || null);
       const state = payload?.state;
       if (state === "downloading") {
@@ -274,8 +274,33 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       } else if (state === "downloaded" || state === "error" || state === "not-available") {
         setUpdateDownloading(false);
       }
+    };
+
+    let cancelled = false;
+    let receivedLiveStatus = false;
+
+    const unsubscribe = window.electronAPI.updater.onStatus((payload) => {
+      receivedLiveStatus = true;
+      applyStatus(payload);
     });
+
+    // Show the result of the automatic startup check even when this page is
+    // opened long after it ran. A null snapshot means "nothing checked yet"
+    // and must not clear the card; a live push that raced this call wins.
+    if (window.electronAPI.updater.getLastStatus) {
+      void window.electronAPI.updater
+        .getLastStatus()
+        .then((payload) => {
+          if (cancelled || receivedLiveStatus || !payload) {
+            return;
+          }
+          applyStatus(payload);
+        })
+        .catch(() => {});
+    }
+
     return () => {
+      cancelled = true;
       try {
         unsubscribe?.();
       } catch {

@@ -56,6 +56,7 @@ const AUTO_UPDATE_INTERVAL_MS = 10 * 60 * 1000;
 let latestAvailableUpdateInfo = null;
 let updateDownloadInProgress = false;
 let updateCheckTimer = null;
+let lastUpdaterStatus = null;
 
 // Not every install can replace itself: an AppImage started without the
 // APPIMAGE env var, a Snap, or an unpacked build. electron-updater answers
@@ -169,10 +170,19 @@ export async function checkForManualUpdate(reason = "unsupported-install") {
 }
 
 function emitUpdaterStatus(payload) {
+  // The startup check fires on a timer, so it can land while the renderer is
+  // still booting or sitting on a screen that has no listener mounted yet —
+  // an IPC push has no replay. Keep the last status so the UI can pull it.
+  lastUpdaterStatus = payload || null;
+
   if (!mainWindowForUpdater || mainWindowForUpdater.isDestroyed()) {
     return;
   }
   mainWindowForUpdater.webContents.send("app-updater-status", payload);
+}
+
+export function getLastUpdaterStatus() {
+  return lastUpdaterStatus;
 }
 
 function normalizeUpdateVersionLabel(info) {
@@ -274,6 +284,28 @@ export async function promptForUpdateDownload(info = latestAvailableUpdateInfo) 
   return await startUpdateDownload(info);
 }
 
+// Accepts either the injected getter or the directly injected instance, and
+// rejects anything that is not an actual store (a Promise from an async getter,
+// a factory function) instead of dropping the notification without a trace.
+function resolveNotificationStore() {
+  const candidates = [];
+  if (typeof getLocalStoreForUpdater === "function") {
+    try {
+      candidates.push(getLocalStoreForUpdater());
+    } catch (error) {
+      console.warn("[updater] local store getter threw:", error?.message || error);
+    }
+  }
+  candidates.push(localStoreForUpdater);
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate.createNotification === "function") {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function createSystemNotificationEntry({
   category = "app_update",
   title = "App Update",
@@ -282,8 +314,11 @@ function createSystemNotificationEntry({
   dedupeWindowHours = 24,
 } = {}) {
   try {
-    const store = getLocalStoreForUpdater ? getLocalStoreForUpdater() : null;
-    if (!store || typeof store.createNotification !== "function") {
+    const store = resolveNotificationStore();
+    if (!store) {
+      console.warn(
+        `[updater] no local store available — dropping "${title}" notification`,
+      );
       return;
     }
 

@@ -967,7 +967,10 @@ app.whenReady().then(async () => {
   const win = createWindow();
   const { setMainWindow: setUpdaterMainWindow, setLocalStoreRefs } = await import("./updater.js");
   setUpdaterMainWindow(win);
-  setLocalStoreRefs(getLocalStore, localStore);
+  // NOT getLocalStore — that one is the async *module* loader and resolves to
+  // the createLocalStore factory. The updater needs the live store instance,
+  // exactly like setIpcDeps above.
+  setLocalStoreRefs(() => localStore, localStore);
 
   // Setup auto-updater
   setupAutoUpdater();

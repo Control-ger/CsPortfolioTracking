@@ -36,6 +36,7 @@ import {
   setMainWindow,
   setActiveNotificationUserId,
   resolveSelfUpdateSupport,
+  getLastUpdaterStatus,
   RELEASES_PAGE_URL,
 } from "./updater.js";
 
@@ -236,6 +237,10 @@ export function registerAllIpcHandlers() {
 
   // ── App updater ───────────────────────────────────────────────
   ipcMain.handle("app-updater-releases-url", async () => RELEASES_PAGE_URL);
+
+  // Replay for renderers that mount after the automatic startup check already
+  // pushed its result (app-updater-status is fire-and-forget).
+  ipcMain.handle("app-updater-last-status", async () => getLastUpdaterStatus());
 
   ipcMain.handle("app-updater-open-releases", async () => {
     const { openReleasesPage } = await import("./updater.js");

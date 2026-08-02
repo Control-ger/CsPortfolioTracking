@@ -1173,7 +1173,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       return;
     }
 
-    const unsubscribe = window.electronAPI.updater.onStatus((payload) => {
+    const applyStatus = (payload) => {
       if (!payload || typeof payload !== "object") {
         return;
       }
@@ -1190,9 +1190,34 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       if (nextState === "not-available") {
         setAppUpdateUnread(false);
       }
+    };
+
+    let cancelled = false;
+    let receivedLiveStatus = false;
+
+    const unsubscribe = window.electronAPI.updater.onStatus((payload) => {
+      receivedLiveStatus = true;
+      applyStatus(payload);
     });
 
+    // The automatic check runs shortly after app start and may have pushed its
+    // result before this page existed — pull the last status once on mount.
+    if (window.electronAPI.updater.getLastStatus) {
+      void window.electronAPI.updater
+        .getLastStatus()
+        .then((payload) => {
+          // A live push that landed while this call was in flight is newer,
+          // so the snapshot must never overwrite it.
+          if (cancelled || receivedLiveStatus) {
+            return;
+          }
+          applyStatus(payload);
+        })
+        .catch(() => {});
+    }
+
     return () => {
+      cancelled = true;
       if (typeof unsubscribe === "function") {
         unsubscribe();
       }
