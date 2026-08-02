@@ -105,14 +105,16 @@ const MacButton = ({ action, onClick }) => (
  * button. Symbolic icons come in `currentColor` and would be invisible as an
  * <img>, so those are painted as a CSS mask instead (`tint`).
  */
-const NativeButton = ({ action, asset, onClick }) => {
+const NativeButton = ({ action, asset, metrics, onClick }) => {
   const label = ACTION_LABELS[action];
+  const iconStyle = { width: metrics.iconSize, height: metrics.iconSize };
   const layer = (src, className) =>
     asset.tint ? (
       <span
         aria-hidden="true"
-        className={`absolute h-4 w-4 bg-current ${className}`}
+        className={`absolute bg-current ${className}`}
         style={{
+          ...iconStyle,
           maskImage: `url("${src}")`,
           WebkitMaskImage: `url("${src}")`,
           maskSize: 'contain',
@@ -124,7 +126,13 @@ const NativeButton = ({ action, asset, onClick }) => {
         }}
       />
     ) : (
-      <img src={src} alt="" aria-hidden="true" className={`absolute h-4 w-4 ${className}`} />
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        className={`absolute ${className}`}
+        style={iconStyle}
+      />
     );
 
   return (
@@ -133,7 +141,8 @@ const NativeButton = ({ action, asset, onClick }) => {
       onClick={onClick}
       title={label.title}
       aria-label={label.aria}
-      className="group relative flex h-full w-8 items-center justify-center text-muted-foreground"
+      className="group relative flex h-full items-center justify-center text-muted-foreground"
+      style={{ width: metrics.buttonSize }}
     >
       {layer(asset.normal, 'opacity-100 group-hover:opacity-0')}
       {layer(asset.hover, 'opacity-0 group-hover:opacity-100')}
@@ -141,15 +150,24 @@ const NativeButton = ({ action, asset, onClick }) => {
   );
 };
 
-const WindowControls = ({ actions, preset, assets, isMaximized }) => {
+const WindowControls = ({ actions, preset, assets, metrics, isMaximized }) => {
   if (actions.length === 0) {
     return null;
   }
 
+  // Native buttons follow the detected theme metrics; the built-in presets keep
+  // their own spacing (Windows cells are edge-to-edge, mac dots use gap-2/px-3).
+  const spacing =
+    preset === 'native'
+      ? { gap: metrics.gap, paddingLeft: metrics.edgePadding, paddingRight: metrics.edgePadding }
+      : null;
+
   return (
     <div
-      className={`flex h-full items-center ${preset === 'windows' ? '' : 'gap-2 px-3'}`}
-      style={{ WebkitAppRegion: 'no-drag' }}
+      className={`flex h-full items-center ${
+        preset === 'windows' || spacing ? '' : 'gap-2 px-3'
+      }`}
+      style={{ WebkitAppRegion: 'no-drag', ...spacing }}
     >
       {actions.map((action) => {
         const onClick = () => triggerWindowAction(action);
@@ -159,7 +177,15 @@ const WindowControls = ({ actions, preset, assets, isMaximized }) => {
         const asset = assets[assetKey] || assets[action];
 
         if (preset === 'native' && asset) {
-          return <NativeButton key={action} action={action} asset={asset} onClick={onClick} />;
+          return (
+            <NativeButton
+              key={action}
+              action={action}
+              asset={asset}
+              metrics={metrics}
+              onClick={onClick}
+            />
+          );
         }
         if (preset === 'macos') {
           return <MacButton key={action} action={action} onClick={onClick} />;
@@ -232,7 +258,7 @@ export const Titlebar = () => {
     };
   }, [isElectron]);
 
-  const { preset, layout, assets } = useMemo(
+  const { preset, layout, assets, metrics } = useMemo(
     () => resolveWindowControls(preference, detection),
     [preference, detection],
   );
@@ -250,6 +276,7 @@ export const Titlebar = () => {
         actions={layout.left}
         preset={preset}
         assets={assets}
+        metrics={metrics}
         isMaximized={isMaximized}
       />
 
@@ -271,6 +298,7 @@ export const Titlebar = () => {
         actions={layout.right}
         preset={preset}
         assets={assets}
+        metrics={metrics}
         isMaximized={isMaximized}
       />
     </div>

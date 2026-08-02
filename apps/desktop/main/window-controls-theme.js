@@ -9,7 +9,9 @@
  * WhiteSur (macOS look) or any custom/joke theme ship those buttons as SVG/PNG
  * under `<theme>/metacity-1/titlebuttons/`, which is what GNOME/Metacity-family
  * WMs render. Reading those files gives us the real icons — including custom
- * ones — instead of guessing "windows or mac".
+ * ones — instead of guessing "windows or mac". The artwork's intrinsic size also
+ * drives the button metrics we report, so a theme with small, tightly spaced
+ * buttons is not blown up to our default box.
  *
  * Resolution order per platform:
  *   win32/darwin → the matching built-in preset (renderer side), no probing.
@@ -169,17 +171,67 @@ function mimeForAsset(filePath) {
   return filePath.toLowerCase().endsWith(".png") ? "image/png" : "image/svg+xml";
 }
 
-async function readAssetAsDataUri(filePath) {
+/**
+ * How large the theme *intends* this button to be. Themes draw the whole button
+ * (WhiteSur's traffic light fills a 16×16 canvas), so the artwork's own size is
+ * the only reliable hint we get for the native button size — the rest of the
+ * headerbar metrics live in the theme's gresource, which we do not parse.
+ */
+function parseSvgIntrinsicSize(source) {
+  const head = source.slice(0, 2000);
+  const asPixels = (raw) => {
+    if (!raw) return null;
+    // Only absolute lengths are usable; `100%` describes the parent, not the icon.
+    const match = String(raw).trim().match(/^([\d.]+)(px)?$/);
+    const value = match ? Number.parseFloat(match[1]) : Number.NaN;
+    return Number.isFinite(value) && value > 0 ? value : null;
+  };
+
+  const width = asPixels(head.match(/\bwidth="([^"]+)"/)?.[1]);
+  const height = asPixels(head.match(/\bheight="([^"]+)"/)?.[1]);
+  if (width || height) {
+    return Math.max(width || 0, height || 0);
+  }
+
+  const viewBox = head.match(/\bviewBox="([^"]+)"/)?.[1];
+  const parts = viewBox ? viewBox.trim().split(/[\s,]+/).map(Number.parseFloat) : [];
+  if (parts.length === 4 && parts.every((part) => Number.isFinite(part))) {
+    return Math.max(parts[2], parts[3]);
+  }
+  return null;
+}
+
+function parsePngIntrinsicSize(buffer) {
+  // PNG signature + IHDR: width/height are big-endian uint32 at byte 16 and 20.
+  if (buffer.length < 24 || buffer.readUInt32BE(0) !== 0x89504e47) {
+    return null;
+  }
+  const size = Math.max(buffer.readUInt32BE(16), buffer.readUInt32BE(20));
+  return size > 0 ? size : null;
+}
+
+/** @returns {{ dataUri: string, size: number|null }|null} */
+async function readAsset(filePath) {
   try {
     const stat = await fs.stat(filePath);
     if (!stat.isFile() || stat.size === 0 || stat.size > MAX_ASSET_BYTES) {
       return null;
     }
     const buffer = await fs.readFile(filePath);
-    return `data:${mimeForAsset(filePath)};base64,${buffer.toString("base64")}`;
+    const size = filePath.toLowerCase().endsWith(".png")
+      ? parsePngIntrinsicSize(buffer)
+      : parseSvgIntrinsicSize(buffer.toString("utf8"));
+    return {
+      dataUri: `data:${mimeForAsset(filePath)};base64,${buffer.toString("base64")}`,
+      size,
+    };
   } catch {
     return null;
   }
+}
+
+async function readAssetAsDataUri(filePath) {
+  return (await readAsset(filePath))?.dataUri || null;
 }
 
 /**
@@ -194,17 +246,19 @@ async function readGtkThemeButtons(themeName) {
   }
   const buttonsDir = path.join(themeDir, "metacity-1", "titlebuttons");
   const assets = {};
+  let iconSize = null;
 
   for (const action of ACTIONS) {
     for (const extension of [".svg", ".png"]) {
-      const normal = await readAssetAsDataUri(
-        path.join(buttonsDir, `titlebutton-${action}${extension}`),
-      );
+      const normal = await readAsset(path.join(buttonsDir, `titlebutton-${action}${extension}`));
       if (!normal) continue;
       const hover = await readAssetAsDataUri(
         path.join(buttonsDir, `titlebutton-${action}-hover${extension}`),
       );
-      assets[action] = { normal, hover: hover || normal, tint: false };
+      assets[action] = { normal: normal.dataUri, hover: hover || normal.dataUri, tint: false };
+      if (action === "close" && normal.size) {
+        iconSize = normal.size;
+      }
       break;
     }
   }
@@ -212,7 +266,7 @@ async function readGtkThemeButtons(themeName) {
   if (!assets.close) {
     return null;
   }
-  return { assets, themeDir };
+  return { assets, themeDir, iconSize };
 }
 
 /**
@@ -244,18 +298,22 @@ async function readIconThemeButtons(iconThemeName, depth = 0) {
   };
 
   const assets = {};
+  let iconSize = null;
   for (const action of ACTIONS) {
     for (const relative of relativeCandidates(iconForAction[action])) {
-      const dataUri = await readAssetAsDataUri(path.join(iconDir, relative));
-      if (dataUri) {
-        assets[action] = { normal: dataUri, hover: dataUri, tint: true };
+      const asset = await readAsset(path.join(iconDir, relative));
+      if (asset) {
+        assets[action] = { normal: asset.dataUri, hover: asset.dataUri, tint: true };
+        if (action === "close" && asset.size) {
+          iconSize = asset.size;
+        }
         break;
       }
     }
   }
 
   if (assets.close) {
-    return { assets, themeDir: iconDir };
+    return { assets, themeDir: iconDir, iconSize };
   }
 
   // Follow one level of theme inheritance (e.g. WhiteSur → breeze → hicolor).
@@ -278,6 +336,33 @@ async function readIconThemeButtons(iconThemeName, depth = 0) {
   return null;
 }
 
+/**
+ * Turns the artwork size into the box the renderer should draw.
+ *
+ * The two sources behave differently: a GTK theme ships the *complete* button
+ * (WhiteSur's coloured traffic light already includes its background), so the
+ * clickable box is the icon itself and the buttons sit tightly next to each
+ * other like the native titlebar draws them. Icon themes only ship a monochrome
+ * glyph, which needs a surrounding surface to be hoverable at all.
+ */
+function metricsForSource(source, iconSize) {
+  const icon = Math.round(Math.min(24, Math.max(10, iconSize || 16)));
+  if (source === "gtk-theme") {
+    return {
+      iconSize: icon,
+      buttonSize: icon,
+      gap: Math.round(icon * 0.4),
+      edgePadding: Math.round(icon * 0.75),
+    };
+  }
+  return {
+    iconSize: icon,
+    buttonSize: icon + 10,
+    gap: 2,
+    edgePadding: 8,
+  };
+}
+
 async function detectLinuxWindowControls() {
   const layout = await detectButtonLayout();
   // `GTK_THEME` may carry a variant suffix (`Adwaita:dark`) that is not part of
@@ -294,6 +379,7 @@ async function detectLinuxWindowControls() {
       source: "gtk-theme",
       themeName: gtkTheme,
       assets: fromGtkTheme.assets,
+      metrics: metricsForSource("gtk-theme", fromGtkTheme.iconSize),
     };
   }
 
@@ -304,10 +390,11 @@ async function detectLinuxWindowControls() {
       source: "icon-theme",
       themeName: iconTheme,
       assets: fromIconTheme.assets,
+      metrics: metricsForSource("icon-theme", fromIconTheme.iconSize),
     };
   }
 
-  return { layout, source: "fallback", themeName: gtkTheme || null, assets: {} };
+  return { layout, source: "fallback", themeName: gtkTheme || null, assets: {}, metrics: null };
 }
 
 /**
@@ -330,6 +417,7 @@ export async function detectWindowControls(force = false) {
       source: "platform",
       themeName: null,
       assets: {},
+      metrics: null,
       layout:
         process.platform === "darwin"
           ? { left: ["close", "minimize", "maximize"], right: [] }
@@ -347,6 +435,7 @@ export async function detectWindowControls(force = false) {
       source: "fallback",
       themeName: null,
       assets: {},
+      metrics: null,
       layout: { left: [], right: ["minimize", "maximize", "close"] },
     };
   }

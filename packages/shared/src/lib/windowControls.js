@@ -76,13 +76,40 @@ const PRESET_LAYOUTS = {
 };
 
 /**
+ * Box the native buttons fall back to when the detection reported no metrics —
+ * matches what the titlebar used before sizes were detected at all.
+ */
+const DEFAULT_NATIVE_METRICS = { iconSize: 16, buttonSize: 32, gap: 8, edgePadding: 12 };
+
+function normalizeMetrics(metrics) {
+  if (!metrics || typeof metrics !== "object") {
+    return DEFAULT_NATIVE_METRICS;
+  }
+  const number = (value, fallback, min, max) =>
+    Number.isFinite(value) && value >= min && value <= max ? Math.round(value) : fallback;
+
+  return {
+    iconSize: number(metrics.iconSize, DEFAULT_NATIVE_METRICS.iconSize, 8, 32),
+    buttonSize: number(metrics.buttonSize, DEFAULT_NATIVE_METRICS.buttonSize, 8, 64),
+    gap: number(metrics.gap, DEFAULT_NATIVE_METRICS.gap, 0, 24),
+    edgePadding: number(metrics.edgePadding, DEFAULT_NATIVE_METRICS.edgePadding, 0, 32),
+  };
+}
+
+/**
  * Resolves the preference plus the detection into what the titlebar renders:
- * `{ preset, layout, assets }`. `assets` is only populated when native theme
- * artwork was found and the user did not force a preset.
+ * `{ preset, layout, assets, metrics }`. `assets` is only populated when native
+ * theme artwork was found and the user did not force a preset; `metrics` sizes
+ * those native buttons the way the theme draws them.
  */
 export function resolveWindowControls(preference, detection) {
   if (preference === "windows" || preference === "macos") {
-    return { preset: preference, layout: PRESET_LAYOUTS[preference], assets: {} };
+    return {
+      preset: preference,
+      layout: PRESET_LAYOUTS[preference],
+      assets: {},
+      metrics: DEFAULT_NATIVE_METRICS,
+    };
   }
 
   const platform = detection?.platform;
@@ -94,5 +121,5 @@ export function resolveWindowControls(preference, detection) {
   const assets = detection?.assets && Object.keys(detection.assets).length > 0 ? detection.assets : {};
   const preset = assets.close ? "native" : platform === "darwin" ? "macos" : "windows";
 
-  return { preset, layout, assets };
+  return { preset, layout, assets, metrics: normalizeMetrics(detection?.metrics) };
 }
