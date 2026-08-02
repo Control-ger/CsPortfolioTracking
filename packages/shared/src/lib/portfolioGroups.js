@@ -301,16 +301,25 @@ export function buildPortfolioGroupSummaries({
         }
 
         const clusterKey = resolveClusterRowKey(clusterRow || rawItem);
+
+        // The member resolved, so it counts as part of the group regardless of
+        // whether its value is aggregated below. Consumers use presentMemberIds
+        // as the membership registry — InventoryTable hides a cluster row only
+        // when EVERY one of its positions is a member, so dropping ids here made
+        // an already-grouped cluster reappear as a standalone row.
+        presentMemberIds.push(investmentId);
+        if (String(rawItem?.bucket || clusterRow?.bucket || "").toLowerCase() === "inventory") {
+          inventoryMemberCount += 1;
+        }
+
+        // Without a raw position row (web runtime: only server-aggregated cluster
+        // rows exist) the clusterRow already carries the whole cluster's quantity
+        // and value, so aggregate it exactly once per cluster.
         if (!rawItem && clusterRow) {
           if (fallbackClusterKeysHandled.has(clusterKey)) {
             return;
           }
           fallbackClusterKeysHandled.add(clusterKey);
-        }
-
-        presentMemberIds.push(investmentId);
-        if (String(rawItem?.bucket || clusterRow?.bucket || "").toLowerCase() === "inventory") {
-          inventoryMemberCount += 1;
         }
 
         const rawQuantity = Math.max(

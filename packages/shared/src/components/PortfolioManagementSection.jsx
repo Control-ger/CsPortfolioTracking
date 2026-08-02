@@ -4,6 +4,7 @@ import { Badge } from "./ui/badge.jsx";
 import { Button } from "./ui/button.jsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
+import { LayeredGroupIcon } from "./LayeredGroupIcon.jsx";
 import {
   Tooltip,
   TooltipContent,
@@ -325,6 +326,10 @@ export function PortfolioManagementSection({
 
   // Portfolio group state
   portfolioGroups,
+  // Aggregated counterparts of `portfolioGroups` keyed by group id. The raw
+  // groups carry only name/thesis/memberInvestmentIds — cluster counts, item
+  // counts and topVisuals live exclusively on the summaries.
+  portfolioGroupSummaryById,
   portfolioGroupsLoading,
   portfolioGroupDraft,
   portfolioGroupEditorId,
@@ -1029,7 +1034,10 @@ export function PortfolioManagementSection({
                         Noch keine Gruppen angelegt.
                       </p>
                     ) : (
-                      portfolioGroups.map((group) => (
+                      portfolioGroups.map((group) => {
+                        const groupSummary =
+                          portfolioGroupSummaryById?.get(String(group.id)) || null;
+                        return (
                         <div
                           key={group.id}
                           className={`rounded-lg border p-3 transition-colors ${
@@ -1039,13 +1047,18 @@ export function PortfolioManagementSection({
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
+                            <LayeredGroupIcon
+                              visuals={groupSummary?.topVisuals || []}
+                              fallbackLabel={group.name}
+                              size="sm"
+                            />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">
                                 {group.name}
                               </p>
                               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                {group.clusterCount || 0} Cluster ·{" "}
-                                {group.totalQuantity || 0} Items
+                                {groupSummary?.clusterCount || 0} Cluster ·{" "}
+                                {groupSummary?.totalQuantity || 0} Items
                               </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-1">
@@ -1081,7 +1094,8 @@ export function PortfolioManagementSection({
                             </div>
                           </div>
                         </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </CardContent>

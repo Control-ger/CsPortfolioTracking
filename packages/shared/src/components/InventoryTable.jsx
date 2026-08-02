@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Badge } from "@shared/components/ui/badge";
 import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import { ItemListRow } from "@shared/components/ItemListRow";
+import { LayeredGroupIcon } from "@shared/components/LayeredGroupIcon";
 import {
   Table,
   TableBody,
@@ -13,47 +14,6 @@ import {
 
 import { Abbr } from "@shared/components/AbbreviationTooltip";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
-
-function LayeredGroupIcon({ visuals = [], fallbackLabel }) {
-  const items = Array.isArray(visuals) ? visuals.slice(0, 2) : [];
-
-  return (
-    <div className="relative h-12 w-[4.25rem] shrink-0">
-      {items.length === 0 ? (
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/70 bg-card/70 text-[11px] font-semibold text-muted-foreground">
-          {String(fallbackLabel || "Group").slice(0, 2).toUpperCase()}
-        </div>
-      ) : null}
-      {items.map((item, index) => {
-        const offsetClass =
-          index === 0
-            ? "left-0 top-0 z-20 rotate-[-3deg]"
-            : "left-[1.05rem] top-[0.1rem] z-10 rotate-[4deg]";
-        const cardToneClass = index === 0 ? "bg-card/95 shadow-sm" : "bg-card shadow-md";
-        return (
-          <div
-            key={item.id || `${item.name}-${index}`}
-            className={`absolute ${offsetClass} flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border/80 ${cardToneClass} p-1 transition-transform`}
-          >
-            {item.imageUrl ? (
-              <img
-                src={item.imageUrl}
-                alt={item.name || "Group visual"}
-                className="h-full w-full object-contain"
-                loading="lazy"
-                decoding="async"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-muted-foreground">
-                {String(item.name || fallbackLabel || "Group").slice(0, 2).toUpperCase()}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 const ItemThumbnail = ({ imageUrl, name }) => (
   <div className="h-14 w-14 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1">

@@ -5291,6 +5291,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             handleManualSuggestionPick={handleManualSuggestionPick}
             handleCreateManualInvestment={handleCreateManualInvestment}
             portfolioGroups={portfolioGroups}
+            portfolioGroupSummaryById={portfolioGroupSummaryById}
             portfolioGroupsLoading={portfolioGroupsLoading}
             portfolioGroupDraft={portfolioGroupDraft}
             portfolioGroupEditorId={portfolioGroupEditorId}
