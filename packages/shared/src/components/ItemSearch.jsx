@@ -11,6 +11,13 @@ import {
 import { searchWatchlistItems } from "@shared/lib/apiClient.js";
 import { createWatchlistItemData } from "@shared/lib/dataSource.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@shared/components/ui/select";
 
 const ITEM_TYPE_OPTIONS = [
   { value: "all", label: "Alle Typen" },
@@ -440,61 +447,72 @@ export const ItemSearch = ({
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <label className="space-y-1 text-xs text-muted-foreground">
             Item Type
-            <select
+            <Select
               value={itemType}
-              onChange={(event) => {
-                const nextType = event.target.value;
+              onValueChange={(nextType) => {
                 setItemType(nextType);
                 if (nextType !== "skin") {
                   setWear("all");
                 }
                 setPage(1);
               }}
-              className="h-11 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground sm:h-9"
             >
-              {ITEM_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-11 border-border/70 text-sm text-foreground sm:h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ITEM_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
 
           <label className="space-y-1 text-xs text-muted-foreground">
             Condition
-            <select
+            <Select
               value={wear}
-              onChange={(event) => {
-                setWear(event.target.value);
+              onValueChange={(nextWear) => {
+                setWear(nextWear);
                 setPage(1);
               }}
               disabled={!wearEnabled}
-              className="h-11 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground sm:h-9 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {WEAR_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-11 border-border/70 text-sm text-foreground sm:h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WEAR_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
 
           <label className="space-y-1 text-xs text-muted-foreground">
             Sortierung
-            <select
+            <Select
               value={sortBy}
-              onChange={(event) => {
-                setSortBy(event.target.value);
+              onValueChange={(nextSort) => {
+                setSortBy(nextSort);
                 setPage(1);
               }}
-              className="h-11 w-full rounded-md border border-border/70 bg-transparent px-2.5 text-sm text-foreground sm:h-9"
             >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-11 border-border/70 text-sm text-foreground sm:h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
         </div>
       </form>
