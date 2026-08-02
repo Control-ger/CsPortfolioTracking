@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
@@ -271,6 +271,9 @@ export const PortfolioChart = ({
   cardRef = null,
 }) => {
   const { formatPrice, currency } = useCurrency();
+  // Several PortfolioCharts can be mounted at once; a shared SVG gradient id would
+  // make every instance pick up the first one's trend color.
+  const fillGradientId = `portfolio-chart-fill-${useId()}`;
   const [rangeKey, setRangeKey] = useState("30T");
   const hoverAnimationFrameRef = useRef(null);
   const lastHoveredIndexRef = useRef(null);
@@ -632,7 +635,8 @@ export const PortfolioChart = ({
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full sm:h-[340px]">
-            <LineChart
+            <ComposedChart
+              key={rangeKey}
               accessibilityLayer
               data={chartData}
               margin={{
@@ -644,6 +648,12 @@ export const PortfolioChart = ({
               onMouseMove={handleChartMouseMove}
               onMouseLeave={handleChartMouseLeave}
             >
+              <defs>
+                <linearGradient id={fillGradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={trendStats.lineColor} stopOpacity={0.32} />
+                  <stop offset="100%" stopColor={trendStats.lineColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.45} />
               {!showAbsolute ? (
                 <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.8} strokeDasharray="3 3" />
@@ -744,6 +754,18 @@ export const PortfolioChart = ({
                   />
                 }
               />
+              <Area
+                dataKey="displayValue"
+                type="linear"
+                stroke="none"
+                fill={`url(#${fillGradientId})`}
+                isAnimationActive
+                animationDuration={900}
+                animationEasing="ease-out"
+                activeDot={false}
+                legendType="none"
+                tooltipType="none"
+              />
               <Line
                 dataKey="displayValue"
                 type="linear"
@@ -752,6 +774,9 @@ export const PortfolioChart = ({
                 strokeLinecap="square"
                 strokeLinejoin="miter"
                 dot={false}
+                isAnimationActive
+                animationDuration={900}
+                animationEasing="ease-out"
                 activeDot={{
                   r: 5,
                   fill: trendStats.lineColor,
@@ -759,7 +784,7 @@ export const PortfolioChart = ({
                   strokeWidth: 2,
                 }}
               />
-            </LineChart>
+            </ComposedChart>
           </ChartContainer>
         )}
       </CardContent>
