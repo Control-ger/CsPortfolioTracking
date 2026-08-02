@@ -25,7 +25,17 @@ let masterGain = null;
 let enabled = DEFAULT_ENABLED;
 let volume = DEFAULT_VOLUME;
 let initialized = false;
+let unlockListenersAttached = false;
+let silentBufferPlayed = false;
 const listeners = new Set();
+
+/**
+ * How long after a gesture-triggered resume() a deferred sound may still fire.
+ * Mobile browsers resolve the resume asynchronously, so the play that requested
+ * it has to wait a tick — but a context that only wakes up seconds later (tab
+ * came back to the foreground) must not replay a stale blip.
+ */
+const RESUME_PLAY_GRACE_MS = 400;
 
 /**
  * Sound presets. Each is a short additive blip: an oscillator swept between two
@@ -128,10 +138,56 @@ function notifyListeners() {
 }
 
 /**
+ * iOS/Safari unlock. Calling resume() is not enough there: the context only
+ * leaves the suspended state once a source node has actually been started from
+ * inside a user gesture. One frame of silence does that without being audible.
+ */
+function playSilentBuffer(context) {
+  if (silentBufferPlayed) {
+    return;
+  }
+  try {
+    const buffer = context.createBuffer(1, 1, context.sampleRate);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source.start(0);
+    silentBufferPlayed = true;
+  } catch {
+    // Unlock is best-effort — a failure just means we retry on the next gesture.
+  }
+}
+
+/**
+ * Fallback unlock path. The app primes sounds from its own handlers, but those
+ * only cover surfaces that play something; on touch devices the context stays
+ * suspended until *any* gesture happens, so listen for the first one globally
+ * and detach as soon as the context is running.
+ */
+function attachUnlockListeners() {
+  if (unlockListenersAttached || typeof document === "undefined") {
+    return;
+  }
+  unlockListenersAttached = true;
+
+  const events = ["pointerdown", "touchend", "click", "keydown"];
+  const unlock = () => {
+    const context = getAudioContext();
+    if (context && context.state === "running") {
+      events.forEach((name) => document.removeEventListener(name, unlock, true));
+    }
+  };
+
+  events.forEach((name) =>
+    document.addEventListener(name, unlock, { capture: true, passive: true }),
+  );
+}
+
+/**
  * Lazily create the AudioContext. Browsers start it suspended until a user
- * gesture, so every play attempt tries to resume it; before the first click the
- * resume simply fails and the sound is silently dropped, which is the correct
- * behaviour rather than an error.
+ * gesture, so every play attempt tries to resume it; before the first gesture
+ * the resume simply fails and the sound is silently dropped, which is the
+ * correct behaviour rather than an error.
  */
 function getAudioContext() {
   if (typeof window === "undefined") {
@@ -154,6 +210,8 @@ function getAudioContext() {
       return null;
     }
   }
+
+  playSilentBuffer(audioContext);
 
   if (audioContext.state === "suspended") {
     void audioContext.resume().catch(() => {});
@@ -223,10 +281,32 @@ export function playUiSound(name) {
   }
 
   const context = getAudioContext();
-  if (!context || !masterGain || context.state !== "running") {
+  if (!context || !masterGain) {
     return;
   }
 
+  // On mobile the resume() kicked off above resolves a tick *after* the gesture
+  // handler that asked for the sound, so a running-state check here would drop
+  // every play. Wait for the context instead, and give up if it takes so long
+  // that the blip would no longer belong to the interaction that caused it.
+  if (context.state !== "running") {
+    const requestedAt = Date.now();
+    void context
+      .resume()
+      .then(() => {
+        if (context.state === "running" && Date.now() - requestedAt <= RESUME_PLAY_GRACE_MS) {
+          emitPreset(context, name, preset);
+        }
+      })
+      .catch(() => {});
+    return;
+  }
+
+  emitPreset(context, name, preset);
+}
+
+/** Schedule one preset on a context that is known to be running. */
+function emitPreset(context, name, preset) {
   try {
     const now = context.currentTime;
     const oscillator = context.createOscillator();
@@ -279,6 +359,7 @@ export function primeUiSounds() {
   if (!enabled) {
     return;
   }
+  attachUnlockListeners();
   getAudioContext();
 }
 
