@@ -371,40 +371,6 @@ export const PortfolioChart = ({
     [chartData, showAbsolute],
   );
 
-  // Vertical extent actually rendered: the explicit padded domain in absolute mode,
-  // else the raw min/max of the plotted values (recharts' auto domain adds a little
-  // padding around these, so treating them as the bounds is a safe approximation).
-  const displayValueBounds = useMemo(() => {
-    const values = chartData
-      .map((entry) => Number(entry?.displayValue))
-      .filter((value) => Number.isFinite(value));
-    if (values.length === 0) {
-      return null;
-    }
-    return { min: Math.min(...values), max: Math.max(...values) };
-  }, [chartData]);
-  const effectiveDomain =
-    showAbsolute && absoluteAxisConfig
-      ? { min: absoluteAxisConfig.domain[0], max: absoluteAxisConfig.domain[1] }
-      : displayValueBounds;
-  // Where the buy-in sits relative to the visible window: "below"/"above" when it is
-  // clipped off the axis (→ edge label), null when it renders inside as a normal line.
-  const referenceEdge =
-    showReferenceLine && effectiveDomain && Number.isFinite(referenceDisplayValue)
-      ? referenceDisplayValue < effectiveDomain.min
-        ? "below"
-        : referenceDisplayValue > effectiveDomain.max
-          ? "above"
-          : null
-      : null;
-  // Latest value vs. buy-in — the "how far off break-even" figure shown on the edge label.
-  const lastVisibleWert = visibleHistory[visibleHistory.length - 1]?.wert;
-  const referenceGainPercent =
-    Number.isFinite(Number(lastVisibleWert)) && normalizedReferenceLineValue > 0
-      ? ((Number(lastVisibleWert) - normalizedReferenceLineValue) / normalizedReferenceLineValue) * 100
-      : null;
-  const showReferenceEdgeLabel = Boolean(referenceEdge) && Number.isFinite(referenceGainPercent);
-
   const trendStats = useMemo(() => {
     if (chartData.length === 0) {
       return {
@@ -664,26 +630,7 @@ export const PortfolioChart = ({
                   stroke="hsl(var(--muted-foreground))"
                   strokeOpacity={0.65}
                   strokeDasharray="4 4"
-                  ifOverflow="hidden"
-                  label={{
-                    value: referenceLineLabel,
-                    position: "insideTopLeft",
-                    fill: "hsl(var(--muted-foreground))",
-                    fontSize: 10,
-                  }}
-                />
-              ) : null}
-              {showReferenceEdgeLabel ? (
-                <ReferenceLine
-                  y={referenceEdge === "below" ? effectiveDomain.min : effectiveDomain.max}
-                  stroke="transparent"
                   ifOverflow="extendDomain"
-                  label={{
-                    value: `${referenceEdge === "below" ? "↓" : "↑"} ${referenceLineLabel} ${formatSignedPercent(referenceGainPercent)}`,
-                    position: referenceEdge === "below" ? "insideBottomLeft" : "insideTopLeft",
-                    fill: "hsl(var(--muted-foreground))",
-                    fontSize: 10,
-                  }}
                 />
               ) : null}
               <XAxis
