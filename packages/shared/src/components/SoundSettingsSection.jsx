@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card.jsx";
+import { Label } from "./ui/label.jsx";
+import { Slider } from "./ui/slider.jsx";
+import { Switch } from "./ui/switch.jsx";
 import {
   getUiSoundVolume,
   isUiSoundsEnabled,
@@ -38,9 +41,8 @@ export function SoundSettingsSection() {
     }
   }, []);
 
-  const handleVolumeChange = useCallback((event) => {
-    const next = Number(event.target.value) / 100;
-    setUiSoundVolume(next);
+  const handleVolumeChange = useCallback(([percent]) => {
+    setUiSoundVolume(percent / 100);
     primeUiSounds();
     playUiSound("click");
   }, []);
@@ -71,47 +73,32 @@ export function SoundSettingsSection() {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
+          <Switch
+            checked={enabled}
+            onCheckedChange={handleToggle}
             aria-label="Sounds umschalten"
             data-no-sound
-            onClick={handleToggle}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-              enabled ? "bg-primary" : "bg-muted-foreground/35"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-background transition-transform ${
-                enabled ? "translate-x-[22px]" : "translate-x-0.5"
-              }`}
-            />
-          </button>
+            className="shrink-0"
+          />
         </div>
 
         <div className="rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="ui-sound-volume" className="text-sm text-foreground">
-              Lautstaerke
-            </label>
+            <Label htmlFor="ui-sound-volume">Lautstaerke</Label>
             <span className="text-xs tabular-nums text-muted-foreground">
               {Math.round(volume * 100)} %
             </span>
           </div>
-          <input
+          <Slider
             id="ui-sound-volume"
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={Math.round(volume * 100)}
-            onChange={handleVolumeChange}
+            min={0}
+            max={100}
+            step={5}
+            value={[Math.round(volume * 100)]}
+            onValueChange={handleVolumeChange}
             disabled={!enabled}
-            className="ui-range mt-3 w-full disabled:opacity-40"
-            style={{
-              background: `linear-gradient(to right, var(--primary) ${Math.round(volume * 100)}%, var(--muted) ${Math.round(volume * 100)}%)`,
-            }}
+            aria-label="Lautstaerke"
+            className="mt-3"
           />
         </div>
       </CardContent>
