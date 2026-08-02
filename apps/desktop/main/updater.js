@@ -1,5 +1,8 @@
 /* eslint-disable */
 
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import electronUpdater from "electron-updater";
 
@@ -54,6 +57,7 @@ function resolveNotificationUserId(store) {
 
 const AUTO_UPDATE_INTERVAL_MS = 10 * 60 * 1000;
 let latestAvailableUpdateInfo = null;
+let latestDownloadedFilePath = null;
 let updateDownloadInProgress = false;
 let updateCheckTimer = null;
 let lastUpdaterStatus = null;
@@ -84,6 +88,225 @@ export function describeSelfUpdateReason(reason) {
     return "Entwicklungsmodus";
   }
   return "z. B. AppImage ohne APPIMAGE-Umgebungsvariable oder entpackter Build";
+}
+
+// deb/rpm installs need root to replace themselves, so electron-updater shells
+// out to pkexec. That can never succeed here: Chromium's namespace sandbox sets
+// PR_SET_NO_NEW_PRIVS on the main process, every child inherits it, and a
+// setuid binary launched under it drops its privileges — pkexec then aborts with
+// "pkexec must be setuid root" (exit 127). Detect that up front so
+// installDownloadedUpdate() can take the elevated-out-of-the-sandbox route
+// instead of failing loudly.
+function readLinuxPackageType() {
+  try {
+    return fs
+      .readFileSync(path.join(process.resourcesPath, "package-type"), "utf8")
+      .trim()
+      .toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function hasNoNewPrivs() {
+  try {
+    const status = fs.readFileSync("/proc/self/status", "utf8");
+    return /^NoNewPrivs:\s*1$/m.test(status);
+  } catch {
+    return false;
+  }
+}
+
+export function resolveInstallHandoff() {
+  if (process.platform !== "linux") {
+    return { handoff: false, reason: null };
+  }
+  const packageType = readLinuxPackageType();
+  if (packageType !== "deb" && packageType !== "rpm") {
+    return { handoff: false, reason: null };
+  }
+  if (!hasNoNewPrivs()) {
+    return { handoff: false, reason: null };
+  }
+  return { handoff: true, reason: "no-new-privs", packageType };
+}
+
+// Must match `updaterCacheDirName` in resources/app-update.yml, which
+// electron-builder derives from the package name.
+const UPDATER_CACHE_DIR_NAME = "cs-portfolio-tracking-monorepo-updater";
+
+// The expected checksum is taken from the update metadata this session fetched
+// from GitHub over TLS — never from the pending/update-info.json next to the
+// package, which sits in the same user-writable directory an attacker would
+// have to control to swap the package in the first place.
+function resolveExpectedPackage() {
+  const files = Array.isArray(latestAvailableUpdateInfo?.files)
+    ? latestAvailableUpdateInfo.files
+    : [];
+  const entry = files.find((file) => String(file?.url || "").toLowerCase().endsWith(".deb"));
+  if (!entry?.sha512) {
+    return null;
+  }
+  try {
+    return {
+      fileName: path.basename(decodeURIComponent(String(entry.url))),
+      // sha512sum prints hex; the feed carries base64.
+      sha512Hex: Buffer.from(String(entry.sha512), "base64").toString("hex"),
+    };
+  } catch (error) {
+    console.warn("[updater] could not read the expected checksum:", error?.message || error);
+    return null;
+  }
+}
+
+// The in-memory path is gone after a restart, so fall back to the package
+// electron-updater left in its pending directory.
+function resolveDownloadedPackagePath(fileName = "") {
+  if (latestDownloadedFilePath && fs.existsSync(latestDownloadedFilePath)) {
+    return latestDownloadedFilePath;
+  }
+  const pendingDir = path.join(app.getPath("cache"), UPDATER_CACHE_DIR_NAME, "pending");
+  if (fileName) {
+    const candidate = path.join(pendingDir, fileName);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  try {
+    const packages = fs
+      .readdirSync(pendingDir)
+      .filter((entry) => entry.toLowerCase().endsWith(".deb"))
+      .map((entry) => path.join(pendingDir, entry));
+    return packages.length === 1 ? packages[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+// `NO_NEW_PRIVS` is inherited, never dropped — but it is only inherited across
+// fork/exec. Letting `systemd --user` (which does not carry the flag) spawn the
+// installer therefore gets us a clean process in which pkexec works normally,
+// so the update stays fully automatic behind a single Polkit prompt.
+const ELEVATED_INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
+const EXIT_CHECKSUM_MISMATCH = 90;
+
+function quoteForShell(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function runElevatedViaSystemdRun(script) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(
+        "systemd-run",
+        [
+          "--user",
+          "--collect",
+          "--quiet",
+          "--pipe",
+          "--",
+          "pkexec",
+          // Without a Polkit agent we want a fast failure, not a prompt on a
+          // tty nobody is looking at.
+          "--disable-internal-agent",
+          "/bin/bash",
+          "-c",
+          script,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+    } catch (error) {
+      resolve({ ok: false, code: null, stderr: error?.message || String(error) });
+      return;
+    }
+
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+
+    // Killing our client does not stop the transient unit — systemd --user
+    // cannot signal the root processes inside it — so a timeout means "outcome
+    // unknown", not "did not happen".
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, ELEVATED_INSTALL_TIMEOUT_MS);
+
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      // systemd-run missing entirely (non-systemd distro) lands here.
+      resolve({ ok: false, code: null, timedOut, stderr: error?.message || String(error) });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0 && !timedOut, code, timedOut, stderr: stderr.trim() });
+    });
+  });
+}
+
+// Copies the package somewhere only root can write, verifies it there, and only
+// then installs it. Verifying the copy (rather than the original) closes the
+// window in which the user-writable source could be swapped after the check.
+//
+// The install must end on a successful `dpkg -i`: plain
+// `dpkg -i … || apt-get install -f -y` would exit 0 whenever apt finds nothing
+// to repair, reporting success while the old version is still installed.
+function buildElevatedInstallScript(filePath, sha512Hex) {
+  return [
+    "set -eu",
+    `expected=${quoteForShell(sha512Hex)}`,
+    'work=$(mktemp -d /var/tmp/csih-update-XXXXXX)',
+    "trap 'rm -rf \"$work\"' EXIT",
+    `cp ${quoteForShell(filePath)} "$work/package.deb"`,
+    'actual=$(sha512sum "$work/package.deb" | cut -d" " -f1)',
+    `[ "$actual" = "$expected" ] || exit ${EXIT_CHECKSUM_MISMATCH}`,
+    'dpkg -i "$work/package.deb" || { apt-get install -f -y && dpkg -i "$work/package.deb"; }',
+  ].join("\n");
+}
+
+// Returns "cancelled" when the user dismissed the Polkit dialog — that is a
+// decision, not a failure, and must not trigger another prompt.
+async function runElevatedDebInstall(filePath, sha512Hex) {
+  const result = await runElevatedViaSystemdRun(buildElevatedInstallScript(filePath, sha512Hex));
+  if (result.ok) {
+    return "installed";
+  }
+  if (result.timedOut) {
+    // The root-side dpkg is outside our reach and may still be running, so the
+    // caller must not start a second package operation on top of it.
+    console.warn("[updater] elevated install timed out; outcome unknown");
+    return "timeout";
+  }
+  if (result.code === EXIT_CHECKSUM_MISMATCH) {
+    console.error("[updater] downloaded package failed checksum verification — refusing to install");
+    return "corrupt";
+  }
+  // pkexec: 126 = dialog dismissed, 127 = not authorized / could not elevate.
+  if (result.code === 126) {
+    console.log("[updater] elevated install cancelled by the user");
+    return "cancelled";
+  }
+  console.warn(
+    `[updater] elevated install failed (exit ${result.code}): ${result.stderr || "no stderr"}`,
+  );
+  return "failed";
+}
+
+// Opens the already-downloaded package with the desktop's package installer.
+// Returns false when there is nothing to hand over, so callers can fall back.
+async function handOffDownloadedPackage(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return false;
+  }
+  const error = await shell.openPath(filePath);
+  if (error) {
+    console.warn("[updater] handing the package to the system installer failed:", error);
+    return false;
+  }
+  return true;
 }
 
 export async function openReleasesPage() {
@@ -425,6 +648,7 @@ export function setupAutoUpdater() {
   autoUpdater.on("update-downloaded", async (info) => {
     console.log("[updater] update downloaded:", info?.version || "unknown");
     latestAvailableUpdateInfo = info || latestAvailableUpdateInfo;
+    latestDownloadedFilePath = info?.downloadedFile || null;
     updateDownloadInProgress = false;
     emitUpdaterStatus({ state: "downloaded", version: info?.version || null, info });
     createSystemNotificationEntry({
@@ -455,6 +679,68 @@ export function clearUpdateCheckTimer() {
     clearInterval(updateCheckTimer);
     updateCheckTimer = null;
   }
+}
+
+// Single entry point for "install the update now". Prefers the in-place
+// electron-updater install and only steps aside where that path is provably
+// dead (see resolveInstallHandoff).
+export async function installDownloadedUpdate() {
+  const { handoff, reason, packageType } = resolveInstallHandoff();
+  if (handoff) {
+    const version = latestAvailableUpdateInfo?.version || null;
+    const expected = resolveExpectedPackage();
+    const filePath = resolveDownloadedPackagePath(expected?.fileName);
+
+    // Tier 1: elevate out of the sandbox and install in place. Requires a
+    // checksum from the release feed — without it we will not run a package
+    // from a user-writable directory as root.
+    if (packageType === "deb" && filePath && expected) {
+      emitUpdaterStatus({ state: "installing", version });
+      const outcome = await runElevatedDebInstall(filePath, expected.sha512Hex);
+
+      if (outcome === "installed") {
+        console.log("[updater] elevated install succeeded, relaunching");
+        app.relaunch();
+        app.quit();
+        return { ok: true, elevated: true };
+      }
+      if (outcome === "cancelled") {
+        // Back to the state we came from; the package stays downloaded.
+        emitUpdaterStatus({ state: "downloaded", version, info: latestAvailableUpdateInfo });
+        return { ok: true, cancelled: true };
+      }
+      // Both of these must stop the cascade: after a timeout a root-side dpkg
+      // may still be running, and a corrupt package must not be passed on to
+      // another installer either.
+      if (outcome === "timeout" || outcome === "corrupt") {
+        const message =
+          outcome === "timeout"
+            ? "Die Installation hat zu lange gebraucht. Pruefe die installierte Version, bevor du es erneut versuchst."
+            : "Das heruntergeladene Paket ist beschaedigt und wurde nicht installiert.";
+        emitUpdaterStatus({ state: "error", version, message, url: RELEASES_PAGE_URL });
+        return { ok: false, error: message, url: RELEASES_PAGE_URL };
+      }
+    }
+
+    // Tier 2: let the desktop's package installer do it.
+    const opened = await handOffDownloadedPackage(filePath);
+    if (opened) {
+      console.log(`[updater] handed the ${packageType} package to the system installer (${reason})`);
+      emitUpdaterStatus({
+        state: "handoff",
+        version,
+        path: filePath,
+        reason,
+        url: RELEASES_PAGE_URL,
+      });
+      return { ok: true, handoff: true, reason, path: filePath };
+    }
+    // Nothing downloaded (or no handler registered) — GitHub stays the way out.
+    return { ok: false, handoff: true, reason, url: RELEASES_PAGE_URL };
+  }
+
+  autoUpdater.quitAndInstall();
+  return { ok: true };
 }
 
 export function getUpdaterLatestInfo() {

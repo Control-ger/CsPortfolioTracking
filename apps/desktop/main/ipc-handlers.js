@@ -325,10 +325,10 @@ export function registerAllIpcHandlers() {
 
   ipcMain.handle("app-updater-install", async () => {
     if (!app.isPackaged) {
-      return false;
+      return { ok: false, reason: "not-packaged", url: RELEASES_PAGE_URL };
     }
-    autoUpdater.quitAndInstall();
-    return true;
+    const { installDownloadedUpdate } = await import("./updater.js");
+    return await installDownloadedUpdate();
   });
 
   // ── Server config ─────────────────────────────────────────────

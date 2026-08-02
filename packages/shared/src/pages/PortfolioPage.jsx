@@ -1186,7 +1186,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }));
 
       const nextState = String(payload.state || "");
-      if (["available", "manual", "downloading", "downloaded", "error"].includes(nextState)) {
+      // "installing" is user-initiated and needs no badge; "handoff" does,
+      // because it leaves an action pending in another app.
+      if (["available", "manual", "downloading", "downloaded", "handoff", "error"].includes(nextState)) {
         setAppUpdateUnread(true);
       }
       if (nextState === "not-available") {
@@ -3711,6 +3713,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (appUpdateState === "downloaded") {
       return `${appUpdateVersionLabel} heruntergeladen`;
     }
+    if (appUpdateState === "installing") {
+      return `${appUpdateVersionLabel} wird installiert`;
+    }
+    if (appUpdateState === "handoff") {
+      return `${appUpdateVersionLabel} im System-Installer geoeffnet`;
+    }
     if (appUpdateState === "not-available") {
       return "App ist aktuell";
     }
@@ -3723,8 +3731,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (appUpdateState === "downloaded") {
       return "w-full rounded-xl border border-emerald-400/35 bg-emerald-500/12 px-2 py-2 text-left hover:bg-emerald-500/18";
     }
-    if (appUpdateState === "downloading") {
+    if (appUpdateState === "downloading" || appUpdateState === "installing") {
       return "w-full rounded-xl border border-blue-400/35 bg-blue-500/12 px-2 py-2 text-left hover:bg-blue-500/18";
+    }
+    if (appUpdateState === "handoff") {
+      return "w-full rounded-xl border border-amber-400/35 bg-amber-500/12 px-2 py-2 text-left hover:bg-amber-500/18";
     }
     if (appUpdateState === "available" || appUpdateState === "manual") {
       return "w-full rounded-xl border border-amber-400/35 bg-amber-500/12 px-2 py-2 text-left hover:bg-amber-500/18";
@@ -3741,6 +3752,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (appUpdateState === "downloading") {
       return "Download laeuft im Hintergrund.";
     }
+    if (appUpdateState === "installing") {
+      return "Bitte die Passwortabfrage bestaetigen.";
+    }
+    if (appUpdateState === "handoff") {
+      return "App schliessen und im System-Installer bestaetigen.";
+    }
     if (appUpdateState === "available") {
       return "Klick: Jetzt updaten oder spaeter.";
     }
@@ -3752,7 +3769,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     return "Klick: Update-Status ansehen.";
   })();
-  const APP_UPDATE_VISIBLE_STATES = ["available", "manual", "downloading", "downloaded", "error"];
+  const APP_UPDATE_VISIBLE_STATES = [
+    "available",
+    "manual",
+    "downloading",
+    "downloaded",
+    "installing",
+    "handoff",
+    "error",
+  ];
   const hasVisibleAppUpdateNotification = APP_UPDATE_VISIBLE_STATES.includes(appUpdateState);
   const hasUnreadAppUpdate = appUpdateUnread && APP_UPDATE_VISIBLE_STATES.includes(appUpdateState);
   const handleUiWarningsChange = useCallback((sourceKey, sourceLabel, nextWarnings = []) => {

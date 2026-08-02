@@ -93,8 +93,30 @@ export async function runAppUpdateAction(payload = {}) {
     const shouldInstallNow = window.confirm(
       `${versionLabel} wurde heruntergeladen. Jetzt neu starten und installieren?`,
     );
-    if (shouldInstallNow && window.electronAPI?.updater?.install) {
-      await window.electronAPI.updater.install();
+    if (!shouldInstallNow || !window.electronAPI?.updater?.install) {
+      return;
+    }
+    const result = await window.electronAPI.updater.install();
+    // The user dismissed the password prompt — their call, nothing to report.
+    if (result?.cancelled) {
+      return;
+    }
+    // Linux deb/rpm cannot install themselves from inside the app (the sandbox
+    // blocks the root helper). If elevating out of the sandbox did not work
+    // either, the main process opens the package in the system installer and
+    // the app keeps running until the user confirms there.
+    if (result?.handoff && result?.ok) {
+      window.alert(
+        `${versionLabel} wurde im System-Installer geoeffnet.\n\n`
+        + "Schliesse die App und bestaetige dort die Installation.",
+      );
+      return;
+    }
+    if (result && result.ok === false) {
+      await offerManualDownload(
+        String(result.error || "Das Update konnte nicht installiert werden."),
+        result.url || url,
+      );
     }
     return;
   }
@@ -105,6 +127,20 @@ export async function runAppUpdateAction(payload = {}) {
     await offerManualDownload(
       `${versionLabel} ist verfuegbar, aber diese Installation kann sich nicht selbst aktualisieren.`,
       url,
+    );
+    return;
+  }
+
+  // Both are waiting on something outside the app — a Polkit prompt or the
+  // system installer. Re-triggering the install would only stack prompts.
+  if (state === "installing") {
+    window.alert(`${versionLabel} wird installiert. Bitte die Passwortabfrage bestaetigen.`);
+    return;
+  }
+  if (state === "handoff") {
+    window.alert(
+      `${versionLabel} wurde im System-Installer geoeffnet.\n\n`
+      + "Schliesse die App und bestaetige dort die Installation.",
     );
     return;
   }

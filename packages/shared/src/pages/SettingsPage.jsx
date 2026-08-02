@@ -273,7 +273,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       const state = payload?.state;
       if (state === "downloading") {
         setUpdateDownloading(true);
-      } else if (state === "downloaded" || state === "error" || state === "not-available") {
+      } else if (
+        state === "downloaded"
+        || state === "handoff"
+        || state === "error"
+        || state === "not-available"
+      ) {
         setUpdateDownloading(false);
       }
     };
@@ -354,7 +359,12 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     if (!window.electronAPI?.updater?.install) {
       return;
     }
-    await window.electronAPI.updater.install();
+    const result = await window.electronAPI.updater.install();
+    // deb/rpm installs are handed to the system installer instead of restarting
+    // in place — the status line explains that, but the failure needs a route out.
+    if (result && result.ok === false) {
+      await openAppReleasesPage(result.url);
+    }
   };
 
   useEffect(() => {
@@ -1245,7 +1255,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                       ? `Wird heruntergeladen... ${Math.round(Number(updateStatus.percent || 0))}%`
                       : updateStatus.state === "downloaded"
                         ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} bereit zur Installation.`
-                        : updateStatus.state === "not-available"
+                        : updateStatus.state === "installing"
+                          ? "Wird installiert — bitte die Passwortabfrage bestätigen."
+                          : updateStatus.state === "handoff"
+                          ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} wurde im System-Installer geöffnet — App schließen und dort bestätigen.`
+                          : updateStatus.state === "not-available"
                           ? "Du hast die neueste Version."
                           : updateStatus.state === "dev"
                             ? "Update-Suche ist nur in der installierten App verfügbar."
