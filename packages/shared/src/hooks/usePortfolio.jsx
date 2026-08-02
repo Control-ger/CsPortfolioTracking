@@ -1,6 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { fetchPortfolioData } from "@shared/lib/dataSource.js";
 import { getCurrentUser } from "@shared/lib/auth.js";
+import {
+  calculatePortfolioSummary,
+  filterRowsByScope,
+} from "@shared/lib/portfolioCalculations.js";
 
 const portfolioViewCache = new Map();
 // Paint window (stale-while-revalidate): how long a cached payload may be shown
@@ -20,6 +24,10 @@ function resolveCacheKey(options = {}) {
   const rowScope = String(options.rowScope || "default");
   const user = String(options.userCacheSegment || "user:resolving");
   return `${user}::${scope}::${rowScope}`;
+}
+
+function resolveUserSegmentFromCacheKey(cacheKey) {
+  return String(cacheKey || "").split("::")[0] || "";
 }
 
 function resolveUserCacheSegment(user) {
@@ -162,9 +170,17 @@ export function usePortfolio(options = {}) {
   const cacheKey = resolveCacheKey({ ...options, userCacheSegment });
 
   const [investments, setInvestments] = useState([]);
+  // Whether `investments` carry live pricing. When they do, the summary is
+  // derived from them locally instead of being taken from the payload — the
+  // rows are fetched with rowScope "all" and are therefore valid for every
+  // metrics scope, so switching scope is a pure recompute, not a refetch.
+  const [rowsArePriced, setRowsArePriced] = useState(false);
+  const rowsArePricedRef = useRef(false);
+  // Rows are scope-independent but never account-independent.
+  const rowsUserRef = useRef("");
   const [authRequired, setAuthRequired] = useState(true); // Default to auth required until checked
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [storedStats, setStoredStats] = useState({
     totalValue: 0,
     totalInvested: 0,
     totalQuantity: 0,
@@ -184,17 +200,38 @@ export function usePortfolio(options = {}) {
   const [portfolioHistory, setPortfolioHistory] = useState([]);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
-  // Whether the currently displayed stats came from a priced payload. Read from
-  // a ref inside applyPortfolioPayload so an unpriced (local-only) payload can
-  // decide synchronously whether it may overwrite known values with zeros.
+  // Whether we currently hold priced values from any source (rows, cached
+  // snapshot, restored snapshot). Read from a ref inside applyPortfolioPayload
+  // so an unpriced (local-only) payload can decide synchronously whether it may
+  // overwrite known values with zeros. Tagged with the cache key the values
+  // belong to — values for one scope or account are not "known values" for
+  // another, and using them there would silently show the wrong numbers.
   const [statsArePriced, setStatsArePriced] = useState(false);
   const statsArePricedRef = useRef(false);
+  const statsCacheKeyRef = useRef("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const markStatsPriced = useCallback((priced) => {
+  const markStatsPriced = useCallback((priced, key) => {
     statsArePricedRef.current = priced;
+    statsCacheKeyRef.current = key;
     setStatsArePriced(priced);
   }, []);
+
+  const markRowsPriced = useCallback((priced, userSegment) => {
+    rowsArePricedRef.current = priced;
+    rowsUserRef.current = userSegment;
+    setRowsArePriced(priced);
+  }, []);
+
+  // Priced rows are the better source of truth than the payload's summary: they
+  // are scope-independent (rowScope "all"), so the metrics-scope toggle becomes
+  // an instant local recompute. Identical maths to what the data source runs —
+  // same pure functions over the same rows, just without the round-trip.
+  const stats = useMemo(() => (
+    rowsArePriced
+      ? calculatePortfolioSummary(filterRowsByScope(investments, options.scope))
+      : storedStats
+  ), [investments, options.scope, rowsArePriced, storedStats]);
 
   useEffect(() => {
     let isActive = true;
@@ -221,14 +258,27 @@ export function usePortfolio(options = {}) {
       return;
     }
 
+    // Priced rows already in state cover every metrics scope, so a scope switch
+    // needs nothing restored — `stats` recomputes from them synchronously. Only
+    // valid within the same account: rows never carry over a Steam switch.
+    if (rowsArePricedRef.current && rowsUserRef.current === userCacheSegment) {
+      markStatsPriced(true, cacheKey);
+      return;
+    }
+    if (rowsArePricedRef.current) {
+      setInvestments([]);
+      markRowsPriced(false, userCacheSegment);
+    }
+
     const snapshot = getValidPortfolioSnapshot(cacheKey);
     if (snapshot) {
       setInvestments(snapshot.investments || []);
+      markRowsPriced(true, userCacheSegment);
       setAuthRequired(Boolean(snapshot.authRequired));
-      setStats(snapshot.stats || {});
+      setStoredStats(snapshot.stats || {});
       setPortfolioHistory(snapshot.portfolioHistory || []);
       setWarnings(snapshot.warnings || []);
-      markStatsPriced(true);
+      markStatsPriced(true, cacheKey);
       setError("");
       setIsLoading(false);
       return;
@@ -240,11 +290,19 @@ export function usePortfolio(options = {}) {
     // way. Rows stay empty — they are rebuilt from local SQLite immediately.
     const persisted = readPersistedStats(cacheKey);
     if (persisted?.stats) {
-      setStats(persisted.stats);
+      setStoredStats(persisted.stats);
       setPortfolioHistory(persisted.portfolioHistory);
-      markStatsPriced(true);
+      markStatsPriced(true, cacheKey);
+      return;
     }
-  }, [cacheKey, markStatsPriced, userCacheSegment]);
+
+    // Nothing restorable and no priced rows: whatever we still show belongs to
+    // a different scope or account. Drop the claim so the skeleton renders
+    // instead of stale numbers that look like a switch that did nothing.
+    if (statsCacheKeyRef.current !== cacheKey) {
+      markStatsPriced(false, cacheKey);
+    }
+  }, [cacheKey, markRowsPriced, markStatsPriced, userCacheSegment]);
 
   const applyPortfolioPayload = useCallback((payload, { cachePayload = true, targetCacheKey = cacheKey } = {}) => {
     const { rows: rowsResponse, summary: summaryResponse, history, requiresAuth } = payload || {};
@@ -254,18 +312,30 @@ export function usePortfolio(options = {}) {
     );
     const priced = isPricedPayload(payload);
     // An unpriced payload carries real rows but all-zero values. It may fill in
-    // what we do not have yet, but it must never overwrite known values.
-    const keepKnownValues = !priced && statsArePricedRef.current;
+    // what we do not have yet, but it must never overwrite known values — and
+    // only values for this very cache key count as known.
+    const keepKnownValues =
+      !priced && statsArePricedRef.current && statsCacheKeyRef.current === targetCacheKey;
+
+    const targetUserSegment = resolveUserSegmentFromCacheKey(targetCacheKey);
+    // Same rule as for the values: an unpriced payload is strictly less
+    // informative, so it must not replace priced rows of the same account —
+    // doing so would collapse the derived summary back to zeros.
+    const keepKnownRows =
+      !priced && rowsArePricedRef.current && rowsUserRef.current === targetUserSegment;
 
     setAuthRequired(requiresAuth || false);
-    setInvestments(rowsResponse?.data || []);
+    if (!keepKnownRows) {
+      setInvestments(rowsResponse?.data || []);
+      markRowsPriced(priced, targetUserSegment);
+    }
     setWarnings(nextWarnings);
     setError("");
 
     if (!keepKnownValues) {
-      setStats(summaryResponse?.data || {});
+      setStoredStats(summaryResponse?.data || {});
       setPortfolioHistory(history || []);
-      markStatsPriced(priced);
+      markStatsPriced(priced, targetCacheKey);
     }
 
     if (cachePayload && priced) {
@@ -279,7 +349,7 @@ export function usePortfolio(options = {}) {
       });
       persistStats(targetCacheKey, summaryResponse?.data || {}, history || []);
     }
-  }, [cacheKey, markStatsPriced]);
+  }, [cacheKey, markRowsPriced, markStatsPriced]);
 
   const loadData = useCallback(async ({ showLoading = true, preferImmediateLocal = false } = {}) => {
     // Abort previous request if still pending
@@ -385,10 +455,15 @@ export function usePortfolio(options = {}) {
       return;
     }
     initialLoadKeyRef.current = cacheKey;
-    const hasSnapshot = getValidPortfolioSnapshot(cacheKey) !== null;
+    // Priced rows for this account already paint the whole view (the summary is
+    // derived from them), so a metrics-scope switch neither needs a loading
+    // state nor the local-snapshot read that precedes the refresh.
+    const hasPaintableData =
+      getValidPortfolioSnapshot(cacheKey) !== null ||
+      (rowsArePricedRef.current && rowsUserRef.current === userCacheSegment);
     void Promise.resolve().then(() => loadData({
-      showLoading: !hasSnapshot,
-      preferImmediateLocal: !hasSnapshot,
+      showLoading: !hasPaintableData,
+      preferImmediateLocal: !hasPaintableData,
     }));
   }, [cacheKey, loadData, userCacheSegment]);
 
