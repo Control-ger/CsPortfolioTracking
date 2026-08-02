@@ -136,6 +136,58 @@ export function isDesktopLocalStoreRuntime() {
   return typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
 }
 
+// Reading the preferences is an async IPC round-trip, but `metricsScope` derives
+// from them and feeds the portfolio cache key. Without a synchronously readable
+// copy the first render always uses the default scope and the real scope only
+// arrives one tick later — which changes the cache key and costs a second full
+// portfolio load on every mount. The module cache covers remounts, localStorage
+// covers app restarts.
+const PREFERENCES_CACHE_KEY = "portfolio-preferences:last-known";
+let cachedPreferences = null;
+
+function writePreferencesCache(userId, preferences) {
+  cachedPreferences = { userId: String(userId || ""), preferences };
+  if (typeof window === "undefined" || !window.localStorage) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(PREFERENCES_CACHE_KEY, JSON.stringify(cachedPreferences));
+  } catch {
+    // Quota/private-mode failures are not worth breaking a preference read over.
+  }
+}
+
+/**
+ * Last known preferences without awaiting IPC. This is a first-paint hint, not
+ * an authority: the async read always follows on mount and overwrites it. The
+ * cached entry is tagged with the user scope it was written for, so a stale
+ * entry from another Steam account is replaced as soon as the real read lands.
+ * Falls back to the defaults, so the result is always complete and normalized.
+ */
+export function getCachedPortfolioPreferences() {
+  if (cachedPreferences) {
+    return cachedPreferences.preferences;
+  }
+
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      const raw = window.localStorage.getItem(PREFERENCES_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) || {};
+        cachedPreferences = {
+          userId: String(parsed.userId || ""),
+          preferences: normalizePortfolioPreferences(parsed.preferences || {}),
+        };
+        return cachedPreferences.preferences;
+      }
+    } catch {
+      // fall through to defaults
+    }
+  }
+
+  return { ...DEFAULT_PORTFOLIO_PREFERENCES };
+}
+
 export async function getPortfolioPreferences() {
   if (!isDesktopLocalStoreRuntime() || !window.electronAPI?.localStore?.getPortfolioPreferences) {
     return { ...DEFAULT_PORTFOLIO_PREFERENCES };
@@ -147,7 +199,9 @@ export async function getPortfolioPreferences() {
     await window.electronAPI.localStore.getPortfolioPreferences(userId),
     "local-store-get-portfolio-preferences",
   );
-  return normalizePortfolioPreferences(raw || {});
+  const preferences = normalizePortfolioPreferences(raw || {});
+  writePreferencesCache(userId, preferences);
+  return preferences;
 }
 
 export async function updatePortfolioPreferences(patch = {}) {
@@ -164,7 +218,9 @@ export async function updatePortfolioPreferences(patch = {}) {
     await window.electronAPI.localStore.updatePortfolioPreferences(userId, patch || {}),
     "local-store-update-portfolio-preferences",
   );
-  return normalizePortfolioPreferences(raw || {});
+  const preferences = normalizePortfolioPreferences(raw || {});
+  writePreferencesCache(userId, preferences);
+  return preferences;
 }
 
 // --- Web-push notification preferences -------------------------------------

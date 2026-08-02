@@ -1,5 +1,6 @@
 import { TrendingDown, TrendingUp, RotateCw, Clock } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { Skeleton } from "@shared/components/ui/skeleton.jsx";
 
 const formatAge = (seconds) => {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
@@ -88,6 +89,7 @@ export const PortfolioHeaderCard = ({
   liveItemsCount = 0,
   freshestDataAgeSeconds = 0,
   oldestDataAgeSeconds = 0,
+  isLoading = false,
 }) => {
   const { currency, formatPrice } = useCurrency();
   const numericRoiPercent = Number(totalRoiPercent);
@@ -108,48 +110,65 @@ export const PortfolioHeaderCard = ({
       {/* Hauptwert mit Trend und Frische-Indikator */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight">
-              {formatPrice(totalValue || 0, {
-                useUsd: true,
-                buyPriceUsd: totalValue || 0,
-              }).replace(/^[^\d-]+/, "")}
-            </span>
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{currency}</span>
-          </div>
-          <div className={`mt-1 flex items-center gap-1 ${trendColor}`}>
-            <Icon className="h-4 w-4" />
-            <span className="text-sm font-semibold">
-              {formatPercent(totalRoiPercent, 2)}
-            </span>
-          </div>
+          {isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-9 w-36" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold tracking-tight">
+                  {formatPrice(totalValue || 0, {
+                    useUsd: true,
+                    buyPriceUsd: totalValue || 0,
+                  }).replace(/^[^\d-]+/, "")}
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{currency}</span>
+              </div>
+              <div className={`mt-1 flex items-center gap-1 ${trendColor}`}>
+                <Icon className="h-4 w-4" />
+                <span className="text-sm font-semibold">
+                  {formatPercent(totalRoiPercent, 2)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Price Sync Icon - rechts oben */}
-        <div className="flex flex-col items-end gap-2 text-right">
-          <div
-            className={syncHealth.iconClass}
-            title={syncTitle}
-          >
-            {syncHealth.icon === "refresh" ? (
-              <RotateCw className="h-4 w-4" />
-            ) : (
-              <Clock className="h-4 w-4" />
-            )}
+        {isLoading ? (
+          <Skeleton className="h-12 w-16" />
+        ) : (
+          <div className="flex flex-col items-end gap-2 text-right">
+            <div
+              className={syncHealth.iconClass}
+              title={syncTitle}
+            >
+              {syncHealth.icon === "refresh" ? (
+                <RotateCw className="h-4 w-4" />
+              ) : (
+                <Clock className="h-4 w-4" />
+              )}
+            </div>
+            <div className={`text-xs ${syncHealth.tone}`}>
+              <span>{syncHealth.label}</span>
+            </div>
           </div>
-          <div className={`text-xs ${syncHealth.tone}`}>
-            <span>{syncHealth.label}</span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Zusaetzliche Infos in kleinerer Schrift */}
-      <div className="text-xs text-muted-foreground">
-        <span>{totalQuantity} Items - </span>
-        <span className="font-medium">{liveItemsCount} live quotes</span>
-        <span>, aeltestes Cache-Alter {formatAge(oldestDataAgeSeconds)}</span>
-        <span>, letztes Update {formatAge(freshestDataAgeSeconds)}</span>
-      </div>
+      {isLoading ? (
+        <Skeleton className="h-3 w-56" />
+      ) : (
+        <div className="text-xs text-muted-foreground">
+          <span>{totalQuantity} Items - </span>
+          <span className="font-medium">{liveItemsCount} live quotes</span>
+          <span>, aeltestes Cache-Alter {formatAge(oldestDataAgeSeconds)}</span>
+          <span>, letztes Update {formatAge(freshestDataAgeSeconds)}</span>
+        </div>
+      )}
     </div>
   );
 };

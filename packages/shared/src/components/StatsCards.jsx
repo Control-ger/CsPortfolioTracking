@@ -4,6 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@shared/components/ui/card.jsx";
+import { Skeleton } from "@shared/components/ui/skeleton.jsx";
 
 export const StatCard = ({
   title,
@@ -14,6 +15,7 @@ export const StatCard = ({
   primaryLabel = "Brutto",
   secondaryLabel = "Netto",
   isPositive,
+  isLoading = false,
 }) => {
   const hasStatus = isPositive !== undefined;
   const statusColor = isPositive ? "text-emerald-400" : "text-red-400";
@@ -30,7 +32,12 @@ export const StatCard = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {hasDualMetricLayout ? (
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-28" />
+            {hasSideValue ? <Skeleton className="h-3 w-40" /> : null}
+          </div>
+        ) : hasDualMetricLayout ? (
           <div className="space-y-2">
             <div>
               <div className="text-[10px] uppercase text-muted-foreground">{primaryLabel}</div>

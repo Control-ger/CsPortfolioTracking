@@ -368,6 +368,11 @@ export async function buildDesktopPortfolioLocalSnapshot(options = {}) {
     source: "desktop-local",
     rawInvestmentCount: rawRows.length,
     scopedInvestmentCount: scopedRows.length,
+    // Local rows carry no price (clusterDesktopInvestments has no live/display
+    // price to work with), so every value-bearing summary field is 0 until the
+    // upstream enrichment lands. Consumers must be able to tell that apart from
+    // a genuine zero — an empty portfolio has nothing to price and is priced.
+    livePricing: rows.length === 0,
     warnings: [],
   };
   let history = buildPortfolioHistoryFromSnapshots(snapshots);
@@ -485,6 +490,7 @@ export async function fetchDesktopPortfolioData(options = {}, fetchApiPortfolioI
     meta = {
       ...meta,
       livePricingSource: "upstream",
+      livePricing: true,
     };
   } else if (upstreamSource === "desktop-local-fallback") {
     const upstreamHint = upstreamMeta?.upstreamHint || {};
