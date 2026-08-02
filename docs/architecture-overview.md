@@ -120,6 +120,7 @@ From `apps/web/src/App.jsx`:
 - `/search` -> `PortfolioPage` (`initialTab=search`)
 - `/cs-updates` -> `CsUpdatesPage`
 - `/settings` -> `SettingsPage`
+- `/wrapped` -> `YearWrappedPage` (Year Wrapped, lazy) — **deliberately not registered in `DesktopSidebarRail`, the page-local rail copies, or `BottomNavigation`.** Reached via the seasonal dashboard banner (15 Dec - 31 Jan, see §6.1) or directly by URL (`#/wrapped?year=YYYY`). Desktop-only: on web the page immediately redirects to `/`.
 - Electron/Desktop uses a shared app-level rail shell (`DesktopSidebarRail`) so cross-route navigation does not remount page-local sidebars.
 - The same shared app-level rail shell is used consistently across runtime paths so sidebar active-state/layout does not diverge between Dashboard, Settings, and Updates.
 
@@ -202,6 +203,8 @@ From `apps/web/src/App.jsx`:
 - Desktop auto Steam inventory sync is deferred until the first portfolio load has finished and then scheduled during browser idle, so it no longer competes with the initial dashboard paint.
 - For `metricsScope=all`, frontend normalizes history/KPI fallback inputs against the active summary values when the newest history snapshot diverges significantly, so `Gesamt Zuwachs` and chart stay scope-consistent.
 - CSFloat rate-limit handling uses a circuit-breaker file backoff and respects upstream `Retry-After` when present.
+- **Year Wrapped (`/wrapped`) reads raw local rows, not the portfolio view model.** `YearWrappedPage` calls `localStore.listInvestments()` / `listWatchlist()` directly, because both clustering paths (`clusterDesktopInvestments` client-side, `aggregateInvestmentsByName` server-side) collapse rows by item name and drop the per-purchase `purchasedAt` every buy-related statistic depends on. `usePortfolio()` is still used, but only for `portfolioHistory` (daily USD values) and `enrichedInvestments` (current ROI). This is also why Wrapped is desktop-only: the web API returns aggregated rows without purchase dates. Stats live in `packages/shared/src/lib/yearWrapped.js` as pure functions; the purchase date falls back `purchasedAt || importedAt || createdAt`, and rows with none are excluded from buy stats but counted as `undatedCount`. Every stat block carries an `available` flag so slides without data are dropped rather than rendered empty. Realized P&L is **not** part of Wrapped — no exit model exists (the exclusion flag carries neither timestamp nor sell price).
+- The Year Wrapped entry point is a seasonal, dismissible banner in the dashboard overview (`PortfolioOverviewSection`), gated by `resolveWrappedSeason()`: 15-31 Dec shows the ending year, all of January shows the year just ended. Dismissal is a year-scoped `localStorage` key (`year-wrapped:dismissed:<year>`) so the next season shows the banner again. The route itself stays reachable year-round by URL.
 
 ### 6.4 Price tables and write policy
 

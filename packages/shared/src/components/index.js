@@ -43,6 +43,7 @@ export { Watchlist } from './Watchlist.jsx';
 export { WebPushSettingsSection } from './WebPushSettingsSection.jsx';
 export { WatchlistItemModal } from './WatchlistItemModal.jsx';
 export { WatchlistOverview } from './WatchlistOverview.jsx';
+export * from './YearWrappedSlides.jsx';
 
 // UI Components
 export * from './ui/badge.jsx';

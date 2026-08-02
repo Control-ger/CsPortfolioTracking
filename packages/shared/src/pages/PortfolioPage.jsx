@@ -89,6 +89,7 @@ import {
   PortfolioSearchSection,
   PortfolioManagementSection,
 } from "@shared/components";
+import { resolveWrappedSeason } from "../lib/yearWrapped.js";
 
 const InventoryTable = lazy(() =>
   import("../components/InventoryTable.jsx").then((module) => ({
@@ -154,6 +155,8 @@ const GLOBAL_SEARCH_RECENTS_KEY = "global-search:recent:v1";
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
 const BAN_WAVE_NOTIFIED_KEY = "ban-wave:last-notified-id:v1";
 const CS_UPDATE_NOTIFIED_KEY = "cs-update:last-notified-id:v1";
+// Year-scoped so dismissing this season's banner does not hide the next one.
+const YEAR_WRAPPED_DISMISS_KEY_PREFIX = "year-wrapped:dismissed:";
 const DEFAULT_CS_UPDATES_BANNER_VISIBLE_HOURS = 24 * 7;
 const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "push_notifications", "matching", "management"];
 const DESKTOP_SIDEBAR_TABS = [
@@ -2729,6 +2732,36 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     navigate(`/cs-updates?item=${encodeURIComponent(String(freshBanWaveItem.id))}`);
   }, [freshBanWaveItem?.id, navigate]);
 
+  // Seasonal Year-Wrapped entry point (Dec 15 - Jan 31). Desktop only: the
+  // per-purchase dates Wrapped needs live exclusively in the local SQLite rows.
+  const wrappedSeason = useMemo(() => resolveWrappedSeason(new Date()), []);
+  const wrappedDismissKey = `${YEAR_WRAPPED_DISMISS_KEY_PREFIX}${wrappedSeason.year}`;
+  const [wrappedBannerDismissed, setWrappedBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setWrappedBannerDismissed(localStorage.getItem(wrappedDismissKey) === "1");
+    } catch {
+      setWrappedBannerDismissed(false);
+    }
+  }, [wrappedDismissKey]);
+
+  const showYearWrappedBanner =
+    isDesktopRuntime && wrappedSeason.active && !wrappedBannerDismissed;
+
+  const handleOpenYearWrapped = useCallback(() => {
+    navigate(`/wrapped?year=${wrappedSeason.year}`);
+  }, [navigate, wrappedSeason.year]);
+
+  const handleDismissYearWrapped = useCallback(() => {
+    try {
+      localStorage.setItem(wrappedDismissKey, "1");
+    } catch {
+      // Ignore storage failures — the banner simply returns on next load.
+    }
+    setWrappedBannerDismissed(true);
+  }, [wrappedDismissKey]);
+
   useEffect(() => {
     if (!freshBanWaveItem || !isDesktopRuntime) return;
     if (!portfolioPreferences.notifyBanWaveDesktop) return;
@@ -5062,6 +5095,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             showBanWaveBanner={showBanWaveBanner}
             freshBanWaveItem={freshBanWaveItem}
             handleOpenBanWaveFeed={handleOpenBanWaveFeed}
+            showYearWrappedBanner={showYearWrappedBanner}
+            yearWrappedYear={wrappedSeason.year}
+            handleOpenYearWrapped={handleOpenYearWrapped}
+            handleDismissYearWrapped={handleDismissYearWrapped}
             scopedPortfolioHistory={scopedPortfolioHistory}
             portfolioChartCardRef={portfolioChartCardRef}
             onChartHoverChange={setHoveredChartData}

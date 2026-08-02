@@ -1,4 +1,4 @@
-import { ArrowUpRight, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowUpRight, Sparkles, TrendingUp, TrendingDown, X } from "lucide-react";
 
 import { PortfolioChart } from "./PortfolioChart.jsx";
 import { PortfolioCompositionChart } from "./PortfolioCompositionChart.jsx";
@@ -43,6 +43,10 @@ export function PortfolioOverviewSection({
   showBanWaveBanner,
   freshBanWaveItem,
   handleOpenBanWaveFeed,
+  showYearWrappedBanner,
+  yearWrappedYear,
+  handleOpenYearWrapped,
+  handleDismissYearWrapped,
   scopedPortfolioHistory,
   portfolioChartCardRef,
   onChartHoverChange,
@@ -75,6 +79,47 @@ export function PortfolioOverviewSection({
           oldestDataAgeSeconds={stats.oldestDataAgeSeconds}
         />
       </div>
+
+      {showYearWrappedBanner ? (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleOpenYearWrapped}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleOpenYearWrapped();
+            }
+          }}
+          className="steam-avatar-gradient-banner group relative rounded-2xl border border-border/70 px-5 py-4 cursor-pointer transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <button
+            type="button"
+            aria-label="Jahresrueckblick ausblenden"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleDismissYearWrapped();
+            }}
+            className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="flex flex-col gap-3 pr-8">
+            <div className="flex min-w-0 items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+              <span className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Jahresrueckblick {yearWrappedYear}
+              </span>
+            </div>
+            <p className="text-base font-semibold text-foreground sm:text-lg">
+              Dein CS-Investment-Jahr {yearWrappedYear}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Kaeufe, Ausgaben, Plattformen und die Kurve deines Portfolios — jetzt ansehen.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {showBanWaveBanner && freshBanWaveItem ? (
         <div

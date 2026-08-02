@@ -16,6 +16,9 @@ const SettingsPage = lazy(() =>
   import("@shared/pages/SettingsPage.jsx").then((module) => ({ default: module.SettingsPage })),
 );
 const CsUpdatesPage = lazy(() => import("@shared/pages/CsUpdatesPage.jsx"));
+const YearWrappedPage = lazy(() =>
+  import("@shared/pages/YearWrappedPage.jsx").then((module) => ({ default: module.YearWrappedPage })),
+);
 
 const DEFAULT_STEAM_SHELL_PALETTE = Object.freeze({
   colorA: "hsla(212, 62%, 52%, 0.24)",
@@ -528,6 +531,16 @@ export default function App() {
         element={(
           <Suspense fallback={routeFallback}>
             <SettingsPage useExternalDesktopSidebarShell />
+          </Suspense>
+        )}
+      />
+      {/* Seasonal year-in-review. Deliberately not in the rail or bottom nav:
+          reachable via the dashboard banner (Dec 15 - Jan 31) or by URL. */}
+      <Route
+        path="/wrapped"
+        element={(
+          <Suspense fallback={routeFallback}>
+            <YearWrappedPage />
           </Suspense>
         )}
       />
