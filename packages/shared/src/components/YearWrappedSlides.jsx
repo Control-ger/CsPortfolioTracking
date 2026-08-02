@@ -1,4 +1,6 @@
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   Cell,
@@ -16,14 +18,15 @@ import { useCountUp } from "../hooks/useCountUp.js";
 import { formatDateSafe } from "../lib/portfolioHelpers.js";
 import { MONTH_LABELS } from "../lib/yearWrapped.js";
 
-// The Steam palette is the only sanctioned gradient source (see CLAUDE.md).
-// Charts pull the very same custom properties the shell paints with, so a
-// slide always matches the avatar-derived backdrop behind it.
+// Chart marks use the opaque siblings of the avatar palette (set by
+// YearWrappedPage via toOpaqueChartColor). The --steam-shell-color-* vars
+// themselves bake in a 0.11-0.20 alpha because they are background washes;
+// filling a donut with them renders it nearly invisible.
 const STEAM_CHART_COLORS = [
-  "var(--steam-shell-color-a, hsla(212, 62%, 52%, 0.85))",
-  "var(--steam-shell-color-b, hsla(188, 55%, 52%, 0.85))",
-  "var(--steam-shell-color-d, hsla(32, 42%, 46%, 0.85))",
-  "var(--steam-shell-color-c, hsla(39, 48%, 52%, 0.85))",
+  "var(--wrapped-chart-a, hsl(212, 70%, 58%))",
+  "var(--wrapped-chart-b, hsl(188, 62%, 55%))",
+  "var(--wrapped-chart-d, hsl(32, 60%, 54%))",
+  "var(--wrapped-chart-c, hsl(39, 66%, 56%))",
 ];
 
 function useUsdFormatter() {
@@ -275,19 +278,25 @@ export function WrappedPlatformsSlide({ year, platforms }) {
       title={leader ? `Am meisten ueber ${leader.label}` : "Deine Plattformen"}
       icon={Sparkles}
     >
-      <div className="grid items-center gap-6 sm:grid-cols-[1fr_1.2fr]">
-        <div className="h-44 w-full">
+      <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="relative h-56 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={platforms.entries}
                 dataKey="count"
                 nameKey="label"
-                innerRadius="58%"
-                outerRadius="88%"
+                innerRadius="62%"
+                outerRadius="94%"
                 paddingAngle={2}
                 stroke="none"
-                isAnimationActive={false}
+                startAngle={90}
+                // Sweeps a full turn clockwise as it grows in.
+                endAngle={-270}
+                isAnimationActive
+                animationBegin={220}
+                animationDuration={1100}
+                animationEasing="ease-out"
               >
                 {platforms.entries.map((entry, index) => (
                   <Cell key={entry.key} fill={STEAM_CHART_COLORS[index % STEAM_CHART_COLORS.length]} />
@@ -295,22 +304,42 @@ export function WrappedPlatformsSlide({ year, platforms }) {
               </Pie>
             </PieChart>
           </ResponsiveContainer>
+          {/* Centre label — the hole was the emptiest part of the slide. */}
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-semibold tabular-nums text-foreground">
+              {platforms.totalCount}
+            </span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Kaeufe</span>
+          </div>
         </div>
-        <ul className="flex flex-col gap-2">
-          {platforms.entries.map((entry, index) => (
-            <li key={entry.key} className="flex items-center justify-between gap-3 text-sm">
-              <span className="flex min-w-0 items-center gap-2">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: STEAM_CHART_COLORS[index % STEAM_CHART_COLORS.length] }}
-                />
-                <span className="truncate text-foreground">{entry.label}</span>
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {entry.count} · {entry.percentage.toFixed(0)} % · {formatUsd(entry.spentUsd)}
-              </span>
-            </li>
-          ))}
+        <ul className="flex flex-col gap-3">
+          {platforms.entries.map((entry, index) => {
+            const color = STEAM_CHART_COLORS[index % STEAM_CHART_COLORS.length];
+            return (
+              <li key={entry.key} className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+                    <span className="truncate font-medium text-foreground">{entry.label}</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {entry.count} · {entry.percentage.toFixed(0)} %
+                  </span>
+                </div>
+                {/* Share bar: gives the legend visual weight instead of leaving
+                    the right half of the slide as bare text. */}
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted-foreground/15">
+                  <span
+                    className="wrapped-bar-grow block h-full rounded-full"
+                    style={{ background: color, "--wrapped-bar-width": `${entry.percentage}%` }}
+                  />
+                </div>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {formatUsd(entry.spentUsd)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </WrappedSlideShell>
@@ -416,9 +445,24 @@ export function WrappedPerformersSlide({ year, performers }) {
 }
 
 export function WrappedWatchlistSlide({ year, watchlist }) {
+  const buckets = Array.isArray(watchlist.buckets) ? watchlist.buckets : [];
+  const sharePercent =
+    watchlist.totalCount > 0
+      ? Math.min(100, (watchlist.addedCount / watchlist.totalCount) * 100)
+      : 0;
+
   return (
-    <WrappedSlideShell eyebrow={`Watchlist ${year}`} title="Was du im Blick behalten hast" icon={Eye}>
-      <div className="grid gap-6 sm:grid-cols-2">
+    <WrappedSlideShell
+      eyebrow={`Watchlist ${year}`}
+      title="Was du im Blick behalten hast"
+      icon={Eye}
+      footnote={
+        watchlist.peakMonth
+          ? `Die meisten Eintraege kamen im ${watchlist.peakMonth.label} dazu.`
+          : null
+      }
+    >
+      <div className="grid items-center gap-6 sm:grid-cols-2">
         <StatBlock
           label="Neu beobachtet"
           countTo={watchlist.addedCount}
@@ -426,7 +470,55 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
           hint={`von aktuell ${watchlist.totalCount} Eintraegen`}
           sound
         />
+        <div className="flex flex-col gap-2">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            Anteil am Bestand
+          </span>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted-foreground/15">
+            <span
+              className="wrapped-bar-grow block h-full rounded-full"
+              style={{
+                background: STEAM_CHART_COLORS[0],
+                "--wrapped-bar-width": `${sharePercent}%`,
+              }}
+            />
+          </div>
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {sharePercent.toFixed(0)} % deiner Watchlist
+          </span>
+        </div>
       </div>
+
+      {buckets.length > 0 ? (
+        <div className="h-40 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={buckets} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+              <defs>
+                <linearGradient id="wrappedWatchlistFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={STEAM_CHART_COLORS[0]} stopOpacity={0.55} />
+                  <stop offset="100%" stopColor={STEAM_CHART_COLORS[0]} stopOpacity={0.04} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: "currentColor" }}
+                className="text-muted-foreground"
+              />
+              <Area
+                type="monotone"
+                dataKey="count"
+                stroke={STEAM_CHART_COLORS[0]}
+                strokeWidth={2}
+                fill="url(#wrappedWatchlistFill)"
+                animationDuration={1000}
+                animationBegin={240}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      ) : null}
     </WrappedSlideShell>
   );
 }

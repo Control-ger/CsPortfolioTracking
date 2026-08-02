@@ -76,6 +76,7 @@ export function SoundSettingsSection() {
             role="switch"
             aria-checked={enabled}
             aria-label="Sounds umschalten"
+            data-no-sound
             onClick={handleToggle}
             className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
               enabled ? "bg-primary" : "bg-muted-foreground/35"

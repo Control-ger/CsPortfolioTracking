@@ -331,15 +331,34 @@ function buildPerformerStats(enrichedInvestments) {
 }
 
 function buildWatchlistStats(watchlistItems, year) {
-  const addedCount = (Array.isArray(watchlistItems) ? watchlistItems : []).filter((item) => {
+  const items = Array.isArray(watchlistItems) ? watchlistItems : [];
+  const buckets = MONTH_LABELS.map((label, index) => ({ month: index, label, count: 0 }));
+  let addedCount = 0;
+
+  items.forEach((item) => {
     const timestamp = Date.parse(String(item?.createdAt || ""));
-    return Number.isFinite(timestamp) && new Date(timestamp).getFullYear() === year;
-  }).length;
+    if (!Number.isFinite(timestamp)) {
+      return;
+    }
+    const date = new Date(timestamp);
+    if (date.getFullYear() !== year) {
+      return;
+    }
+    addedCount += 1;
+    buckets[date.getMonth()].count += 1;
+  });
+
+  const peakMonth = buckets.reduce(
+    (best, bucket) => (bucket.count > (best?.count || 0) ? bucket : best),
+    null,
+  );
 
   return {
     available: addedCount > 0,
     addedCount,
-    totalCount: Array.isArray(watchlistItems) ? watchlistItems.length : 0,
+    totalCount: items.length,
+    buckets,
+    peakMonth: peakMonth && peakMonth.count > 0 ? peakMonth : null,
   };
 }
 

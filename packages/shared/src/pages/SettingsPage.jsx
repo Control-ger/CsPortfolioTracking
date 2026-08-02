@@ -46,6 +46,7 @@ import {
 } from "@shared/lib/settingsHelpers";
 import { FeeSettingsSection } from "@shared/components/FeeSettingsSection";
 import { CurrencySettingsSection } from "@shared/components/CurrencySettingsSection";
+import { SoundSettingsSection } from "@shared/components/SoundSettingsSection.jsx";
 import { WindowControlsSettingsSection } from "@shared/components/WindowControlsSettingsSection.jsx";
 import { PriceSourceSettingsSection } from "@shared/components/PriceSourceSettingsSection";
 import { WebPushSettingsSection } from "@shared/components/WebPushSettingsSection";
@@ -892,6 +893,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         </Card>
 
         {desktopRuntime && <WindowControlsSettingsSection />}
+
+        <SoundSettingsSection />
 
         <CurrencySettingsSection
           currency={currencyContext.currency}

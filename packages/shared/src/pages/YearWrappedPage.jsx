@@ -17,6 +17,7 @@ import {
 } from "../components/YearWrappedSlides.jsx";
 import { usePortfolio } from "../hooks/usePortfolio.jsx";
 import { getCurrentUser } from "../lib/auth.js";
+import { buildChartPaletteVars } from "../lib/steamChartPalette.js";
 import { resolveDesktopLocalUserId } from "../lib/userIdentity.js";
 import {
   isUiSoundsEnabled,
@@ -27,8 +28,9 @@ import {
 } from "../lib/uiSounds.js";
 import { buildYearWrappedStats, resolveWrappedSeason } from "../lib/yearWrapped.js";
 
-// Dwell time per slide before auto-advancing.
-const AUTOPLAY_INTERVAL_MS = 20000;
+// Dwell time per slide before auto-advancing. Single knob — change this one
+// number to retune the pace of the whole story.
+const AUTOPLAY_INTERVAL_MS = 12000;
 
 // Frozen fallback for the avatar-derived shell gradient, mirroring the vault
 // gate in apps/web/src/App.jsx. The palette is applied as a scoped inline style
@@ -251,9 +253,11 @@ export function YearWrappedPage() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
+  // No explicit sound here: the global click handler already covers a plain
+  // button press. Only controls with a *semantic* sound of their own opt out
+  // of the global one via data-no-sound.
   const togglePaused = useCallback(() => {
     primeUiSounds();
-    playUiSound("click");
     setIsPaused((current) => !current);
   }, []);
 
@@ -308,6 +312,8 @@ export function YearWrappedPage() {
     "--steam-shell-color-b": shellPalette.colorB,
     "--steam-shell-color-c": shellPalette.colorC,
     "--steam-shell-color-d": shellPalette.colorD,
+    // Opaque siblings for chart marks — see lib/steamChartPalette.js.
+    ...buildChartPaletteVars(shellPalette),
   };
 
   return (
@@ -351,6 +357,7 @@ export function YearWrappedPage() {
           <button
             type="button"
             onClick={toggleSounds}
+            data-no-sound
             aria-label={soundsEnabled ? "Sounds ausschalten" : "Sounds einschalten"}
             title={soundsEnabled ? "Sounds aus" : "Sounds an"}
             className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -406,6 +413,7 @@ export function YearWrappedPage() {
             <button
               type="button"
               onClick={goToPrevious}
+              data-no-sound
               disabled={activeIndex === 0}
               className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-card/70 px-4 py-2 text-sm font-medium text-foreground transition-opacity disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
@@ -418,6 +426,7 @@ export function YearWrappedPage() {
             <button
               type="button"
               onClick={activeIndex === slideCount - 1 ? handleClose : goToNext}
+              data-no-sound
               data-keyboard-default
               className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >

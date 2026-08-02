@@ -509,6 +509,21 @@
   animation-delay: var(--wrapped-reveal-delay, 0ms);
 }
 
+/* Share bars grow to their own width, set per element via --wrapped-bar-width. */
+@keyframes wrappedBarGrow {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--wrapped-bar-width, 0%);
+  }
+}
+
+.wrapped-bar-grow {
+  width: var(--wrapped-bar-width, 0%);
+  animation: wrappedBarGrow 900ms cubic-bezier(0.2, 0.9, 0.2, 1) 260ms backwards;
+}
+
 /* Auto-advance progress: each segment fills over the dwell time. The duration
    is driven from JS via --wrapped-autoplay-duration so pausing can freeze it. */
 @keyframes wrappedProgressFill {
@@ -536,7 +551,8 @@
   .steam-progress-pulse,
   .journey-step-panel,
   .wrapped-slide,
-  .wrapped-reveal {
+  .wrapped-reveal,
+  .wrapped-bar-grow {
     animation: none;
   }
 

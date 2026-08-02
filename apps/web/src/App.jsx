@@ -8,7 +8,7 @@ import { Button } from "@shared/components/ui/button";
 import { Input } from "@shared/components/ui/input";
 import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
 import { PortfolioPage } from "@shared/pages";
-import { useGlobalKeyboardNavigation } from "@shared/hooks";
+import { useGlobalKeyboardNavigation, useGlobalUiSounds } from "@shared/hooks";
 import { handleWebAuthCallback } from "@shared/lib/auth.js";
 import { startDesktopAutoSync } from "@shared/lib/desktopSync.js";
 
@@ -96,6 +96,8 @@ export default function App() {
   });
   const shouldUseVaultGate = isElectron && desktopRuntime;
   useGlobalKeyboardNavigation(true);
+  // App-wide click feedback; no-op while sounds are disabled in Settings.
+  useGlobalUiSounds();
 
   const refreshVaultStatus = useMemo(() => {
     return async ({ quiet = false } = {}) => {
