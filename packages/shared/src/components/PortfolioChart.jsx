@@ -668,7 +668,7 @@ export const PortfolioChart = ({
                       const wert = Number(dataPoint?.wert);
                       const growth = Number(dataPoint?.growthPercent);
                       const growthClassName =
-                        Number.isFinite(growth) && growth < 0 ? "text-red-500" : "text-emerald-500";
+                        Number.isFinite(growth) && growth < 0 ? "text-destructive" : "text-success";
                       return (
                         <div className="flex w-full flex-col gap-1">
                           <div className="flex w-full items-center justify-between gap-4">

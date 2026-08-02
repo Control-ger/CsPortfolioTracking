@@ -77,8 +77,8 @@ const TopMoverItemRow = ({ item, type, onClick, formatPrice }) => {
       className={cn(
         "flex w-full items-center justify-between gap-3 rounded-md border p-3 text-left shadow-none transition-all dark:rounded-2xl dark:shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
         isGainer
-          ? "border-emerald-400/30 bg-transparent hover:bg-emerald-500/7 dark:bg-emerald-500/7 dark:hover:bg-emerald-500/11"
-          : "border-red-400/30 bg-transparent hover:bg-red-500/7 dark:bg-red-500/7 dark:hover:bg-red-500/11"
+          ? "border-success/30 bg-transparent hover:bg-success/7 dark:bg-success/7 dark:hover:bg-success/11"
+          : "border-destructive/30 bg-transparent hover:bg-destructive/7 dark:bg-destructive/7 dark:hover:bg-destructive/11"
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -99,8 +99,8 @@ const TopMoverItemRow = ({ item, type, onClick, formatPrice }) => {
 
       <div className="flex flex-shrink-0 items-center gap-2">
         <div className="flex flex-col items-end gap-0.5">
-          <Icon className={cn("h-4 w-4", isGainer ? "text-emerald-400" : "text-red-400")} />
-          <span className={cn("text-xs font-semibold", isGainer ? "text-emerald-400" : "text-red-400")}>
+          <Icon className={cn("h-4 w-4", isGainer ? "text-success" : "text-destructive")} />
+          <span className={cn("text-xs font-semibold", isGainer ? "text-success" : "text-destructive")}>
             {derivedPercent >= 0 ? "+" : ""}{derivedPercent.toFixed(2)}%
           </span>
         </div>
@@ -250,7 +250,7 @@ export const WatchlistOverview = ({
           {/* Top Gewinner Sektion */}
           {gainers.length > 0 && (
             <div className="space-y-2">
-                <div className="flex items-center gap-2 text-emerald-400">
+                <div className="flex items-center gap-2 text-success">
                 <TrendingUp className="h-4 w-4" />
                 <h3 className="text-xs font-semibold uppercase tracking-wide">Top Gewinner (7 Tage)</h3>
               </div>
@@ -271,7 +271,7 @@ export const WatchlistOverview = ({
           {/* Top Verlierer Sektion */}
           {losers.length > 0 && (
             <div className="space-y-2">
-                <div className="flex items-center gap-2 text-red-400">
+                <div className="flex items-center gap-2 text-destructive">
                 <TrendingDown className="h-4 w-4" />
                 <h3 className="text-xs font-semibold uppercase tracking-wide">Top Verlierer (7 Tage)</h3>
               </div>

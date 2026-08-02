@@ -54,8 +54,8 @@ export function SkinBaronApiKeySection({
         <div
           className={
             readOnlyImportReady
-              ? "rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300"
-              : "rounded-xl border border-amber-400/35 bg-amber-500/12 p-3 text-sm text-amber-200"
+              ? "rounded-xl border border-success/35 bg-success/12 p-3 text-sm text-success"
+              : "rounded-xl border border-warning/35 bg-warning/12 p-3 text-sm text-warning"
           }
         >
           <p className="font-medium">
@@ -74,14 +74,14 @@ export function SkinBaronApiKeySection({
             <p className="text-sm font-medium">Session-Cookie fuer Purchases</p>
             <Badge
               variant="outline"
-              className={readOnlyImportReady ? "border-emerald-400/35 text-emerald-300" : "border-amber-400/35 text-amber-300"}
+              className={readOnlyImportReady ? "border-success/35 text-success" : "border-warning/35 text-warning"}
             >
               {readOnlyImportReady ? "Import Ready" : "Nicht bereit"}
             </Badge>
           </div>
 
           {skinBaronApiKeyStatus?.sessionCookieConfigured ? (
-            <div className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-2 text-xs text-muted-foreground">
+            <div className="rounded-lg border border-success/25 bg-success/10 p-2 text-xs text-muted-foreground">
               AUTHID ...{skinBaronApiKeyStatus.sessionCookieLastFour || "----"}
               {skinBaronApiKeyStatus?.sessionCookieCheckedAt
                 ? ` | letzter Purchases-Check: ${new Date(skinBaronApiKeyStatus.sessionCookieCheckedAt).toLocaleString("de-DE")}`
@@ -148,7 +148,7 @@ export function SkinBaronApiKeySection({
           </div>
         )}
         {skinBaronApiKeySuccess && (
-          <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
+          <div className="rounded-xl border border-success/35 bg-success/12 p-3 text-sm text-success">
             {skinBaronApiKeySuccess}
           </div>
         )}

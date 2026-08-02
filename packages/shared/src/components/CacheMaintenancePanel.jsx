@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button.jsx';
 import { Skeleton } from './ui/skeleton';
 import { AlertCircle, RefreshCw, Database } from 'lucide-react';
 import { fetchCacheMaintenanceStats } from '../lib/apiClient';
@@ -64,10 +65,10 @@ export function CacheMaintenancePanel() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+      <div className="rounded-lg border border-destructive/35 bg-destructive/12 p-4">
         <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <p className="text-sm text-red-800">{error}</p>
+          <AlertCircle className="h-4 w-4 text-destructive" />
+          <p className="text-sm text-destructive">{error}</p>
         </div>
       </div>
     );
@@ -162,19 +163,19 @@ export function CacheMaintenancePanel() {
                 <p className="text-xs text-muted-foreground">Total runs</p>
               </div>
               <div>
-                <p className="text-lg font-bold text-orange-600">
+                <p className="text-lg font-bold text-warning">
                   {maintenanceStats.total_live_deleted || 0}
                 </p>
                 <p className="text-xs text-muted-foreground">Live cache entries deleted</p>
               </div>
               <div>
-                <p className="text-lg font-bold text-blue-600">
+                <p className="text-lg font-bold text-info">
                   {maintenanceStats.total_catalog_deleted || 0}
                 </p>
                 <p className="text-xs text-muted-foreground">Catalog entries deleted</p>
               </div>
               <div>
-                <p className="text-sm font-mono text-green-600">
+                <p className="text-sm font-mono text-success">
                   {Math.round(maintenanceStats.avg_duration_ms || 0)}ms avg
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -204,12 +205,12 @@ export function CacheMaintenancePanel() {
                     </p>
                     <div className="flex gap-2">
                       {log.live_cache_deleted > 0 && (
-                        <Badge variant="outline" className="text-orange-600 border-orange-200">
+                        <Badge variant="outline" className="text-warning border-warning/35">
                           Live: {log.live_cache_deleted}
                         </Badge>
                       )}
                       {log.catalog_cache_deleted > 0 && (
-                        <Badge variant="outline" className="text-blue-600 border-blue-200">
+                        <Badge variant="outline" className="text-info border-info/35">
                           Catalog: {log.catalog_cache_deleted}
                         </Badge>
                       )}
@@ -226,14 +227,10 @@ export function CacheMaintenancePanel() {
       )}
 
       {/* Refresh Button */}
-      <button
-        onClick={loadStats}
-        disabled={loading}
-        className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-input bg-background hover:bg-accent disabled:opacity-50 flex items-center justify-center gap-2"
-      >
-        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+      <Button variant="outline" onClick={loadStats} disabled={loading} className="w-full">
+        <RefreshCw className={loading ? 'animate-spin' : undefined} />
         {loading ? 'Refreshing...' : 'Refresh Stats'}
-      </button>
+      </Button>
     </div>
   );
 }

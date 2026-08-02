@@ -1,5 +1,6 @@
 import { Component } from "react"
 import { errorToContext, sendFrontendTelemetryEvent } from "../lib/frontendTelemetry"
+import { Button } from "./ui/button.jsx"
 
 export class AppErrorBoundary extends Component {
   constructor(props) {
@@ -45,7 +46,7 @@ export class AppErrorBoundary extends Component {
               Die Anwendung ist abgestuerzt. Bitte Seite neu laden.
             </p>
             {/* Debug info - shows actual error */}
-            <div className="text-left text-xs text-red-400 bg-red-950/50 rounded-md p-3 overflow-auto max-h-40">
+            <div className="text-left text-xs text-destructive bg-destructive/50 rounded-md p-3 overflow-auto max-h-40">
               <p className="font-semibold mb-1">Error:</p>
               <p className="break-all">{errorMessage}</p>
               {errorStack && (
@@ -55,13 +56,9 @@ export class AppErrorBoundary extends Component {
                 </>
               )}
             </div>
-            <button
-              type="button"
-              onClick={this.handleReload}
-              className="mt-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
-            >
+            <Button variant="outline" onClick={this.handleReload} className="mt-2">
               Neu laden
-            </button>
+            </Button>
           </div>
         </div>
       )

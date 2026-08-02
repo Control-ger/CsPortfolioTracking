@@ -18,7 +18,7 @@ export const StatCard = ({
   isLoading = false,
 }) => {
   const hasStatus = isPositive !== undefined;
-  const statusColor = isPositive ? "text-emerald-400" : "text-red-400";
+  const statusColor = isPositive ? "text-success" : "text-destructive";
   const hasDualMetricLayout = primaryValue !== undefined || secondaryValue !== undefined;
   const mainValue = primaryValue ?? value;
   const sideValue = secondaryValue ?? subValue;

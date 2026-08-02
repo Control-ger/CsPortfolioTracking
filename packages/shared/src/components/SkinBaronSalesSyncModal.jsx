@@ -27,9 +27,9 @@ function formatDate(value) {
 function Stat({ label, value, tone = "muted" }) {
   const toneClass =
     tone === "positive"
-      ? "text-emerald-400"
+      ? "text-success"
       : tone === "negative"
-        ? "text-red-400"
+        ? "text-destructive"
         : "text-foreground";
 
   return (

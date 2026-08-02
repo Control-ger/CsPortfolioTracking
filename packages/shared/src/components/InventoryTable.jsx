@@ -91,17 +91,17 @@ function deltaClassName(value) {
     return "text-muted-foreground";
   }
 
-  return value >= 0 ? "text-emerald-400" : "text-red-400";
+  return value >= 0 ? "text-success" : "text-destructive";
 }
 
 function freshnessBadgeClass(status) {
   switch (status) {
     case "fresh":
-      return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
+      return "border-success/35 bg-success/12 text-success";
     case "aging":
-      return "border-amber-400/35 bg-amber-500/12 text-amber-300";
+      return "border-warning/35 bg-warning/12 text-warning";
     case "stale":
-      return "border-red-400/35 bg-red-500/12 text-red-300";
+      return "border-destructive/35 bg-destructive/12 text-destructive";
     default:
       return "border-muted text-muted-foreground";
   }
@@ -411,7 +411,7 @@ export function InventoryTable({
                     <TableCell className="text-right">
                       {item.isLive && isFiniteNumber(item.roi) ? (
                         <span
-                          className={`text-sm font-bold ${item.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                          className={`text-sm font-bold ${item.roi >= 0 ? "text-success" : "text-destructive"}`}
                         >
                           {formatSignedPercentOneDecimal(item.roi)}
                         </span>

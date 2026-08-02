@@ -38,7 +38,7 @@ export function PriceSourceSettingsSection({
           </div>
         ) : null}
         {priceSourceSuccess ? (
-          <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
+          <div className="rounded-xl border border-success/35 bg-success/12 p-3 text-sm text-success">
             {priceSourceSuccess}
           </div>
         ) : null}

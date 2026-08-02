@@ -180,7 +180,7 @@ function deriveMarketImpact(item) {
       level: "pending",
       label: "KI laeuft",
       action: "Eilmeldung lesen, Bewertung folgt.",
-      badgeClass: "border-sky-500/25 bg-sky-500/8 text-sky-300",
+      badgeClass: "border-info/25 bg-info/8 text-info",
       itemClass: "border-border bg-transparent",
     };
   }
@@ -194,17 +194,17 @@ function deriveMarketImpact(item) {
       },
       low: {
         label: "Impact niedrig",
-        badgeClass: "border-emerald-500/20 bg-emerald-500/8 text-emerald-300",
+        badgeClass: "border-success/20 bg-success/8 text-success",
         action: "Beobachten.",
       },
       medium: {
         label: "Impact mittel",
-        badgeClass: "border-amber-500/20 bg-amber-500/8 text-amber-300",
+        badgeClass: "border-warning/20 bg-warning/8 text-warning",
         action: "Heute monitoren.",
       },
       high: {
         label: "Impact hoch",
-        badgeClass: "border-red-500/25 bg-red-500/8 text-red-300",
+        badgeClass: "border-destructive/25 bg-destructive/8 text-destructive",
         action: "Schnell relevante Positionen pruefen.",
       },
     };
@@ -215,7 +215,7 @@ function deriveMarketImpact(item) {
       label: mapped.label,
       action: aiAction || mapped.action,
       badgeClass: mapped.badgeClass,
-      itemClass: aiImpactLevel === "high" ? "border-red-500/25 bg-transparent" : "border-border bg-transparent",
+      itemClass: aiImpactLevel === "high" ? "border-destructive/25 bg-transparent" : "border-border bg-transparent",
     };
   }
 
@@ -224,7 +224,7 @@ function deriveMarketImpact(item) {
       level: "failed",
       label: "KI fehlgeschlagen",
       action: "Patchnotes manuell bewerten.",
-      badgeClass: "border-rose-500/25 bg-rose-500/8 text-rose-300",
+      badgeClass: "border-destructive/25 bg-destructive/8 text-destructive",
       itemClass: "border-border bg-transparent",
     };
   }
@@ -267,9 +267,9 @@ function EmptyState() {
 
 function ErrorState({ message, onRetry, hasItems }) {
   return (
-    <div className={cn("rounded-xl border p-4", hasItems ? "border-amber-500/25 bg-amber-500/8" : "border-red-500/25 bg-red-500/8")}>
+    <div className={cn("rounded-xl border p-4", hasItems ? "border-warning/25 bg-warning/8" : "border-destructive/25 bg-destructive/8")}>
       <div className="flex items-start gap-2">
-        <AlertCircle className={cn("mt-0.5 h-4 w-4", hasItems ? "text-amber-300" : "text-red-300")} />
+        <AlertCircle className={cn("mt-0.5 h-4 w-4", hasItems ? "text-warning" : "text-destructive")} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">CS Updates konnten nicht geladen werden</p>
           <p className="mt-1 text-xs text-muted-foreground">{message}</p>
@@ -519,7 +519,7 @@ export function CsUpdatesFeed({
               <Badge variant="outline" className="border-border text-muted-foreground">{meta.sourceMode || "backend"}</Badge>
               <Badge
                 variant="outline"
-                className={meta.isStale ? "border-amber-500/25 bg-amber-500/8 text-amber-300" : "border-emerald-500/25 bg-emerald-500/8 text-emerald-300"}
+                className={meta.isStale ? "border-warning/25 bg-warning/8 text-warning" : "border-success/25 bg-success/8 text-success"}
               >
                 {meta.isStale ? "Veraltet" : "Aktuell"}
               </Badge>

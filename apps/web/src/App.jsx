@@ -381,20 +381,20 @@ export default function App() {
           {isElectron && <Titlebar />}
           <main className="flex flex-1 items-center justify-center overflow-auto p-4">
             <div
-              className="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-slate-950/58 p-5 text-slate-100 shadow-2xl backdrop-blur-xl"
+              className="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-foreground/15 bg-card/58 p-5 text-foreground shadow-2xl backdrop-blur-xl"
               data-keyboard-scope="page"
             >
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-slate-100">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground">
                   <Lock className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="text-base font-semibold">Welcome to CS Investor Hub</p>
-                  <p className="text-xs text-slate-300">Mit App-Passwort anmelden und direkt ins Dashboard.</p>
+                  <p className="text-xs text-muted-foreground">Mit App-Passwort anmelden und direkt ins Dashboard.</p>
                 </div>
               </div>
 
-              <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/15 bg-white/5 p-3">
+              <div className="mb-4 flex items-center gap-3 rounded-lg border border-foreground/15 bg-foreground/5 p-3">
                 {vaultAvatarUrl ? (
                   <img
                     src={vaultAvatarUrl}
@@ -402,17 +402,17 @@ export default function App() {
                     className="h-12 w-12 rounded-full object-cover ring-2 ring-primary/30"
                   />
                 ) : hasVaultSteamUser ? (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-slate-100 ring-2 ring-cyan-300/30">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-foreground/10 text-xs font-semibold text-foreground ring-2 ring-info/30">
                     {vaultDisplayName.slice(0, 2).toUpperCase()}
                   </div>
                 ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-slate-300 ring-2 ring-white/15">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-foreground/10 text-muted-foreground ring-2 ring-foreground/15">
                     <UserRound className="h-5 w-5" />
                   </div>
                 )}
                 <div>
-                  <p className="text-sm font-semibold text-slate-100">{vaultDisplayName}</p>
-                  <p className="text-xs text-slate-300">
+                  <p className="text-sm font-semibold text-foreground">{vaultDisplayName}</p>
+                  <p className="text-xs text-muted-foreground">
                     {hasVaultSteamUser ? "Steam verbunden" : "Noch nicht verbunden"}
                   </p>
                 </div>
@@ -433,7 +433,7 @@ export default function App() {
                     onChange={(event) => setSetupPassword(event.target.value)}
                     placeholder={`Mindestens ${minPasswordLength} Zeichen`}
                     disabled={vaultActionRunning}
-                    className="border-white/15 bg-white/5 text-slate-100 placeholder:text-slate-400"
+                    className="border-foreground/15 bg-foreground/5 text-foreground placeholder:text-muted-foreground"
                   />
                   <Input
                     type="password"
@@ -441,14 +441,14 @@ export default function App() {
                     onChange={(event) => setSetupPasswordConfirm(event.target.value)}
                     placeholder="Passwort bestaetigen"
                     disabled={vaultActionRunning}
-                    className="border-white/15 bg-white/5 text-slate-100 placeholder:text-slate-400"
+                    className="border-foreground/15 bg-foreground/5 text-foreground placeholder:text-muted-foreground"
                   />
-                  <p className="text-xs text-slate-300">
+                  <p className="text-xs text-muted-foreground">
                     Empfehlung: Lange Passphrase mit Gross-/Kleinbuchstaben, Zahlen und Sonderzeichen.
                   </p>
                   <Button
                     type="submit"
-                    className="w-full bg-white/95 text-slate-950 hover:bg-white"
+                    className="w-full"
                     disabled={vaultActionRunning}
                     data-keyboard-default
                   >
@@ -470,11 +470,11 @@ export default function App() {
                     onChange={(event) => setUnlockPassword(event.target.value)}
                     placeholder="App-Passwort"
                     disabled={vaultActionRunning}
-                    className="border-white/15 bg-white/5 text-slate-100 placeholder:text-slate-400"
+                    className="border-foreground/15 bg-foreground/5 text-foreground placeholder:text-muted-foreground"
                   />
                   <Button
                     type="submit"
-                    className="w-full bg-white/95 text-slate-950 hover:bg-white"
+                    className="w-full"
                     disabled={vaultActionRunning}
                     data-keyboard-default
                   >
@@ -484,20 +484,20 @@ export default function App() {
               )}
 
               <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between text-xs text-slate-300">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{vaultLoginProgressLabel}</span>
                   <span>{vaultLoginProgressPercent}%</span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-foreground/20">
                   <div
-                    className={`h-full rounded-full bg-cyan-300 transition-[width] duration-300 ${vaultActionRunning ? "steam-progress-pulse" : ""}`}
+                    className={`h-full rounded-full bg-info-solid transition-[width] duration-300 ${vaultActionRunning ? "steam-progress-pulse" : ""}`}
                     style={{ width: `${vaultLoginProgressPercent}%` }}
                   />
                 </div>
               </div>
 
               {vaultError ? (
-                <div className="mt-3 rounded-md border border-red-400/40 bg-red-500/15 p-2 text-xs text-red-100">
+                <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/15 p-2 text-xs text-destructive">
                   {vaultError}
                 </div>
               ) : null}

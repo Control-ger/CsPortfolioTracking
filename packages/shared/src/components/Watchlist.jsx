@@ -688,7 +688,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                               Aktuell: {formatPrice(Number(selectedItemWithBuyOrderRows.currentPrice))}
                             </p>
                             {selectedItemWithBuyOrderRows?.hasBuyOrder && Number(selectedItemWithBuyOrderRows?.buyOrderBestPriceUsd || 0) > 0 ? (
-                              <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-100 px-2 py-0.5 font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
+                              <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-info/35 bg-info/12 px-2 py-0.5 font-medium text-info">
                                 Meine Buyorder: {formatPrice(Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd), {
                                   useUsd: true,
                                   buyPriceUsd: Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd),
@@ -752,14 +752,14 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   )}
                   <div className={`mt-4 rounded-xl border p-4 ${
                     selectedItemBuyOrderRows.length > 0
-                      ? "border-sky-300 bg-sky-100/50 dark:border-sky-400/40 dark:bg-sky-400/5"
+                      ? "border-info/35 bg-info/50 dark:border-info/40 dark:bg-info/5"
                       : "border-border/70 bg-card/65"
                   }`}>
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h4 className="flex items-center gap-2 text-sm font-semibold">
                         Meine Buyorders (CSFloat)
                         {selectedItemBuyOrderRows.length > 0 ? (
-                          <span className="rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
+                          <span className="rounded-full border border-info/35 bg-info/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-info">
                             Aktiv
                           </span>
                         ) : null}
@@ -788,7 +788,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                           <tbody>
                             {selectedItemBuyOrderRows.slice(0, 12).map((row, index) => (
                               <tr key={`${row.priceUsd}-${index}`} className="border-t border-border/50">
-                                <td className="px-3 py-2 text-sky-700 dark:text-sky-300">
+                                <td className="px-3 py-2 text-info">
                                   {formatPrice(Number(row.priceUsd), {
                                     useUsd: true,
                                     buyPriceUsd: Number(row.priceUsd),
@@ -815,7 +815,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       variant="outline"
                       size="sm"
                       onClick={handleDeleteClick}
-                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Aus Watchlist entfernen

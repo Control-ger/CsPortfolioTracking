@@ -46,8 +46,8 @@ const MATCH_REASON_LABELS = {
 };
 
 const MATCH_CONFIDENCE_META = {
-  high: { label: "Hoch", className: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" },
-  medium: { label: "Mittel", className: "border-amber-500/40 text-amber-600 dark:text-amber-400" },
+  high: { label: "Hoch", className: "border-success/40 text-success" },
+  medium: { label: "Mittel", className: "border-warning/40 text-warning" },
   low: { label: "Niedrig", className: "border-muted-foreground/40 text-muted-foreground" },
 };
 
@@ -1011,7 +1011,7 @@ export function PortfolioManagementSection({
                       ) : null}
                     </div>
                     {portfolioGroupMessage ? (
-                      <p className="text-xs text-emerald-400">
+                      <p className="text-xs text-success">
                         {portfolioGroupMessage}
                       </p>
                     ) : null}
@@ -1371,7 +1371,7 @@ export function PortfolioManagementSection({
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   />
                   {manualSelectedSuggestion ? (
-                    <p className="text-xs text-emerald-400">
+                    <p className="text-xs text-success">
                       Ausgewaehlt: {manualSelectedSuggestion.name}
                     </p>
                   ) : null}
@@ -1715,7 +1715,7 @@ export function PortfolioManagementSection({
                                   {positionMatched ? (
                                     <Badge
                                       variant="outline"
-                                      className="h-4 shrink-0 gap-0.5 border-emerald-500/40 px-1.5 text-[9px] font-normal text-emerald-600 dark:text-emerald-400"
+                                      className="h-4 shrink-0 gap-0.5 border-success/40 px-1.5 text-[9px] font-normal text-success"
                                     >
                                       <Link2 className="h-2.5 w-2.5" />
                                       Gematcht
@@ -2051,7 +2051,7 @@ export function PortfolioManagementSection({
                                         </span>
                                       ) : null}
                                       {Number.isFinite(item.points) ? (
-                                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                        <span className="font-semibold text-success">
                                           +{item.points}
                                         </span>
                                       ) : null}
@@ -2109,7 +2109,7 @@ export function PortfolioManagementSection({
                               ) : (
                                 <Badge
                                   variant="outline"
-                                  className="justify-center border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                  className="justify-center border-success/40 text-success"
                                 >
                                   Bestaetigt
                                 </Badge>

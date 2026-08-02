@@ -18,6 +18,7 @@ import { useCurrency } from "../contexts/CurrencyContext.jsx";
 import { useCountUp } from "../hooks/useCountUp.js";
 import { formatDateSafe } from "../lib/portfolioHelpers.js";
 import { MONTH_LABELS } from "../lib/yearWrapped.js";
+import { Button } from "./ui/button.jsx";
 
 // Chart marks use the opaque siblings of the avatar palette (set by
 // YearWrappedPage via toOpaqueChartColor). The --steam-shell-color-* vars
@@ -86,9 +87,9 @@ function StatBlock({ label, value, countTo, format, hint, tone = "neutral", acti
 
   const toneClass =
     tone === "positive"
-      ? "text-emerald-500 dark:text-emerald-400"
+      ? "text-success"
       : tone === "negative"
-        ? "text-rose-500 dark:text-rose-400"
+        ? "text-destructive"
         : "text-foreground";
 
   return (
@@ -469,7 +470,7 @@ function PerformerReveal({ headline, performer, tone, delayMs, formatUsd }) {
     sound: true,
   });
   const toneClass =
-    tone === "negative" ? "text-rose-500 dark:text-rose-400" : "text-emerald-500 dark:text-emerald-400";
+    tone === "negative" ? "text-destructive" : "text-success";
 
   return (
     <div className="flex flex-col gap-3">
@@ -638,13 +639,9 @@ export function WrappedOutroSlide({ year, stats, onClose }) {
           </div>
         ))}
       </dl>
-      <button
-        type="button"
-        onClick={onClose}
-        className="self-start rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-      >
+      <Button onClick={onClose} className="self-start rounded-xl">
         Zurueck zum Dashboard
-      </button>
+      </Button>
     </WrappedSlideShell>
   );
 }

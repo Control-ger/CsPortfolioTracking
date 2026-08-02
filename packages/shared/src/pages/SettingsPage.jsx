@@ -1067,7 +1067,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             ) : null}
 
             {notifyError ? (
-              <p className="text-xs text-amber-400">{notifyError}</p>
+              <p className="text-xs text-warning">{notifyError}</p>
             ) : null}
           </CardContent>
         </Card>
@@ -1116,10 +1116,10 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                 </Button>
               </div>
               {csfloatWatchlistMessage ? (
-                <p className="text-xs text-emerald-400">{csfloatWatchlistMessage}</p>
+                <p className="text-xs text-success">{csfloatWatchlistMessage}</p>
               ) : null}
               {csfloatWatchlistError ? (
-                <p className="text-xs text-amber-400">{csfloatWatchlistError}</p>
+                <p className="text-xs text-warning">{csfloatWatchlistError}</p>
               ) : null}
             </CardContent>
           </Card>
@@ -1169,10 +1169,10 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                 </Button>
               </div>
               {csfloatBuyOrderMessage ? (
-                <p className="text-xs text-emerald-400">{csfloatBuyOrderMessage}</p>
+                <p className="text-xs text-success">{csfloatBuyOrderMessage}</p>
               ) : null}
               {csfloatBuyOrderError ? (
-                <p className="text-xs text-amber-400">{csfloatBuyOrderError}</p>
+                <p className="text-xs text-warning">{csfloatBuyOrderError}</p>
               ) : null}
             </CardContent>
           </Card>
@@ -1239,11 +1239,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                 <p
                   className={`text-xs ${
                     updateStatus.state === "error"
-                      ? "text-amber-400"
+                      ? "text-warning"
                       : updateStatus.state === "manual"
-                        ? "text-amber-400"
+                        ? "text-warning"
                         : updateStatus.state === "available" || updateStatus.state === "downloaded"
-                        ? "text-emerald-400"
+                        ? "text-success"
                         : "text-muted-foreground"
                   }`}
                 >
@@ -1352,7 +1352,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant="outline"
-              className={isUnlocked ? "border-emerald-400/35 text-emerald-300" : "border-amber-400/35 text-amber-300"}
+              className={isUnlocked ? "border-success/35 text-success" : "border-warning/35 text-warning"}
             >
               {isUnlocked ? "Entsperrt" : "Gesperrt"}
             </Badge>

@@ -20,17 +20,17 @@ function deltaClassName(value) {
     return "text-muted-foreground";
   }
 
-  return value >= 0 ? "text-emerald-400" : "text-red-400";
+  return value >= 0 ? "text-success" : "text-destructive";
 }
 
 function freshnessBadgeClass(status) {
   switch (status) {
     case "fresh":
-      return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
+      return "border-success/35 bg-success/12 text-success";
     case "aging":
-      return "border-amber-400/35 bg-amber-500/12 text-amber-300";
+      return "border-warning/35 bg-warning/12 text-warning";
     case "stale":
-      return "border-red-400/35 bg-red-500/12 text-red-300";
+      return "border-destructive/35 bg-destructive/12 text-destructive";
     default:
       return "border-muted text-muted-foreground";
   }
@@ -223,7 +223,7 @@ export function ItemDetailsModal({
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">{item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}</p>
             {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
-              <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-300 bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
+              <p className="mt-1 inline-flex items-center gap-1 rounded border border-info/35 bg-info/12 px-1.5 py-0.5 text-[10px] font-medium text-info">
                 Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
                   useUsd: true,
                   buyPriceUsd: Number(item.buyOrderBestPriceUsd),
@@ -260,8 +260,8 @@ export function ItemDetailsModal({
                 item.isProfitPositive === null
                   ? "text-muted-foreground"
                   : item.isProfitPositive
-                    ? "text-emerald-400"
-                    : "text-red-400"
+                    ? "text-success"
+                    : "text-destructive"
               }`}
             >
               {item.isLive
@@ -355,8 +355,8 @@ export function ItemDetailsModal({
               onClick={handleToggleExclude}
               className={`flex h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
                 (item.excluded ?? item.isExcluded)
-                  ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-300 hover:bg-emerald-500/18"
-                  : "border-amber-400/35 bg-amber-500/12 text-amber-300 hover:bg-amber-500/18"
+                  ? "border-success/35 bg-success/12 text-success hover:bg-success/18"
+                  : "border-warning/35 bg-warning/12 text-warning hover:bg-warning/18"
               }`}
             >
               {(item.excluded ?? item.isExcluded) ? (

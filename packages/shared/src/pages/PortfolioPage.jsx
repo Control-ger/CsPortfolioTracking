@@ -134,15 +134,15 @@ const ItemSearch = lazy(() =>
 // accent dot + the impact badge. No gradients, no nested panels, light-safe.
 function getCsUpdateBannerTone(level) {
   if (level === "high") {
-    return { dot: "bg-red-500" };
+    return { dot: "bg-destructive-solid" };
   }
   if (level === "medium") {
-    return { dot: "bg-amber-500" };
+    return { dot: "bg-warning-solid" };
   }
   if (level === "pending") {
-    return { dot: "bg-sky-500" };
+    return { dot: "bg-info-solid" };
   }
-  return { dot: "bg-emerald-500" };
+  return { dot: "bg-success-solid" };
 }
 
 const JOURNEY_STORAGE_KEY = "onboarding:journey:v1";
@@ -3729,16 +3729,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   })();
   const appUpdateNotificationClass = (() => {
     if (appUpdateState === "downloaded") {
-      return "w-full rounded-xl border border-emerald-400/35 bg-emerald-500/12 px-2 py-2 text-left hover:bg-emerald-500/18";
+      return "w-full rounded-xl border border-success/35 bg-success/12 px-2 py-2 text-left hover:bg-success/18";
     }
     if (appUpdateState === "downloading" || appUpdateState === "installing") {
-      return "w-full rounded-xl border border-blue-400/35 bg-blue-500/12 px-2 py-2 text-left hover:bg-blue-500/18";
+      return "w-full rounded-xl border border-info/35 bg-info/12 px-2 py-2 text-left hover:bg-info/18";
     }
     if (appUpdateState === "handoff") {
-      return "w-full rounded-xl border border-amber-400/35 bg-amber-500/12 px-2 py-2 text-left hover:bg-amber-500/18";
+      return "w-full rounded-xl border border-warning/35 bg-warning/12 px-2 py-2 text-left hover:bg-warning/18";
     }
     if (appUpdateState === "available" || appUpdateState === "manual") {
-      return "w-full rounded-xl border border-amber-400/35 bg-amber-500/12 px-2 py-2 text-left hover:bg-amber-500/18";
+      return "w-full rounded-xl border border-warning/35 bg-warning/12 px-2 py-2 text-left hover:bg-warning/18";
     }
     if (appUpdateState === "error") {
       return "w-full rounded-xl border border-destructive/60 bg-destructive/12 px-2 py-2 text-left hover:bg-destructive/20";
@@ -3914,7 +3914,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               markLatestCsUpdateSeen();
               navigate("/cs-updates");
             }}
-            className="w-full rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-2 py-2 text-left hover:bg-cyan-500/15"
+            className="w-full rounded-xl border border-info/30 bg-info/10 px-2 py-2 text-left hover:bg-info/15"
           >
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold">CS Update Feed</p>
@@ -3932,14 +3932,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         {warningNotifications.length > 0 ? (
-          <div className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-2">
+          <div className="rounded-xl border border-warning/35 bg-warning/12 p-2">
             <p className="text-xs font-semibold">Systemhinweise</p>
             <div className="mt-1.5 space-y-1.5">
               {warningNotifications.slice(0, 4).map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-amber-300/25 bg-amber-500/8 px-2 py-1.5">
+                <div key={entry.id} className="rounded-lg border border-warning/25 bg-warning/8 px-2 py-1.5">
                   <p className="text-sm">{entry.message}</p>
                   {entry.meta ? (
-                    <p className="text-[11px] text-amber-200/80">{entry.meta}</p>
+                    <p className="text-[11px] text-warning/80">{entry.meta}</p>
                   ) : null}
                 </div>
               ))}
@@ -4354,7 +4354,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     <Button variant="outline" size="icon" className="relative h-10 w-10 rounded-full border-border/80 bg-card/75 p-0">
                       <Bell className="h-5 w-5" />
                       {unreadNotificationCount > 0 ? (
-                        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive-solid px-1 text-[10px] font-bold text-destructive-foreground">
                           {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                         </span>
                       ) : null}
@@ -4382,7 +4382,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
                       <Bell className="h-5 w-5" />
                       {unreadNotificationCount > 0 ? (
-                        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive-solid px-1 text-[10px] font-bold text-destructive-foreground">
                           {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                         </span>
                       ) : null}
@@ -4440,29 +4440,29 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         {showSetupJourney ? (
-          <Card className="steam-journey-card relative overflow-hidden border-white/15 bg-slate-950/58 text-slate-100 shadow-2xl backdrop-blur-xl">
+          <Card className="steam-journey-card relative overflow-hidden border-foreground/15 bg-background/58 text-foreground shadow-2xl backdrop-blur-xl">
             <CardHeader className="space-y-2 pb-3">
-              <CardTitle className="text-2xl tracking-tight text-slate-50">
+              <CardTitle className="text-2xl tracking-tight text-foreground">
                 Setup Journey{journeyUserName ? ` fuer ${journeyUserName}` : ""}
               </CardTitle>
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-muted-foreground">
                 Wir teilen alles in klare Schritte auf. Du kannst spaeter in den Einstellungen jeden Punkt wieder aendern.
               </p>
             </CardHeader>
             <CardContent className="space-y-6 text-sm">
               {showStartupAutoSyncEmptyHint ? (
-                <div className="rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100">
+                <div className="rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-xs text-info">
                   Keine neuen Steam Items beim letzten Auto-Sync.
                 </div>
               ) : null}
-              <div className="space-y-3 rounded-xl border border-white/15 bg-white/5 p-4">
-                <div className="flex items-center justify-between text-xs text-slate-300">
+              <div className="space-y-3 rounded-xl border border-foreground/15 bg-foreground/5 p-4">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Fortschritt</span>
                   <span>{journeyProgressPercent}%</span>
                 </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/15">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-foreground/15">
                   <div
-                    className={`h-full rounded-full bg-cyan-300 transition-[width] duration-500 ${journeyProgressPercent < 100 ? "steam-progress-pulse" : ""}`}
+                    className={`h-full rounded-full bg-info-solid transition-[width] duration-500 ${journeyProgressPercent < 100 ? "steam-progress-pulse" : ""}`}
                     style={{ width: `${journeyProgressPercent}%` }}
                   />
                 </div>
@@ -4472,8 +4472,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       key={step.id}
                       className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
                         step.done
-                          ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-200"
-                          : "border-white/15 bg-slate-900/40 text-slate-300"
+                          ? "border-success/40 bg-success/15 text-success"
+                          : "border-foreground/15 bg-card/40 text-muted-foreground"
                       }`}
                     >
                       <input
@@ -4481,7 +4481,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         checked={step.done}
                         readOnly
                         disabled
-                        className="h-4 w-4 cursor-default accent-emerald-400"
+                        className="h-4 w-4 cursor-default accent-success"
                       />
                       <span>{step.label}</span>
                     </label>
@@ -4490,15 +4490,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </div>
 
               {!journeyStarted ? (
-                <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
-                  <p className="text-slate-200">
+                <div className="space-y-4 rounded-xl border border-foreground/15 bg-foreground/5 p-4">
+                  <p className="text-foreground">
                     Reihenfolge: Login, Server, Steam-Importziel, CSFloat-Key, CSFloat-Import, Push, Matching, Verwaltung.
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button onClick={() => void handleStartJourney()}>Journey starten</Button>
                     <Button
                       variant="ghost"
-                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      className="text-foreground hover:bg-foreground/10 hover:text-foreground"
                       onClick={() => void handleSkipJourney()}
                     >
                       Ueberspringen
@@ -4510,15 +4510,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               {journeyStarted ? (
                 <div key={activeJourneyStepId} className="journey-step-panel space-y-4">
                   {activeJourneyStepId === "server" ? (
-                    <div className="space-y-4 rounded-xl border border-amber-300/35 bg-amber-500/10 p-4">
+                    <div className="space-y-4 rounded-xl border border-warning/35 bg-warning/10 p-4">
                       <div>
-                        <p className="font-semibold text-amber-100">1. Server-Verbindung</p>
-                        <p className="mt-1 text-xs text-amber-200/90">
+                        <p className="font-semibold text-warning">1. Server-Verbindung</p>
+                        <p className="mt-1 text-xs text-warning/90">
                           Diese URL wird fuer Sync und serverseitige Preisdaten benoetigt.
                         </p>
                       </div>
-                      {serverSetupError ? <p className="text-xs text-red-200">{serverSetupError}</p> : null}
-                      {serverSetupMessage ? <p className="text-xs text-emerald-200">{serverSetupMessage}</p> : null}
+                      {serverSetupError ? <p className="text-xs text-destructive">{serverSetupError}</p> : null}
+                      {serverSetupMessage ? <p className="text-xs text-success">{serverSetupMessage}</p> : null}
                         <input
                           type="text"
                           value={serverSetup.serverUrl}
@@ -4534,13 +4534,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             }
                           }}
                           placeholder="cs2.clustercontrol.cc"
-                          className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100 placeholder:text-slate-400"
+                          className="h-10 w-full rounded-md border border-foreground/20 bg-card/65 px-3 text-sm text-foreground placeholder:text-muted-foreground"
                         />
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          className="border-foreground/30 bg-card/35 text-foreground hover:bg-foreground/10"
                           disabled={serverSetupTesting || !serverSetup.serverUrl.trim()}
                           onClick={async () => {
                             try {
@@ -4605,18 +4605,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     </div>
                   ) : null}
                   {activeJourneyStepId === "import_defaults" ? (
-                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                    <div className="space-y-4 rounded-xl border border-foreground/15 bg-foreground/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">2. Ziel fuer Steam-Items waehlen</p>
-                        <p className="mt-1 text-xs text-slate-300">
+                        <p className="font-semibold text-foreground">2. Ziel fuer Steam-Items waehlen</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Kleiner Hinweis: Das kannst du spaeter jederzeit in den Einstellungen aendern.
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-1">
-                          <label className="text-xs text-slate-300">Steam-Import</label>
+                          <label className="text-xs text-muted-foreground">Steam-Import</label>
                           <select
-                            className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100"
+                            className="h-10 w-full rounded-md border border-foreground/20 bg-card/65 px-3 text-sm text-foreground"
                             value={portfolioPreferences.steamImportBucket}
                             onChange={async (event) => {
                               const updated = await updatePortfolioPreferences({
@@ -4630,9 +4630,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-slate-300">CSFloat-Import</label>
+                          <label className="text-xs text-muted-foreground">CSFloat-Import</label>
                           <select
-                            className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100"
+                            className="h-10 w-full rounded-md border border-foreground/20 bg-card/65 px-3 text-sm text-foreground"
                             value={portfolioPreferences.csfloatImportBucket}
                             onChange={async (event) => {
                               const updated = await updatePortfolioPreferences({
@@ -4646,9 +4646,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-slate-300">SkinBaron-Import</label>
+                          <label className="text-xs text-muted-foreground">SkinBaron-Import</label>
                           <select
-                            className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100"
+                            className="h-10 w-full rounded-md border border-foreground/20 bg-card/65 px-3 text-sm text-foreground"
                             value={portfolioPreferences.skinBaronImportBucket}
                             onChange={async (event) => {
                               const updated = await updatePortfolioPreferences({
@@ -4662,7 +4662,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           </select>
                         </div>
                       </div>
-                      <label className="flex items-start gap-3 rounded-md border border-white/15 bg-slate-900/40 p-3 text-xs text-slate-200">
+                      <label className="flex items-start gap-3 rounded-md border border-foreground/15 bg-card/40 p-3 text-xs text-foreground">
                         <input
                           type="checkbox"
                           checked={Boolean(journeyState?.importBucketConfirmedAt)}
@@ -4671,27 +4671,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                               void handleConfirmImportDefaultsStep();
                             }
                           }}
-                          className="mt-0.5 h-4 w-4 accent-cyan-400"
+                          className="mt-0.5 h-4 w-4 accent-info"
                         />
                         <span>Importziel verstanden und bestaetigt.</span>
                       </label>
                     </div>
                   ) : null}
                   {activeJourneyStepId === "csfloat_key" ? (
-                    <div className="space-y-4 rounded-xl border border-cyan-300/30 bg-cyan-500/10 p-4">
+                    <div className="space-y-4 rounded-xl border border-info/30 bg-info/10 p-4">
                       <div>
-                        <p className="font-semibold text-cyan-100">3. CSFloat API Key hinterlegen</p>
-                        <p className="mt-1 text-xs text-cyan-100/90">
+                        <p className="font-semibold text-info">3. CSFloat API Key hinterlegen</p>
+                        <p className="mt-1 text-xs text-info/90">
                           Der Key wird nur lokal und verschluesselt gespeichert. Nie im Web-Build und nie auf dem Server.
                         </p>
                       </div>
-                      <ol className="list-decimal space-y-1 pl-4 text-xs text-cyan-100/90">
+                      <ol className="list-decimal space-y-1 pl-4 text-xs text-info/90">
                         <li>
                           <a
                             href="https://csfloat.com/"
                             target="_blank"
                             rel="noreferrer"
-                            className="underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-200"
+                            className="underline decoration-info/50 underline-offset-2 hover:text-info"
                           >
                             csfloat.com
                           </a>{" "}
@@ -4703,7 +4703,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             href="https://csfloat.com/profile"
                             target="_blank"
                             rel="noreferrer"
-                            className="underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-200"
+                            className="underline decoration-info/50 underline-offset-2 hover:text-info"
                           >
                             csfloat.com/profile
                           </a>
@@ -4711,27 +4711,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         <li>Zum Reiter Developer gehen</li>
                         <li>Neuen Schluessel erstellen und kopieren</li>
                       </ol>
-                      <div className="rounded-md border border-amber-300/35 bg-amber-500/10 p-3 text-xs text-amber-100">
+                      <div className="rounded-md border border-warning/35 bg-warning/10 p-3 text-xs text-warning">
                         Gib den Schluessel nicht weiter. Falls du einen Leak vermutest: alten Schluessel loeschen und neu
                         erstellen. Du kannst den Key spaeter jederzeit in der Verwaltung aendern.
                       </div>
                       {journeyApiKeyError ? (
-                        <div className="rounded-md border border-red-300/35 bg-red-500/10 p-2 text-xs text-red-200">
+                        <div className="rounded-md border border-destructive/35 bg-destructive/10 p-2 text-xs text-destructive">
                           {journeyApiKeyError}
                         </div>
                       ) : null}
                       {journeyApiKeySuccess ? (
-                        <div className="rounded-md border border-emerald-300/35 bg-emerald-500/10 p-2 text-xs text-emerald-200">
+                        <div className="rounded-md border border-success/35 bg-success/10 p-2 text-xs text-success">
                           {journeyApiKeySuccess}
                         </div>
                       ) : null}
                       {journeyApiKeyHelper ? (
-                        <div className="rounded-md border border-cyan-300/35 bg-cyan-500/10 p-2 text-xs text-cyan-100">
+                        <div className="rounded-md border border-info/35 bg-info/10 p-2 text-xs text-info">
                           {journeyApiKeyHelper}
                         </div>
                       ) : null}
                       <div className="space-y-2">
-                        <label className="text-xs font-medium text-cyan-100">CSFloat API Key</label>
+                        <label className="text-xs font-medium text-info">CSFloat API Key</label>
                         <input
                           type="password"
                           value={journeyApiKey}
@@ -4748,13 +4748,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             }
                           }}
                           placeholder="CSFloat API Key..."
-                          className="h-10 w-full rounded-md border border-white/20 bg-slate-900/65 px-3 text-sm text-slate-100 placeholder:text-slate-400"
+                          className="h-10 w-full rounded-md border border-foreground/20 bg-card/65 px-3 text-sm text-foreground placeholder:text-muted-foreground"
                         />
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             size="sm"
                             disabled={journeyApiKeySaving || !normalizeCsFloatApiKeyInput(journeyApiKey)}
-                            className="bg-slate-100 text-slate-900 hover:bg-white disabled:bg-slate-500 disabled:text-slate-800"
                             onClick={() => void handleSaveJourneyCsFloatKey()}
                           >
                             {journeyApiKeySaving ? "Speichert..." : "Key speichern"}
@@ -4762,7 +4761,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           <Button
                             size="sm"
                             variant="outline"
-                            className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                            className="border-foreground/30 bg-card/35 text-foreground hover:bg-foreground/10"
                             onClick={() => void handleRefreshCsFloatStatus()}
                           >
                             Status aktualisieren
@@ -4770,7 +4769,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-cyan-100 hover:bg-white/10 hover:text-white"
+                            className="text-info hover:bg-foreground/10 hover:text-foreground"
                             onClick={() => void handleMarkCsFloatKeySkipped()}
                           >
                             Ohne CSFloat weiter
@@ -4780,10 +4779,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     </div>
                   ) : null}
                   {activeJourneyStepId === "csfloat_import" ? (
-                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                    <div className="space-y-4 rounded-xl border border-foreground/15 bg-foreground/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">4. CSFloat-Import jetzt starten?</p>
-                        <p className="mt-1 text-xs text-slate-300">
+                        <p className="font-semibold text-foreground">4. CSFloat-Import jetzt starten?</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Beim Import siehst du direkt die Ladeanzeige im CSFloat-Sync-Dialog.
                         </p>
                       </div>
@@ -4797,32 +4796,32 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         </Button>
                         <Button
                           variant="outline"
-                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          className="border-foreground/30 bg-card/35 text-foreground hover:bg-foreground/10"
                           onClick={() => void handleMarkCsFloatImportSkipped()}
                         >
                           Spaeter / Skip
                         </Button>
                       </div>
-                      <p className="text-[11px] text-slate-300">
+                      <p className="text-[11px] text-muted-foreground">
                         Wenn du jetzt importierst, leiten wir dich danach direkt zum Matching-Schritt.
                       </p>
                     </div>
                   ) : null}
                   {activeJourneyStepId === "push_notifications" ? (
-                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                    <div className="space-y-4 rounded-xl border border-foreground/15 bg-foreground/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">5. Push-Benachrichtigungen fuer CS-Updates</p>
-                        <p className="mt-1 text-xs text-slate-300">
+                        <p className="font-semibold text-foreground">5. Push-Benachrichtigungen fuer CS-Updates</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Browser Push ist fuer Mobile gedacht. In Electron reicht der integrierte Feed, daher aktivierst du Push am besten im Mobile Companion.
                         </p>
                       </div>
-                      <div className="rounded-md border border-cyan-300/25 bg-cyan-500/10 p-3 text-xs text-cyan-100">
+                      <div className="rounded-md border border-info/25 bg-info/10 p-3 text-xs text-info">
                         Empfehlung: Server auf dem Handy oeffnen, einloggen und unter Einstellungen - Allgemein Browser Push aktivieren.
                       </div>
                       {mobileCompanionSetupUrl ? (
-                        <div className="rounded-md border border-white/15 bg-slate-900/40 p-3 text-xs text-slate-200">
+                        <div className="rounded-md border border-foreground/15 bg-card/40 p-3 text-xs text-foreground">
                           Server-Link fuer Mobile Setup:{" "}
-                          <span className="font-mono text-[11px] text-cyan-200">{mobileCompanionSetupUrl}</span>
+                          <span className="font-mono text-[11px] text-info">{mobileCompanionSetupUrl}</span>
                         </div>
                       ) : null}
                       <div className="flex flex-wrap items-center gap-2">
@@ -4832,7 +4831,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          className="border-foreground/30 bg-card/35 text-foreground hover:bg-foreground/10"
                           onClick={async () => {
                             await handleOpenMobileCompanionPushSetup();
                             await handleSetJourneyPushPreference(true);
@@ -4844,17 +4843,17 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     </div>
                   ) : null}
                   {activeJourneyStepId === "matching" ? (
-                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                    <div className="space-y-4 rounded-xl border border-foreground/15 bg-foreground/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">6. Steam und CSFloat Matching pruefen</p>
-                        <p className="mt-1 text-xs text-slate-300">
+                        <p className="font-semibold text-foreground">6. Steam und CSFloat Matching pruefen</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Offene Matching-Vorschlaege: <span className="font-semibold">{matchingSuggestedCount}</span>
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="outline"
-                          className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                          className="border-foreground/30 bg-card/35 text-foreground hover:bg-foreground/10"
                           onClick={() => {
                             setActiveTab("management");
                             setManagementSection("matching");
@@ -4869,28 +4868,28 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     </div>
                   ) : null}
                   {activeJourneyStepId === "management" ? (
-                    <div className="space-y-4 rounded-xl border border-white/15 bg-white/5 p-4">
+                    <div className="space-y-4 rounded-xl border border-foreground/15 bg-foreground/5 p-4">
                       <div>
-                        <p className="font-semibold text-slate-100">7. Verwaltung kurz erklaert</p>
-                        <p className="mt-1 text-xs text-slate-300">
+                        <p className="font-semibold text-foreground">7. Verwaltung kurz erklaert</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Hier steuerst du Matching, Preise und Exclude-Logik fuer deine Items.
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
-                          <p className="text-xs font-semibold uppercase text-slate-200">Matching</p>
-                          <p className="mt-1 text-xs text-slate-300">Vorschlaege bestaetigen oder korrigieren.</p>
+                        <div className="rounded-lg border border-foreground/15 bg-card/50 p-3">
+                          <p className="text-xs font-semibold uppercase text-foreground">Matching</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Vorschlaege bestaetigen oder korrigieren.</p>
                         </div>
-                        <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
-                          <p className="text-xs font-semibold uppercase text-slate-200">Preise</p>
-                          <p className="mt-1 text-xs text-slate-300">Fehlende Einkaufspreise schnell nachpflegen.</p>
+                        <div className="rounded-lg border border-foreground/15 bg-card/50 p-3">
+                          <p className="text-xs font-semibold uppercase text-foreground">Preise</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Fehlende Einkaufspreise schnell nachpflegen.</p>
                         </div>
-                        <div className="rounded-lg border border-white/15 bg-slate-900/50 p-3">
-                          <p className="text-xs font-semibold uppercase text-slate-200">Exclude</p>
-                          <p className="mt-1 text-xs text-slate-300">Positionen aus Kennzahlen ausblenden.</p>
+                        <div className="rounded-lg border border-foreground/15 bg-card/50 p-3">
+                          <p className="text-xs font-semibold uppercase text-foreground">Exclude</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Positionen aus Kennzahlen ausblenden.</p>
                         </div>
                       </div>
-                      <label className="flex items-start gap-3 rounded-md border border-white/15 bg-slate-900/40 p-3 text-xs text-slate-200">
+                      <label className="flex items-start gap-3 rounded-md border border-foreground/15 bg-card/40 p-3 text-xs text-foreground">
                         <input
                           type="checkbox"
                           checked={Boolean(journeyState?.managementHintsSeenAt)}
@@ -4899,7 +4898,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                               void handleManagementHintsSeen();
                             }
                           }}
-                          className="mt-0.5 h-4 w-4 accent-cyan-400"
+                          className="mt-0.5 h-4 w-4 accent-info"
                         />
                         <span>Hinweise verstanden.</span>
                       </label>
@@ -4915,12 +4914,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               ) : null}
 
               {journeyStarted ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-foreground/10 pt-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      className="text-foreground hover:bg-foreground/10 hover:text-foreground"
                       onClick={() => void handleGoBackJourneyStep()}
                       disabled={activeJourneyStepId === JOURNEY_STEP_ORDER[0]}
                     >
@@ -4929,7 +4928,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      className="text-foreground hover:bg-foreground/10 hover:text-foreground"
                       onClick={() => navigate("/settings", { replace: true })}
                     >
                       Einstellungen
@@ -4939,7 +4938,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-slate-200 hover:bg-white/10 hover:text-slate-50"
+                      className="text-foreground hover:bg-foreground/10 hover:text-foreground"
                       onClick={() => void handleSkipJourney()}
                     >
                       Journey beenden
@@ -4948,7 +4947,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-white/30 bg-slate-900/35 text-slate-100 hover:bg-white/10"
+                        className="border-foreground/30 bg-card/35 text-foreground hover:bg-foreground/10"
                         onClick={() => void handleGoNextJourneyStep()}
                       >
                         Schritt ueberspringen
@@ -5007,7 +5006,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             <span className="relative inline-flex">
                               <Icon className="h-5 w-5" />
                               {tab.key === "updates" && hasUnreadCsUpdate ? (
-                                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-400" />
+                                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-destructive-solid" />
                               ) : null}
                             </span>
                           </button>
@@ -5022,7 +5021,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
                           <Bell className="h-5 w-5" />
                           {unreadNotificationCount > 0 ? (
-                            <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                            <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive-solid px-1 text-[10px] font-bold text-destructive-foreground">
                               {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                             </span>
                           ) : null}
@@ -5045,7 +5044,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             className={`w-full min-w-0 ${renderLocalDesktopSidebar ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
           >
             {useDesktopSidebarShell ? (
-              <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
+              <div className="tr-app-header hidden lg:flex lg:sticky lg:top-0 lg:z-0 lg:mb-4 lg:items-center lg:gap-6 lg:border-b lg:border-border/50 lg:px-2 lg:py-4">
                 <div className={`flex min-w-0 items-center ${activeTab === "search" ? "w-full justify-center" : "gap-3"}`}>
                   <form
                     className={`relative ${activeTab === "search" ? "w-[min(920px,72vw)]" : "w-[340px] max-w-[46vw]"}`}

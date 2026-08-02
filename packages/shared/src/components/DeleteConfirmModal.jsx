@@ -32,8 +32,8 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
         </button>
 
         <div className="flex flex-col items-center text-center">
-          <div className="mb-4 rounded-full bg-amber-100 p-3 dark:bg-amber-900/30">
-            <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          <div className="mb-4 rounded-full bg-warning/12 p-3">
+            <AlertTriangle className="h-6 w-6 text-warning" />
           </div>
 
           <h3 className="mb-2 text-lg font-semibold">{title}</h3>

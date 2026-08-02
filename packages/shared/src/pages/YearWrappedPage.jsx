@@ -1,3 +1,4 @@
+import { Button } from "@shared/components/ui/button.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
@@ -345,34 +346,34 @@ export function YearWrappedPage() {
               </span>
             ))}
           </div>
-          <button
+          <Button
             type="button"
             onClick={togglePaused}
             aria-label={isPaused ? "Wiedergabe fortsetzen" : "Wiedergabe pausieren"}
             title={isPaused ? "Fortsetzen (Leertaste)" : "Pausieren (Leertaste)"}
-            className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            variant="outline" size="icon" className="h-9 w-9 rounded-full bg-card/70 text-muted-foreground hover:text-foreground"
           >
             {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={toggleSounds}
             data-no-sound
             aria-label={soundsEnabled ? "Sounds ausschalten" : "Sounds einschalten"}
             title={soundsEnabled ? "Sounds aus" : "Sounds an"}
-            className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            variant="outline" size="icon" className="h-9 w-9 rounded-full bg-card/70 text-muted-foreground hover:text-foreground"
           >
             {soundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={handleClose}
             aria-label="Jahresrueckblick schliessen"
             data-keyboard-cancel
-            className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            variant="outline" size="icon" className="h-9 w-9 rounded-full bg-card/70 text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         <div className="flex flex-1 items-center justify-center">
@@ -391,13 +392,13 @@ export function YearWrappedPage() {
                 </code>
                 .
               </p>
-              <button
+              <Button
                 type="button"
                 onClick={handleClose}
-                className="mx-auto rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="mx-auto rounded-xl"
               >
                 Zurueck zum Dashboard
-              </button>
+              </Button>
             </div>
           ) : (
             // Keyed so every slide change remounts the subtree: that is what
@@ -410,29 +411,29 @@ export function YearWrappedPage() {
 
         {!isLoading && hasAnyData && slideCount > 1 ? (
           <div className="flex items-center justify-between gap-3">
-            <button
+            <Button
               type="button"
               onClick={goToPrevious}
               data-no-sound
               disabled={activeIndex === 0}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-card/70 px-4 py-2 text-sm font-medium text-foreground transition-opacity disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              variant="outline" className="rounded-xl bg-card/70"
             >
               <ChevronLeft className="h-4 w-4" />
               Zurueck
-            </button>
+            </Button>
             <span className="text-xs tabular-nums text-muted-foreground">
               {activeIndex + 1} / {slideCount}
             </span>
-            <button
+            <Button
               type="button"
               onClick={activeIndex === slideCount - 1 ? handleClose : goToNext}
               data-no-sound
               data-keyboard-default
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="rounded-xl"
             >
               {activeIndex === slideCount - 1 ? "Fertig" : "Weiter"}
               <ChevronRight className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>

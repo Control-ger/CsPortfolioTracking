@@ -12,8 +12,8 @@ export const PriceSourceBadge = ({
   }
 
   const styleClass = isSteam
-    ? "border-sky-400/35 bg-sky-500/12 text-sky-300"
-    : "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
+    ? "border-info/35 bg-info/12 text-info"
+    : "border-success/35 bg-success/12 text-success";
   const title = isSteam ? "Steam-Preisquelle" : "CSFloat-Preisquelle";
   const label = compact
     ? (isSteam ? "Steam" : "CSFloat")

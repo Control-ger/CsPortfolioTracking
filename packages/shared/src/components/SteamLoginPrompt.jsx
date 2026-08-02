@@ -794,17 +794,17 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
     return (
       <Card
-        className="relative mx-auto w-full max-w-lg overflow-hidden border-white/15 bg-slate-950/92 text-slate-100 shadow-2xl backdrop-blur-xl"
+        className="relative mx-auto w-full max-w-lg overflow-hidden border-foreground/15 bg-background/92 text-foreground shadow-2xl backdrop-blur-xl"
         data-keyboard-scope="page"
       >
         <CardHeader className="relative z-10 pb-3">
-          <CardTitle className="text-2xl tracking-tight text-slate-50">Willkommen, {user.name}!</CardTitle>
-          <CardDescription className="text-sm leading-relaxed text-slate-300">
+          <CardTitle className="text-2xl tracking-tight text-foreground">Willkommen, {user.name}!</CardTitle>
+          <CardDescription className="text-sm leading-relaxed text-muted-foreground">
             Dein Steam-Account ist verbunden. Wir bereiten jetzt deine Daten fuer das Dashboard vor.
           </CardDescription>
         </CardHeader>
         <CardContent className="relative z-10 space-y-4">
-          <div className="flex items-center gap-3 rounded-lg border border-white/15 bg-white/5 p-3">
+          <div className="flex items-center gap-3 rounded-lg border border-foreground/15 bg-foreground/5 p-3">
             {preferredAvatarUrl ? (
               avatarIsVideo ? (
                 <video
@@ -826,47 +826,47 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
               )
             ) : null}
             <div>
-              <p className="text-lg font-semibold text-slate-100">{user.name}</p>
-              <p className="text-sm text-slate-300">Steam verbunden</p>
+              <p className="text-lg font-semibold text-foreground">{user.name}</p>
+              <p className="text-sm text-muted-foreground">Steam verbunden</p>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-300">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{`${setupProgress.currentStep || "Vorbereitung"}${setupProgress.inProgress ? progressDots : ""}`}</span>
               <span>{progressPercent}%</span>
             </div>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/20">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-foreground/20">
               <div
-                className={`h-full rounded-full bg-cyan-300 transition-[width] duration-500 ${
+                className={`h-full rounded-full bg-info-solid transition-[width] duration-500 ${
                   setupProgress.inProgress ? "steam-progress-pulse" : ""
                 }`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <p className="text-[11px] text-slate-300">
+            <p className="text-[11px] text-muted-foreground">
               Schritt {Math.min(setupProgress.completed, setupProgress.total)} von {setupProgress.total}
             </p>
             {setupDetail ? (
-              <p className="truncate font-mono text-[11px] text-cyan-200/80" title={setupDetail}>
+              <p className="truncate font-mono text-[11px] text-info/80" title={setupDetail}>
                 {`› ${setupDetail}`}
               </p>
             ) : null}
           </div>
 
           {error ? (
-            <div className="rounded-md border border-red-400/40 bg-red-500/15 p-2 text-xs text-red-200">
+            <div className="rounded-md border border-destructive/40 bg-destructive/15 p-2 text-xs text-destructive">
               Vorbereitung fehlgeschlagen: {error}
             </div>
           ) : syncInfo ? (
-            <div className="rounded-md border border-emerald-300/35 bg-emerald-500/15 p-2 text-xs text-emerald-200">
+            <div className="rounded-md border border-success/35 bg-success/15 p-2 text-xs text-success">
               {syncInfo}
             </div>
           ) : null}
 
           <Button
             type="button"
-            className="w-full bg-white/95 text-slate-950 hover:bg-white"
+            className="w-full"
             disabled={!isDashboardReady}
             onClick={() => onLoginSuccessRef.current?.(user)}
             data-keyboard-default
@@ -888,7 +888,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {error ? (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
+          <div className="rounded-md bg-destructive/12 p-3 text-sm text-destructive">
             {error}
           </div>
         ) : null}

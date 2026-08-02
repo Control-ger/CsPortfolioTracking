@@ -41,7 +41,7 @@ export function CsFloatApiKeySection({
           <Key className="h-5 w-5" />
           <CardTitle>CSFloat API Key</CardTitle>
           {apiKeyStatus.configured && (
-            <Badge variant="outline" className="ml-auto border-emerald-400/35 text-emerald-300">
+            <Badge variant="outline" className="ml-auto border-success/35 text-success">
               Konfiguriert
             </Badge>
           )}
@@ -52,7 +52,7 @@ export function CsFloatApiKeySection({
       </CardHeader>
       <CardContent className="space-y-6">
         {!encryptionReady && (
-          <div className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-3 text-sm text-amber-300">
+          <div className="rounded-xl border border-warning/35 bg-warning/12 p-3 text-sm text-warning">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               <span>
@@ -70,16 +70,16 @@ export function CsFloatApiKeySection({
           </div>
         )}
         {apiKeySuccess && (
-          <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
+          <div className="rounded-xl border border-success/35 bg-success/12 p-3 text-sm text-success">
             {apiKeySuccess}
           </div>
         )}
 
         {/* Current Status */}
         {apiKeyStatus.configured && (
-          <div className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/18">
-              <Lock className="h-5 w-5 text-emerald-300" />
+          <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/10 p-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/18">
+              <Lock className="h-5 w-5 text-success" />
             </div>
             <div>
               <p className="text-sm font-medium">API Key aktiv</p>

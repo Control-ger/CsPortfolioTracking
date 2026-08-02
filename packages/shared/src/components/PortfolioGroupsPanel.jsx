@@ -27,7 +27,7 @@ function resolveDeltaClassName(value) {
   if (!Number.isFinite(numeric)) {
     return "text-muted-foreground";
   }
-  return numeric >= 0 ? "text-emerald-400" : "text-red-400";
+  return numeric >= 0 ? "text-success" : "text-destructive";
 }
 
 function LayeredGroupIcon({ visuals = [], fallbackLabel }) {

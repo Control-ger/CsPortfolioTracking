@@ -23,9 +23,9 @@ export const ItemListRow = ({
   const isDown = trend === "down";
   const Icon = isUp ? TrendingUp : isDown ? TrendingDown : null;
   const colorClass = isUp
-    ? "text-emerald-400"
+    ? "text-success"
     : isDown
-      ? "text-red-400"
+      ? "text-destructive"
       : "text-muted-foreground";
   const changeLabel =
     item.changeLabel || (Number.isFinite(derivedPercent) ? `${derivedPercent >= 0 ? "+" : ""}${derivedPercent.toFixed(1)}%` : "-");
@@ -70,7 +70,7 @@ export const ItemListRow = ({
             </p>
           )}
           {hasBuyOrder ? (
-            <Badge variant="outline" className="mt-1 border-sky-300 bg-sky-100 text-[10px] font-medium text-sky-800 dark:border-sky-400/50 dark:bg-sky-500/20 dark:text-sky-200">
+            <Badge variant="outline" className="mt-1 border-info/35 bg-info/12 text-[10px] font-medium text-info">
               {buyOrderLabel}
             </Badge>
           ) : null}

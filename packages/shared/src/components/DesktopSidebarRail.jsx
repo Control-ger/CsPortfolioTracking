@@ -361,7 +361,7 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
               <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
                 <Bell className="h-5 w-5" />
                 {desktopRuntime && unreadNotificationCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                  <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive-solid px-1 text-[10px] font-bold text-destructive-foreground">
                     {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                   </span>
                 ) : null}

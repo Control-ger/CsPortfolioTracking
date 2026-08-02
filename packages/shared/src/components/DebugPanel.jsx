@@ -170,7 +170,7 @@ export function DebugPanel() {
                 <CardTitle className="text-sm">Env Keys</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="rounded border bg-slate-100 p-2 text-xs dark:bg-slate-900">
+                <div className="rounded border bg-muted p-2 text-xs">
                   <p className="text-muted-foreground">
                     Anzahl verfuegbarer Keys: <span className="font-mono">{debug.all_env_keys_count}</span>
                   </p>
@@ -185,7 +185,7 @@ export function DebugPanel() {
                 <CardTitle className="text-sm">App Logs ({appLogCount})</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="max-h-96 space-y-1 overflow-auto rounded border bg-slate-100 p-3 font-mono text-xs text-slate-900 dark:border-muted dark:bg-slate-900 dark:text-green-400">
+                <div className="max-h-96 space-y-1 overflow-auto rounded border bg-muted p-3 font-mono text-xs text-foreground dark:border-muted dark:text-success">
                   {logs.app.map((line, idx) => (
                     <div key={idx} className="break-words">
                       {line}
@@ -202,7 +202,7 @@ export function DebugPanel() {
                 <CardTitle className="text-sm">CSFloat Proxy Logs ({proxyLogCount})</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="max-h-96 space-y-1 overflow-auto rounded border bg-slate-100 p-3 font-mono text-xs text-slate-900 dark:border-muted dark:bg-slate-900 dark:text-blue-400">
+                <div className="max-h-96 space-y-1 overflow-auto rounded border bg-muted p-3 font-mono text-xs text-foreground dark:border-muted dark:text-info">
                   {logs.proxy.map((line, idx) => (
                     <div key={idx} className="break-words">
                       {line}

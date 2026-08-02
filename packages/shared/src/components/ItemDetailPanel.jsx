@@ -225,7 +225,7 @@ export const ItemDetailPanel = ({
                 <CardTitle className="text-sm sm:text-lg truncate">
                   {item.name}
                   {item.excluded && (
-                      <span className="ml-2 inline rounded border border-amber-300/70 bg-amber-100/80 px-2 py-1 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/35 dark:text-amber-200">
+                      <span className="ml-2 inline rounded border border-warning/70 bg-warning/80 px-2 py-1 text-xs text-warning">
                     AUSGESCHLOSSEN
                   </span>
                   )}
@@ -245,11 +245,7 @@ export const ItemDetailPanel = ({
                       variant="outline"
                       size="sm"
                       onClick={handleExcludeClick}
-                      className={`h-8 rounded-lg border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow ${
-                          item.excluded
-                              ? "border-sky-300 bg-sky-100 text-sky-800 hover:bg-sky-200 dark:border-sky-400/35 dark:bg-sky-500/12 dark:text-sky-300 dark:hover:bg-sky-500/18"
-                              : "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200 dark:border-amber-400/35 dark:bg-amber-500/12 dark:text-amber-300 dark:hover:bg-amber-500/18"
-                      }`}
+                      className={`h-8 rounded-lg border px-2.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm transition-all hover:-translate-y-0.5 hover:shadow ${ item.excluded ? "border-info/35 bg-info/12 text-info hover:bg-info/18" : "border-warning/35 bg-warning/12 text-warning hover:bg-warning/18" }`}
                   >
                     <AlertCircle className="mr-1 h-3 w-3" />
                     {item.excluded ? "Einschliessen" : "Ausschliessen"}
@@ -291,7 +287,7 @@ export const ItemDetailPanel = ({
                     {item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}
                   </p>
                   {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
-                    <p className="mt-1 inline-flex items-center gap-1 rounded border border-sky-300 bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
+                    <p className="mt-1 inline-flex items-center gap-1 rounded border border-info/35 bg-info/12 px-1.5 py-0.5 text-[10px] font-medium text-info">
                       Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
                         useUsd: true,
                         buyPriceUsd: Number(item.buyOrderBestPriceUsd),
@@ -329,8 +325,8 @@ export const ItemDetailPanel = ({
                     item.isProfitPositive === null
                       ? "text-muted-foreground"
                       : item.isProfitPositive
-                        ? "text-emerald-400"
-                        : "text-red-400"
+                        ? "text-success"
+                        : "text-destructive"
                   }`}
                 >
                   {item.isLive
