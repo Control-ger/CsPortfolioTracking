@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 
 import { deriveSteamPaletteFromUser } from "../components/SteamLoginPrompt.jsx";
 import {
@@ -18,7 +18,17 @@ import {
 import { usePortfolio } from "../hooks/usePortfolio.jsx";
 import { getCurrentUser } from "../lib/auth.js";
 import { resolveDesktopLocalUserId } from "../lib/userIdentity.js";
+import {
+  isUiSoundsEnabled,
+  playUiSound,
+  primeUiSounds,
+  setUiSoundsEnabled,
+  subscribeUiSounds,
+} from "../lib/uiSounds.js";
 import { buildYearWrappedStats, resolveWrappedSeason } from "../lib/yearWrapped.js";
+
+// Dwell time per slide before auto-advancing.
+const AUTOPLAY_INTERVAL_MS = 20000;
 
 // Frozen fallback for the avatar-derived shell gradient, mirroring the vault
 // gate in apps/web/src/App.jsx. The palette is applied as a scoped inline style
@@ -55,6 +65,8 @@ export function YearWrappedPage() {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [localLoading, setLocalLoading] = useState(true);
   const [slideIndex, setSlideIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [soundsEnabled, setSoundsEnabled] = useState(() => isUiSoundsEnabled());
 
   const {
     enrichedInvestments,
@@ -183,17 +195,80 @@ export function YearWrappedPage() {
     return candidates.filter(Boolean);
   }, [stats, year, user, handleClose]);
 
+  // Intro and outro always exist, so "only those two" means the year has
+  // nothing to tell. Without this the story would run as two empty cards —
+  // easily mistaken for a bug, especially since excluded positions are filtered
+  // out and a year can legitimately end up with zero countable purchases.
+  const hasAnyData = slides.length > 2;
+
   const isLoading = localLoading || portfolioLoading;
   const slideCount = slides.length;
   const activeIndex = Math.min(slideIndex, Math.max(0, slideCount - 1));
 
+  const isLastSlide = activeIndex >= slideCount - 1;
+
   const goToPrevious = useCallback(() => {
-    setSlideIndex((current) => Math.max(0, current - 1));
+    primeUiSounds();
+    setSlideIndex((current) => {
+      if (current <= 0) {
+        return current;
+      }
+      playUiSound("slidePrev");
+      return current - 1;
+    });
   }, []);
 
   const goToNext = useCallback(() => {
-    setSlideIndex((current) => Math.min(slideCount - 1, current + 1));
+    primeUiSounds();
+    setSlideIndex((current) => {
+      if (current >= slideCount - 1) {
+        return current;
+      }
+      playUiSound(current + 1 === slideCount - 1 ? "success" : "slideNext");
+      return current + 1;
+    });
   }, [slideCount]);
+
+  // Auto-advance. Stops on the last slide so the story ends on the summary
+  // instead of looping, and pauses while the window is hidden so a backgrounded
+  // app does not silently run the whole story out.
+  useEffect(() => {
+    if (isLoading || isPaused || isLastSlide || slideCount <= 1 || !hasAnyData) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => goToNext(), AUTOPLAY_INTERVAL_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoading, isPaused, isLastSlide, slideCount, activeIndex, hasAnyData, goToNext]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIsPaused(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
+  const togglePaused = useCallback(() => {
+    primeUiSounds();
+    playUiSound("click");
+    setIsPaused((current) => !current);
+  }, []);
+
+  // The story exposes its own sound toggle, but the setting is global — mirror
+  // external changes (e.g. from Settings) so the icon never lies.
+  const toggleSounds = useCallback(() => {
+    const next = !isUiSoundsEnabled();
+    setUiSoundsEnabled(next);
+    if (next) {
+      primeUiSounds();
+      playUiSound("click");
+    }
+  }, []);
+
+  useEffect(() => subscribeUiSounds(({ enabled }) => setSoundsEnabled(enabled)), []);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -207,6 +282,11 @@ export function YearWrappedPage() {
         goToNext();
         return;
       }
+      if (event.key === " ") {
+        event.preventDefault();
+        togglePaused();
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         handleClose();
@@ -215,7 +295,7 @@ export function YearWrappedPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToPrevious, goToNext, handleClose]);
+  }, [goToPrevious, goToNext, togglePaused, handleClose]);
 
   // Keep this after every hook so the hook order stays stable across renders.
   // Wrapped depends on the local SQLite rows, which only exist on desktop.
@@ -242,12 +322,41 @@ export function YearWrappedPage() {
             {slides.map((slide, index) => (
               <span
                 key={slide.key}
-                className={`h-1 flex-1 rounded-full transition-colors ${
-                  index <= activeIndex ? "bg-primary" : "bg-muted-foreground/25"
+                className={`h-1 flex-1 overflow-hidden rounded-full ${
+                  index < activeIndex ? "bg-primary" : "bg-muted-foreground/25"
                 }`}
-              />
+              >
+                {index === activeIndex && !isLastSlide && !isLoading ? (
+                  <span
+                    key={`${slide.key}-${isPaused ? "paused" : "running"}`}
+                    className="wrapped-progress-fill block h-full w-full rounded-full bg-primary"
+                    data-paused={isPaused ? "true" : "false"}
+                    style={{ "--wrapped-autoplay-duration": `${AUTOPLAY_INTERVAL_MS}ms` }}
+                  />
+                ) : index === activeIndex ? (
+                  <span className="block h-full w-full rounded-full bg-primary" />
+                ) : null}
+              </span>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={togglePaused}
+            aria-label={isPaused ? "Wiedergabe fortsetzen" : "Wiedergabe pausieren"}
+            title={isPaused ? "Fortsetzen (Leertaste)" : "Pausieren (Leertaste)"}
+            className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={toggleSounds}
+            aria-label={soundsEnabled ? "Sounds ausschalten" : "Sounds einschalten"}
+            title={soundsEnabled ? "Sounds aus" : "Sounds an"}
+            className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            {soundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </button>
           <button
             type="button"
             onClick={handleClose}
@@ -262,12 +371,37 @@ export function YearWrappedPage() {
         <div className="flex flex-1 items-center justify-center">
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Jahresrueckblick wird berechnet...</p>
+          ) : !hasAnyData ? (
+            <div className="wrapped-slide flex w-full max-w-2xl flex-col gap-4 rounded-3xl border border-border/60 bg-card/85 p-6 text-center shadow-xl backdrop-blur-md sm:p-10">
+              <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
+                Fuer {year} gibt es nichts zu zeigen
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                In diesem Jahr sind keine Kaeufe erfasst. Ausgeschlossene Positionen zaehlen dabei
+                nicht mit. Ein anderes Jahr erreichst du ueber die Adresse{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                  #/wrapped?year={year + 1}
+                </code>
+                .
+              </p>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="mx-auto rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                Zurueck zum Dashboard
+              </button>
+            </div>
           ) : (
-            slides[activeIndex]?.node
+            // Keyed so every slide change remounts the subtree: that is what
+            // restarts the entrance animations and the count-up counters.
+            <div key={slides[activeIndex]?.key} className="flex w-full justify-center">
+              {slides[activeIndex]?.node}
+            </div>
           )}
         </div>
 
-        {!isLoading && slideCount > 1 ? (
+        {!isLoading && hasAnyData && slideCount > 1 ? (
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"

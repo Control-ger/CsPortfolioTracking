@@ -351,7 +351,14 @@ export function buildYearWrappedStats({
   year,
 } = {}) {
   const targetYear = Number.isFinite(Number(year)) ? Number(year) : new Date().getFullYear();
-  const rows = Array.isArray(rawInvestments) ? rawInvestments : [];
+  // Raw local rows still contain excluded positions (that is the price of not
+  // going through the filtered view model), so drop them here. An excluded
+  // position is one the user has taken out of the portfolio — counting it as a
+  // purchase would inflate every spend figure and can hand "most expensive buy"
+  // to an item the user no longer considers theirs.
+  const rows = (Array.isArray(rawInvestments) ? rawInvestments : []).filter(
+    (row) => !isExcludedRow(row),
+  );
 
   let undatedCount = 0;
   const datedRows = [];

@@ -5,3 +5,4 @@ export { usePortfolio } from './usePortfolio.jsx';
 export { usePortfolioComposition } from './usePortfolioComposition.js';
 export { useCsUpdatesFeed } from './useCsUpdatesFeed.js';
 export { useAbortableFetch } from './useAbortableFetch.js';
+export { useCountUp } from './useCountUp.js';

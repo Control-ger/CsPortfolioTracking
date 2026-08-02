@@ -12,6 +12,7 @@ import {
 import { CalendarRange, Eye, Flame, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
+import { useCountUp } from "../hooks/useCountUp.js";
 import { formatDateSafe } from "../lib/portfolioHelpers.js";
 import { MONTH_LABELS } from "../lib/yearWrapped.js";
 
@@ -38,23 +39,44 @@ function formatPercent(value, decimals = 1) {
   return `${parsed > 0 ? "+" : ""}${parsed.toFixed(decimals)} %`;
 }
 
+// Children animate in staggered rather than all at once — the delay is what
+// makes a slide read as "revealed" instead of "rendered".
 export function WrappedSlideShell({ eyebrow, title, icon: Icon, children, footnote }) {
   return (
     <div className="wrapped-slide flex w-full max-w-3xl flex-col gap-6 rounded-3xl border border-border/60 bg-card/85 p-6 shadow-xl backdrop-blur-md sm:p-10">
-      <div className="flex items-center gap-3">
+      <div className="wrapped-reveal flex items-center gap-3" style={{ "--wrapped-reveal-delay": "0ms" }}>
         {Icon ? <Icon className="h-5 w-5 shrink-0 text-primary" /> : null}
         <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           {eyebrow}
         </span>
       </div>
-      <h2 className="text-2xl font-semibold leading-tight text-foreground sm:text-4xl">{title}</h2>
-      <div className="flex flex-col gap-5">{children}</div>
-      {footnote ? <p className="text-xs text-muted-foreground">{footnote}</p> : null}
+      <h2
+        className="wrapped-reveal text-2xl font-semibold leading-tight text-foreground sm:text-4xl"
+        style={{ "--wrapped-reveal-delay": "90ms" }}
+      >
+        {title}
+      </h2>
+      <div className="wrapped-reveal flex flex-col gap-5" style={{ "--wrapped-reveal-delay": "200ms" }}>
+        {children}
+      </div>
+      {footnote ? (
+        <p className="wrapped-reveal text-xs text-muted-foreground" style={{ "--wrapped-reveal-delay": "320ms" }}>
+          {footnote}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-function StatBlock({ label, value, hint, tone = "neutral" }) {
+/**
+ * A headline number. `countTo` opts the value into the count-up animation:
+ * pass the raw number plus a `format` function, since the displayed string is
+ * currency/percent formatted and cannot be interpolated directly.
+ */
+function StatBlock({ label, value, countTo, format, hint, tone = "neutral", active = true, sound = false }) {
+  const shouldCount = typeof countTo === "number" && typeof format === "function";
+  const animatedValue = useCountUp(shouldCount ? countTo : 0, { active: active && shouldCount, sound });
+
   const toneClass =
     tone === "positive"
       ? "text-emerald-500 dark:text-emerald-400"
@@ -65,7 +87,9 @@ function StatBlock({ label, value, hint, tone = "neutral" }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className={`text-3xl font-semibold tabular-nums sm:text-5xl ${toneClass}`}>{value}</span>
+      <span className={`text-3xl font-semibold tabular-nums sm:text-5xl ${toneClass}`}>
+        {shouldCount ? format(animatedValue) : value}
+      </span>
       {hint ? <span className="text-sm text-muted-foreground">{hint}</span> : null}
     </div>
   );
@@ -128,6 +152,8 @@ export function WrappedIntroSlide({ year, user }) {
 
 export function WrappedPurchasesSlide({ year, purchases }) {
   const formatUsd = useUsdFormatter();
+  const animatedCount = useCountUp(purchases.count, { sound: true });
+  const animatedPieces = useCountUp(purchases.totalQuantity);
 
   return (
     <WrappedSlideShell
@@ -135,7 +161,7 @@ export function WrappedPurchasesSlide({ year, purchases }) {
       title={
         purchases.count === 1
           ? "Ein Kauf in diesem Jahr"
-          : `${purchases.count} Kaeufe in diesem Jahr`
+          : `${Math.round(animatedCount)} Kaeufe in diesem Jahr`
       }
       icon={Flame}
       footnote={
@@ -147,12 +173,14 @@ export function WrappedPurchasesSlide({ year, purchases }) {
       <div className="grid gap-6 sm:grid-cols-2">
         <StatBlock
           label="Gesamtausgaben"
-          value={formatUsd(purchases.totalSpentUsd)}
-          hint={`${purchases.totalQuantity} Stueck insgesamt`}
+          countTo={purchases.totalSpentUsd}
+          format={formatUsd}
+          hint={`${Math.round(animatedPieces)} Stueck insgesamt`}
         />
         <StatBlock
           label="Durchschnittspreis"
-          value={formatUsd(purchases.avgBuyPriceUsd)}
+          countTo={purchases.avgBuyPriceUsd}
+          format={formatUsd}
           hint="pro Stueck"
         />
       </div>
@@ -173,8 +201,10 @@ export function WrappedMonthlySlide({ year, monthly }) {
       <div className="grid gap-6 sm:grid-cols-2">
         <StatBlock
           label="Kaeufe im Peak-Monat"
-          value={String(monthly.peakMonth?.count ?? 0)}
+          countTo={monthly.peakMonth?.count ?? 0}
+          format={(v) => String(Math.round(v))}
           hint={formatUsd(monthly.peakMonth?.spentUsd ?? 0)}
+          sound
         />
       </div>
       <div className="h-48 w-full">
@@ -304,11 +334,12 @@ export function WrappedCurveSlide({ year, curve }) {
       }
     >
       <div className="grid gap-6 sm:grid-cols-3">
-        <StatBlock label="Start" value={formatUsd(curve.firstValue)} />
-        <StatBlock label="Ende" value={formatUsd(curve.lastValue)} />
+        <StatBlock label="Start" countTo={curve.firstValue} format={formatUsd} />
+        <StatBlock label="Ende" countTo={curve.lastValue} format={formatUsd} sound />
         <StatBlock
           label="Veraenderung"
-          value={formatPercent(curve.deltaPercent)}
+          countTo={curve.deltaPercent}
+          format={(v) => formatPercent(v)}
           hint={formatUsd(curve.deltaUsd)}
           tone={isPositive ? "positive" : "negative"}
         />
@@ -390,8 +421,10 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
       <div className="grid gap-6 sm:grid-cols-2">
         <StatBlock
           label="Neu beobachtet"
-          value={String(watchlist.addedCount)}
+          countTo={watchlist.addedCount}
+          format={(v) => String(Math.round(v))}
           hint={`von aktuell ${watchlist.totalCount} Eintraegen`}
+          sound
         />
       </div>
     </WrappedSlideShell>

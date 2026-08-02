@@ -488,12 +488,59 @@
   animation: wrappedSlideEnter 380ms cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 
+/* Staggered child reveal inside a slide. Each element sets its own
+   --wrapped-reveal-delay so the eyebrow, headline and body land in sequence. */
+@keyframes wrappedRevealEnter {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.wrapped-reveal {
+  opacity: 0;
+  animation: wrappedRevealEnter 460ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+  animation-delay: var(--wrapped-reveal-delay, 0ms);
+}
+
+/* Auto-advance progress: each segment fills over the dwell time. The duration
+   is driven from JS via --wrapped-autoplay-duration so pausing can freeze it. */
+@keyframes wrappedProgressFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.wrapped-progress-fill {
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: wrappedProgressFill var(--wrapped-autoplay-duration, 20s) linear forwards;
+}
+
+.wrapped-progress-fill[data-paused="true"] {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .steam-startup-shell::before,
   .steam-startup-shell::after,
   .steam-progress-pulse,
   .journey-step-panel,
-  .wrapped-slide {
+  .wrapped-slide,
+  .wrapped-reveal {
     animation: none;
+  }
+
+  /* The reveal animation ends at opacity 1 via `forwards`; with the animation
+     disabled the initial opacity: 0 would otherwise hide the content. */
+  .wrapped-reveal {
+    opacity: 1;
   }
 }

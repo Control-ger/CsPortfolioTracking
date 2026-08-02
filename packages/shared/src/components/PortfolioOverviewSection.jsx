@@ -20,6 +20,7 @@ export function PortfolioOverviewSection({
   forceMount,
   stats,
   portfolioLoading,
+  statsPending,
   metricsScope,
   portfolioPreferences,
   headerPortfolioValue,
@@ -69,6 +70,7 @@ export function PortfolioOverviewSection({
       {/* Mobile: PortfolioHeaderCard oben */}
       <div className="sm:hidden">
         <PortfolioHeaderCard
+          isLoading={statsPending}
           totalValue={headerPortfolioValue}
           totalRoiPercent={headerPortfolioPercent}
           isPositive={headerPortfolioPositive}
@@ -228,14 +230,20 @@ export function PortfolioOverviewSection({
           title="Portfolio Wert (Live)"
           value={headerPortfolioValueLabel}
           isPositive={headerPortfolioPositive}
+          isLoading={statsPending}
         />
         <StatCard
           title="Gesamt Zuwachs"
           value={`${headerProfitEuro >= 0 ? "+" : "-"}${formatPrice(Math.abs(headerProfitEuro))}`}
           subValue={`${headerProfitPercent >= 0 ? "+" : ""}${headerProfitPercent.toFixed(2)}% | ${headerProfitSubLabel}`}
           isPositive={headerProfitPositive}
+          isLoading={statsPending}
         />
-        <StatCard title="Items im Bestand" value={`${stats.totalQuantity} Stueck`} />
+        <StatCard
+          title="Items im Bestand"
+          value={`${stats.totalQuantity} Stueck`}
+          isLoading={statsPending}
+        />
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
@@ -243,17 +251,26 @@ export function PortfolioOverviewSection({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="text-2xl font-bold">
-              {formatAge(stats.freshestDataAgeSeconds)} zuletzt
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>
-                Live Quotes: {liveItems} | Aeltestes Cache-Alter: {formatAge(stats.oldestDataAgeSeconds)}
-              </span>
-              <Badge variant="outline" className={syncHealthBadgeClass(Number(stats.oldestDataAgeSeconds), liveItems)}>
-                {syncHealthLabel(Number(stats.oldestDataAgeSeconds), liveItems)}
-              </Badge>
-            </div>
+            {statsPending ? (
+              <>
+                <Skeleton className="h-8 w-28" />
+                <Skeleton className="h-3 w-40" />
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {formatAge(stats.freshestDataAgeSeconds)} zuletzt
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>
+                    Live Quotes: {liveItems} | Aeltestes Cache-Alter: {formatAge(stats.oldestDataAgeSeconds)}
+                  </span>
+                  <Badge variant="outline" className={syncHealthBadgeClass(Number(stats.oldestDataAgeSeconds), liveItems)}>
+                    {syncHealthLabel(Number(stats.oldestDataAgeSeconds), liveItems)}
+                  </Badge>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

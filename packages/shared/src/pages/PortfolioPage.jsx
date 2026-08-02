@@ -37,6 +37,7 @@ import {
   fetchCS2Inventory,
   fetchCsFloatBuyOrdersData,
   fetchWatchlistData,
+  getCachedPortfolioPreferences,
   getPortfolioPreferences,
   getCurrentUser,
   importInventoryAsInvestments,
@@ -491,27 +492,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [showStartupWelcome, setShowStartupWelcome] = useState(
     () => isElectronRuntime && !readStartupWelcomeDismissed(),
   );
-  const [portfolioPreferences, setPortfolioPreferences] = useState({
-    steamImportBucket: "inventory",
-    csfloatImportBucket: "investment",
-    skinBaronImportBucket: "investment",
-    metricsDisplayMode: "toggle_mode",
-    metricsScopeDefault: "investments",
-    notifyBanWaveDesktop: true,
-    notifyBanWaveDesktopMinLevel: "low",
-    notifyCsUpdatesDesktop: true,
-    notifyCsUpdatesDesktopMinLevel: "medium",
-    notifySteamSyncDesktop: true,
-    notifyBanWaveWebPush: false,
-    notifyBanWaveWebPushMinLevel: "medium",
-    notifyCsUpdatesWebPush: false,
-    notifyCsUpdatesWebPushMinLevel: "high",
-  });
+  // Seeded from the synchronously readable preference cache: metricsScope feeds
+  // the portfolio cache key, so starting on the default scope and switching one
+  // tick later would cost a second full portfolio load on every mount.
+  const [portfolioPreferences, setPortfolioPreferences] = useState(
+    getCachedPortfolioPreferences,
+  );
   // Ref so the startup auto-sync callback always reads the latest pref without
   // needing to be re-memoized (avoids the race where auto-sync fires before
   // loadPortfolioPreferences resolves and evaluates against the initial default).
   const notifySteamSyncDesktopRef = useRef(true);
-  const [selectedMetricsScope, setSelectedMetricsScope] = useState("investments");
+  const [selectedMetricsScope, setSelectedMetricsScope] = useState(
+    () => getCachedPortfolioPreferences().metricsScopeDefault || "investments",
+  );
   const [inventoryScope, setInventoryScope] = useState("investment");
   const metricsScope = resolveMetricsScopeFromPreferences(
     portfolioPreferences,
@@ -520,6 +513,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const {
     enrichedInvestments,
     isLoading: portfolioLoading,
+    statsPending,
     authRequired,
     stats,
     portfolioHistory,
@@ -5096,6 +5090,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           <PortfolioOverviewSection
             forceMount={visitedTabs.has("overview")}
             stats={stats}
+            statsPending={statsPending}
             portfolioLoading={portfolioLoading}
             metricsScope={metricsScope}
             portfolioPreferences={portfolioPreferences}
