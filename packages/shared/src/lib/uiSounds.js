@@ -31,22 +31,53 @@ const listeners = new Set();
  * Sound presets. Each is a short additive blip: an oscillator swept between two
  * frequencies through a percussive gain envelope. Keeping them under ~200ms
  * avoids the "toy" feel that longer synthesized tones have.
+ *
+ * `detune` is the half-width of the random pitch spread in cents (100 cents =
+ * one semitone) applied per playback. Without it the same preset fired twice in
+ * a row is audibly identical and the UI starts to sound like a metronome; a few
+ * dozen cents of wobble reads as "the same sound again" rather than "a different
+ * sound", which is exactly the goal. Repeat-heavy presets get a wider spread.
  */
 const SOUND_PRESETS = {
   // Slide advance — soft upward whoosh.
-  slideNext: { type: "sine", from: 420, to: 720, duration: 0.18, gain: 0.5 },
+  slideNext: { type: "sine", from: 420, to: 720, duration: 0.18, gain: 0.5, detune: 45 },
   // Slide back — the same gesture inverted.
-  slidePrev: { type: "sine", from: 720, to: 420, duration: 0.18, gain: 0.42 },
+  slidePrev: { type: "sine", from: 720, to: 420, duration: 0.18, gain: 0.42, detune: 45 },
   // Per-digit tick while a number counts up. Very short and quiet by design:
-  // this one fires dozens of times in a row.
-  tick: { type: "triangle", from: 1180, to: 1180, duration: 0.035, gain: 0.13 },
+  // this one fires dozens of times in a row — the widest spread of the set.
+  tick: { type: "triangle", from: 1180, to: 1180, duration: 0.035, gain: 0.13, detune: 140 },
   // A counter finished settling.
-  countDone: { type: "sine", from: 660, to: 990, duration: 0.16, gain: 0.4 },
-  // Generic confirmation / end of story.
-  success: { type: "sine", from: 523.25, to: 1046.5, duration: 0.28, gain: 0.5 },
-  // Generic UI press.
-  click: { type: "square", from: 320, to: 320, duration: 0.03, gain: 0.16 },
+  countDone: { type: "sine", from: 660, to: 990, duration: 0.16, gain: 0.4, detune: 35 },
+  // Generic confirmation / end of story. Kept nearly fixed: it is the one
+  // "musical" cue and should stay recognisable.
+  success: { type: "sine", from: 523.25, to: 1046.5, duration: 0.28, gain: 0.5, detune: 15 },
+  // Generic UI press — fires constantly, so it varies generously.
+  click: { type: "square", from: 320, to: 320, duration: 0.03, gain: 0.16, detune: 110 },
 };
+
+/** Last detune per preset, so a value is never repeated back-to-back. */
+const lastDetuneByPreset = new Map();
+
+/**
+ * Pick a detune offset in cents that is meaningfully different from the
+ * previous one for this preset. Pure randomness happily returns near-identical
+ * neighbours, which is precisely the monotony we are trying to avoid.
+ */
+function pickDetune(name, spread) {
+  if (!spread) {
+    return 0;
+  }
+  const previous = lastDetuneByPreset.get(name) ?? 0;
+  let next = 0;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    next = (Math.random() * 2 - 1) * spread;
+    if (Math.abs(next - previous) > spread * 0.4) {
+      break;
+    }
+  }
+  lastDetuneByPreset.set(name, next);
+  return next;
+}
 
 function readStoredBoolean(key, fallback) {
   try {
@@ -201,23 +232,30 @@ export function playUiSound(name) {
     const oscillator = context.createOscillator();
     const envelope = context.createGain();
 
+    // Pitch wobble, plus matching jitter on level and length: a blip that is
+    // only detuned still has an identical envelope, and the ear picks that up.
+    const detune = pickDetune(name, preset.detune ?? 0);
+    const gain = preset.gain * (1 + (Math.random() * 2 - 1) * 0.12);
+    const duration = preset.duration * (1 + (Math.random() * 2 - 1) * 0.1);
+
     oscillator.type = preset.type;
+    oscillator.detune.setValueAtTime(detune, now);
     oscillator.frequency.setValueAtTime(preset.from, now);
     if (preset.to !== preset.from) {
-      oscillator.frequency.exponentialRampToValueAtTime(preset.to, now + preset.duration);
+      oscillator.frequency.exponentialRampToValueAtTime(preset.to, now + duration);
     }
 
     // Percussive envelope: near-instant attack, exponential decay. A linear
     // ramp to exactly 0 would click, hence the small non-zero target.
     envelope.gain.setValueAtTime(0.0001, now);
-    envelope.gain.exponentialRampToValueAtTime(preset.gain, now + 0.008);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, now + preset.duration);
+    envelope.gain.exponentialRampToValueAtTime(gain, now + 0.008);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     oscillator.connect(envelope);
     envelope.connect(masterGain);
 
     oscillator.start(now);
-    oscillator.stop(now + preset.duration + 0.02);
+    oscillator.stop(now + duration + 0.02);
     oscillator.onended = () => {
       try {
         oscillator.disconnect();

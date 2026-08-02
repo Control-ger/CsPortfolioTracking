@@ -108,7 +108,10 @@ export function SoundSettingsSection() {
             value={Math.round(volume * 100)}
             onChange={handleVolumeChange}
             disabled={!enabled}
-            className="mt-3 w-full accent-primary disabled:opacity-40"
+            className="ui-range mt-3 w-full disabled:opacity-40"
+            style={{
+              background: `linear-gradient(to right, var(--primary) ${Math.round(volume * 100)}%, var(--muted) ${Math.round(volume * 100)}%)`,
+            }}
           />
         </div>
       </CardContent>
