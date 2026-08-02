@@ -393,6 +393,9 @@ export function setupAutoUpdater() {
     updateDownloadInProgress = true;
     emitUpdaterStatus({
       state: "downloading",
+      // electron-updater omits the version here; carry it so the UI does not
+      // fall back to a generic label mid-download.
+      version: latestAvailableUpdateInfo?.version || null,
       percent: progress?.percent || 0,
       bytesPerSecond: progress?.bytesPerSecond || 0,
       transferred: progress?.transferred || 0,

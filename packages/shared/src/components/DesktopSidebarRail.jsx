@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Bell, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, Bell, Cog, Download, Eye, FolderCog, LayoutGrid, Newspaper, Package, Search, Trash2, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -64,6 +64,56 @@ function isStaleAppUpdateEntry(entry, installedVersion) {
   return compareSemver(payloadVersion, currentVersion) <= 0;
 }
 
+function formatMegabytes(bytes) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// "12,3 MB von 78,0 MB · 2,1 MB/s" — omits whatever electron-updater did not
+// report rather than rendering "0.0 MB von 0.0 MB".
+function describeDownloadProgress(progress) {
+  const transferred = formatMegabytes(progress?.transferred);
+  const total = formatMegabytes(progress?.total);
+  const speed = formatMegabytes(progress?.bytesPerSecond);
+
+  const parts = [];
+  if (transferred && total) {
+    parts.push(`${transferred} von ${total}`);
+  } else if (transferred) {
+    parts.push(transferred);
+  }
+  if (speed) {
+    parts.push(`${speed}/s`);
+  }
+  return parts.join(" · ");
+}
+
+// The bell renders persisted rows, but download progress arrives many times a
+// second — persisting it would hammer SQLite and leave an orphan row if the app
+// dies mid-download. It lives as an ephemeral entry instead, rebuilt from the
+// live updater status (and replayed via getLastStatus on mount).
+function buildDownloadProgressEntry(progress) {
+  if (!progress) {
+    return null;
+  }
+  const rawPercent = Number(progress.percent || 0);
+  const percent = Number.isFinite(rawPercent) ? Math.min(100, Math.max(0, rawPercent)) : 0;
+  const versionLabel = progress.version ? `v${normalizeVersion(progress.version)}` : "Update";
+
+  return {
+    id: "__app-update-download__",
+    ephemeral: true,
+    percent,
+    category: "app_update",
+    title: `${versionLabel} wird heruntergeladen`,
+    message: describeDownloadProgress(progress),
+    payload: { state: "downloading", version: progress.version || null },
+  };
+}
+
 function isErrorNotification(entry) {
   const category = String(entry?.category || "").trim().toLowerCase();
   if (category.includes("error") || category.includes("fehler")) {
@@ -78,6 +128,8 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
   const navigate = useNavigate();
   const [syncNotifications, setSyncNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [notificationsRefreshToken, setNotificationsRefreshToken] = useState(0);
   const activePortfolioTab = new URLSearchParams(location.search).get("tab") || "overview";
   const routeMappedTab = location.pathname === "/inventory"
     ? "inventory"
@@ -150,7 +202,67 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
       cancelled = true;
       window.clearInterval(intervalId);
     };
+  }, [desktopRuntime, notificationsRefreshToken]);
+
+  // Live download progress for the ephemeral bell entry. The 30s poll above is
+  // far too coarse for a progress bar, so it is driven by the updater push.
+  useEffect(() => {
+    if (!desktopRuntime || !window.electronAPI?.updater?.onStatus) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let receivedLiveStatus = false;
+
+    const applyStatus = (payload) => {
+      if (cancelled || !payload || typeof payload !== "object") {
+        return;
+      }
+      if (String(payload.state || "") === "downloading") {
+        setDownloadProgress(payload);
+        return;
+      }
+      // Download ended (downloaded / error / anything else): drop the transient
+      // entry and pull the persisted row it hands over to right away, instead
+      // of leaving the bell stale for up to 30s.
+      setDownloadProgress((current) => {
+        if (current) {
+          setNotificationsRefreshToken((token) => token + 1);
+        }
+        return null;
+      });
+    };
+
+    const unsubscribe = window.electronAPI.updater.onStatus((payload) => {
+      receivedLiveStatus = true;
+      applyStatus(payload);
+    });
+
+    // A download already running when the rail mounts must still show up.
+    if (window.electronAPI.updater.getLastStatus) {
+      void window.electronAPI.updater
+        .getLastStatus()
+        .then((payload) => {
+          if (cancelled || receivedLiveStatus || !payload) {
+            return;
+          }
+          applyStatus(payload);
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
   }, [desktopRuntime]);
+
+  const downloadProgressEntry = buildDownloadProgressEntry(downloadProgress);
+  const visibleNotifications = downloadProgressEntry
+    ? [downloadProgressEntry, ...syncNotifications]
+    : syncNotifications;
 
   const removeEntryLocally = (entryId) => {
     setSyncNotifications((current) => current.filter((item) => item.id !== entryId));
@@ -273,9 +385,43 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
               {desktopRuntime ? (
                 <>
                   <div className="max-h-72 space-y-1 overflow-y-auto">
-                    {syncNotifications.length > 0 ? (
-                      syncNotifications.slice(0, 8).map((entry) => {
+                    {visibleNotifications.length > 0 ? (
+                      visibleNotifications.slice(0, 8).map((entry) => {
                         const isError = isErrorNotification(entry);
+                        if (entry.ephemeral) {
+                          return (
+                            <div
+                              key={entry.id}
+                              className="flex w-full items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-2 text-left text-xs"
+                            >
+                              <Download className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <p className="truncate font-semibold text-foreground">{entry.title}</p>
+                                  <span className="shrink-0 font-semibold tabular-nums text-primary">
+                                    {Math.round(entry.percent)}%
+                                  </span>
+                                </div>
+                                <div
+                                  role="progressbar"
+                                  aria-valuenow={Math.round(entry.percent)}
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                  aria-label={entry.title}
+                                  className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-primary/15"
+                                >
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                                    style={{ width: `${entry.percent}%` }}
+                                  />
+                                </div>
+                                {entry.message ? (
+                                  <p className="mt-1 text-[11px] text-muted-foreground">{entry.message}</p>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        }
                         return (
                           <div
                             key={entry.id}
