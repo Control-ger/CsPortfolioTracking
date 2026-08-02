@@ -201,8 +201,10 @@ export function registerAllIpcHandlers() {
     return await detectWindowControls(Boolean(force));
   });
 
-  ipcMain.handle("window-is-maximized", () => {
-    const win = BrowserWindow.getFocusedWindow();
+  // Resolved from the sender, not from the focused window: the renderer polls
+  // this after resizes, when its own window may no longer be focused.
+  ipcMain.handle("window-is-maximized", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
     return win ? win.isMaximized() : false;
   });
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import appIcon from '/icon.ico?url';
 
 import {
@@ -7,6 +7,9 @@ import {
   resolveWindowControls,
   subscribeWindowControlsStyle,
 } from '../lib/windowControls.js';
+
+/** Minimum gap between two forced (cache-skipping) theme detections. */
+const FORCED_DETECTION_INTERVAL_MS = 60_000;
 
 const ACTION_LABELS = {
   minimize: { title: 'Minimieren', aria: 'Fenster minimieren' },
@@ -175,6 +178,8 @@ export const Titlebar = () => {
 
   useEffect(() => subscribeWindowControlsStyle(setPreference), []);
 
+  const lastForcedDetection = useRef(0);
+
   const refreshDetection = useCallback((force) => {
     detectNativeWindowControls(force).then((result) => {
       if (result) setDetection(result);
@@ -187,9 +192,18 @@ export const Titlebar = () => {
     }
     refreshDetection(false);
 
-    // The desktop theme can change while the app runs; a re-detect on focus is
-    // cheap (the main process caches) and picks that up without a restart.
-    const onFocus = () => refreshDetection(true);
+    // The desktop theme can change while the app runs, so re-detect on focus to
+    // pick that up without a restart — but throttled: a forced detection spawns
+    // gsettings and re-reads (and re-transfers) the theme assets, and focus
+    // fires on every alt-tab.
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastForcedDetection.current < FORCED_DETECTION_INTERVAL_MS) {
+        return;
+      }
+      lastForcedDetection.current = now;
+      refreshDetection(true);
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [isElectron, refreshDetection]);
@@ -198,14 +212,24 @@ export const Titlebar = () => {
     if (!isElectron || typeof window.electronAPI?.isWindowMaximized !== 'function') {
       return undefined;
     }
-    const sync = () => {
+    const read = () => {
       Promise.resolve(window.electronAPI.isWindowMaximized())
         .then(setIsMaximized)
         .catch(() => {});
     };
-    sync();
+    // `resize` fires continuously while dragging a window edge; only the settled
+    // state decides between the maximize and restore icon.
+    let timer = null;
+    const sync = () => {
+      clearTimeout(timer);
+      timer = setTimeout(read, 150);
+    };
+    read();
     window.addEventListener('resize', sync);
-    return () => window.removeEventListener('resize', sync);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', sync);
+    };
   }, [isElectron]);
 
   const { preset, layout, assets } = useMemo(
@@ -219,7 +243,7 @@ export const Titlebar = () => {
 
   return (
     <div
-      className="relative z-[130] flex h-8 select-none items-center justify-between border-b border-border/70 bg-card/90 backdrop-blur-md"
+      className="relative z-[130] flex h-8 select-none items-center border-b border-border/70 bg-card/90 backdrop-blur-md"
       style={{ WebkitAppRegion: 'drag' }}
     >
       <WindowControls
@@ -229,7 +253,14 @@ export const Titlebar = () => {
         isMaximized={isMaximized}
       />
 
-      <div className={`flex items-center gap-2 ${layout.left.length > 0 ? '' : 'pl-3'}`}>
+      {/* `flex-1` instead of `justify-between` on the bar: with the buttons on
+          one side only, the empty other side is not rendered at all and
+          `justify-between` would push the title against the opposite edge. */}
+      <div
+        className={`flex min-w-0 flex-1 items-center gap-2 ${
+          layout.left.length > 0 ? 'justify-center pr-3' : 'pl-3'
+        }`}
+      >
         <img src={appIcon} className="h-4 w-4 opacity-85" alt="logo" />
         <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
           CS Portfolio Tracking

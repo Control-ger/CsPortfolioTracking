@@ -28,8 +28,10 @@ import path from "node:path";
 const ACTIONS = ["close", "minimize", "maximize", "unmaximize"];
 const LAYOUT_ACTIONS = new Set(["close", "minimize", "maximize"]);
 
-// Guards against pathological theme assets being inlined into the renderer.
-const MAX_ASSET_BYTES = 96 * 1024;
+// Guards against pathological theme assets being inlined into the renderer —
+// every asset is base64'd through IPC, and a titlebar button larger than this
+// is broken artwork, not a design choice.
+const MAX_ASSET_BYTES = 48 * 1024;
 
 let cachedDetection = null;
 
@@ -278,7 +280,11 @@ async function readIconThemeButtons(iconThemeName, depth = 0) {
 
 async function detectLinuxWindowControls() {
   const layout = await detectButtonLayout();
-  const gtkTheme = process.env.GTK_THEME || (await readGsettings("org.gnome.desktop.interface", "gtk-theme"));
+  // `GTK_THEME` may carry a variant suffix (`Adwaita:dark`) that is not part of
+  // the directory name; gsettings values never do.
+  const gtkTheme =
+    String(process.env.GTK_THEME || "").split(":")[0].trim() ||
+    (await readGsettings("org.gnome.desktop.interface", "gtk-theme"));
   const iconTheme = await readGsettings("org.gnome.desktop.interface", "icon-theme");
 
   const fromGtkTheme = gtkTheme ? await readGtkThemeButtons(gtkTheme) : null;
