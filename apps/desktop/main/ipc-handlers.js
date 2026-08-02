@@ -22,6 +22,8 @@ import {
   clearSkinBaronSessionCookie,
 } from "./secret-vault.js";
 
+import { detectWindowControls } from "./window-controls-theme.js";
+
 import {
   restartPhpSidecar,
   ensurePhpSidecarForRenderer,
@@ -193,6 +195,16 @@ export function registerAllIpcHandlers() {
 
   // ── Platform detection ─────────────────────────────────────────
   ipcMain.handle("get-platform", () => process.platform);
+
+  // ── Native window-control look (Linux: GTK theme + button layout) ──
+  ipcMain.handle("window-controls-theme", async (event, force) => {
+    return await detectWindowControls(Boolean(force));
+  });
+
+  ipcMain.handle("window-is-maximized", () => {
+    const win = BrowserWindow.getFocusedWindow();
+    return win ? win.isMaximized() : false;
+  });
 
   // ── Cloudflare Access login ───────────────────────────────────
   ipcMain.handle("cloudflare-access-login", async (event, serverUrl, cfLoginUrl) => {

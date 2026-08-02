@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   minimize: () => ipcRenderer.send("window-control", "minimize"),
   maximize: () => ipcRenderer.send("window-control", "maximize"),
   platform: () => ipcRenderer.invoke("get-platform"),
+  windowControlsTheme: (force = false) => ipcRenderer.invoke("window-controls-theme", force),
+  isWindowMaximized: () => ipcRenderer.invoke("window-is-maximized"),
   localFileRead: (key) => ipcRenderer.invoke("local-cache-read", key),
   localFileWrite: (key, content) =>
     ipcRenderer.invoke("local-cache-write", key, content),
