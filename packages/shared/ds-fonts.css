@@ -1,0 +1,33 @@
+/* @font-face declarations for the brand family. The woff2 files live in the web
+   app's assets but were never declared anywhere — apps/web/src/fonts.css is
+   empty — so the app itself only shows Manrope when the OS happens to have it.
+   The design system ships them properly so previews and generated designs use
+   the real brand font. */
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../../apps/web/src/assets/fonts/Manrope-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../../apps/web/src/assets/fonts/Manrope-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../../apps/web/src/assets/fonts/Manrope-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("../../apps/web/src/assets/fonts/Manrope-800.woff2") format("woff2");
+}

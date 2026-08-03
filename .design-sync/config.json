@@ -1,0 +1,246 @@
+{
+  "projectId": "e4b1ca33-2419-4789-897d-4e973313c086",
+  "shape": "package",
+  "pkg": "@packages/shared",
+  "globalName": "CsInvestorHubUI",
+  "srcDir": "src",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": "ds-styles.css",
+  "buildCmd": "npx @tailwindcss/cli -i .design-sync/css/ds.css -o .design-sync/css/out.css --optimize && cp .design-sync/css/out.css packages/shared/ds-styles.css",
+  "componentSrcMap": {
+    "Abbr": "src/components/AbbreviationTooltip.jsx",
+    "AbbreviationTooltip": "src/components/AbbreviationTooltip.jsx",
+    "Accordion": "src/components/ui/accordion.jsx",
+    "AccordionContent": "src/components/ui/accordion.jsx",
+    "AccordionItem": "src/components/ui/accordion.jsx",
+    "AccordionTrigger": "src/components/ui/accordion.jsx",
+    "Alert": "src/components/ui/alert.jsx",
+    "AlertDescription": "src/components/ui/alert.jsx",
+    "AlertDialog": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogAction": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogCancel": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogContent": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogDescription": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogFooter": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogHeader": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogOverlay": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogPortal": "src/components/ui/alert-dialog.jsx",
+    "AlertDialogTitle": "src/components/ui/alert-dialog.jsx",
+    "AlertTitle": "src/components/ui/alert.jsx",
+    "ApiWarnings": "src/components/ApiWarnings.jsx",
+    "Badge": "src/components/ui/badge.jsx",
+    "BaseModal": "src/components/BaseModal.jsx",
+    "Button": "src/components/ui/button.jsx",
+    "Card": "src/components/ui/card.jsx",
+    "CardContent": "src/components/ui/card.jsx",
+    "CardDescription": "src/components/ui/card.jsx",
+    "CardFooter": "src/components/ui/card.jsx",
+    "CardHeader": "src/components/ui/card.jsx",
+    "CardSkeleton": "src/components/LoadingSkeletons.jsx",
+    "CardTitle": "src/components/ui/card.jsx",
+    "ChartContainer": "src/components/ui/chart.jsx",
+    "ChartLegend": "src/components/ui/chart.jsx",
+    "ChartLegendContent": "src/components/ui/chart.jsx",
+    "ChartSkeleton": "src/components/LoadingSkeletons.jsx",
+    "ChartStyle": "src/components/ui/chart.jsx",
+    "ChartTooltip": "src/components/ui/chart.jsx",
+    "ChartTooltipContent": "src/components/ui/chart.jsx",
+    "Checkbox": "src/components/ui/checkbox.jsx",
+    "DeleteConfirmModal": "src/components/DeleteConfirmModal.jsx",
+    "Dialog": "src/components/ui/dialog.jsx",
+    "DialogClose": "src/components/ui/dialog.jsx",
+    "DialogContent": "src/components/ui/dialog.jsx",
+    "DialogDescription": "src/components/ui/dialog.jsx",
+    "DialogFooter": "src/components/ui/dialog.jsx",
+    "DialogHeader": "src/components/ui/dialog.jsx",
+    "DialogOverlay": "src/components/ui/dialog.jsx",
+    "DialogPortal": "src/components/ui/dialog.jsx",
+    "DialogTitle": "src/components/ui/dialog.jsx",
+    "DialogTrigger": "src/components/ui/dialog.jsx",
+    "DropdownMenu": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuCheckboxItem": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuContent": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuGroup": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuItem": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuLabel": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuPortal": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuRadioGroup": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuRadioItem": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuSeparator": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuShortcut": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuSub": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuSubContent": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuSubTrigger": "src/components/ui/dropdown-menu.jsx",
+    "DropdownMenuTrigger": "src/components/ui/dropdown-menu.jsx",
+    "ExcludeInvestmentDialog": "src/components/ExcludeInvestmentDialog.jsx",
+    "Input": "src/components/ui/input.jsx",
+    "Label": "src/components/ui/label.jsx",
+    "LayeredGroupIcon": "src/components/LayeredGroupIcon.jsx",
+    "MetricPairBlock": "src/components/MetricPair.jsx",
+    "MetricPairInline": "src/components/MetricPair.jsx",
+    "PageHeaderSkeleton": "src/components/LoadingSkeletons.jsx",
+    "PriceSourceBadge": "src/components/PriceSourceBadge.jsx",
+    "Progress": "src/components/ui/progress.jsx",
+    "ScrollArea": "src/components/ui/scroll-area.jsx",
+    "ScrollBar": "src/components/ui/scroll-area.jsx",
+    "Select": "src/components/ui/select.jsx",
+    "SelectContent": "src/components/ui/select.jsx",
+    "SelectGroup": "src/components/ui/select.jsx",
+    "SelectItem": "src/components/ui/select.jsx",
+    "SelectLabel": "src/components/ui/select.jsx",
+    "SelectScrollDownButton": "src/components/ui/select.jsx",
+    "SelectScrollUpButton": "src/components/ui/select.jsx",
+    "SelectSeparator": "src/components/ui/select.jsx",
+    "SelectTrigger": "src/components/ui/select.jsx",
+    "SelectValue": "src/components/ui/select.jsx",
+    "Separator": "src/components/ui/separator.jsx",
+    "Skeleton": "src/components/ui/skeleton.jsx",
+    "Slider": "src/components/ui/slider.jsx",
+    "StatCard": "src/components/StatsCards.jsx",
+    "StatsCardsSkeleton": "src/components/LoadingSkeletons.jsx",
+    "Switch": "src/components/ui/switch.jsx",
+    "Table": "src/components/ui/table.jsx",
+    "TableBody": "src/components/ui/table.jsx",
+    "TableCaption": "src/components/ui/table.jsx",
+    "TableCell": "src/components/ui/table.jsx",
+    "TableFooter": "src/components/ui/table.jsx",
+    "TableHead": "src/components/ui/table.jsx",
+    "TableHeader": "src/components/ui/table.jsx",
+    "TableRow": "src/components/ui/table.jsx",
+    "TableSkeleton": "src/components/LoadingSkeletons.jsx",
+    "Tabs": "src/components/ui/tabs.jsx",
+    "TabsContent": "src/components/ui/tabs.jsx",
+    "TabsList": "src/components/ui/tabs.jsx",
+    "TabsTrigger": "src/components/ui/tabs.jsx",
+    "ThemeToggle": "src/components/ThemeToggle.jsx",
+    "Tooltip": "src/components/ui/tooltip.jsx",
+    "TooltipContent": "src/components/ui/tooltip.jsx",
+    "TooltipProvider": "src/components/ui/tooltip.jsx",
+    "TooltipTrigger": "src/components/ui/tooltip.jsx"
+  },
+  "overrides": {
+    "Dialog": {
+      "cardMode": "single",
+      "primaryStory": "Confirm",
+      "viewport": "760x420"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "primaryStory": "Confirm",
+      "viewport": "760x400"
+    },
+    "Select": {
+      "cardMode": "single",
+      "primaryStory": "Open",
+      "viewport": "520x460"
+    },
+    "DropdownMenu": {
+      "cardMode": "single",
+      "primaryStory": "Open",
+      "viewport": "520x420"
+    },
+    "Tooltip": {
+      "cardMode": "single",
+      "primaryStory": "Open",
+      "viewport": "480x260"
+    },
+    "Table": {
+      "cardMode": "column"
+    },
+    "DialogHeader": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "760x400"
+    },
+    "DialogFooter": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "760x400"
+    },
+    "AlertDialogHeader": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "760x400"
+    },
+    "AlertDialogFooter": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "760x400"
+    },
+    "SelectGroup": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "520x460"
+    },
+    "SelectSeparator": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "520x460"
+    },
+    "DropdownMenuGroup": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "520x460"
+    },
+    "DropdownMenuLabel": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "520x460"
+    },
+    "DropdownMenuRadioGroup": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "520x460"
+    },
+    "DropdownMenuSeparator": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "520x460"
+    },
+    "DropdownMenuShortcut": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "520x460"
+    },
+    "TableBody": {
+      "cardMode": "column"
+    },
+    "TableCaption": {
+      "cardMode": "column"
+    },
+    "TableCell": {
+      "cardMode": "column"
+    },
+    "TableFooter": {
+      "cardMode": "column"
+    },
+    "TableHead": {
+      "cardMode": "column"
+    },
+    "TableHeader": {
+      "cardMode": "column"
+    },
+    "TableRow": {
+      "cardMode": "column"
+    },
+    "ChartContainer": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "560x330"
+    },
+    "ChartTooltip": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "560x330"
+    },
+    "ChartLegend": {
+      "cardMode": "single",
+      "primaryStory": "InContext",
+      "viewport": "560x330"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md",
+  "extraFonts": [
+    "ds-fonts.css"
+  ]
+}

@@ -42,3 +42,10 @@ packages/*/node_modules/
 
 # Local Claude Code dev-server config
 .claude/
+
+# design-sync working dirs (staged scripts + generated bundle)
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

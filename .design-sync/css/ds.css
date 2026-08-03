@@ -1,0 +1,5 @@
+/* Stylesheet shipped with the design system. It is the app's own theme block
+   plus a safelist, because the app's compiled CSS only contains the utilities
+   the app happens to use — and the design agent builds new screens that reach
+   for others. Without the safelist those render unstyled. */
+@import "../../apps/web/src/index.css";
