@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronLeft,
-  ChevronRight,
+  Check,
+  LayoutGrid,
+  List,
   LoaderCircle,
   Plus,
   Search,
@@ -18,20 +17,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@shared/components/ui/select";
+import { ItemThumb } from "@shared/components/ui/item-thumb";
+import { SegmentedControl } from "@shared/components/ui/segmented-control";
+import { Pagination } from "@shared/components/ui/data-display";
 
-const ITEM_TYPE_OPTIONS = [
-  { value: "all", label: "Alle Typen" },
-  { value: "skin", label: "Skins" },
-  { value: "case", label: "Cases" },
-  { value: "sticker", label: "Sticker" },
-  { value: "agent", label: "Agents" },
-  { value: "sticker_capsule", label: "Capsules" },
-  { value: "patch", label: "Patches" },
-  { value: "music_kit", label: "Music Kits" },
-  { value: "charm", label: "Charms" },
-  { value: "other", label: "Everything else" },
-];
-
+/**
+ * Item-type filter. The design shows these as a single chip row, so the former
+ * "Item Type" dropdown is gone — every type it offered must therefore have a
+ * chip here, or that filter becomes unreachable.
+ */
 const CATEGORY_CHIPS = [
   { label: "Alle", type: "all" },
   { label: "Skins", type: "skin" },
@@ -39,6 +33,9 @@ const CATEGORY_CHIPS = [
   { label: "Sticker", type: "sticker" },
   { label: "Agents", type: "agent" },
   { label: "Capsules", type: "sticker_capsule" },
+  { label: "Patches", type: "patch" },
+  { label: "Music Kits", type: "music_kit" },
+  { label: "Charms", type: "charm" },
   { label: "Everything else", type: "other" },
 ];
 
@@ -147,6 +144,7 @@ export const ItemSearch = ({
   const [itemType, setItemType] = useState("all");
   const [wear, setWear] = useState("all");
   const [sortBy, setSortBy] = useState("relevance");
+  const [viewMode, setViewMode] = useState("grid");
   const [page, setPage] = useState(1);
   const [results, setResults] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -291,300 +289,283 @@ export const ItemSearch = ({
     }
   };
 
-  const renderBody = () => {
-    if (!shouldSearch) {
-      return (
-        <tbody>
-          <tr className="border-t border-border/70">
-            <td colSpan={5} className="px-3 py-5 text-sm text-muted-foreground">
-              Gib mindestens 2 Zeichen ein und druecke Enter oder browse direkt ueber die Kategorien.
-            </td>
-          </tr>
-        </tbody>
-      );
-    }
+  const pageCount = Math.max(totalPages, 1);
 
-    if (isSearching) {
-      return (
-        <tbody>
-          <tr className="border-t border-border/70">
-            <td colSpan={5} className="px-3 py-4 text-sm text-muted-foreground">
-              <span className="inline-flex items-center gap-2">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-                Suche laeuft...
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      );
-    }
+  const renderStatus = (message, spinner = false) => (
+    <div className="rounded-2xl border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
+      {spinner ? (
+        <span className="inline-flex items-center gap-2">
+          <LoaderCircle className="size-4 animate-spin" />
+          {message}
+        </span>
+      ) : (
+        message
+      )}
+    </div>
+  );
 
-    if (results.length === 0) {
-      return (
-        <tbody>
-          <tr className="border-t border-border/70">
-            <td colSpan={5} className="px-3 py-5 text-sm text-muted-foreground">
-              Keine Treffer fuer diese Suche.
-            </td>
-          </tr>
-        </tbody>
-      );
-    }
+  /** Meta lines below the price. Only fields the catalog actually returns. */
+  const metaEntries = (candidate) => [
+    ["Typ", candidate.itemTypeLabel || "—"],
+    ["Condition", candidate.wearLabel || "—"],
+  ];
+
+  const priceLabel = (candidate) =>
+    Number.isFinite(Number(candidate.livePriceEur))
+      ? formatPrice(Number(candidate.livePriceEur))
+      : "Preis folgt";
+
+  const renderAddButton = (candidate, { compact = false } = {}) => {
+    const alreadyAdded = existingItemNames.has(candidate.marketHashName);
+    const isSubmitting = submittingItem === candidate.marketHashName;
 
     return (
-      <tbody>
-        {results.map((candidate, index) => {
-          const alreadyAdded = existingItemNames.has(candidate.marketHashName);
-          const isSubmitting = submittingItem === candidate.marketHashName;
-          const rowNumber = (page - 1) * PAGE_SIZE + index + 1;
-
-          return (
-            <tr key={candidate.marketHashName} className="border-t border-border/70 align-middle">
-              <td className="px-3 py-3 text-xs text-muted-foreground">{rowNumber}</td>
-              <td className="px-3 py-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="h-9 w-9 shrink-0 overflow-hidden rounded-sm border border-border/70">
-                    {candidate.iconUrl ? (
-                      <img
-                        src={candidate.iconUrl}
-                        alt={candidate.displayName}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {candidate.displayName}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {candidate.itemTypeLabel}
-                    </p>
-                  </div>
-                </div>
-              </td>
-              <td className="px-3 py-3 text-sm font-semibold text-foreground">
-                {Number.isFinite(Number(candidate.livePriceEur))
-                  ? formatPrice(Number(candidate.livePriceEur))
-                  : "Preis folgt"}
-              </td>
-              <td className="px-3 py-3 text-sm text-muted-foreground">
-                {candidate.wearLabel || "-"}
-              </td>
-              <td className="px-3 py-3 text-right">
-                <button
-                  type="button"
-                  onClick={() => void handleAddItem(candidate)}
-                  disabled={alreadyAdded || isSubmitting || submittingItem !== ""}
-                  className="inline-flex h-10 items-center gap-1 rounded-md border border-border/75 px-3 text-sm font-semibold transition-colors hover:bg-accent/60 touch-manipulation sm:h-8 sm:px-2.5 sm:text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSubmitting ? (
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Plus className="h-3.5 w-3.5" />
-                  )}
-                  {alreadyAdded ? "Bereits in Watchlist" : "Hinzufuegen"}
-                </button>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
+      <button
+        type="button"
+        onClick={() => void handleAddItem(candidate)}
+        disabled={alreadyAdded || isSubmitting || submittingItem !== ""}
+        className={`inline-flex h-[30px] items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-colors disabled:cursor-not-allowed ${
+          compact ? "px-3" : "w-full"
+        } ${
+          alreadyAdded
+            ? "border border-success/35 bg-success/12 text-success"
+            : "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        }`}
+      >
+        {isSubmitting ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : alreadyAdded ? (
+          <Check className="size-3.5" />
+        ) : (
+          <Plus className="size-3.5" />
+        )}
+        {alreadyAdded ? "Watchlist" : "Zur Watchlist"}
+      </button>
     );
   };
 
+  const renderGrid = () => (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+      {results.map((candidate) => (
+        <article
+          key={candidate.marketHashName}
+          className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-success/45"
+        >
+          <div className="relative h-24 bg-[repeating-linear-gradient(135deg,var(--stripe)_0_7px,transparent_7px_14px)]">
+            {candidate.iconUrl ? (
+              <img
+                src={candidate.iconUrl}
+                alt={candidate.displayName}
+                loading="lazy"
+                decoding="async"
+                className="size-full object-contain p-2"
+              />
+            ) : null}
+            <span className="absolute left-2 top-2 inline-flex h-[19px] items-center rounded-md border border-border bg-background/85 px-[7px] text-[10px] font-bold text-foreground">
+              {candidate.itemTypeLabel || "Item"}
+            </span>
+            {candidate.wearLabel ? (
+              <span className="absolute right-2 top-2 inline-flex h-[19px] items-center rounded-md border border-border bg-background/85 px-[7px] text-[10px] font-bold text-muted-foreground">
+                {candidate.wearLabel}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="flex flex-1 flex-col gap-2 px-3 pb-3 pt-2.5">
+            <p
+              className="line-clamp-2 min-h-[31px] text-xs font-bold leading-[1.3] text-foreground"
+              title={candidate.displayName}
+            >
+              {candidate.displayName}
+            </p>
+            <span className="text-base font-extrabold tracking-[-0.01em] tabular-nums text-foreground">
+              {priceLabel(candidate)}
+            </span>
+            <div className="flex flex-col gap-1 border-t border-border-soft pt-2 text-[10px]">
+              {metaEntries(candidate).map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-1.5">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="truncate text-foreground tabular-nums" title={value}>
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-auto pt-1">{renderAddButton(candidate)}</div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+
+  const renderList = () => (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="grid grid-cols-[minmax(0,1fr)_120px_140px_150px] items-center gap-3 border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        <span>Item</span>
+        <span className="text-right">Preis</span>
+        <span>Condition</span>
+        <span className="text-right">Aktion</span>
+      </div>
+      {results.map((candidate) => (
+        <div
+          key={candidate.marketHashName}
+          className="grid grid-cols-[minmax(0,1fr)_120px_140px_150px] items-center gap-3 border-b border-border-soft px-4 py-2.5 last:border-b-0"
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <ItemThumb src={candidate.iconUrl} alt={candidate.displayName} size="lg" />
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-foreground">
+                {candidate.displayName}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {candidate.itemTypeLabel}
+              </p>
+            </div>
+          </div>
+          <span className="text-right text-[13px] font-bold tabular-nums text-foreground">
+            {priceLabel(candidate)}
+          </span>
+          <span className="truncate text-xs text-muted-foreground">
+            {candidate.wearLabel || "—"}
+          </span>
+          <div className="flex justify-end">{renderAddButton(candidate, { compact: true })}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderResults = () => {
+    if (!shouldSearch) {
+      return renderStatus(
+        "Gib mindestens 2 Zeichen ein und drücke Enter — oder browse direkt über die Kategorien.",
+      );
+    }
+    if (isSearching) return renderStatus("Suche läuft…", true);
+    if (results.length === 0) return renderStatus("Keine Treffer für diese Suche.");
+    return viewMode === "grid" ? renderGrid() : renderList();
+  };
+
   return (
-    <section className="space-y-3">
-      <form onSubmit={handleSearchSubmit} className="space-y-3">
+    <section className="flex flex-col gap-4">
+      {/* Toolbar: query on the left, result count and view controls on the right. */}
+      <form
+        onSubmit={handleSearchSubmit}
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         {showSearchInput ? (
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <label className="relative min-w-0 flex-1 basis-72 sm:max-w-[560px]">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground" />
             <input
               ref={searchInputRef}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Suche nach Item-Namen (Enter startet Suche)"
-              className="h-11 w-full rounded-md border border-border/70 bg-transparent pl-10 pr-32 text-sm text-foreground outline-none transition-colors focus:border-border sm:h-10 sm:pr-28"
+              placeholder="Nach Item suchen…"
               disabled={submittingItem !== ""}
+              className="h-11 w-full rounded-xl border border-border-strong bg-card pl-[42px] pr-3.5 text-[15px] text-foreground outline-none transition-colors focus:border-success/50"
             />
-            <button
-              type="submit"
-              className="absolute right-1.5 top-1.5 inline-flex h-8 items-center rounded-md border border-border/70 px-3 text-sm font-semibold hover:bg-accent/60 touch-manipulation sm:h-7 sm:px-2.5 sm:text-xs"
-            >
-              Suchen
-            </button>
-          </div>
-        ) : null}
-
-        {!showSearchInput ? (
-          <p className="text-xs text-muted-foreground">
-            Suche erfolgt ueber die obere Suchleiste.
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap gap-1.5 border-b border-border/70 pb-2">
-          {CATEGORY_CHIPS.map((chip) => (
-            <button
-              key={chip.type}
-              type="button"
-              onClick={() => {
-                setItemType(chip.type);
-                if (chip.type !== "skin") {
-                  setWear("all");
-                }
-                setPage(1);
-              }}
-              className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors touch-manipulation sm:px-2.5 sm:py-1 sm:text-xs ${
-                itemType === chip.type
-                  ? "border-primary/60 bg-primary text-primary-foreground"
-                  : "border-border/70 text-foreground hover:bg-accent/60"
-              }`}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="space-y-1 text-xs text-muted-foreground">
-            Item Type
-            <Select
-              value={itemType}
-              onValueChange={(nextType) => {
-                setItemType(nextType);
-                if (nextType !== "skin") {
-                  setWear("all");
-                }
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-11 border-border/70 text-sm text-foreground sm:h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ITEM_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </label>
+        ) : (
+          <p className="text-xs text-muted-foreground">Suche erfolgt über die obere Suchleiste.</p>
+        )}
 
-          <label className="space-y-1 text-xs text-muted-foreground">
-            Condition
-            <Select
-              value={wear}
-              onValueChange={(nextWear) => {
-                setWear(nextWear);
-                setPage(1);
-              }}
-              disabled={!wearEnabled}
-            >
-              <SelectTrigger className="h-11 border-border/70 text-sm text-foreground sm:h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {WEAR_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+            {totalItems} Treffer{browseMode ? " · Browse" : ""}
+          </span>
 
-          <label className="space-y-1 text-xs text-muted-foreground">
-            Sortierung
-            <Select
-              value={sortBy}
-              onValueChange={(nextSort) => {
-                setSortBy(nextSort);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-11 border-border/70 text-sm text-foreground sm:h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SORT_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
+          <Select
+            value={sortBy}
+            onValueChange={(nextSort) => {
+              setSortBy(nextSort);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-xl border-border bg-card px-3 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={wear}
+            onValueChange={(nextWear) => {
+              setWear(nextWear);
+              setPage(1);
+            }}
+            disabled={!wearEnabled}
+          >
+            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-xl border-border bg-card px-3 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WEAR_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <SegmentedControl
+            size="icon"
+            value={viewMode}
+            onChange={setViewMode}
+            items={[
+              { value: "grid", title: "Kacheln", label: <LayoutGrid className="size-[15px]" /> },
+              { value: "list", title: "Liste", label: <List className="size-[15px]" /> },
+            ]}
+          />
         </div>
       </form>
 
+      {/* Category chips double as the item-type filter. */}
+      <div className="flex flex-wrap gap-[7px] border-b border-border pb-3.5">
+        {CATEGORY_CHIPS.map((chip) => (
+          <button
+            key={chip.type}
+            type="button"
+            onClick={() => {
+              setItemType(chip.type);
+              if (chip.type !== "skin") setWear("all");
+              setPage(1);
+            }}
+            className={`inline-flex h-7 items-center rounded-full px-3 text-xs transition-colors ${
+              itemType === chip.type
+                ? "bg-primary font-bold text-primary-foreground"
+                : "border border-border-strong font-semibold text-foreground hover:bg-surface-2"
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
       {error ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-md border border-border/70">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/70 bg-transparent text-left">
-                <th className="w-14 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">#</th>
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</th>
-                <th className="w-44 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Price</th>
-                <th className="w-40 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Condition</th>
-                <th className="w-52 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Action</th>
-              </tr>
-            </thead>
-            {renderBody()}
-          </table>
-        </div>
-      </div>
+      {renderResults()}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-2 text-sm text-muted-foreground sm:text-xs">
-        <span className="w-full sm:w-auto">
-          {results.length} / {totalItems} Treffer | Seite {page} von {Math.max(totalPages, 1)}
-          {browseMode ? " | Browse-Modus" : ""}
-        </span>
-
-        <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-1">
-          <button
-            type="button"
-            onClick={() => setPage(1)}
-            disabled={page <= 1 || isSearching}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Erste Seite"
-          >
-            <ChevronsLeft className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-            disabled={page <= 1 || isSearching}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Vorherige Seite"
-          >
-            <ChevronLeft className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage((current) => Math.min(Math.max(totalPages, 1), current + 1))}
-            disabled={page >= totalPages || totalPages === 0 || isSearching}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Naechste Seite"
-          >
-            <ChevronRight className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage(Math.max(totalPages, 1))}
-            disabled={page >= totalPages || totalPages === 0 || isSearching}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border/70 hover:bg-accent/60 touch-manipulation sm:h-7 sm:w-7 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Letzte Seite"
-          >
-            <ChevronsRight className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-          </button>
+      {shouldSearch && results.length > 0 ? (
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3.5">
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {results.length} von {totalItems} Treffern · Seite {page} von {pageCount}
+          </span>
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            onPageChange={(next) => setPage(Math.min(Math.max(1, next), pageCount))}
+          />
         </div>
-      </div>
+      ) : null}
     </section>
   );
 };
