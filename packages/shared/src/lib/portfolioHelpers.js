@@ -473,3 +473,13 @@ export function getItemNameKey(item) {
     .trim()
     .toLowerCase();
 }
+
+// Vocabulary of the manual-investment "Typ" select. The item catalog uses a
+// different one (skin, case, sticker_capsule, …), and a catalog "skin" covers
+// weapons, knives and gloves alike — so a catalog type is only adopted when it
+// happens to be one of these. Otherwise the user's own choice stands, rather
+// than the browser silently falling back to the first option.
+export const MANUAL_ITEM_TYPES = [
+  "other", "weapon", "knife", "gloves", "sticker", "agent", "collectible",
+  "container", "key", "music", "patch", "pin", "graffiti", "tool",
+];

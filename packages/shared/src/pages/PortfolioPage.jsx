@@ -83,6 +83,7 @@ import {
   buildGroupDetailSelection,
   buildGroupClusterDetailSelection,
   getItemNameKey,
+  MANUAL_ITEM_TYPES,
 } from "../lib/portfolioHelpers.js";
 import {
   PortfolioOverviewSection,
@@ -1097,14 +1098,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         setManualNameSuggestionsLoading(true);
         setManualNameSuggestionsError("");
 
+        // The manual "Typ" vocabulary (weapon, knife, container, …) is not the
+        // catalog's (skin, case, sticker_capsule, …), so forwarding it as a
+        // filter matched nothing and returned an empty list. Since picking a
+        // catalog hit is now required to create an investment, that made the
+        // item unreachable as soon as a type was selected. Search unfiltered.
         const response = await searchWatchlistItems(
           query,
-          {
-            itemType: manualItemDraft.type && manualItemDraft.type !== "other"
-              ? manualItemDraft.type
-              : undefined,
-            sortBy: "relevance",
-          },
+          { sortBy: "relevance" },
           6,
           1,
         );
@@ -1128,7 +1129,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [managementSection, manualItemDraft.name, manualItemDraft.type, manualSelectedSuggestion]);
+  }, [managementSection, manualItemDraft.name, manualSelectedSuggestion]);
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -3591,10 +3592,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     setManualSelectedSuggestion(candidate);
     setManualNameSuggestions([]);
     setManualNameSuggestionsError("");
+    const catalogType = String(candidate.itemType || "").trim().toLowerCase();
     setManualItemDraft((current) => ({
       ...current,
       name: String(candidate.marketHashName || candidate.displayName || current.name || "").trim(),
-      type: String(candidate.itemType || current.type || "skin").trim().toLowerCase() || "skin",
+      // The catalog's vocabulary only partly overlaps the manual "Typ" select.
+      // An unknown value would make the select fall back to its first option,
+      // silently filing every catalog pick as "Anderes".
+      type: MANUAL_ITEM_TYPES.includes(catalogType) ? catalogType : current.type,
     }));
   };
   const handleCreateManualInvestment = async () => {
@@ -3623,7 +3628,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       String(manualItemDraft.fundingMode || "wallet_funded").trim().toLowerCase() === "balance_funded"
         ? "balance_funded"
         : "wallet_funded";
-    const type = String(chosenSuggestion?.itemType || manualItemDraft.type || "skin").trim().toLowerCase() || "skin";
+    // Store what the user actually sees in the "Typ" select. The catalog's own
+    // itemType uses a different vocabulary, so preferring it here saved a value
+    // the form never displayed.
+    const type = String(manualItemDraft.type || "other").trim().toLowerCase() || "other";
     const suggestionImageUrl = String(chosenSuggestion?.iconUrl || "").trim() || null;
 
     if (!name) {

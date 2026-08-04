@@ -304,16 +304,10 @@ export const ItemSearch = ({
     </div>
   );
 
-  /** Meta lines below the price. Only fields the catalog actually returns. */
-  const metaEntries = (candidate) => [
-    ["Typ", candidate.itemTypeLabel || "—"],
-    ["Condition", candidate.wearLabel || "—"],
-  ];
-
-  const priceLabel = (candidate) =>
-    Number.isFinite(Number(candidate.livePriceEur))
-      ? formatPrice(Number(candidate.livePriceEur))
-      : "Preis folgt";
+  const priceLabel = (candidate) => {
+    const value = Number(candidate.livePriceEur);
+    return Number.isFinite(value) && value > 0 ? formatPrice(value) : "Preis folgt";
+  };
 
   const renderAddButton = (candidate, { compact = false } = {}) => {
     const alreadyAdded = existingItemNames.has(candidate.marketHashName);
@@ -345,13 +339,19 @@ export const ItemSearch = ({
   };
 
   const renderGrid = () => (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {results.map((candidate) => (
         <article
           key={candidate.marketHashName}
           className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-success/45"
         >
-          <div className="relative h-24 bg-[repeating-linear-gradient(135deg,var(--stripe)_0_7px,transparent_7px_14px)]">
+          <div
+            className={`relative h-24 ${
+              candidate.iconUrl
+                ? "bg-surface-1"
+                : "bg-[repeating-linear-gradient(135deg,var(--stripe)_0_7px,transparent_7px_14px)]"
+            }`}
+          >
             {candidate.iconUrl ? (
               <img
                 src={candidate.iconUrl}
@@ -381,16 +381,6 @@ export const ItemSearch = ({
             <span className="text-base font-extrabold tracking-[-0.01em] tabular-nums text-foreground">
               {priceLabel(candidate)}
             </span>
-            <div className="flex flex-col gap-1 border-t border-border-soft pt-2 text-[10px]">
-              {metaEntries(candidate).map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-1.5">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="truncate text-foreground tabular-nums" title={value}>
-                    {value}
-                  </span>
-                </div>
-              ))}
-            </div>
             <div className="mt-auto pt-1">{renderAddButton(candidate)}</div>
           </div>
         </article>

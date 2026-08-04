@@ -16,7 +16,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip.jsx";
-import { formatDateSafe, getClusterUpdatedAt } from "../lib/portfolioHelpers.js";
+import {
+  formatDateSafe,
+  getClusterUpdatedAt,
+  MANUAL_ITEM_TYPES,
+} from "../lib/portfolioHelpers.js";
 import {
   uniqueInvestmentIds,
   normalizeInvestmentId,
@@ -1582,7 +1586,7 @@ export function PortfolioManagementSection({
 
           {/* === CREATE (MANUAL ITEM) SECTION === */}
           {managementSection === "create" ? (
-            <Card className="overflow-hidden">
+            <Card>
               <CardHeader>
                 <CardTitle>Manuelles Investment hinzufügen</CardTitle>
                 <p className="text-sm text-muted-foreground">
@@ -1621,8 +1625,8 @@ export function PortfolioManagementSection({
                     </button>
 
                     {catalogOpen && manualNameSuggestions.length > 0 ? (
-                      <div className="absolute inset-x-0 top-12 z-20 overflow-hidden rounded-xl border border-border-strong bg-card shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
-                        <div className="flex items-center justify-between border-b border-border-soft px-3 py-2">
+                      <div className="absolute inset-x-0 top-12 z-20 flex max-h-[320px] flex-col overflow-hidden rounded-xl border border-border-strong bg-card shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
+                        <div className="flex shrink-0 items-center justify-between border-b border-border-soft px-3 py-2">
                           <SectionLabel className="tracking-[0.08em]">
                             {manualNameSuggestions.length} Treffer im Katalog
                           </SectionLabel>
@@ -1630,6 +1634,7 @@ export function PortfolioManagementSection({
                             Klicken zum Übernehmen
                           </span>
                         </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto">
                         {manualNameSuggestions.map((hit) => {
                           const hitName = hit.marketHashName || hit.displayName;
                           const picked =
@@ -1664,7 +1669,8 @@ export function PortfolioManagementSection({
                             </button>
                           );
                         })}
-                        <div className="border-t border-border-soft px-3 py-2.5 text-[11px] text-muted-foreground">
+                        </div>
+                        <div className="shrink-0 border-t border-border-soft px-3 py-2.5 text-[11px] text-muted-foreground">
                           Nur Items aus dem Katalog sind wählbar. Fehlt eines, hilft ein Sync
                           oder eine Meldung an den Katalog.
                         </div>
