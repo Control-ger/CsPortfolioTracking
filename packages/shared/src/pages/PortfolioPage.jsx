@@ -70,6 +70,8 @@ import {
   mergePortfolioGroups,
   portfolioGroupsSignature,
   portfolioGroupsStorageKey,
+  normalizePortfolioGroupColor,
+  preservePortfolioGroupColors,
 } from "@shared/lib/portfolioGroups.js";
 import {
   formatDateSafe,
@@ -955,7 +957,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         // A group that only ever reached the local cache (e.g. saved while upstream
         // was unreachable and the sidecar returned a desktop-local-fallback success)
         // must not be dropped just because the server holds a different/older subset.
-        const nextGroups = mergePortfolioGroups(localGroups, remoteGroups);
+        // The server drops `color` until its whitelist ships, so a remote group
+        // must not overwrite a colour the local cache still knows.
+        const nextGroups = mergePortfolioGroups(
+          localGroups,
+          preservePortfolioGroupColors(remoteGroups, localGroups),
+        );
 
         // If the merge carries anything the server does not already have (local-only
         // or locally-newer groups), push the merged set up so the server catches up.
@@ -1681,7 +1688,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       // list, which must not wipe the set we just saved locally.
       const remoteGroups =
         Array.isArray(remoteEcho) && (remoteEcho.length > 0 || normalizedGroups.length === 0)
-          ? normalizePortfolioGroups(remoteEcho)
+          ? normalizePortfolioGroups(
+              preservePortfolioGroupColors(remoteEcho, normalizedGroups),
+            )
           : normalizedGroups;
       setPortfolioGroups(remoteGroups);
       await writeLocalState(storageKey, { groups: remoteGroups });
@@ -1717,6 +1726,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       id: group.id,
       name: group.name || "",
       thesis: group.thesis || "",
+      color: normalizePortfolioGroupColor(group.color),
     });
     setPortfolioGroupMessage("");
     setPortfolioGroupError("");
@@ -1734,6 +1744,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const handleSavePortfolioGroup = useCallback(async () => {
     const name = String(portfolioGroupDraft?.name || "").trim();
     const thesis = String(portfolioGroupDraft?.thesis || "").trim();
+    const color = normalizePortfolioGroupColor(portfolioGroupDraft?.color);
     if (!name) {
       setPortfolioGroupError("Bitte einen Gruppennamen vergeben.");
       return;
@@ -1751,6 +1762,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                 ...group,
                 name,
                 thesis,
+                color,
                 updatedAt: now,
               }
             : group,
@@ -1761,6 +1773,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             id: nextGroupId,
             name,
             thesis,
+            color,
             memberInvestmentIds: [],
             createdAt: now,
             updatedAt: now,
@@ -1776,6 +1789,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           id: savedGroup.id,
           name: savedGroup.name,
           thesis: savedGroup.thesis || "",
+          color: normalizePortfolioGroupColor(savedGroup.color),
         });
       }
       setPortfolioGroupMessage(existingGroup ? "Gruppe aktualisiert." : "Gruppe angelegt.");
@@ -3435,29 +3449,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     matchingSuggestedCount,
     priceMissingCount,
   ]);
-
-  const managementQuickHints = [
-    {
-      id: "matching",
-      title: "Matching",
-      text: "Verknuepfe Steam-Items mit CSFloat-Kaeufen fuer korrekte Kaufpreise und Historie.",
-    },
-    {
-      id: "prices",
-      title: "Preise",
-      text: "Ergaenze fehlende Einkaufspreise fuer saubere ROI- und Gewinnwerte.",
-    },
-    {
-      id: "exclude",
-      title: "Exclude",
-      text: "Blende Positionen aus Kennzahlen aus, ohne Daten zu loeschen.",
-    },
-    {
-      id: "sync",
-      title: "Sync",
-      text: "Starte manuell oder automatisch neue Imports, wenn sich dein Steam-Inventar geaendert hat.",
-    },
-  ];
 
   const handleManagementExcludeToggle = async (investmentId, exclude) => {
     await toggleExcludeInvestment(investmentId, exclude);
@@ -5362,7 +5353,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             portfolioGroupsById={portfolioGroupsById}
             filteredManagementClusters={filteredManagementClusters}
             managementTypeOptions={managementTypeOptions}
-            managementQuickHints={managementQuickHints}
             filteredMatchingRows={filteredMatchingRows}
             matchingSuggestedCount={matchingSuggestedCount}
             matchedSteamInventoryItemsCount={matchedSteamInventoryItemsCount}

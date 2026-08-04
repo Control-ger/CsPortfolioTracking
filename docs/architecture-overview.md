@@ -112,6 +112,24 @@ This document tracks:
 | Steam/CSFloat secrets | Desktop only | Local Secret Vault (app-password wrapped, main-memory unlock session) | Desktop only |
 | VAC ban stats + ban-wave feed entries | Server cron (`sync-ban-stats.php`, hourly) | `cs_ban_stats` (raw daily counts) + `cs_updates_feed` (synthetic ban-wave entries, source=`ban_wave_detected`) | Web + Desktop |
 
+### 4.1 Portfolio group fields
+
+A portfolio group carries `id`, `name`, `thesis`, `color` and `memberInvestmentIds`.
+`color` is one of `success | info | warn | danger | muted` — a token key, not a raw
+colour value, so each theme resolves it against its own palette. The vocabulary is
+defined twice and the two must stay in lockstep: `PORTFOLIO_GROUP_COLORS` in
+`packages/shared/src/lib/portfolioGroups.js` and `GROUP_COLORS` in
+`backend/src/Infrastructure/Persistence/Repository/UserPortfolioGroupsRepository.php`.
+Both normalise an unknown value to `success` rather than storing it.
+
+Groups round-trip through `PUT /api/v1/settings/portfolio-groups`, whose response is
+adopted as authoritative. A server that predates the `color` whitelist echoes every
+other field but drops this one, which would reset the colour on every save — so
+`preservePortfolioGroupColors` re-applies the locally known colour wherever the echo
+omits it, on both the save and the load/merge path. Fields the server does know still
+win; only a *missing* colour falls back to the local value. This guard stays correct
+once the backend ships and can be removed then.
+
 ## 5. Frontend Route Map (current)
 
 From `apps/web/src/App.jsx`:

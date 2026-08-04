@@ -8,6 +8,11 @@ use Throwable;
 
 final class UserPortfolioGroupsRepository
 {
+    /** Accent colours a group may carry; kept in lockstep with
+     * PORTFOLIO_GROUP_COLORS in packages/shared/src/lib/portfolioGroups.js. */
+    private const GROUP_COLORS = ['success', 'info', 'warn', 'danger', 'muted'];
+    private const DEFAULT_GROUP_COLOR = 'success';
+
     public function __construct(private readonly PDO $pdo)
     {
     }
@@ -132,6 +137,12 @@ final class UserPortfolioGroupsRepository
             }
 
             $thesis = trim((string) ($group['thesis'] ?? ''));
+            // Accent colour chosen in the desktop client. Restricted to the
+            // known keys so an arbitrary string can never reach the payload.
+            $color = strtolower(trim((string) ($group['color'] ?? '')));
+            if (!in_array($color, self::GROUP_COLORS, true)) {
+                $color = self::DEFAULT_GROUP_COLOR;
+            }
             $createdAt = trim((string) ($group['createdAt'] ?? ''));
             $updatedAt = trim((string) ($group['updatedAt'] ?? ''));
 
@@ -156,6 +167,7 @@ final class UserPortfolioGroupsRepository
                 'id' => $id,
                 'name' => $name,
                 'thesis' => $thesis,
+                'color' => $color,
                 'memberInvestmentIds' => $memberIds,
                 'createdAt' => $createdAt !== '' ? $createdAt : gmdate('c'),
                 'updatedAt' => $updatedAt !== '' ? $updatedAt : ($createdAt !== '' ? $createdAt : gmdate('c')),

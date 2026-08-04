@@ -137,12 +137,50 @@ export function portfolioGroupsStorageKey(userId) {
   return scope ? `${PORTFOLIO_GROUPS_STORAGE_KEY}:user:${scope}` : PORTFOLIO_GROUPS_STORAGE_KEY;
 }
 
+/**
+ * Accent colours a group can carry. Stored as one of these keys rather than a
+ * raw colour so both themes can resolve it against their own tokens.
+ */
+export const PORTFOLIO_GROUP_COLORS = ["success", "info", "warn", "danger", "muted"];
+export const DEFAULT_PORTFOLIO_GROUP_COLOR = "success";
+
+export function normalizePortfolioGroupColor(value) {
+  const candidate = String(value ?? "").trim().toLowerCase();
+  return PORTFOLIO_GROUP_COLORS.includes(candidate)
+    ? candidate
+    : DEFAULT_PORTFOLIO_GROUP_COLOR;
+}
+
 export function createPortfolioGroupDraft() {
   return {
     id: "",
     name: "",
     thesis: "",
+    color: DEFAULT_PORTFOLIO_GROUP_COLOR,
   };
+}
+
+/**
+ * Carry locally-known accent colours across a server echo.
+ *
+ * `color` is a newer field than the server's whitelist: an older backend echoes
+ * every other field back but silently drops this one. Adopting that echo
+ * verbatim would reset the colour to its default on every save. Fields the
+ * server does know still win — only a missing colour falls back to the local
+ * one.
+ */
+export function preservePortfolioGroupColors(remoteGroups = [], localGroups = []) {
+  const localColorById = new Map(
+    (Array.isArray(localGroups) ? localGroups : []).map((group) => [group?.id, group?.color]),
+  );
+  return (Array.isArray(remoteGroups) ? remoteGroups : []).map((group) => {
+    const echoed = String(group?.color ?? "").trim();
+    if (echoed !== "") {
+      return group;
+    }
+    const local = localColorById.get(group?.id);
+    return local ? { ...group, color: normalizePortfolioGroupColor(local) } : group;
+  });
 }
 
 export function normalizePortfolioGroups(input) {
@@ -160,6 +198,7 @@ export function normalizePortfolioGroups(input) {
         id: normalizeText(group?.id) || buildGroupId(),
         name: normalizeText(group?.name),
         thesis: normalizeText(group?.thesis),
+        color: normalizePortfolioGroupColor(group?.color),
         memberInvestmentIds: uniqueInvestmentIds(group?.memberInvestmentIds),
         createdAt,
         updatedAt,

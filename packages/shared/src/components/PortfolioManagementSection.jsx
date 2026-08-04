@@ -11,6 +11,10 @@ import { ItemThumb } from "./ui/item-thumb.jsx";
 import { SectionLabel, MetaRow } from "./ui/data-display.jsx";
 import { NativeSelect } from "./ui/native-select.jsx";
 import {
+  PORTFOLIO_GROUP_COLORS,
+  normalizePortfolioGroupColor,
+} from "../lib/portfolioGroups.js";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -54,6 +58,29 @@ const MATCH_CONFIDENCE_META = {
   high: { label: "Hoch", tone: "success", className: "border-success/40 text-success" },
   medium: { label: "Mittel", tone: "warn", className: "border-warn/40 text-warn" },
   low: { label: "Niedrig", tone: "neutral", className: "border-muted-foreground/40 text-muted-foreground" },
+};
+
+// Group accent colours, resolved against the design tokens so both themes work.
+const GROUP_COLOR_SWATCH = {
+  success: "bg-success",
+  info: "bg-info",
+  warn: "bg-warn",
+  danger: "bg-danger",
+  muted: "bg-muted-foreground",
+};
+const GROUP_COLOR_CHIP = {
+  success: "border-success/45 bg-success/12",
+  info: "border-info/45 bg-info/12",
+  warn: "border-warn/45 bg-warn/12",
+  danger: "border-danger/45 bg-danger/12",
+  muted: "border-border-strong bg-surface-2",
+};
+const GROUP_COLOR_TEXT = {
+  success: "text-success",
+  info: "text-info",
+  warn: "text-warn",
+  danger: "text-danger",
+  muted: "text-muted-foreground",
 };
 
 // The five Verwaltung tabs, in the order the design presents them.
@@ -382,7 +409,6 @@ export function PortfolioManagementSection({
   // Derived / computed values
   filteredManagementClusters,
   managementTypeOptions,
-  managementQuickHints,
   filteredMatchingRows,
   matchingSuggestedCount,
   matchedSteamInventoryItemsCount,
@@ -613,26 +639,6 @@ export function PortfolioManagementSection({
             </p>
           ) : null}
 
-          <TooltipProvider delayDuration={140}>
-            <div className="flex flex-wrap items-center gap-2">
-              {managementQuickHints.map((hint) => (
-                <Tooltip key={hint.id}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
-                    >
-                      <Info className="size-3.5" />
-                      <span>{hint.title}</span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
-                    {hint.text}
-                  </TooltipContent>
-                </Tooltip>
-              ))}
-            </div>
-          </TooltipProvider>
 
           {steamSyncError ? (
             <p className="text-xs text-danger">{steamSyncError}</p>
@@ -1202,6 +1208,29 @@ export function PortfolioManagementSection({
                         className="min-h-[92px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Farbe</label>
+                      <div className="flex flex-wrap gap-2.5">
+                        {PORTFOLIO_GROUP_COLORS.map((color) => {
+                          const active =
+                            normalizePortfolioGroupColor(portfolioGroupDraft.color) === color;
+                          return (
+                            <button
+                              key={color}
+                              type="button"
+                              aria-label={`Farbe ${color}`}
+                              aria-pressed={active}
+                              onClick={() => handlePortfolioGroupDraftChange("color", color)}
+                              className={`size-[30px] rounded-[9px] ${GROUP_COLOR_SWATCH[color]} ${
+                                active
+                                  ? "ring-2 ring-foreground ring-offset-2 ring-offset-card"
+                                  : ""
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
                       Gruppen ändern keine Positionsdaten. Ein Cluster kann in mehreren
                       Gruppen liegen.
@@ -1269,12 +1298,13 @@ export function PortfolioManagementSection({
                           const groupSummary =
                             portfolioGroupSummaryById?.get(String(group.id)) || null;
                           const isActive = portfolioGroupEditorId === group.id;
+                          const groupColor = normalizePortfolioGroupColor(group.color);
                           return (
                             <div
                               key={group.id}
                               className={`flex items-center gap-2.5 rounded-xl border p-2 transition-colors ${
                                 isActive
-                                  ? "border-success/45 bg-success/12"
+                                  ? GROUP_COLOR_CHIP[groupColor]
                                   : "border-border hover:border-border-strong"
                               }`}
                             >
@@ -1295,7 +1325,7 @@ export function PortfolioManagementSection({
                                   </span>
                                   <span
                                     className={`block truncate text-[11px] tabular-nums ${
-                                      isActive ? "text-success" : "text-muted-foreground"
+                                      isActive ? GROUP_COLOR_TEXT[groupColor] : "text-muted-foreground"
                                     }`}
                                   >
                                     {groupSummary?.clusterCount || 0} Cluster ·{" "}
@@ -1349,7 +1379,15 @@ export function PortfolioManagementSection({
                       {portfolioGroupEditor ? (
                         <>
                           Zuweisen zu{" "}
-                          <b className="text-success">{portfolioGroupEditor.name}</b>
+                          <b
+                            className={
+                              GROUP_COLOR_TEXT[
+                                normalizePortfolioGroupColor(portfolioGroupEditor.color)
+                              ]
+                            }
+                          >
+                            {portfolioGroupEditor.name}
+                          </b>
                         </>
                       ) : (
                         "Oben eine Gruppe wählen"
