@@ -483,3 +483,74 @@ export const MANUAL_ITEM_TYPES = [
   "other", "weapon", "knife", "gloves", "sticker", "agent", "collectible",
   "container", "key", "music", "patch", "pin", "graffiti", "tool",
 ];
+
+/**
+ * Bundle a cluster's raw investment rows into the positions a user actually
+ * thinks in.
+ *
+ * A Steam sync writes one row per physical item, so 55 cases acquired in one
+ * go arrive as 55 rows. Presenting those as 55 "positions" is noise: they were
+ * one acquisition and share one buy-in. Rows are therefore bundled by
+ * acquisition day plus source, which is exactly what distinguishes two real
+ * acquisitions of the same item.
+ *
+ * This is a view-level bundling only — the underlying rows are untouched, and a
+ * bundle can be expanded to reach them individually.
+ *
+ * @param {Array} positions raw investment rows of one cluster
+ * @param {(row: any) => Date|null} resolveDate acquisition-date resolver
+ * @returns {Array} lots, newest acquisition first
+ */
+export function buildPositionLots(positions = [], resolveDate) {
+  const lots = new Map();
+
+  (Array.isArray(positions) ? positions : []).forEach((position) => {
+    const date = typeof resolveDate === "function" ? resolveDate(position) : null;
+    const dayKey = date ? date.toISOString().slice(0, 10) : "unbekannt";
+    const source = String(position?.platform || position?.source || "").toLowerCase();
+    const key = `${dayKey}|${source}`;
+
+    if (!lots.has(key)) {
+      lots.set(key, {
+        key,
+        dayKey,
+        date,
+        source,
+        positions: [],
+        quantity: 0,
+      });
+    }
+
+    const lot = lots.get(key);
+    lot.positions.push(position);
+    lot.quantity += Math.max(1, Number(position?.quantity || 1));
+  });
+
+  return Array.from(lots.values())
+    .map((lot) => {
+      const priced = lot.positions.filter(
+        (position) => Number(position?.buyPriceUsd ?? position?.buyPrice ?? 0) > 0,
+      );
+      const prices = priced.map((position) =>
+        Number(position.buyPriceUsd ?? position.buyPrice ?? 0),
+      );
+      const uniquePrices = new Set(prices.map((price) => price.toFixed(2)));
+      return {
+        ...lot,
+        // A lot only reports one price when every row in it agrees; mixed rows
+        // must not silently show one of them as if it applied to all.
+        buyPriceUsd: uniquePrices.size === 1 ? prices[0] : null,
+        mixedPrices: uniquePrices.size > 1,
+        missingCount: lot.positions.length - priced.length,
+        excluded: lot.positions.every((position) => Boolean(position?.excluded)),
+        partiallyExcluded:
+          lot.positions.some((position) => Boolean(position?.excluded)) &&
+          !lot.positions.every((position) => Boolean(position?.excluded)),
+      };
+    })
+    .sort((a, b) => {
+      const at = a.date ? a.date.getTime() : 0;
+      const bt = b.date ? b.date.getTime() : 0;
+      return bt - at;
+    });
+}
