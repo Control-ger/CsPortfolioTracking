@@ -5,4 +5,5 @@ export { usePortfolio } from './usePortfolio.jsx';
 export { useCsUpdatesFeed } from './useCsUpdatesFeed.js';
 export { useAbortableFetch } from './useAbortableFetch.js';
 export { useCountUp } from './useCountUp.js';
+export { useAutoHideOnScroll } from './useAutoHideOnScroll.js';
 export { useGlobalUiSounds } from './useGlobalUiSounds.js';

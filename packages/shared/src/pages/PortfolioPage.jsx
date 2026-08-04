@@ -55,6 +55,7 @@ import {
 } from "@shared/lib";
 import { BREAKPOINTS } from "@shared/lib";
 import { useKeyboard } from "@shared/hooks";
+import { useAutoHideOnScroll } from "@shared/hooks";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { runDesktopSyncNowIfDue } from "@shared/lib/desktopSync.js";
 import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
@@ -669,7 +670,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const manualSteamSyncInfoTimeoutRef = useRef(null);
   const startupAutoSyncHintTimeoutRef = useRef(null);
   const globalSearchInputRef = useRef(null);
+  const mobileSearchInputRef = useRef(null);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const { hidden: searchBarHidden, reveal: revealSearchBar } = useAutoHideOnScroll({
+    disabled: globalSearchOpen,
+  });
   const [globalSearchTerm, setGlobalSearchTerm] = useState("");
   const [globalSearchCommittedTerm, setGlobalSearchCommittedTerm] = useState("");
   const [globalSearchCategory, setGlobalSearchCategory] = useState("all");
@@ -782,6 +787,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     });
   }, [metricsScope, portfolioHistory, stats.totalInvested, stats.totalValue]);
 
+  const focusGlobalSearchInput = useCallback(() => {
+    const candidates = [globalSearchInputRef.current, mobileSearchInputRef.current];
+    const target =
+      candidates.find((element) => element && element.offsetParent !== null) ??
+      candidates.find(Boolean);
+    if (!target) {
+      return;
+    }
+    target.focus();
+    target.select?.();
+  }, []);
+
+  // Shared entry point for Strg+K / Strg+F: pin the search bar back into view,
+  // open the overlay and focus the input (focus() alone does not fire onFocus
+  // when the input already had focus).
+  const openGlobalSearchShortcut = useCallback(() => {
+    revealSearchBar();
+    setGlobalSearchOpen(activeTab !== "search");
+    setTimeout(() => focusGlobalSearchInput(), 40);
+  }, [activeTab, focusGlobalSearchInput, revealSearchBar]);
+
   // Keyboard shortcuts for tab navigation and search
   useKeyboard({
     onArrowLeft: () => {
@@ -800,15 +826,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         navigate(newTab === "search" ? "/search" : `/?tab=${newTab}`, { replace: true });
       }
     },
-    onSearch: () => {
-      if (activeTab === "search") {
-        setGlobalSearchOpen(false);
-        setTimeout(() => globalSearchInputRef.current?.focus(), 40);
-        return;
-      }
-      setGlobalSearchOpen(true);
-      setTimeout(() => globalSearchInputRef.current?.focus(), 40);
-    }
+    onSearch: openGlobalSearchShortcut
   }, true);
 
   useEffect(() => {
@@ -2518,6 +2536,26 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       handleGlobalSearchExecuteKeyboardEntry,
     ],
   );
+
+  // Strg+K is handled by useKeyboard; Strg+F is the second, more "find"-ish
+  // binding for the same action.
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    const handleShortcut = (event) => {
+      if (event.defaultPrevented || event.altKey || event.shiftKey) {
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey) || event.key?.toLowerCase() !== "f") {
+        return;
+      }
+      event.preventDefault();
+      openGlobalSearchShortcut();
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [openGlobalSearchShortcut]);
 
   useEffect(() => {
     if (!globalSearchOpen) {
@@ -5071,7 +5109,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             className={`w-full min-w-0 ${renderLocalDesktopSidebar ? "lg:min-h-0 lg:overflow-y-auto lg:px-6 xl:px-8" : ""}`}
           >
             {useDesktopSidebarShell ? (
-              <div className="hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl">
+              <div
+                className={`hidden lg:flex lg:sticky lg:top-0 lg:z-20 lg:mb-4 lg:items-center lg:gap-6 lg:border-b lg:border-border/60 lg:bg-background/92 lg:px-2 lg:py-4 lg:backdrop-blur-xl lg:transition-transform lg:duration-300 lg:will-change-transform ${
+                  searchBarHidden ? "lg:-translate-y-[calc(100%+1px)]" : "lg:translate-y-0"
+                }`}
+              >
                 <div className={`flex min-w-0 items-center ${activeTab === "search" ? "w-full justify-center" : "gap-3"}`}>
                   <form
                     className={`relative ${activeTab === "search" ? "w-[min(920px,72vw)]" : "w-[340px] max-w-[46vw]"}`}
@@ -5095,14 +5137,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         }
                       }}
                       onKeyDown={handleGlobalSearchInputKeyDown}
-                      placeholder="Suche nach Item, Typ oder Kategorie..."
+                      placeholder="Suche nach Item, Typ oder Kategorie... (Strg+K)"
                       className="flex h-11 w-full items-center rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground shadow-none outline-none transition-colors focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
                     />
                   </form>
                 </div>
               </div>
             ) : null}
-            <div className={`${useDesktopSidebarShell ? "mb-3 lg:hidden" : "mb-3"} px-0`}>
+            <div
+              className={`${useDesktopSidebarShell ? "mb-3 lg:hidden" : "mb-3"} sticky top-0 z-20 -mx-1 bg-background/92 px-1 py-2 backdrop-blur-xl transition-transform duration-300 will-change-transform ${
+                searchBarHidden ? "-translate-y-[calc(100%+1px)]" : "translate-y-0"
+              }`}
+            >
               <form
                 className="relative"
                 onSubmit={(event) => {
@@ -5111,6 +5157,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               >
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
+                  ref={mobileSearchInputRef}
                   value={globalSearchTerm}
                   onFocus={() => {
                     if (activeTab !== "search") {
