@@ -9,6 +9,7 @@ import { StatusPill } from "./ui/status-pill.jsx";
 import { SegmentedControl } from "./ui/segmented-control.jsx";
 import { ItemThumb } from "./ui/item-thumb.jsx";
 import { SectionLabel } from "./ui/data-display.jsx";
+import { NativeSelect } from "./ui/native-select.jsx";
 import {
   Tooltip,
   TooltipContent,
@@ -685,17 +686,16 @@ export function PortfolioManagementSection({
                   >
                     Nur ohne Preis · {priceMissingCount}
                   </button>
-                  <select
+                  <NativeSelect size="default"
                     value={priceSortBy}
                     onChange={(event) => setPriceSortBy(event.target.value)}
-                    className="h-[38px] rounded-xl border border-border bg-background px-2.5 text-xs"
                   >
                     <option value="name_asc">Name A–Z</option>
                     <option value="name_desc">Name Z–A</option>
                     <option value="price_desc">Preis ↓</option>
                     <option value="price_asc">Preis ↑</option>
                     <option value="qty_desc">Menge ↓</option>
-                  </select>
+                  </NativeSelect>
 
                   {selectedPriceClusters.size > 0 ? (
                     <div className="ml-auto flex items-center gap-2">
@@ -1352,14 +1352,13 @@ export function PortfolioManagementSection({
                         className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
                       />
                     </label>
-                    <select
+                    <NativeSelect size="default"
                       value={groupSortBy}
                       onChange={(event) => setGroupSortBy(event.target.value)}
-                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                     >
                       <option value="name_asc">Name (A-Z)</option>
                       <option value="updated_desc">Neueste</option>
-                    </select>
+                    </NativeSelect>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -1737,12 +1736,12 @@ export function PortfolioManagementSection({
                   <label className="text-xs font-medium text-muted-foreground">
                     Typ
                   </label>
-                  <select
+                  <NativeSelect size="lg"
                     value={manualItemDraft.type}
                     onChange={(event) =>
                       handleManualItemDraftChange("type", event.target.value)
                     }
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="w-full"
                   >
                     <option value="other">Anderes</option>
                     <option value="weapon">Waffe</option>
@@ -1758,7 +1757,7 @@ export function PortfolioManagementSection({
                     <option value="pin">Pin</option>
                     <option value="graffiti">Graffiti</option>
                     <option value="tool">Tool</option>
-                  </select>
+                  </NativeSelect>
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
                   <Button
@@ -1828,12 +1827,11 @@ export function PortfolioManagementSection({
                     className="h-[38px] w-full rounded-xl border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
                   />
                 </label>
-                <select
+                <NativeSelect size="default"
                   value={managementTypeFilter}
                   onChange={(event) =>
                     setManagementTypeFilter(event.target.value)
                   }
-                  className="h-[38px] rounded-xl border border-border bg-background px-2.5 text-xs"
                 >
                   <option value="all">Typ: Alle</option>
                   {managementTypeOptions.map((type) => (
@@ -1841,22 +1839,20 @@ export function PortfolioManagementSection({
                       Typ: {type}
                     </option>
                   ))}
-                </select>
-                <select
+                </NativeSelect>
+                <NativeSelect size="default"
                   value={managementBucketFilter}
                   onChange={(event) =>
                     setManagementBucketFilter(event.target.value)
                   }
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
                   <option value="all">Bucket: Alle</option>
                   <option value="investment">Bucket: Investment</option>
                   <option value="inventory">Bucket: Inventar</option>
-                </select>
-                <select
+                </NativeSelect>
+                <NativeSelect size="default"
                   value={managementSortBy}
                   onChange={(event) => setManagementSortBy(event.target.value)}
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
                   <option value="name_asc">Sortierung: Name A-Z</option>
                   <option value="name_desc">Sortierung: Name Z-A</option>
@@ -1869,7 +1865,7 @@ export function PortfolioManagementSection({
                   <option value="updated_desc">
                     Sortierung: Zuletzt aktualisiert
                   </option>
-                </select>
+                </NativeSelect>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <SegmentedControl
@@ -2035,7 +2031,7 @@ export function PortfolioManagementSection({
                                     ? "Ent-excluden"
                                     : "Excluden"}
                                 </Button>
-                                <select
+                                <NativeSelect size="sm"
                                   value={position.bucket || "investment"}
                                   onChange={(event) =>
                                     void handleManagementBucketToggle(
@@ -2043,11 +2039,11 @@ export function PortfolioManagementSection({
                                       event.target.value,
                                     )
                                   }
-                                  className="h-[30px] rounded-lg border border-border bg-card px-2 text-[11px]"
+                                  className="bg-card"
                                 >
                                   <option value="investment">Investment</option>
                                   <option value="inventory">Inventar</option>
-                                </select>
+                                </NativeSelect>
                               </div>
                             </div>
                             );
@@ -2068,7 +2064,7 @@ export function PortfolioManagementSection({
                               >
                                 Alle excluden
                               </Button>
-                              <select
+                              <NativeSelect size="sm"
                                 value=""
                                 onChange={(event) =>
                                   void handleManagementClusterBucketToggle(
@@ -2076,14 +2072,13 @@ export function PortfolioManagementSection({
                                     event.target.value,
                                   )
                                 }
-                                className="h-7 rounded border border-input bg-background px-1 text-[11px]"
                               >
                                 <option value="" disabled>
                                   Bucket fuer alle...
                                 </option>
                                 <option value="investment">Investment</option>
                                 <option value="inventory">Inventar</option>
-                              </select>
+                              </NativeSelect>
                             </div>
                           ) : null}
                         </div>
@@ -2160,22 +2155,20 @@ export function PortfolioManagementSection({
                       className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
                     />
                   </label>
-                  <select
+                  <NativeSelect size="default"
                     value={matchingConfidenceFilter}
                     onChange={(event) =>
                       setMatchingConfidenceFilter(event.target.value)
                     }
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                   >
                     <option value="all">Konfidenz: Alle</option>
                     <option value="high">Konfidenz: Hoch</option>
                     <option value="medium">Konfidenz: Mittel</option>
                     <option value="low">Konfidenz: Niedrig</option>
-                  </select>
-                  <select
+                  </NativeSelect>
+                  <NativeSelect size="default"
                     value={matchingSortBy}
                     onChange={(event) => setMatchingSortBy(event.target.value)}
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                   >
                     <option value="score_desc">
                       Sortierung: Score absteigend
@@ -2186,7 +2179,7 @@ export function PortfolioManagementSection({
                     <option value="newest">
                       Sortierung: Neueste zuerst
                     </option>
-                  </select>
+                  </NativeSelect>
                   <label className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
                     <input
                       type="checkbox"

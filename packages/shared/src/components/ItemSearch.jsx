@@ -480,7 +480,7 @@ export const ItemSearch = ({
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-xl border-border bg-card px-3 text-xs">
+            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -500,7 +500,7 @@ export const ItemSearch = ({
             }}
             disabled={!wearEnabled}
           >
-            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-xl border-border bg-card px-3 text-xs">
+            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
