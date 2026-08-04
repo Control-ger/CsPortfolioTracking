@@ -1644,7 +1644,12 @@ export function PortfolioManagementSection({
                       Kein Cluster passt zur Suche.
                     </p>
                   ) : (
-                    <div className="flex max-h-[70vh] flex-col gap-[9px] overflow-y-auto pr-1">
+                    <div className="flex max-h-[70vh] flex-col gap-1 overflow-y-auto pr-1">
+                      {/* gap-1 (4px) rather than the design's 9px: our rows are a
+                          few px taller than the design's, so the design gap would
+                          leave this list visibly looser than Exclude. 4px puts the
+                          row pitch at Exclude's 65px, which is what makes switching
+                          tabs feel continuous. */}
                       {filteredGroupManagementClusters.map((cluster) => {
                         const clusterAssignment = managementGroupsByClusterKey.get(cluster.key) || {
                           assignmentState: "ungrouped",
