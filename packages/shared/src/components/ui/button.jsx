@@ -20,6 +20,15 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground shadow-none hover:bg-secondary/88 dark:shadow-[0_10px_28px_rgba(0,0,0,0.2)]",
         ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        // Soft tonal actions from the design system: a 12% tint of the semantic
+        // color with a 35% border, so affirmative/cautionary actions read as
+        // secondary next to the solid `default` button.
+        softSuccess:
+          "border border-success/35 bg-success/12 text-success hover:bg-success/20",
+        softWarn:
+          "border border-warn/35 bg-warn/12 text-warn hover:bg-warn/20",
+        softDanger:
+          "border border-danger/35 bg-danger/12 text-danger hover:bg-danger/20",
       },
       size: {
         default: "h-10 px-4 py-2",
