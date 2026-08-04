@@ -603,8 +603,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     bucket: "investment",
   });
   const [manualNameSuggestions, setManualNameSuggestions] = useState([]);
-  const [_manualNameSuggestionsLoading, setManualNameSuggestionsLoading] = useState(false);
-  const [_manualNameSuggestionsError, setManualNameSuggestionsError] = useState("");
+  const [manualNameSuggestionsLoading, setManualNameSuggestionsLoading] = useState(false);
+  const [manualNameSuggestionsError, setManualNameSuggestionsError] = useState("");
   const [manualSelectedSuggestion, setManualSelectedSuggestion] = useState(null);
   const [manualItemSaving, setManualItemSaving] = useState(false);
   const [syncNotification, setSyncNotification] = useState({
@@ -5313,6 +5313,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             manualItemSaving={manualItemSaving}
             setManualItemSaving={setManualItemSaving}
             handleManualItemDraftChange={handleManualItemDraftChange}
+            manualNameSuggestions={manualNameSuggestions}
+            manualNameSuggestionsLoading={manualNameSuggestionsLoading}
+            manualNameSuggestionsError={manualNameSuggestionsError}
             handleManualSuggestionPick={handleManualSuggestionPick}
             handleCreateManualInvestment={handleCreateManualInvestment}
             portfolioGroups={portfolioGroups}
