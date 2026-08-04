@@ -3489,6 +3489,28 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     await window.electronAPI.localStore.updateSteamCsfloatMatchStatus(matchId, status);
     setCompositionRefreshToken((current) => current + 1);
   };
+  // Manual Steam<->CSFloat link. The store upserts on
+  // UNIQUE(user, steam_asset, csfloat_investment), so re-linking an existing
+  // suggestion promotes it instead of creating a second row.
+  const handleManualMatchCreate = async ({ steamItem, csfloatItem }) => {
+    if (!window.electronAPI?.localStore?.createManualSteamCsfloatMatch) {
+      return;
+    }
+    if (!steamItem || !csfloatItem) {
+      return;
+    }
+    const user = await getCurrentUser();
+    await window.electronAPI.localStore.createManualSteamCsfloatMatch({
+      userId: resolveDesktopRuntimeUserId(user, 1),
+      steamAssetId: String(steamItem.steamAssetId || steamItem.id || ""),
+      steamItemName: String(steamItem.marketHashName || steamItem.name || ""),
+      csfloatInvestmentId: String(csfloatItem.id || ""),
+      csfloatTradeId: csfloatItem.externalTradeId || null,
+    });
+    await refreshPortfolio();
+    setCompositionRefreshToken((current) => current + 1);
+  };
+
   const handlePriceDraftChange = (itemId, value) => {
     setPriceDrafts((current) => ({
       ...current,
@@ -5290,6 +5312,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             showMatchedMatchingRows={showMatchedMatchingRows}
             setShowMatchedMatchingRows={setShowMatchedMatchingRows}
             handleMatchStatusUpdate={handleMatchStatusUpdate}
+            handleManualMatchCreate={handleManualMatchCreate}
             managementInvestmentById={managementInvestmentById}
             matchingDisplayRows={matchingDisplayRows}
             handleEditPortfolioGroup={handleEditPortfolioGroup}

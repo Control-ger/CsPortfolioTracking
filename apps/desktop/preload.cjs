@@ -111,6 +111,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-list-steam-csfloat-matches", userId, status, limit),
     updateSteamCsfloatMatchStatus: (matchId, status) =>
       ipcRenderer.invoke("local-store-update-steam-csfloat-match-status", matchId, status),
+    createManualSteamCsfloatMatch: (payload) =>
+      ipcRenderer.invoke("local-store-create-manual-steam-csfloat-match", payload),
     createNotification: (payload) =>
       ipcRenderer.invoke("local-store-create-notification", payload),
     listNotifications: (userId, options) =>

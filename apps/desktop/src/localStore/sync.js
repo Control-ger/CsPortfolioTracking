@@ -835,6 +835,70 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
         .map(mapSteamCsfloatMatch);
     },
 
+    // Manual counterpart to the scorer's insert above: the user picked both sides
+    // themselves, so the row lands as manual_confirmed with a `manual_link` reason
+    // and no score. It reuses the same UNIQUE(user, steam, csfloat) upsert, which
+    // means re-linking an already-suggested pair promotes that row rather than
+    // creating a duplicate. A rejected pair is deliberately revivable this way —
+    // manually linking is how a user overrides an earlier rejection.
+    createManualSteamCsfloatMatch({
+      userId = CANONICAL_LOCAL_USER_ID,
+      steamAssetId,
+      steamItemName = "",
+      csfloatInvestmentId,
+      csfloatTradeId = null,
+    } = {}) {
+      const normalizedUserId = normalizeLocalUserId(userId);
+      const normalizedSteamAssetId = String(steamAssetId || "").trim();
+      const normalizedCsfloatId = String(csfloatInvestmentId || "").trim();
+      if (!normalizedSteamAssetId || !normalizedCsfloatId) {
+        throw new Error("createManualSteamCsfloatMatch: both sides are required");
+      }
+
+      const now = nowIso();
+      const existing = db
+        .prepare(
+          `SELECT id FROM steam_csfloat_matches
+           WHERE user_id = ? AND steam_asset_id = ? AND csfloat_investment_id = ?
+           LIMIT 1`,
+        )
+        .get(normalizedUserId, normalizedSteamAssetId, normalizedCsfloatId);
+
+      const id = existing?.id || randomUUID();
+      db.prepare(
+        `INSERT INTO steam_csfloat_matches (
+          id, user_id, steam_asset_id, steam_item_name, csfloat_investment_id, csfloat_trade_id,
+          match_score, confidence, status, reason, score_breakdown, created_at, updated_at
+        ) VALUES (
+          @id, @userId, @steamAssetId, @steamItemName, @csfloatInvestmentId, @csfloatTradeId,
+          0, 'high', 'manual_confirmed', 'manual_link', NULL, @createdAt, @updatedAt
+        )
+        ON CONFLICT(user_id, steam_asset_id, csfloat_investment_id) DO UPDATE SET
+          steam_item_name = excluded.steam_item_name,
+          csfloat_trade_id = excluded.csfloat_trade_id,
+          confidence = excluded.confidence,
+          status = 'manual_confirmed',
+          reason = excluded.reason,
+          updated_at = excluded.updated_at`,
+      ).run({
+        id,
+        userId: normalizedUserId,
+        steamAssetId: normalizedSteamAssetId,
+        steamItemName: String(steamItemName || ""),
+        csfloatInvestmentId: normalizedCsfloatId,
+        csfloatTradeId: csfloatTradeId ? String(csfloatTradeId) : null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      applySteamCsfloatMatchLink(
+        normalizedUserId,
+        normalizedSteamAssetId,
+        normalizedCsfloatId,
+      );
+      return { id };
+    },
+
     updateSteamCsfloatMatchStatus(matchId, status = "manual_confirmed") {
       const updatedAt = nowIso();
       const normalizedStatus = String(status || "manual_confirmed");
