@@ -328,7 +328,7 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
   };
 
   return (
-    <div className="tr-desktop-rail h-[98vh] w-[92px] overflow-hidden rounded-2xl">
+    <div className="tr-desktop-rail h-full w-[92px] overflow-hidden rounded-2xl">
       <div className="flex h-full flex-col items-center py-4">
         <nav className="flex w-full flex-col items-center gap-2 px-2">
           {DESKTOP_SIDEBAR_ITEMS

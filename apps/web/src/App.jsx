@@ -562,7 +562,7 @@ export default function App() {
             isElectron ? "" : "w-full"
           }`}
         >
-          <aside className="hidden lg:flex lg:justify-center lg:pt-2">
+          <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-[calc(100dvh-2.5rem)] lg:justify-center lg:pt-2">
             <DesktopSidebarRail desktopRuntime={desktopRuntime} />
           </aside>
           <main className="w-full flex-1 min-h-0 overflow-y-auto">

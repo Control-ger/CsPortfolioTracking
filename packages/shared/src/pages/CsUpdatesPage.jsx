@@ -210,8 +210,8 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
     >
       {renderLocalDesktopSidebar ? (
         <div className="w-full lg:grid lg:min-h-0 lg:h-full lg:grid-cols-[92px_minmax(0,1fr)]">
-          <aside className="hidden lg:flex lg:justify-center lg:pt-2">
-            <div className="tr-desktop-rail h-[98vh] w-[92px] overflow-hidden rounded-2xl">
+          <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-[calc(100dvh-2.5rem)] lg:justify-center lg:pt-2">
+            <div className="tr-desktop-rail h-full w-[92px] overflow-hidden rounded-2xl">
               <div className="flex h-full flex-col items-center py-4">
                 <nav className="flex w-full flex-col items-center gap-2 px-2">
                   {DESKTOP_SIDEBAR_ITEMS
