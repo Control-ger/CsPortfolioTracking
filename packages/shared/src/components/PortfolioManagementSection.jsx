@@ -26,6 +26,7 @@ import {
   normalizeInvestmentId,
 } from "../lib/portfolioGroups.js";
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
+import { resolveInvestmentDate } from "../lib/yearWrapped.js";
 
 // Human-readable labels for the match `reason` codes produced by
 // calculateSteamCsfloatMatch (see apps/desktop/src/localStore/utils.js). These are
@@ -852,7 +853,7 @@ export function PortfolioManagementSection({
                                           <span className="mb-2 size-3 flex-none self-center rounded-bl-[3px] border-b border-l border-border-strong" />
                                           <span className="min-w-0">
                                             <span className="block truncate text-xs font-semibold">
-                                              {formatDateSafe(position.purchaseDate || position.createdAt || null)}
+                                              {formatDateSafe(resolveInvestmentDate(position))}
                                             </span>
                                             <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
                                               {resolvePositionSourceLabel(position.platform)} ·{" "}
@@ -988,7 +989,7 @@ export function PortfolioManagementSection({
                                 >
                                   <span className="min-w-0 flex-1">
                                     <span className="block truncate text-xs font-semibold">
-                                      {formatDateSafe(position.purchaseDate || position.createdAt || null)}
+                                      {formatDateSafe(resolveInvestmentDate(position))}
                                       {" · "}
                                       {Math.max(1, Number(position.quantity || 1))}×
                                     </span>
@@ -1697,7 +1698,7 @@ export function PortfolioManagementSection({
                           : "Wähle einen Treffer aus der Liste. Freie Eingaben sind nicht möglich."}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[130px_1fr_1fr]">
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">
                       Menge
@@ -1713,6 +1714,19 @@ export function PortfolioManagementSection({
                         )
                       }
                       className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Kaufdatum
+                    </label>
+                    <input
+                      type="date"
+                      value={manualItemDraft.purchaseDate || ""}
+                      onChange={(event) =>
+                        handleManualItemDraftChange("purchaseDate", event.target.value)
+                      }
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm tabular-nums"
                     />
                   </div>
                   <div className="space-y-2">
@@ -1852,6 +1866,14 @@ export function PortfolioManagementSection({
                       </div>
                       <div className="flex flex-col gap-2 text-[13px]">
                         <MetaRow label="Menge" value={`${qty}×`} />
+                        <MetaRow
+                          label="Kaufdatum"
+                          value={
+                            manualItemDraft.purchaseDate
+                              ? formatDateSafe(manualItemDraft.purchaseDate)
+                              : "heute"
+                          }
+                        />
                         <MetaRow
                           label="Einstand"
                           value={hasEntry ? `${entry.toFixed(2)} ${currencySymbol}` : "—"}
@@ -2227,6 +2249,11 @@ export function PortfolioManagementSection({
                       ) : null}
                     </div>
                   </div>
+                  {syncNotification?.lastSyncedAt ? (
+                    <span className="self-center whitespace-nowrap text-[11px] text-muted-foreground">
+                      Letzter Lauf {formatDateSafe(syncNotification.lastSyncedAt)}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,1fr)_180px_190px_auto]">
                   <label className="relative block">
@@ -2248,23 +2275,17 @@ export function PortfolioManagementSection({
                     }
                   >
                     <option value="all">Konfidenz: Alle</option>
-                    <option value="high">Konfidenz: Hoch</option>
-                    <option value="medium">Konfidenz: Mittel</option>
-                    <option value="low">Konfidenz: Niedrig</option>
+                    <option value="high">Hoch</option>
+                    <option value="medium">Mittel</option>
+                    <option value="low">Niedrig</option>
                   </NativeSelect>
                   <NativeSelect size="default"
                     value={matchingSortBy}
                     onChange={(event) => setMatchingSortBy(event.target.value)}
                   >
-                    <option value="score_desc">
-                      Sortierung: Score absteigend
-                    </option>
-                    <option value="score_asc">
-                      Sortierung: Score aufsteigend
-                    </option>
-                    <option value="newest">
-                      Sortierung: Neueste zuerst
-                    </option>
+                    <option value="score_desc">Score ↓</option>
+                    <option value="score_asc">Score ↑</option>
+                    <option value="newest">Neueste zuerst</option>
                   </NativeSelect>
                   <button
                     type="button"

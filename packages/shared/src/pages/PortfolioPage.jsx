@@ -94,6 +94,23 @@ import {
 } from "@shared/components";
 import { resolveWrappedSeason } from "../lib/yearWrapped.js";
 
+/**
+ * Blank manual-investment draft. `purchaseDate` is the form's own field and is
+ * written out as `purchasedAt`, the key resolveInvestmentDate looks at first.
+ */
+function createManualItemDraft() {
+  return {
+    name: "",
+    buyPriceInput: "",
+    quantity: "1",
+    platform: "manual",
+    fundingMode: "wallet_funded",
+    type: "skin",
+    bucket: "investment",
+    purchaseDate: new Date().toISOString().slice(0, 10),
+  };
+}
+
 const InventoryTable = lazy(() =>
   import("../components/InventoryTable.jsx").then((module) => ({
     default: module.InventoryTable,
@@ -594,15 +611,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [showMatchedMatchingRows, setShowMatchedMatchingRows] = useState(false);
   const [priceDrafts, setPriceDrafts] = useState({});
   const [savingPriceItemId, setSavingPriceItemId] = useState(null);
-  const [manualItemDraft, setManualItemDraft] = useState({
-    name: "",
-    buyPriceInput: "",
-    quantity: "1",
-    platform: "manual",
-    fundingMode: "wallet_funded",
-    type: "skin",
-    bucket: "investment",
-  });
+  const [manualItemDraft, setManualItemDraft] = useState(() => createManualItemDraft());
   const [manualNameSuggestions, setManualNameSuggestions] = useState([]);
   const [manualNameSuggestionsLoading, setManualNameSuggestionsLoading] = useState(false);
   const [manualNameSuggestionsError, setManualNameSuggestionsError] = useState("");
@@ -3672,6 +3681,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         imageUrl: suggestionImageUrl,
         bucket,
         createdManually: true,
+        // Acquisition date the user entered; falls back to now when left blank.
+        purchasedAt: manualItemDraft.purchaseDate
+          ? new Date(`${manualItemDraft.purchaseDate}T12:00:00Z`).toISOString()
+          : new Date().toISOString(),
         createdAt: new Date().toISOString(),
       });
       try {
@@ -3681,15 +3694,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }
       await refreshPortfolio();
       setCompositionRefreshToken((current) => current + 1);
-      setManualItemDraft({
-        name: "",
-        buyPriceInput: "",
-        quantity: "1",
-        platform: "manual",
-        fundingMode: "wallet_funded",
-        type: "skin",
-        bucket: "investment",
-      });
+      setManualItemDraft(createManualItemDraft());
       setManualSelectedSuggestion(null);
       setManualNameSuggestions([]);
       setManualNameSuggestionsError("");
