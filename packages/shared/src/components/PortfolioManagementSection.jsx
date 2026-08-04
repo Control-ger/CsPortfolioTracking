@@ -10,6 +10,7 @@ import { SegmentedControl } from "./ui/segmented-control.jsx";
 import { ItemThumb } from "./ui/item-thumb.jsx";
 import { SectionLabel, MetaRow } from "./ui/data-display.jsx";
 import { NativeSelect } from "./ui/native-select.jsx";
+import { ManualMatchModal } from "./ManualMatchModal.jsx";
 import {
   PORTFOLIO_GROUP_COLORS,
   normalizePortfolioGroupColor,
@@ -22,7 +23,6 @@ import {
 } from "./ui/tooltip.jsx";
 import {
   formatDateSafe,
-  getClusterUpdatedAt,
   buildPositionLots,
   MANUAL_ITEM_TYPES,
 } from "../lib/portfolioHelpers.js";
@@ -55,11 +55,36 @@ const MATCH_REASON_LABELS = {
   time_loose: "Zeit grob",
 };
 
+// `accentText`/`accentBar` drive the score column: the confidence reads as a colour
+// before it reads as a word, so a card can be judged without parsing the number.
 const MATCH_CONFIDENCE_META = {
-  high: { label: "Hoch", tone: "success", className: "border-success/40 text-success" },
-  medium: { label: "Mittel", tone: "warn", className: "border-warn/40 text-warn" },
-  low: { label: "Niedrig", tone: "neutral", className: "border-muted-foreground/40 text-muted-foreground" },
+  high: {
+    label: "Hoch",
+    tone: "success",
+    className: "border-success/40 text-success",
+    accentText: "text-success",
+    accentBar: "bg-success",
+  },
+  medium: {
+    label: "Mittel",
+    tone: "warn",
+    className: "border-warn/40 text-warn",
+    accentText: "text-warn",
+    accentBar: "bg-warn",
+  },
+  low: {
+    label: "Niedrig",
+    tone: "neutral",
+    className: "border-muted-foreground/40 text-muted-foreground",
+    accentText: "text-muted-foreground",
+    accentBar: "bg-muted-foreground",
+  },
 };
+
+// Highest score the scorer can realistically award (every reason code firing at once).
+// The meter is a share of that ceiling, not of 100, so a 102 does not render as
+// "over full".
+const MATCH_SCORE_METER_MAX = 110;
 
 // Group accent colours, resolved against the design tokens so both themes work.
 const GROUP_COLOR_SWATCH = {
@@ -339,6 +364,7 @@ export function PortfolioManagementSection({
   showMatchedMatchingRows,
   setShowMatchedMatchingRows,
   handleMatchStatusUpdate,
+  handleManualMatchCreate,
   managementInvestmentById,
 
   // Price state
@@ -419,6 +445,7 @@ export function PortfolioManagementSection({
   const [expandedPriceClusters, setExpandedPriceClusters] = useState({});
   // Catalog dropdown visibility for the manual-investment item picker.
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [manualMatchOpen, setManualMatchOpen] = useState(false);
   // Which bundled positions are split open into their individual rows.
   const [expandedPriceLots, setExpandedPriceLots] = useState({});
   // Group editor modal. Editing an existing group opens it implicitly.
@@ -541,6 +568,19 @@ export function PortfolioManagementSection({
     : { missing: 0, label: "—", note: "", detail: "—" };
 
   const resolvedMatchIds = buildResolvedMatchIdSet(matchingRows);
+  // Manual-link pools. A position already part of a resolved match is excluded so
+  // the modal cannot produce a second link for something already spoken for.
+  const manualMatchPool = Array.from(managementInvestmentById?.values?.() || []);
+  const manualSteamCandidates = manualMatchPool.filter((item) => {
+    const platform = String(item?.platform || item?.source || "").toLowerCase();
+    return (
+      platform === "steam_inventory" && !isPositionMatchLinked(item, resolvedMatchIds)
+    );
+  });
+  const manualCsfloatCandidates = manualMatchPool.filter((item) => {
+    const platform = String(item?.platform || item?.source || "").toLowerCase();
+    return platform === "csfloat" && !isPositionMatchLinked(item, resolvedMatchIds);
+  });
   // Confirmed = suggestions that already resolved into a linked position.
   const confirmedMatchCount = resolvedMatchIds.size;
   // Share of all known matches the scorer resolved without manual triage.
@@ -688,17 +728,17 @@ export function PortfolioManagementSection({
                       value={priceSearchTerm}
                       onChange={(event) => setPriceSearchTerm(event.target.value)}
                       placeholder="Nach Item suchen…"
-                      className="h-[38px] w-full rounded-xl border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
+                      className="h-[38px] w-full rounded-[10px] border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
                     />
                   </label>
                   <button
                     type="button"
                     aria-pressed={priceMissingOnly}
                     onClick={() => setPriceMissingOnly(!priceMissingOnly)}
-                    className={`inline-flex h-[38px] items-center rounded-xl border px-3 text-xs font-bold transition-colors ${
+                    className={`inline-flex h-[38px] items-center whitespace-nowrap rounded-[10px] border px-3 text-[12px] font-bold leading-none transition-colors ${
                       priceMissingOnly
-                        ? "border-warn/60 bg-warn/20 text-warn"
-                        : "border-warn/30 bg-warn/10 text-warn hover:border-warn/60"
+                        ? "border-warn/30 bg-warn/10 text-warn"
+                        : "border-border bg-transparent text-muted-foreground hover:border-border-strong hover:text-foreground"
                     }`}
                   >
                     Nur ohne Preis · {priceMissingCount}
@@ -1158,7 +1198,7 @@ export function PortfolioManagementSection({
                               return (
                                 <div
                                   key={lot.key}
-                                  className={`flex items-center gap-2.5 rounded-xl border p-2.5 ${
+                                  className={`flex items-center gap-2.5 rounded-[11px] border px-2.5 py-2.5 ${
                                     missing ? "border-warn/40 bg-warn/8" : "border-border bg-background"
                                   }`}
                                 >
@@ -1210,7 +1250,7 @@ export function PortfolioManagementSection({
                                         : currencySymbol
                                     }
                                     disabled={savingPriceItemId === lotDraftKey || ratesLoading}
-                                    className={`h-8 w-[88px] rounded-lg border bg-card px-2 text-right text-[13px] tabular-nums outline-none placeholder:text-muted-foreground/60 focus:border-border-strong ${
+                                    className={`h-8 w-[88px] rounded-[8px] border bg-card px-2.5 text-right text-[13px] tabular-nums outline-none placeholder:text-muted-foreground/60 focus:border-border-strong ${
                                       missing ? "border-warn/50" : "border-border-strong"
                                     }`}
                                   />
@@ -1241,7 +1281,7 @@ export function PortfolioManagementSection({
                                     ? convertFromUsd(Number(inspectedCluster.suggestion.value)).toFixed(2)
                                     : currencySymbol
                                 }
-                                className="h-9 flex-1 rounded-xl border border-border bg-background px-2.5 text-[13px] tabular-nums outline-none"
+                                className="h-9 flex-1 rounded-[8px] border border-border bg-background px-2.5 text-[13px] tabular-nums outline-none"
                               />
                               <Button
                                 size="sm"
@@ -1365,7 +1405,7 @@ export function PortfolioManagementSection({
                           )
                         }
                         placeholder="z. B. Souvenir Mix Antwerp"
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        className="h-[42px] w-full rounded-[11px] border border-input bg-background px-3.5 text-sm"
                       />
                     </div>
                     <div className="space-y-2">
@@ -1478,7 +1518,7 @@ export function PortfolioManagementSection({
                           return (
                             <div
                               key={group.id}
-                              className={`flex items-center gap-2.5 rounded-xl border p-2 transition-colors ${
+                              className={`flex items-center gap-2.5 rounded-[11px] border px-3 py-2 transition-colors ${
                                 isActive
                                   ? GROUP_COLOR_CHIP[groupColor]
                                   : "border-border hover:border-border-strong"
@@ -1509,35 +1549,6 @@ export function PortfolioManagementSection({
                                   </span>
                                 </span>
                               </button>
-                              <span className="flex shrink-0 items-center">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  title="Gruppe bearbeiten"
-                                  onClick={() => {
-                                    handleEditPortfolioGroup(group);
-                                    setGroupFormOpen(true);
-                                  }}
-                                >
-                                  Bearbeiten
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  title="Gruppe im Inventar öffnen"
-                                  onClick={() => handleOpenPortfolioGroupInInventory(group.id)}
-                                >
-                                  Inventar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  title="Cluster der Gruppe anzeigen"
-                                  onClick={() => handleOpenPortfolioGroupInManagement(group.id)}
-                                >
-                                  Cluster
-                                </Button>
-                              </span>
                             </div>
                           );
                         })}
@@ -1569,6 +1580,37 @@ export function PortfolioManagementSection({
                         "Oben eine Gruppe wählen"
                       )}
                     </span>
+                    {portfolioGroupEditor ? (
+                      <span className="flex shrink-0 items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Gruppe bearbeiten"
+                          onClick={() => {
+                            handleEditPortfolioGroup(portfolioGroupEditor);
+                            setGroupFormOpen(true);
+                          }}
+                        >
+                          Bearbeiten
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Gruppe im Inventar öffnen"
+                          onClick={() => handleOpenPortfolioGroupInInventory(portfolioGroupEditor.id)}
+                        >
+                          Inventar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Cluster der Gruppe anzeigen"
+                          onClick={() => handleOpenPortfolioGroupInManagement(portfolioGroupEditor.id)}
+                        >
+                          Cluster
+                        </Button>
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -1602,7 +1644,7 @@ export function PortfolioManagementSection({
                       Kein Cluster passt zur Suche.
                     </p>
                   ) : (
-                    <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+                    <div className="flex max-h-[70vh] flex-col gap-[9px] overflow-y-auto pr-1">
                       {filteredGroupManagementClusters.map((cluster) => {
                         const clusterAssignment = managementGroupsByClusterKey.get(cluster.key) || {
                           assignmentState: "ungrouped",
@@ -1630,7 +1672,7 @@ export function PortfolioManagementSection({
                         return (
                           <div
                             key={cluster.id}
-                            className={`rounded-2xl border p-3 transition-colors ${
+                            className={`rounded-[13px] border px-3 py-2.5 transition-colors ${
                               clusterAssignment.assignmentState === "grouped"
                                 ? "border-success/30 bg-success/7"
                                 : clusterAssignment.assignmentState === "partial"
@@ -1640,84 +1682,87 @@ export function PortfolioManagementSection({
                           >
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                               <div className="flex min-w-0 items-center gap-3">
-                                <ItemThumb src={cluster.imageUrl} alt={cluster.name} size="xl" />
+                                {/* 36px, matching the design and keeping the row
+                                    pitch in line with Exclude/Preise — "xl" (56px)
+                                    made this list visibly taller than every other
+                                    tab's. */}
+                                <ItemThumb src={cluster.imageUrl} alt={cluster.name} size="md" />
                                 <div className="min-w-0">
                                   <p className="truncate text-[13px] font-bold">{cluster.name}</p>
-                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                    <span>{cluster.totalCount} Stk.</span>
-                                    <span>|</span>
-                                    <span>
-                                      {cluster.positions.length}{" "}
-                                      {cluster.positions.length === 1 ? "Position" : "Positionen"}
-                                    </span>
-                                    {getClusterUpdatedAt(cluster) > 0 ? (
-                                      <>
-                                        <span>|</span>
-                                        <span>{new Date(getClusterUpdatedAt(cluster)).toLocaleDateString("de-DE")}</span>
-                                      </>
-                                    ) : null}
+                                  {/* Design states this as one sentence rather than
+                                      five pipe-separated fragments plus a pill. */}
+                                  <p className="mt-[3px] truncate text-[11px] text-muted-foreground">
+                                    {cluster.totalCount} Stk. · {cluster.positions.length}{" "}
+                                    {cluster.positions.length === 1 ? "Position" : "Positionen"} ·{" "}
                                     {clusterAssignment.assignmentState === "grouped" ? (
-                                      <>
-                                        <span>|</span>
-                                        <span>Gruppe: {clusterAssignment.assignedGroupName}</span>
-                                      </>
-                                    ) : null}
-                                    {clusterAssignment.assignmentState === "partial" ? (
-                                      <>
-                                        <span>|</span>
-                                        <span>
-                                          Teilweise gruppiert ({clusterAssignment.assignedCount}/{clusterAssignment.totalCount})
-                                        </span>
-                                      </>
-                                    ) : null}
-                                  </div>
+                                      <span className="font-semibold text-success">
+                                        vollständig in dieser Gruppe
+                                      </span>
+                                    ) : clusterAssignment.assignmentState === "partial" ? (
+                                      <span className="font-semibold text-warn">
+                                        teilweise gruppiert ({clusterAssignment.assignedCount}/
+                                        {clusterAssignment.totalCount})
+                                      </span>
+                                    ) : (
+                                      "nicht gruppiert"
+                                    )}
+                                  </p>
                                 </div>
                               </div>
 
                               <div className="flex flex-wrap items-center gap-2">
+                                {/* Actions follow the state, as in the design: there is
+                                    nothing to remove from an ungrouped cluster and
+                                    nothing to add to a fully grouped one. The state
+                                    itself now reads from the meta line, so the pill
+                                    that repeated it is gone. */}
+                                {clusterAssignment.assignmentState === "partial" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 rounded-[9px] px-3 text-[12px] font-semibold"
+                                    onClick={() => toggleExpandedGroupManagementCluster(cluster.key)}
+                                  >
+                                    {isExpanded ? "Ausblenden" : "Positionen"}
+                                  </Button>
+                                ) : null}
                                 {clusterAssignment.assignmentState === "grouped" ? (
-                                  <StatusPill tone="success">vollständig gruppiert</StatusPill>
-                                ) : clusterAssignment.assignmentState === "partial" ? (
-                                  <StatusPill tone="warn">
-                                    teilweise gruppiert ({clusterAssignment.assignedCount}/
-                                    {clusterAssignment.totalCount})
-                                  </StatusPill>
+                                  <Button
+                                    size="sm"
+                                    className="h-8 rounded-[9px] px-3 text-[12px] font-semibold"
+                                    variant="outline"
+                                    disabled={!canRemoveCluster}
+                                    onClick={() =>
+                                      void handleRemoveInvestmentIdsFromGroup(
+                                        portfolioGroupEditor?.id,
+                                        clusterInvestmentIds,
+                                      )
+                                    }
+                                  >
+                                    Entfernen
+                                  </Button>
                                 ) : (
-                                  <StatusPill tone="neutral">nicht gruppiert</StatusPill>
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      clusterAssignment.assignmentState === "partial"
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    className="h-8 rounded-[9px] px-3 text-[12px] font-semibold"
+                                    disabled={!canAssignCluster}
+                                    onClick={() =>
+                                      void handleAssignInvestmentIdsToGroup(
+                                        portfolioGroupEditor?.id,
+                                        clusterInvestmentIds,
+                                      )
+                                    }
+                                  >
+                                    {clusterAssignment.assignmentState === "partial"
+                                      ? "Rest hinzufügen"
+                                      : "Cluster hinzufügen"}
+                                  </Button>
                                 )}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => toggleExpandedGroupManagementCluster(cluster.key)}
-                                >
-                                  {isExpanded ? "Positionen ausblenden" : "Positionen anzeigen"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={!canAssignCluster}
-                                  onClick={() =>
-                                    void handleAssignInvestmentIdsToGroup(
-                                      portfolioGroupEditor?.id,
-                                      clusterInvestmentIds,
-                                    )
-                                  }
-                                >
-                                  Cluster hinzufügen
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={!canRemoveCluster}
-                                  onClick={() =>
-                                    void handleRemoveInvestmentIdsFromGroup(
-                                      portfolioGroupEditor?.id,
-                                      clusterInvestmentIds,
-                                    )
-                                  }
-                                >
-                                  Cluster entfernen
-                                </Button>
                               </div>
                             </div>
 
@@ -1829,20 +1874,20 @@ export function PortfolioManagementSection({
                       }}
                       onFocus={() => setCatalogOpen(true)}
                       placeholder="Item-Namen eingeben, z. B. redline"
-                      className={`h-[42px] w-full rounded-xl border bg-background pl-[38px] pr-24 text-sm outline-none transition-colors ${
+                      className={`h-[42px] w-full rounded-[5px] border bg-background pl-[38px] pr-24 text-sm outline-none transition-colors ${
                         manualSelectedSuggestion ? "border-success/45" : "border-border-strong"
                       }`}
                     />
                     <button
                       type="button"
                       onClick={() => setCatalogOpen((open) => !open)}
-                      className="absolute right-2 top-[7px] h-7 rounded-lg border border-border bg-card px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                      className="absolute right-2 top-[7px] h-7 rounded-[8px] border border-border bg-card px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
                     >
                       {catalogOpen ? "Schließen" : "Katalog"}
                     </button>
 
                     {catalogOpen && manualNameSuggestions.length > 0 ? (
-                      <div className="absolute inset-x-0 top-12 z-20 flex max-h-[320px] flex-col overflow-hidden rounded-xl border border-border-strong bg-card shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
+                      <div className="absolute inset-x-0 top-12 z-20 flex max-h-[320px] flex-col overflow-hidden rounded-[5px] border border-border-strong bg-card shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
                         <div className="flex shrink-0 items-center justify-between border-b border-border-soft px-3 py-2">
                           <SectionLabel className="tracking-[0.08em]">
                             {manualNameSuggestions.length} Treffer im Katalog
@@ -1927,7 +1972,7 @@ export function PortfolioManagementSection({
                           event.target.value,
                         )
                       }
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      className="h-[42px] w-full rounded-[11px] border border-input bg-background px-3.5 text-sm"
                     />
                   </div>
                   <div className="space-y-2">
@@ -1940,7 +1985,7 @@ export function PortfolioManagementSection({
                       onChange={(event) =>
                         handleManualItemDraftChange("purchaseDate", event.target.value)
                       }
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm tabular-nums"
+                      className="h-[42px] w-full rounded-[11px] border border-input bg-background px-3.5 text-sm tabular-nums"
                     />
                   </div>
                   <div className="space-y-2">
@@ -1958,7 +2003,7 @@ export function PortfolioManagementSection({
                           event.target.value,
                         )
                       }
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      className="h-[42px] w-full rounded-[11px] border border-input bg-background px-3.5 text-sm"
                     />
                   </div>
                 </div>
@@ -2128,15 +2173,18 @@ export function PortfolioManagementSection({
           ) : null}
 
           {managementSection === "exclude" ? (
-            <>
+            <Card className="overflow-hidden">
+              <CardHeader className="space-y-3">
               <div>
                 <h4 className="text-base font-bold">Positionen ein- und ausschließen</h4>
                 <p className="mt-1.5 text-[13px] text-muted-foreground">
                   Excluded Positionen zählen nicht in Rendite und Portfolio-Wert.
                 </p>
               </div>
-              <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-                <label className="relative block">
+              {/* Design keeps search, scope segments and the two selects on ONE
+                  wrapping row inside the header block, not stacked over three. */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <label className="relative block min-w-[240px] flex-[1_1_300px]">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="text"
@@ -2145,9 +2193,19 @@ export function PortfolioManagementSection({
                       setManagementSearchTerm(event.target.value)
                     }
                     placeholder="Item oder Trade-ID…"
-                    className="h-[38px] w-full rounded-xl border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
+                    className="h-[38px] w-full rounded-[10px] border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
                   />
                 </label>
+                <SegmentedControl
+                  size="sm"
+                  value={managementFilter}
+                  onChange={setManagementFilter}
+                  items={[
+                    { value: "all", label: "Alle" },
+                    { value: "active", label: "Nur aktiv" },
+                    { value: "excluded", label: "Nur excluded" },
+                  ]}
+                />
                 <NativeSelect size="default"
                   value={managementTypeFilter}
                   onChange={(event) =>
@@ -2188,20 +2246,11 @@ export function PortfolioManagementSection({
                   </option>
                 </NativeSelect>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <SegmentedControl
-                  size="sm"
-                  value={managementFilter}
-                  onChange={setManagementFilter}
-                  items={[
-                    { value: "all", label: "Alle" },
-                    { value: "active", label: "Nur aktiv" },
-                    { value: "excluded", label: "Nur excluded" },
-                  ]}
-                />
-                <SectionLabel>{filteredManagementClusters.length} Cluster</SectionLabel>
-              </div>
-              <div className="space-y-3">
+              </CardHeader>
+              {/* Flat separated rows, per the design — not a stack of detached
+                  rounded cards. The expanded cluster is tinted instead. */}
+              <CardContent className="p-0">
+              <div className="border-t border-border">
                 {filteredManagementClusters.map((cluster) => {
                   const isExpanded = Boolean(expandedClusters[cluster.id]);
                   const visiblePositions = cluster.positions.filter(
@@ -2225,21 +2274,11 @@ export function PortfolioManagementSection({
                   return (
                     <div
                       key={cluster.id}
-                      className={`overflow-hidden rounded-2xl border transition-colors ${
-                        isExpanded ? "border-border-strong bg-surface-1" : "border-border"
+                      className={`border-b border-border-soft last:border-b-0 transition-colors ${
+                        isExpanded ? "bg-surface-1" : ""
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          // Accordion: only one cluster open at a time — opening a new
-                          // one collapses the previously expanded cluster.
-                          setExpandedClusters((current) =>
-                            current[cluster.id] ? {} : { [cluster.id]: true },
-                          )
-                        }
-                        className="flex w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-surface-2"
-                      >
+                      <div className="flex items-center gap-3.5 px-5 py-3">
                         <ItemThumb
                           src={cluster.imageUrl || cluster.iconUrl}
                           alt={cluster.name || "Item"}
@@ -2261,13 +2300,31 @@ export function PortfolioManagementSection({
                             )}
                           </p>
                         </div>
-                        <span className="inline-flex h-[22px] items-center rounded-md bg-surface-2 px-2.5 text-[11px] font-bold">
+                        <span className="inline-flex h-[22px] shrink-0 items-center rounded-[6px] bg-surface-2 px-[9px] text-[11px] font-bold">
                           {cluster.bucket === "inventory" ? "Inventar" : "Investment"}
                         </span>
-                      </button>
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          onClick={() =>
+                            // Accordion: only one cluster open at a time — opening a new
+                            // one collapses the previously expanded cluster.
+                            setExpandedClusters((current) =>
+                              current[cluster.id] ? {} : { [cluster.id]: true },
+                            )
+                          }
+                          className={`inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-[9px] border px-3 text-[12px] font-semibold leading-none transition-colors ${
+                            isExpanded
+                              ? "border-border-strong bg-surface-2 text-foreground"
+                              : "border-border-strong text-foreground hover:bg-surface-2"
+                          }`}
+                        >
+                          {isExpanded ? "Ausblenden" : "Positionen"}
+                        </button>
+                      </div>
 
                       {isExpanded ? (
-                        <div className="space-y-1 border-t border-border/50 p-2">
+                        <div className="flex flex-col gap-1 px-5 pb-3.5">
                           {visiblePositions.map((position) => {
                             const positionImageUrl =
                               String(
@@ -2286,7 +2343,7 @@ export function PortfolioManagementSection({
                             return (
                             <div
                               key={position.id}
-                              className={`flex flex-wrap items-center gap-3 rounded-xl border p-2.5 sm:flex-nowrap ${
+                              className={`flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2.5 sm:flex-nowrap ${
                                 position.excluded
                                   ? "border-danger/30 bg-danger/8"
                                   : "border-border bg-background"
@@ -2299,27 +2356,21 @@ export function PortfolioManagementSection({
                                 className={position.excluded ? "opacity-50" : ""}
                               />
                               <div className={`min-w-0 flex-1 ${position.excluded ? "opacity-70" : ""}`}>
-                                <div className="flex min-w-0 items-center gap-1.5">
-                                  <p className="truncate text-xs font-medium">
+                                <div className="flex min-w-0 flex-wrap items-center gap-[7px]">
+                                  <p className="truncate text-[13px] font-semibold">
                                     {position.name || "Unbekannt"}
                                   </p>
-                                  <Badge
-                                    variant="outline"
-                                    className="h-4 shrink-0 px-1.5 text-[9px] font-normal"
-                                  >
+                                  <span className="inline-flex h-[19px] shrink-0 items-center rounded-[5px] border border-border-strong px-[7px] text-[10px] text-muted-foreground">
                                     {resolvePositionSourceLabel(position.platform)}
-                                  </Badge>
+                                  </span>
                                   {positionMatched ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="h-4 shrink-0 gap-0.5 border-success/40 px-1.5 text-[9px] font-normal text-success"
-                                    >
-                                      <Link2 className="h-2.5 w-2.5" />
+                                    <span className="inline-flex h-[19px] shrink-0 items-center gap-1 rounded-[5px] border border-success/40 px-[7px] text-[10px] text-success">
+                                      <Link2 className="size-2.5" />
                                       Gematcht
-                                    </Badge>
+                                    </span>
                                   ) : null}
                                 </div>
-                                <p className={`mt-0.5 text-[10px] ${position.excluded ? "text-danger" : "text-muted-foreground"}`}>
+                                <p className={`mt-[3px] text-[11px] ${position.excluded ? "text-danger" : "text-muted-foreground"}`}>
                                   {position.type || "unbekannt"} ·{" "}
                                   {position.quantity || 1}x ·{" "}
                                   {position.excluded
@@ -2335,7 +2386,24 @@ export function PortfolioManagementSection({
                                     : "ohne Buy-in"}
                                 </p>
                               </div>
-                              <div className="flex shrink-0 items-center gap-1">
+                              <div className="flex shrink-0 items-center gap-2">
+                                {/* An excluded position keeps only its way back —
+                                    the design drops the bucket select there. */}
+                                {position.excluded ? null : (
+                                  <NativeSelect size="sm"
+                                    value={position.bucket || "investment"}
+                                    onChange={(event) =>
+                                      void handleManagementBucketToggle(
+                                        position.id,
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="bg-card"
+                                  >
+                                    <option value="investment">Investment</option>
+                                    <option value="inventory">Inventar</option>
+                                  </NativeSelect>
+                                )}
                                 <Button
                                   size="sm"
                                   variant={
@@ -2347,25 +2415,12 @@ export function PortfolioManagementSection({
                                       !position.excluded,
                                     )
                                   }
-                                  className="text-xs"
+                                  className="h-[30px] rounded-[8px] px-3 text-[12px] font-bold"
                                 >
                                   {position.excluded
                                     ? "Ent-excluden"
                                     : "Excluden"}
                                 </Button>
-                                <NativeSelect size="sm"
-                                  value={position.bucket || "investment"}
-                                  onChange={(event) =>
-                                    void handleManagementBucketToggle(
-                                      position.id,
-                                      event.target.value,
-                                    )
-                                  }
-                                  className="bg-card"
-                                >
-                                  <option value="investment">Investment</option>
-                                  <option value="inventory">Inventar</option>
-                                </NativeSelect>
                               </div>
                             </div>
                             );
@@ -2409,7 +2464,8 @@ export function PortfolioManagementSection({
                   );
                 })}
               </div>
-            </>
+              </CardContent>
+            </Card>
           ) : null}
 
           {/* === MATCHING SECTION === */}
@@ -2463,13 +2519,23 @@ export function PortfolioManagementSection({
                       ) : null}
                     </div>
                   </div>
-                  {syncNotification?.lastSyncedAt ? (
-                    <span className="self-center whitespace-nowrap text-[11px] text-muted-foreground">
-                      Letzter Lauf {formatDateSafe(syncNotification.lastSyncedAt)}
-                    </span>
-                  ) : null}
+                  <div className="flex items-center gap-2 self-center">
+                    {syncNotification?.lastSyncedAt ? (
+                      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                        Letzter Lauf {formatDateSafe(syncNotification.lastSyncedAt)}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setManualMatchOpen(true)}
+                      className="inline-flex h-[34px] shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[10px] border border-border-strong px-3.5 text-[12px] font-semibold leading-none transition-colors hover:bg-surface-2"
+                    >
+                      <Link2 className="size-3.5" />
+                      Manuelles Matching
+                    </button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,1fr)_180px_190px_auto]">
+                <div className="mt-3.5 grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,1fr)_180px_190px_auto]">
                   <label className="relative block">
                     <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <input
@@ -2505,7 +2571,7 @@ export function PortfolioManagementSection({
                     type="button"
                     aria-pressed={showMatchedMatchingRows}
                     onClick={() => setShowMatchedMatchingRows(!showMatchedMatchingRows)}
-                    className={`inline-flex h-[38px] items-center whitespace-nowrap rounded-[5px] border px-3.5 text-xs font-semibold transition-colors ${
+                    className={`inline-flex h-[38px] items-center justify-center whitespace-nowrap rounded-[10px] border px-3.5 text-xs font-semibold leading-none transition-colors ${
                       showMatchedMatchingRows
                         ? "border-border-strong bg-surface-2 text-foreground"
                         : "border-border text-muted-foreground hover:text-foreground"
@@ -2539,7 +2605,7 @@ export function PortfolioManagementSection({
                       </p>
                     </div>
                     {confirmedMatchCount > 0 ? (
-                      <div className="flex items-center gap-6 rounded-2xl border border-border bg-surface-1 px-5 py-3.5 text-left">
+                      <div className="flex items-center gap-6 rounded-[14px] border border-border bg-surface-1 px-5 py-3.5 text-center">
                         <span className="flex flex-col gap-0.5">
                           <span className="text-base font-bold tabular-nums">
                             {confirmedMatchCount}
@@ -2592,6 +2658,15 @@ export function PortfolioManagementSection({
                             csfloatItem?.iconUrl ||
                             "",
                         ).trim() || null;
+                      // The stored match row only carries the Steam side's name; the
+                      // CSFloat name lives on the linked investment the image already
+                      // resolves through, so fall back to it before the placeholder.
+                      const steamDisplayName =
+                        String(row?.steamItemName || steamItem?.name || "").trim() ||
+                        "Steam Item";
+                      const csfloatDisplayName =
+                        String(row?.csfloatItemName || csfloatItem?.name || "").trim() ||
+                        "CSFloat Item";
                       const matchScore = Number(row.matchScore);
                       const createdAtLabel = formatDateSafe(
                         row?.createdAt || null,
@@ -2630,17 +2705,15 @@ export function PortfolioManagementSection({
                               : "border-border bg-background"
                           }`}
                         >
-                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                             <div className="space-y-2">
                               <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)]">
-                                <div className="flex items-center gap-2 rounded-md border border-border/60 p-2">
+                                <div className="flex items-center gap-2.5 rounded-[10px] border border-border bg-background p-2.5">
                                   <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
                                     {steamImageUrl ? (
                                       <img
                                         src={steamImageUrl}
-                                        alt={
-                                          row?.steamItemName || "Steam Item"
-                                        }
+                                        alt={steamDisplayName}
                                         className="h-full w-full object-contain"
                                         loading="lazy"
                                         decoding="async"
@@ -2653,7 +2726,7 @@ export function PortfolioManagementSection({
                                   </div>
                                   <div className="min-w-0">
                                     <p className="truncate text-xs font-medium">
-                                      {row?.steamItemName || "Steam Item"}
+                                      {steamDisplayName}
                                     </p>
                                     <p className="text-[10px] text-muted-foreground">
                                       Steam
@@ -2668,15 +2741,12 @@ export function PortfolioManagementSection({
                                 >
                                   <Link2 className="size-5" />
                                 </div>
-                                <div className="flex items-center gap-2 rounded-md border border-border/60 p-2">
+                                <div className="flex items-center gap-2.5 rounded-[10px] border border-border bg-background p-2.5">
                                   <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted/30 p-1">
                                     {csfloatImageUrl ? (
                                       <img
                                         src={csfloatImageUrl}
-                                        alt={
-                                          row?.csfloatItemName ||
-                                          "CSFloat Item"
-                                        }
+                                        alt={csfloatDisplayName}
                                         className="h-full w-full object-contain"
                                         loading="lazy"
                                         decoding="async"
@@ -2689,7 +2759,7 @@ export function PortfolioManagementSection({
                                   </div>
                                   <div className="min-w-0">
                                     <p className="truncate text-xs font-medium">
-                                      {row?.csfloatItemName || "CSFloat Item"}
+                                      {csfloatDisplayName}
                                     </p>
                                     <p className="text-[10px] text-muted-foreground">
                                       CSFloat
@@ -2697,27 +2767,15 @@ export function PortfolioManagementSection({
                                   </div>
                                 </div>
                               </div>
-                              {/* Confidence + score header */}
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className={`px-2 py-0 text-[10px] ${confidenceMeta.className}`}
-                                >
-                                  Konfidenz: {confidenceMeta.label}
-                                </Badge>
-                                <span className="text-xs font-semibold tabular-nums text-foreground">
-                                  Score {breakdownSum}
-                                </span>
-                              </div>
                               {/* Signal pills carrying the actual measured deviation */}
                               {breakdownRows.length > 0 ? (
                                 <div className="flex flex-wrap gap-1.5">
                                   {breakdownRows.map((item, itemIndex) => (
                                     <span
                                       key={`${item.code}-${itemIndex}`}
-                                      className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[10px]"
+                                      className="inline-flex h-6 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 text-[11px] text-muted-foreground"
                                     >
-                                      <span className="font-medium text-foreground/90">
+                                      <span className="font-bold text-foreground">
                                         {item.label}
                                       </span>
                                       {item.detail ? (
@@ -2726,7 +2784,7 @@ export function PortfolioManagementSection({
                                         </span>
                                       ) : null}
                                       {Number.isFinite(item.points) ? (
-                                        <span className="font-semibold text-success">
+                                        <span className="font-bold text-success">
                                           +{item.points}
                                         </span>
                                       ) : null}
@@ -2734,11 +2792,41 @@ export function PortfolioManagementSection({
                                   ))}
                                 </div>
                               ) : null}
-                              <p className="text-[10px] text-muted-foreground">
-                                {confidenceRationale} · Erstellt: {createdAtLabel}
-                              </p>
                             </div>
-                            <div className="flex shrink-0 flex-row flex-wrap items-start gap-1.5 lg:flex-col lg:items-stretch">
+                            {/* Score column — identical for open suggestions and
+                                resolved matches, so a confirmed row stays as
+                                readable as the one it was confirmed from. Only the
+                                actions below the meter differ by status. */}
+                            <div
+                              className="flex shrink-0 flex-col gap-2 lg:w-[168px]"
+                              title={`${confidenceRationale} · Erstellt: ${createdAtLabel}`}
+                            >
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span
+                                  className={`text-[11px] font-bold uppercase tracking-[0.08em] ${confidenceMeta.accentText}`}
+                                >
+                                  {confidenceMeta.label}
+                                </span>
+                                <span className="text-xl font-extrabold tabular-nums text-foreground">
+                                  {breakdownSum}
+                                </span>
+                              </div>
+                              <div className="mt-0.5 mb-1 h-1.5 overflow-hidden rounded-full bg-border">
+                                <div
+                                  className={`h-full rounded-full ${confidenceMeta.accentBar}`}
+                                  style={{
+                                    width: `${Math.max(
+                                      0,
+                                      Math.min(
+                                        100,
+                                        Math.round(
+                                          (breakdownSum / MATCH_SCORE_METER_MAX) * 100,
+                                        ),
+                                      ),
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
                               {matchStatus === "suggested" ? (
                                 <>
                                   <Button
@@ -2751,7 +2839,7 @@ export function PortfolioManagementSection({
                                       )
                                     }
                                   >
-                                    Bestaetigen
+                                    Bestätigen
                                   </Button>
                                   <Button
                                     size="sm"
@@ -2765,9 +2853,9 @@ export function PortfolioManagementSection({
                                 </>
                               ) : matchStatus === "auto_linked" ? (
                                 <>
-                                  <Badge variant="outline" className="justify-center">
+                                  <span className="flex h-[34px] items-center justify-center rounded-[9px] border border-border-strong text-[13px] font-bold leading-none text-muted-foreground">
                                     Auto-Match
-                                  </Badge>
+                                  </span>
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -2778,16 +2866,13 @@ export function PortfolioManagementSection({
                                       )
                                     }
                                   >
-                                    Bestaetigen
+                                    Bestätigen
                                   </Button>
                                 </>
                               ) : (
-                                <Badge
-                                  variant="outline"
-                                  className="justify-center border-success/40 text-success"
-                                >
+                                <span className="flex h-[34px] items-center justify-center rounded-[9px] border border-success/40 bg-success/10 text-[13px] font-bold leading-none text-success">
                                   Bestätigt
-                                </Badge>
+                                </span>
                               )}
                             </div>
                           </div>
@@ -2803,6 +2888,13 @@ export function PortfolioManagementSection({
       )}
 
       {/* Modals */}
+      <ManualMatchModal
+        open={manualMatchOpen}
+        onClose={() => setManualMatchOpen(false)}
+        steamCandidates={manualSteamCandidates}
+        csfloatCandidates={manualCsfloatCandidates}
+        onConfirm={handleManualMatchCreate}
+      />
       {isCsFloatSyncOpen ? (
         <Suspense fallback={null}>
           <CsFloatTradeSyncModal
