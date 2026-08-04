@@ -8,7 +8,7 @@ import { LayeredGroupIcon } from "./LayeredGroupIcon.jsx";
 import { StatusPill } from "./ui/status-pill.jsx";
 import { SegmentedControl } from "./ui/segmented-control.jsx";
 import { ItemThumb } from "./ui/item-thumb.jsx";
-import { SectionLabel } from "./ui/data-display.jsx";
+import { SectionLabel, MetaRow } from "./ui/data-display.jsx";
 import { NativeSelect } from "./ui/native-select.jsx";
 import {
   Tooltip,
@@ -381,7 +381,6 @@ export function PortfolioManagementSection({
   filteredMatchingRows,
   matchingSuggestedCount,
   matchedSteamInventoryItemsCount,
-  filteredPriceItems,
   filteredPriceClusters,
   priceMissingCount,
 }) {
@@ -443,8 +442,8 @@ export function PortfolioManagementSection({
       return {
         missing,
         label: "— fehlt",
-        note: `${positions.length} Positionen offen`,
-        detail: `keine · ${positions.length} offen`,
+        note: `${positions.length} ${positions.length === 1 ? "Position" : "Positionen"} offen`,
+        detail: `noch keiner gesetzt`,
       };
     }
 
@@ -645,23 +644,17 @@ export function PortfolioManagementSection({
           {managementSection === "prices" ? (
             <Card className="overflow-hidden">
               <CardHeader className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle>Preise setzen</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">
-                      {filteredPriceItems.length} sichtbar
-                    </Badge>
-                    {matchedSteamInventoryItemsCount > 0 ? (
-                      <Badge variant="outline">
-                        {matchedSteamInventoryItemsCount} gematcht ausgeblendet
-                      </Badge>
-                    ) : null}
-                  </div>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <CardTitle className="text-base">Preise setzen</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Nur nicht gematchte Steam-Inventory-Items können hier einen Einkaufspreis
+                    erhalten
+                    {matchedSteamInventoryItemsCount > 0
+                      ? ` · ${matchedSteamInventoryItemsCount} gematchte ausgeblendet`
+                      : ""}
+                    .
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Nur nicht gematchte Steam-Inventory-Items koennen hier einen
-                  Einkaufspreis erhalten.
-                </p>
                 {/* Toolbar: query, the missing-price filter as a warn toggle, sort. */}
                 <div className="flex flex-wrap items-center gap-2.5">
                   <label className="relative min-w-0 flex-1 basis-64 sm:max-w-[380px]">
@@ -733,7 +726,7 @@ export function PortfolioManagementSection({
                     Kein Item passt zu Suche/Filter.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_330px]">
+                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_330px] xl:items-start">
                     {/* Dense cluster list. A cluster expands into its positions,
                         so a per-position price can be set without leaving the row. */}
                     <div className="min-w-0">
@@ -811,7 +804,9 @@ export function PortfolioManagementSection({
                                 </span>
                                 <span className="text-right text-[13px] tabular-nums text-muted-foreground">
                                   {cluster.positions.length}
-                                  {summary.missing > 0 ? ` · ${summary.missing} offen` : ""}
+                                  {summary.missing > 0 && summary.missing < cluster.positions.length
+                                    ? ` · ${summary.missing} offen`
+                                    : ""}
                                 </span>
                                 <span className="text-right text-[13px] tabular-nums">
                                   {hasSuggestion ? formatUsdInDisplayCurrency(suggestedPrice) : "—"}
@@ -850,13 +845,14 @@ export function PortfolioManagementSection({
                                       >
                                         <span />
                                         <div className="flex min-w-0 items-center gap-2 pl-[34px]">
-                                          <span className="size-3 flex-none rounded-bl-[3px] border-b border-l border-border-strong" />
+                                          <span className="mb-2 size-3 flex-none self-center rounded-bl-[3px] border-b border-l border-border-strong" />
                                           <span className="min-w-0">
                                             <span className="block truncate text-xs font-semibold">
                                               {formatDateSafe(position.purchaseDate || position.createdAt || null)}
                                             </span>
                                             <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                                              {position.platform || "manuell"} · {Math.max(1, Number(position.quantity || 1))}×
+                                              {resolvePositionSourceLabel(position.platform)} ·{" "}
+                                              {Math.max(1, Number(position.quantity || 1))}×
                                             </span>
                                           </span>
                                         </div>
@@ -945,7 +941,8 @@ export function PortfolioManagementSection({
                               <p className="truncate text-sm font-bold">{inspectedCluster.name}</p>
                               <p className="mt-0.5 text-xs text-muted-foreground">
                                 {inspectedCluster.bucket === "inventory" ? "Inventar" : "Investment"} ·{" "}
-                                {inspectedCluster.positions.length} Positionen
+                                {inspectedCluster.positions.length}{" "}
+                                {inspectedCluster.positions.length === 1 ? "Position" : "Positionen"}
                               </p>
                             </div>
                           </div>
@@ -1000,7 +997,7 @@ export function PortfolioManagementSection({
                                             : "text-muted-foreground"
                                       }`}
                                     >
-                                      {position.platform || "manuell"}
+                                      {resolvePositionSourceLabel(position.platform)}
                                       {position.excluded
                                         ? " · excluded"
                                         : missing
@@ -1018,8 +1015,17 @@ export function PortfolioManagementSection({
                                       handlePriceDraftChange(position.id, event.target.value)
                                     }
                                     onBlur={() => void handleSaveSteamItemPrice(position)}
+                                    placeholder={
+                                      Number(inspectedCluster.suggestion?.value ?? 0) > 0
+                                        ? convertFromUsd(
+                                            Number(inspectedCluster.suggestion.value),
+                                          ).toFixed(2)
+                                        : currencySymbol
+                                    }
                                     disabled={savingPriceItemId === position.id || ratesLoading}
-                                    className="h-8 w-[88px] rounded-lg border border-border-strong bg-background px-2 text-right text-[13px] tabular-nums outline-none"
+                                    className={`h-8 w-[88px] rounded-lg border bg-card px-2 text-right text-[13px] tabular-nums outline-none placeholder:text-muted-foreground/60 focus:border-border-strong ${
+                                      missing ? "border-warn/50" : "border-border-strong"
+                                    }`}
                                   />
                                 </div>
                               );
@@ -1266,7 +1272,8 @@ export function PortfolioManagementSection({
                               : "border-border hover:border-border-strong"
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2.5">
                             <LayeredGroupIcon
                               visuals={groupSummary?.topVisuals || []}
                               fallbackLabel={group.name}
@@ -1287,7 +1294,8 @@ export function PortfolioManagementSection({
                                 {groupSummary?.totalQuantity || 0} Items
                               </p>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1">
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1">
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -1334,11 +1342,11 @@ export function PortfolioManagementSection({
                     {portfolioGroupEditor ? (
                       <Badge variant="secondary">Aktiv: {portfolioGroupEditor.name}</Badge>
                     ) : (
-                      <Badge variant="outline">Bitte links Gruppe waehlen</Badge>
+                      <Badge variant="outline">Bitte links eine Gruppe wählen</Badge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    "Cluster hinzufuegen" ist nur ein Shortcut. Intern werden die
+                    "Cluster hinzufügen" ist nur ein Shortcut. Intern werden die
                     konkreten Positionen der Gruppe zugeordnet.
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1417,7 +1425,10 @@ export function PortfolioManagementSection({
                                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                                     <span>{cluster.totalCount} Stk.</span>
                                     <span>|</span>
-                                    <span>{cluster.positions.length} Positionen</span>
+                                    <span>
+                                      {cluster.positions.length}{" "}
+                                      {cluster.positions.length === 1 ? "Position" : "Positionen"}
+                                    </span>
                                     {getClusterUpdatedAt(cluster) > 0 ? (
                                       <>
                                         <span>|</span>
@@ -1471,7 +1482,7 @@ export function PortfolioManagementSection({
                                     )
                                   }
                                 >
-                                  Cluster hinzufuegen
+                                  Cluster hinzufügen
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1538,7 +1549,7 @@ export function PortfolioManagementSection({
                                             )
                                           }
                                         >
-                                          Position hinzufuegen
+                                          Position hinzufügen
                                         </Button>
                                         <Button
                                           size="sm"
@@ -1573,13 +1584,13 @@ export function PortfolioManagementSection({
           {managementSection === "create" ? (
             <Card className="overflow-hidden">
               <CardHeader>
-                <CardTitle>Manuelles Investment hinzufuegen</CardTitle>
+                <CardTitle>Manuelles Investment hinzufügen</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Trage ein Item ein, das nicht automatisch importiert wurde,
-                  z. B. ein P2P-Item oder einen Fehlkauf.
+                  Für Items, die kein Sync erfasst — P2P-Käufe, Fehlkäufe, Off-Market-Trades.
                 </p>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="space-y-3">
                 {/* Catalog picker. The debounced lookup already lived in
                     PortfolioPage but its hits were never rendered — this is the
                     dropdown that surfaces them. Only a catalog hit is a valid
@@ -1732,6 +1743,7 @@ export function PortfolioManagementSection({
                     </p>
                   );
                 })()}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">
                     Typ
@@ -1759,6 +1771,19 @@ export function PortfolioManagementSection({
                     <option value="tool">Tool</option>
                   </NativeSelect>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">Bucket</label>
+                  <SegmentedControl
+                    className="h-[42px] w-full rounded-[11px] p-[3px] [&>button]:h-full [&>button]:flex-1"
+                    value={manualItemDraft.bucket === "inventory" ? "inventory" : "investment"}
+                    onChange={(next) => handleManualItemDraftChange("bucket", next)}
+                    items={[
+                      { value: "investment", label: "Investment" },
+                      { value: "inventory", label: "Inventar" },
+                    ]}
+                  />
+                </div>
+                </div>
                 <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
                   <Button
                     disabled={manualItemSaving || ratesLoading || !manualSelectedSuggestion}
@@ -1771,10 +1796,12 @@ export function PortfolioManagementSection({
                     onClick={() => {
                       setManualItemDraft({
                         name: "",
-                        quantity: 1,
                         buyPriceInput: "",
-                        type: "other",
-                        externalUrl: "",
+                        quantity: "1",
+                        platform: "manual",
+                        fundingMode: "wallet_funded",
+                        type: "skin",
+                        bucket: "investment",
                       });
                       setManualSelectedSuggestion?.(null);
                       setCatalogOpen(false);
@@ -1783,6 +1810,56 @@ export function PortfolioManagementSection({
                     Zurücksetzen
                   </Button>
                 </div>
+                </div>
+
+                {/* Vorschau — mirrors what will actually be written: the entry
+                    cost in the display currency and the USD it converts to,
+                    since USD is the stored source of truth. */}
+                {(() => {
+                  const qty = Math.max(1, Number(manualItemDraft.quantity || 1));
+                  const entry = Number(manualItemDraft.buyPriceInput);
+                  const hasEntry = Number.isFinite(entry) && entry > 0;
+                  const entryUsd = hasEntry ? convertToUsd(entry) : 0;
+                  return (
+                    <aside className="flex flex-col gap-3.5 rounded-2xl border border-border bg-background p-4">
+                      <SectionLabel>Vorschau</SectionLabel>
+                      <div className="flex items-center gap-3">
+                        <ItemThumb
+                          src={manualSelectedSuggestion?.iconUrl}
+                          alt={manualSelectedSuggestion?.displayName || ""}
+                          size="xl"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold">
+                            {manualSelectedSuggestion?.displayName || "Noch kein Item gewählt"}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {manualSelectedSuggestion
+                              ? [manualSelectedSuggestion.itemTypeLabel, manualSelectedSuggestion.wearLabel]
+                                  .filter(Boolean)
+                                  .join(" · ")
+                              : "Wähle einen Treffer aus dem Katalog"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2 text-[13px]">
+                        <MetaRow label="Menge" value={`${qty}×`} />
+                        <MetaRow
+                          label="Einstand"
+                          value={hasEntry ? `${entry.toFixed(2)} ${currencySymbol}` : "—"}
+                        />
+                        <MetaRow
+                          label="Gespeichert als"
+                          value={hasEntry ? `${entryUsd.toFixed(2)} USD` : "—"}
+                        />
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Der Kurs zum Kaufzeitpunkt lässt sich nicht rekonstruieren — kleine
+                        Abweichungen sind normal.
+                      </p>
+                    </aside>
+                  );
+                })()}
               </CardContent>
             </Card>
           ) : null}
@@ -1801,7 +1878,7 @@ export function PortfolioManagementSection({
           filteredManagementClusters.length === 0 ? (
             <Card>
               <CardContent className="py-6 text-sm text-muted-foreground">
-                Keine Cluster fuer den gewaehlten Filter gefunden.
+                Keine Cluster für den gewählten Filter gefunden.
               </CardContent>
             </Card>
           ) : null}
@@ -1929,7 +2006,8 @@ export function PortfolioManagementSection({
                             {cluster.name || "Unbenannter Cluster"}
                           </p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            {visiblePositions.length} Positionen ·{" "}
+                            {visiblePositions.length}{" "}
+                            {visiblePositions.length === 1 ? "Position" : "Positionen"} ·{" "}
                             {excludedCount > 0 ? (
                               <span className="font-semibold text-danger">
                                 {excludedCount} excluded
@@ -2074,7 +2152,7 @@ export function PortfolioManagementSection({
                                 }
                               >
                                 <option value="" disabled>
-                                  Bucket fuer alle...
+                                  Bucket für alle …
                                 </option>
                                 <option value="investment">Investment</option>
                                 <option value="inventory">Inventar</option>
@@ -2142,7 +2220,7 @@ export function PortfolioManagementSection({
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,1fr)_180px_190px_auto]">
                   <label className="relative block">
                     <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <input
@@ -2180,17 +2258,18 @@ export function PortfolioManagementSection({
                       Sortierung: Neueste zuerst
                     </option>
                   </NativeSelect>
-                  <label className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={showMatchedMatchingRows}
-                      onChange={(event) =>
-                        setShowMatchedMatchingRows(event.target.checked)
-                      }
-                      className="h-4 w-4 accent-primary"
-                    />
+                  <button
+                    type="button"
+                    aria-pressed={showMatchedMatchingRows}
+                    onClick={() => setShowMatchedMatchingRows(!showMatchedMatchingRows)}
+                    className={`inline-flex h-[38px] items-center whitespace-nowrap rounded-[5px] border px-3.5 text-xs font-semibold transition-colors ${
+                      showMatchedMatchingRows
+                        ? "border-border-strong bg-surface-2 text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
                     Gematchte anzeigen
-                  </label>
+                  </button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
