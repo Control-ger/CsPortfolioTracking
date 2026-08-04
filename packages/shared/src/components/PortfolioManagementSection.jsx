@@ -427,7 +427,7 @@ export function PortfolioManagementSection({
     return null;
   }
 
-  const isGroupFormOpen = groupFormOpen || Boolean(portfolioGroupEditor);
+  const isGroupFormOpen = groupFormOpen;
 
   /**
    * Condenses a cluster's per-position buy-ins into the single "Einkauf" cell
@@ -1109,26 +1109,22 @@ export function PortfolioManagementSection({
 
           {/* === GROUPS SECTION === */}
           {managementSection === "groups" ? (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="flex flex-col gap-4">
               <Card className="overflow-hidden">
-                <CardHeader className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
+                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
+                  <div>
                     <CardTitle>Investment-Gruppen</CardTitle>
-                    <Badge variant="secondary">
-                      {portfolioGroups.length} Gruppen
-                    </Badge>
+                    <p className="mt-1.5 text-[13px] text-muted-foreground">
+                      Ein Anzeige-Layer über den Clustern. Erst Gruppe wählen, dann Cluster
+                      zuweisen — Positionsdaten bleiben unverändert.
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Ein Anzeige-Layer über den Clustern. Erst Gruppe wählen, dann Cluster
-                    zuweisen — Positionsdaten bleiben unverändert.
-                  </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant={isGroupFormOpen ? "outline" : "default"}
                       onClick={() => {
                         if (isGroupFormOpen) {
-                          resetPortfolioGroupEditor();
                           setGroupFormOpen(false);
                           return;
                         }
@@ -1252,107 +1248,114 @@ export function PortfolioManagementSection({
                   </div>
                   ) : null}
 
-                  {/* Group list */}
-                  <div className="space-y-2">
+                  {/* Active-group chips. Selecting one is what the assignment
+                      list below acts on, so it reads as a filter row rather than
+                      a sidebar of records. */}
+                  <div className="flex flex-col gap-2">
+                    <SectionLabel>Aktive Gruppe</SectionLabel>
                     {portfolioGroupsLoading ? (
-                      <div className="space-y-2">
-                        <Skeleton className="h-12 w-full" />
-                        <Skeleton className="h-12 w-full" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-12 w-48" />
+                        <Skeleton className="h-12 w-48" />
                       </div>
                     ) : portfolioGroups.length === 0 ? (
-                      <p className="py-4 text-center text-sm text-muted-foreground">
+                      <p className="py-2 text-sm text-muted-foreground">
                         Noch keine Gruppen angelegt.
                       </p>
                     ) : (
-                      portfolioGroups.map((group) => {
-                        const groupSummary =
-                          portfolioGroupSummaryById?.get(String(group.id)) || null;
-                        return (
-                        <div
-                          key={group.id}
-                          className={`rounded-xl border p-3 transition-colors ${
-                            portfolioGroupEditorId === group.id
-                              ? "border-success/45 bg-success/12"
-                              : "border-border hover:border-border-strong"
-                          }`}
-                        >
-                          <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2.5">
-                            <LayeredGroupIcon
-                              visuals={groupSummary?.topVisuals || []}
-                              fallbackLabel={group.name}
-                              size="sm"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-bold">
-                                {group.name}
-                              </p>
-                              <p
-                                className={`mt-0.5 text-[11px] tabular-nums ${
-                                  portfolioGroupEditorId === group.id
-                                    ? "text-success"
-                                    : "text-muted-foreground"
-                                }`}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {portfolioGroups.map((group) => {
+                          const groupSummary =
+                            portfolioGroupSummaryById?.get(String(group.id)) || null;
+                          const isActive = portfolioGroupEditorId === group.id;
+                          return (
+                            <div
+                              key={group.id}
+                              className={`flex items-center gap-2.5 rounded-xl border p-2 transition-colors ${
+                                isActive
+                                  ? "border-success/45 bg-success/12"
+                                  : "border-border hover:border-border-strong"
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                aria-pressed={isActive}
+                                onClick={() => handleEditPortfolioGroup(group)}
+                                className="flex min-w-0 items-center gap-2.5 text-left"
                               >
-                                {groupSummary?.clusterCount || 0} Cluster ·{" "}
-                                {groupSummary?.totalQuantity || 0} Items
-                              </p>
+                                <LayeredGroupIcon
+                                  visuals={groupSummary?.topVisuals || []}
+                                  fallbackLabel={group.name}
+                                  size="sm"
+                                />
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[13px] font-bold">
+                                    {group.name}
+                                  </span>
+                                  <span
+                                    className={`block truncate text-[11px] tabular-nums ${
+                                      isActive ? "text-success" : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {groupSummary?.clusterCount || 0} Cluster ·{" "}
+                                    {groupSummary?.totalQuantity || 0} Items
+                                  </span>
+                                </span>
+                              </button>
+                              <span className="flex shrink-0 items-center">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  title="Gruppe bearbeiten"
+                                  onClick={() => {
+                                    handleEditPortfolioGroup(group);
+                                    setGroupFormOpen(true);
+                                  }}
+                                >
+                                  Bearbeiten
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  title="Gruppe im Inventar öffnen"
+                                  onClick={() => handleOpenPortfolioGroupInInventory(group.id)}
+                                >
+                                  Inventar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  title="Cluster der Gruppe anzeigen"
+                                  onClick={() => handleOpenPortfolioGroupInManagement(group.id)}
+                                >
+                                  Cluster
+                                </Button>
+                              </span>
                             </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  handleEditPortfolioGroup(group)
-                                }
-                              >
-                                Bearbeiten
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  handleOpenPortfolioGroupInInventory(group.id)
-                                }
-                              >
-                                Inventar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  handleOpenPortfolioGroupInManagement(
-                                    group.id,
-                                  )
-                                }
-                              >
-                                Cluster
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                        );
-                      })
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="h-px bg-border" />
 
-              <Card className="overflow-hidden">
-                <CardHeader className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle>Cluster und Positionen zuweisen</CardTitle>
-                    {portfolioGroupEditor ? (
-                      <Badge variant="secondary">Aktiv: {portfolioGroupEditor.name}</Badge>
-                    ) : (
-                      <Badge variant="outline">Bitte links eine Gruppe wählen</Badge>
-                    )}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-[13px] text-muted-foreground">
+                      „Cluster hinzufügen" ist nur ein Shortcut — intern werden die konkreten
+                      Positionen zugeordnet.
+                    </span>
+                    <span className="text-xs whitespace-nowrap text-muted-foreground">
+                      {portfolioGroupEditor ? (
+                        <>
+                          Zuweisen zu{" "}
+                          <b className="text-success">{portfolioGroupEditor.name}</b>
+                        </>
+                      ) : (
+                        "Oben eine Gruppe wählen"
+                      )}
+                    </span>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    "Cluster hinzufügen" ist nur ein Shortcut. Intern werden die
-                    konkreten Positionen der Gruppe zugeordnet.
-                  </p>
+
                   <div className="flex flex-wrap items-center gap-2">
                     <label className="relative block flex-1">
                       <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1372,8 +1375,7 @@ export function PortfolioManagementSection({
                       <option value="updated_desc">Neueste</option>
                     </NativeSelect>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
+
                   {managementLoading ? (
                     <div className="space-y-2">
                       <Skeleton className="h-16 w-full" />
