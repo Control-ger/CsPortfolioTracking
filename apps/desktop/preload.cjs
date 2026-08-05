@@ -28,7 +28,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getAuthHeaders: () => ipcRenderer.invoke("backend-auth-headers"),
   },
   cloudflareAccess: {
-    login: (serverUrl, cfLoginUrl) => ipcRenderer.invoke("cloudflare-access-login", serverUrl, cfLoginUrl),
+    // options: { cfLoginUrl?: string, force?: boolean }. Without force this
+    // resolves without a window when a valid Access identity already exists.
+    login: (serverUrl, options) => ipcRenderer.invoke("cloudflare-access-login", serverUrl, options),
   },
   steamAuth: {
     serverLogin: (steamOpenIdUrl) => ipcRenderer.invoke("steam-server-login", steamOpenIdUrl),

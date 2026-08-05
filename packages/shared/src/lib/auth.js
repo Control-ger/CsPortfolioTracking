@@ -8,6 +8,7 @@
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { normalizeDesktopLocalUserId } from "./userIdentity.js";
 import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
+import { fetchWithCloudflareAccess } from "./cloudflareAccess.js";
 import {
   reportSessionHealthy,
   reportSessionLocalOnly,
@@ -225,26 +226,7 @@ function buildRemoteApiUrl(remoteBase, apiPath) {
  * Access login if the request is intercepted by a CF challenge.
  */
 async function remoteFetchWithCloudflareAccess(remoteBase, apiPath, options = {}) {
-  const requestInit = { ...options, credentials: "include" };
-  const url = buildRemoteApiUrl(remoteBase, apiPath);
-  let response = await fetch(url, requestInit);
-
-  const isChallenge = (res) => {
-    const url = String(res?.url || "");
-    if (url.includes("/cdn-cgi/access/")) {
-      return true;
-    }
-    const contentType = String(res?.headers?.get?.("content-type") || "").toLowerCase();
-    const server = String(res?.headers?.get?.("server") || "").toLowerCase();
-    return contentType.includes("text/html") && server.includes("cloudflare");
-  };
-
-  if (isChallenge(response) && window.electronAPI?.cloudflareAccess?.login) {
-    await window.electronAPI.cloudflareAccess.login(resolveAccessBaseUrl(remoteBase), response.url);
-    response = await fetch(url, requestInit);
-  }
-
-  return response;
+  return await fetchWithCloudflareAccess(buildRemoteApiUrl(remoteBase, apiPath), options, remoteBase);
 }
 
 /**

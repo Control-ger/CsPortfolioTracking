@@ -3,6 +3,7 @@ import {
   sendFrontendTelemetryEvent,
 } from "../frontendTelemetry";
 import { getCurrentUser, getSession } from "../auth.js";
+import { ensureCloudflareAccessLogin, notifyCloudflareAccessHealthy } from "../cloudflareAccess.js";
 import * as localCache from "../localCache.js";
 import { unwrapLocalStoreResult } from "../localStoreResult.js";
 import { resolveDesktopLocalUserId } from "../userIdentity.js";
@@ -44,37 +45,21 @@ export function getDesktopSecrets() {
 }
 
 // When the desktop sidecar proxy reports that the upstream is behind a
-// Cloudflare Access challenge (cookie missing/expired), prompt the user to sign
-// in again via the existing CF login window, then retry the request once. The
-// main process dedupes concurrent login windows; we also coalesce here so a
-// burst of parallel reads triggers only one re-auth.
-let cfAccessReauthInFlight = null;
-function tryCloudflareAccessReauth() {
-  if (typeof window === "undefined" || !window.electronAPI?.cloudflareAccess?.login) {
-    return Promise.resolve(false);
-  }
-  if (cfAccessReauthInFlight) {
-    return cfAccessReauthInFlight;
-  }
-  cfAccessReauthInFlight = (async () => {
-    try {
-      const cfg = await window.electronAPI.serverConfig?.get?.();
-      const rawServerUrl = String(cfg?.serverUrl || cfg?.url || "").trim().replace(/\/+$/, "");
-      if (!rawServerUrl) {
-        return false;
-      }
-      const serverUrl = /^https?:\/\//i.test(rawServerUrl) ? rawServerUrl : `https://${rawServerUrl}`;
-      const result = await window.electronAPI.cloudflareAccess.login(serverUrl);
-      return Boolean(result?.ok);
-    } catch (error) {
-      console.warn("[apiClient] Cloudflare Access re-login failed", error);
-      return false;
-    } finally {
-      cfAccessReauthInFlight = null;
-    }
-  })();
-  return cfAccessReauthInFlight;
-}
+// Cloudflare Access challenge, recovery happens in two steps (see
+// lib/cloudflareAccess.js for the shared machinery):
+//
+//   1. a silent refresh — the sidecar holds its OWN copy of the CF cookie, and
+//      Cloudflare rotates CF_Session during normal renderer traffic. A copy that
+//      has fallen behind is by far the most common cause of this hint, and
+//      re-reading the live cookie jar fixes it without showing anything.
+//   2. only if the challenge survives that retry is the session genuinely gone,
+//      and a login window is warranted.
+//
+// Doing (2) first is what made the window pop up and close again immediately:
+// the cookies were still valid, so Cloudflare completed a silent SSO in under a
+// second — after the window had already wiped and re-minted a working session.
+const CF_STAGE_REFRESHED = "refreshed";
+const CF_STAGE_LOGGED_IN = "logged-in";
 
 // Deterministic cache keys for Phase 1 offline fallback. Only GET endpoints
 // consumed by portfolio/watchlist UI are cached; mutations are never cached.
@@ -359,20 +344,27 @@ async function requestPayload(path, options = {}) {
       url,
     };
   });
-  if (
-    upstreamHint?.code === "CLOUDFLARE_ACCESS_LOGIN_REQUIRED" &&
-    options._cfAccessRetried !== true
-  ) {
-    // The CF Access cookie is missing/expired, so the proxy got the login HTML
-    // instead of data. Unlike the generic best-effort fallback, this is
-    // actionable: prompt the user to re-authenticate, then retry once.
-    console.warn("[apiClient] Cloudflare Access login required — prompting re-authentication", {
+  if (upstreamHint?.code !== "CLOUDFLARE_ACCESS_LOGIN_REQUIRED") {
+    // Upstream is reachable without a challenge — the session works, so let the
+    // next genuine expiry prompt immediately instead of waiting out the cooldown.
+    notifyCloudflareAccessHealthy();
+  }
+
+  if (upstreamHint?.code === "CLOUDFLARE_ACCESS_LOGIN_REQUIRED" && options._cfAccessStage !== CF_STAGE_LOGGED_IN) {
+    // The proxy got CF's login HTML instead of data. Escalate one step at a time
+    // so a stale sidecar cookie copy never costs the user a login window.
+    const escalateToLogin = options._cfAccessStage === CF_STAGE_REFRESHED;
+    console.warn("[apiClient] Cloudflare Access challenge on the sidecar proxy", {
       method,
       path,
+      action: escalateToLogin ? "opening login window" : "refreshing cookie copy",
     });
-    const reauthed = await tryCloudflareAccessReauth();
-    if (reauthed) {
-      return requestPayload(path, { ...options, _cfAccessRetried: true });
+    const result = await ensureCloudflareAccessLogin(undefined, { force: escalateToLogin });
+    if (result?.ok) {
+      return requestPayload(path, {
+        ...options,
+        _cfAccessStage: escalateToLogin ? CF_STAGE_LOGGED_IN : CF_STAGE_REFRESHED,
+      });
     }
   }
 

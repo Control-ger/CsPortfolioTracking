@@ -50,7 +50,7 @@ export let writeCacheFileRef = null;
 export let readSessionFileRef = null;
 export let writeSessionFileRef = null;
 export let deleteSessionFileRef = null;
-export let openCloudflareAccessLoginWindowRef = null;
+export let ensureCloudflareAccessSessionRef = null;
 export let openSteamServerLoginWindowRef = null;
 export let getStoredServerConfigRef = null;
 export let writeServerConfigRef = null;
@@ -67,7 +67,7 @@ export function setIpcDeps(deps) {
   readSessionFileRef = deps.readSessionFile;
   writeSessionFileRef = deps.writeSessionFile;
   deleteSessionFileRef = deps.deleteSessionFile;
-  openCloudflareAccessLoginWindowRef = deps.openCloudflareAccessLoginWindow;
+  ensureCloudflareAccessSessionRef = deps.ensureCloudflareAccessSession;
   openSteamServerLoginWindowRef = deps.openSteamServerLoginWindow;
   getStoredServerConfigRef = deps.getStoredServerConfig;
   writeServerConfigRef = deps.writeServerConfig;
@@ -209,9 +209,16 @@ export function registerAllIpcHandlers() {
   });
 
   // ── Cloudflare Access login ───────────────────────────────────
-  ipcMain.handle("cloudflare-access-login", async (event, serverUrl, cfLoginUrl) => {
+  // `options` is {cfLoginUrl, force}. Without `force` this only opens a window
+  // when the cookie jar holds no usable Access identity — the common case is a
+  // stale cookie copy in the sidecar, which the ensure path repairs silently.
+  // Older callers passed the challenge URL as the second argument; keep that
+  // shape working so a preload/renderer version skew cannot break the login.
+  ipcMain.handle("cloudflare-access-login", async (event, serverUrl, options) => {
+    const normalizedOptions =
+      typeof options === "string" ? { cfLoginUrl: options } : options || {};
     try {
-      const result = await openCloudflareAccessLoginWindowRef(serverUrl, cfLoginUrl);
+      const result = await ensureCloudflareAccessSessionRef(serverUrl, normalizedOptions);
       return {
         ok: true,
         ...result,

@@ -2,7 +2,11 @@ import { getSession, logout, validateSession } from "./auth.js";
 import { reportSessionRejected } from "./sessionHealthBus.js";
 import { get as cacheGet, set as cacheSet } from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
-import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
+import { normalizeServerBaseUrl } from "./serverConfig.js";
+import {
+  fetchWithCloudflareAccess,
+  isCloudflareAccessChallengeResponse,
+} from "./cloudflareAccess.js";
 import {
   normalizeDesktopLocalUserId,
   parseDesktopSyncUserId,
@@ -26,60 +30,6 @@ function isDesktopWithLocalStore() {
     window.electronAPI.localStore &&
     window.electronAPI.serverConfig
   );
-}
-
-async function hasCloudflareAccessIdentity(accessBaseUrl) {
-  if (!accessBaseUrl) {
-    return true;
-  }
-
-  const response = await fetch(`${accessBaseUrl}/cdn-cgi/access/get-identity`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (response.status === 404) {
-    // No get-identity endpoint = no CF Access app.
-    return true;
-  }
-  if (response.status === 401 || response.status === 403) {
-    return false;
-  }
-
-  // Read the body as text regardless of content-type: CF serves the
-  // get-identity error (e.g. {"err":"no app token set"}) without a reliable
-  // application/json header, so content-type sniffing would miss it.
-  const bodyText = await response.text().catch(() => "");
-  let payload = null;
-  try {
-    payload = bodyText ? JSON.parse(bodyText) : null;
-  } catch {
-    payload = null;
-  }
-
-  const errText = (String(payload?.err || "") || bodyText).toLowerCase();
-  if (errText.includes("no app token") || errText.includes("not set")) {
-    // No usable Access token for this host. Don't preemptively open a login
-    // window here — a genuinely protected endpoint will return a CF challenge,
-    // and that challenge path drives the login. This avoids popup loops on hosts
-    // without an Access app while still logging in when one exists.
-    return true;
-  }
-  if (payload?.err) {
-    console.log("[desktop-sync] CF Access error:", payload.err);
-    return false;
-  }
-
-  // Any other non-OK status: defer to challenge detection rather than forcing a
-  // login window from here.
-  if (!response.ok) {
-    return true;
-  }
-
-  return Boolean(payload && typeof payload === "object" && !payload.err);
 }
 
 function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
@@ -138,11 +88,15 @@ async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, option
   let lastResponse = null;
   let firstNon404Response = null;
   let lastError = null;
+  let sawAccessChallenge = false;
   for (const url of candidates) {
     try {
       const response = await fetchWithCloudflareAccess(url, options, serverBaseUrl);
       if (response?.ok) {
         return response;
+      }
+      if (isCloudflareAccessChallengeResponse(response)) {
+        sawAccessChallenge = true;
       }
       lastResponse = response;
       if (response && response.status !== 404 && !firstNon404Response) {
@@ -151,6 +105,17 @@ async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, option
     } catch (error) {
       lastError = error;
     }
+  }
+
+  // fetchWithCloudflareAccess already tried a silent cookie refresh and a login
+  // window on each candidate. A challenge that survives both is a real "not
+  // signed in to Cloudflare" — say so, instead of letting it surface as an
+  // opaque "status 403 <html>" the UI cannot tell apart from a server error.
+  // PortfolioPage matches on this wording to show the re-login hint.
+  if (sawAccessChallenge) {
+    throw new Error(
+      "Cloudflare Access Anmeldung erforderlich — die Sitzung konnte nicht erneuert werden.",
+    );
   }
 
   if (firstNon404Response) {
@@ -215,89 +180,6 @@ function findResultForOperation(operation, results, usedResultIndexes) {
   }
 
   return null;
-}
-
-async function ensureCloudflareAccessSession(serverBaseUrl) {
-  const accessBaseUrl = resolveAccessBaseUrl(serverBaseUrl);
-  if (!accessBaseUrl) {
-    return;
-  }
-
-  const hasIdentity = await hasCloudflareAccessIdentity(accessBaseUrl).catch(() => false);
-  if (hasIdentity) {
-    return;
-  }
-
-  if (!window.electronAPI?.cloudflareAccess?.login) {
-    throw new Error("Cloudflare Access Session fehlt und Login-Fenster ist nicht verfuegbar.");
-  }
-
-  const loginResult = await window.electronAPI.cloudflareAccess.login(accessBaseUrl);
-  if (!loginResult?.ok) {
-    throw new Error(loginResult?.error || "Cloudflare Access Anmeldung fehlgeschlagen.");
-  }
-
-  const hasIdentityAfterLogin = await hasCloudflareAccessIdentity(accessBaseUrl).catch(() => false);
-  if (!hasIdentityAfterLogin) {
-    throw new Error("Cloudflare Access Session konnte nicht bestaetigt werden.");
-  }
-}
-
-function isCloudflareAccessChallengeResponse(response) {
-  const url = String(response?.url || "");
-  if (url.includes("/cdn-cgi/access/")) {
-    return true;
-  }
-
-  const deniedReason = String(response?.headers?.get?.("cf-access-denied-reason") || "").trim();
-  if (deniedReason) {
-    return true;
-  }
-
-  if (response?.status !== 401 && response?.status !== 403) {
-    return false;
-  }
-
-  const contentType = String(response?.headers?.get?.("content-type") || "").toLowerCase();
-  const serverHeader = String(response?.headers?.get?.("server") || "").toLowerCase();
-  const challengeHint = String(response?.headers?.get?.("cf-mitigated") || "").toLowerCase();
-
-  if (challengeHint.includes("challenge")) {
-    return true;
-  }
-
-  // Avoid false positives for normal API auth errors (JSON 401/403).
-  return contentType.includes("text/html") && serverHeader.includes("cloudflare");
-}
-
-async function fetchWithCloudflareAccess(url, options, serverBaseUrl) {
-  await ensureCloudflareAccessSession(serverBaseUrl);
-
-  let response = await fetch(url, {
-    ...options,
-    credentials: "include",
-  });
-
-  if (!isCloudflareAccessChallengeResponse(response)) {
-    return response;
-  }
-
-  if (!window.electronAPI?.cloudflareAccess?.login) {
-    return response;
-  }
-
-  const cfLoginUrl = response.url;
-  const loginResult = await window.electronAPI.cloudflareAccess.login(resolveAccessBaseUrl(serverBaseUrl), cfLoginUrl);
-  if (!loginResult?.ok) {
-    return response;
-  }
-
-  response = await fetch(url, {
-    ...options,
-    credentials: "include",
-  });
-
-  return response;
 }
 
 function unwrapApiData(payload) {
