@@ -12,6 +12,11 @@ export default defineConfig([
     'tmp_release_check/**',
     'tmp_release_check2/**',
     'src.old/**',
+    // Local tooling state / generated design bundles (see .gitignore)
+    '.claude/**',
+    '.design-sync/**',
+    '.ds-sync/**',
+    'ds-bundle/**',
   ]),
   {
     files: ['**/*.{js,jsx}'],
