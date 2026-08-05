@@ -1281,12 +1281,13 @@ export function PortfolioManagementSection({
                                     ? convertFromUsd(Number(inspectedCluster.suggestion.value)).toFixed(2)
                                     : currencySymbol
                                 }
-                                className="h-9 flex-1 rounded-[8px] border border-border bg-background px-2.5 text-[13px] tabular-nums outline-none"
+                                className="h-9 w-full min-w-0 flex-1 rounded-[8px] border border-border bg-background px-2.5 text-[13px] tabular-nums outline-none"
                               />
                               <Button
                                 size="sm"
                                 variant="outline"
                                 disabled={ratesLoading}
+                                className="shrink-0 whitespace-nowrap"
                                 onClick={() => void handleSaveClusterPrice(inspectedCluster)}
                               >
                                 Auf {inspectedLots.length} Pos.
