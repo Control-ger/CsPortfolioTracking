@@ -39,3 +39,12 @@ apps/*/dist/
 apps/*/node_modules/
 packages/*/dist/
 packages/*/node_modules/
+
+# Claude Code session state / worktrees
+.claude/
+
+# Design-system sync tooling and its generated bundles (not consumed by the app)
+.design-sync/
+.ds-sync/
+ds-bundle/
+packages/shared/ds-styles.css
