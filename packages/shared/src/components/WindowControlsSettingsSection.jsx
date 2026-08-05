@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card.jsx";
+import {
+  SettingsCard,
+  SettingsCardBody,
+  SettingsCardHeader,
+  SettingsNote,
+  SettingsTile,
+} from "./ui/settings-card.jsx";
 import {
   detectNativeWindowControls,
   getWindowControlsStyle,
@@ -64,56 +70,47 @@ export function WindowControlsSettingsSection() {
   ];
 
   return (
-    <Card id="settings-section-window-controls">
-      <CardHeader>
-        <CardTitle>Fenster-Buttons</CardTitle>
-        <CardDescription>
-          Die App zeichnet ihre Titelleiste selbst. Automatisch uebernimmt sie unter Linux
-          Position und Icons deines Desktop-Themes — auch eigene Theme-Icons.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-2 sm:grid-cols-3">
+    <SettingsCard id="settings-section-window-controls">
+      <SettingsCardHeader
+        title="Fenster-Buttons"
+        description="Die App zeichnet ihre Titelleiste selbst. Automatisch übernimmt sie unter Linux Position und Icons deines Desktop-Themes — auch eigene Theme-Icons."
+      />
+      <SettingsCardBody className="flex flex-col gap-3">
+        <div className="grid gap-2.5 sm:grid-cols-3">
           {options.map((option) => (
-            <button
+            <SettingsTile
               key={option.value}
-              type="button"
+              active={style === option.value}
+              label={option.label}
+              hint={option.hint}
               onClick={() => setWindowControlsStyle(option.value)}
-              className={`rounded-xl border p-3 text-left transition-colors ${
-                style === option.value
-                  ? "border-primary/40 bg-primary/12"
-                  : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
-              }`}
-            >
-              <p className="text-sm font-semibold text-foreground">{option.label}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{option.hint}</p>
-            </button>
+            />
           ))}
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">
-              Erkannt: <span className="font-semibold text-foreground">{detectedThemeLabel}</span>
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+        <SettingsNote>
+          <span className="flex min-w-0 flex-col gap-[3px]">
+            <span>
+              Erkannt: <span className="font-bold text-foreground">{detectedThemeLabel}</span>
+            </span>
+            <span>
               Aktive Darstellung:{" "}
-              <span className="font-semibold text-foreground">
+              <span className="font-bold text-foreground">
                 {resolved.preset === "native" ? "Theme-Icons" : resolved.preset}
               </span>
-            </p>
-          </div>
+            </span>
+          </span>
           <button
             type="button"
             onClick={handleRedetect}
             disabled={detecting}
-            className="flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-accent/55 disabled:opacity-50"
+            className="inline-flex h-8 shrink-0 items-center gap-[7px] rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${detecting ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-[13px] ${detecting ? "animate-spin" : ""}`} />
             Neu erkennen
           </button>
-        </div>
-      </CardContent>
-    </Card>
+        </SettingsNote>
+      </SettingsCardBody>
+    </SettingsCard>
   );
 }

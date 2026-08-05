@@ -1,9 +1,17 @@
-import { Skeleton } from "@shared/components/ui/skeleton";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
-import { Button } from "@shared/components/ui/button";
-import { Badge } from "@shared/components/ui/badge";
-import { Bell } from "lucide-react";
+const PERMISSION_LABEL = {
+  granted: "erteilt",
+  denied: "blockiert",
+  default: "noch nicht erteilt",
+};
 
+/**
+ * Footer strip of the Web-Push channel inside the Benachrichtigungen card.
+ *
+ * The per-event toggles above only decide *what* gets sent; this line owns the
+ * one prerequisite they cannot express — the browser permission and the push
+ * subscription itself — which is why the design keeps it as a single closing
+ * sentence with one action rather than its own card.
+ */
 export function WebPushSettingsSection({
   webPushSupported,
   webPushLoading,
@@ -16,71 +24,56 @@ export function WebPushSettingsSection({
   onEnable,
   onDisable,
 }) {
+  const message = webPushError
+    ? webPushError
+    : webPushSuccess
+      ? webPushSuccess
+      : !webPushSupported
+        ? "Browser Push ist in dieser Umgebung nicht verfügbar."
+        : webPushLoading
+          ? "Push-Status wird geladen …"
+          : !webPushConfigured
+            ? "Push ist serverseitig noch nicht konfiguriert (VAPID Keys fehlen)."
+            : null;
+  const tone = webPushError ? "text-danger" : webPushSuccess ? "text-success" : "text-muted-foreground";
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Bell className="h-5 w-5" />
-          <CardTitle>Browser Push (CS Updates)</CardTitle>
-          <Badge variant="outline" className="ml-auto">
-            {webPushSubscribed ? "Aktiv" : "Inaktiv"}
-          </Badge>
-        </div>
-        <CardDescription>
-          Erhalte Benachrichtigungen bei neuen CS-Updates auf Mobile und Desktop (PWA/Web).
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!webPushSupported ? (
-          <div className="rounded-lg border border-border bg-transparent p-3 text-sm text-muted-foreground dark:border-border/70 dark:bg-card/65">
-            Browser Push ist hier nicht verfuegbar (z.B. Electron Runtime oder fehlende Push-Unterstuetzung).
-          </div>
-        ) : null}
-
-        {webPushLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-56" />
-            <Skeleton className="h-4 w-44" />
-          </div>
-        ) : null}
-
-        {webPushError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            {webPushError}
-          </div>
-        ) : null}
-
-        {webPushSuccess ? (
-          <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
-            {webPushSuccess}
-          </div>
-        ) : null}
-
-        <div className="rounded-lg border border-border bg-transparent p-3 text-xs text-muted-foreground dark:border-border/70 dark:bg-card/65">
-          <p>
-            Berechtigung: <span className="font-semibold text-foreground">{webPushPermission}</span>
-          </p>
-          <p>
-            Server konfiguriert: <span className="font-semibold text-foreground">{webPushConfigured ? "ja" : "nein"}</span>
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            onClick={() => void onEnable()}
-            disabled={!webPushSupported || webPushSaving}
-          >
-            {webPushSaving ? "Aktiviere..." : "Push aktivieren"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => void onDisable()}
-            disabled={!webPushSupported || webPushSaving || !webPushSubscribed}
-          >
-            {webPushSaving ? "Deaktiviere..." : "Push deaktivieren"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+      <p className={`min-w-0 text-[11px] leading-[1.55] ${tone}`}>
+        {message ?? (
+          <>
+            Web Push braucht eine erteilte Browser-Berechtigung. Status:{" "}
+            <span
+              className={`font-bold ${
+                webPushPermission === "granted"
+                  ? "text-success"
+                  : webPushPermission === "denied"
+                    ? "text-danger"
+                    : "text-warn"
+              }`}
+            >
+              {PERMISSION_LABEL[webPushPermission] || webPushPermission}
+            </span>{" "}
+            · Abo auf diesem Gerät{" "}
+            <span className={`font-bold ${webPushSubscribed ? "text-success" : "text-muted-foreground"}`}>
+              {webPushSubscribed ? "aktiv" : "inaktiv"}
+            </span>
+            .
+          </>
+        )}
+      </p>
+      <button
+        type="button"
+        onClick={() => void (webPushSubscribed ? onDisable() : onEnable())}
+        disabled={!webPushSupported || webPushSaving}
+        className="h-8 shrink-0 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
+      >
+        {webPushSaving
+          ? "Moment …"
+          : webPushSubscribed
+            ? "Push deaktivieren"
+            : "Push aktivieren"}
+      </button>
+    </div>
   );
 }

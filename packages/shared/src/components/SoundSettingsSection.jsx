@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Volume2, VolumeX } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card.jsx";
+import { Switch } from "./ui/switch.jsx";
+import { SettingsCard, SettingsCardHeader, SettingsRow } from "./ui/settings-card.jsx";
 import {
   getUiSoundVolume,
   isUiSoundsEnabled,
@@ -45,76 +45,49 @@ export function SoundSettingsSection() {
     playUiSound("click");
   }, []);
 
-  return (
-    <Card id="settings-section-sounds">
-      <CardHeader>
-        <CardTitle>Sounds</CardTitle>
-        <CardDescription>
-          Kurze Toene bei Aktionen und im Jahresrueckblick. Die Toene werden im Browser erzeugt —
-          es werden keine Audiodateien geladen.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
-          <div className="flex min-w-0 items-center gap-3">
-            {enabled ? (
-              <Volume2 className="h-5 w-5 shrink-0 text-primary" />
-            ) : (
-              <VolumeX className="h-5 w-5 shrink-0 text-muted-foreground" />
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">
-                Sounds {enabled ? "aktiv" : "aus"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Gilt app-weit und bleibt ueber Neustarts erhalten.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label="Sounds umschalten"
-            data-no-sound
-            onClick={handleToggle}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-              enabled ? "bg-primary" : "bg-muted-foreground/35"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-background transition-transform ${
-                enabled ? "translate-x-[22px]" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        </div>
+  const percent = Math.round(volume * 100);
 
-        <div className="rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
-          <div className="flex items-center justify-between gap-3">
-            <label htmlFor="ui-sound-volume" className="text-sm text-foreground">
-              Lautstaerke
-            </label>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {Math.round(volume * 100)} %
-            </span>
-          </div>
+  return (
+    <SettingsCard id="settings-section-sounds">
+      <SettingsCardHeader
+        title="Sounds"
+        description="Kurzes Klick-Feedback bei Aktionen und im Jahresrückblick. Die Töne werden im Browser erzeugt — es werden keine Audiodateien geladen."
+      />
+      <SettingsRow
+        title="UI-Sounds"
+        description="Gilt app-weit und bleibt über Neustarts erhalten."
+        divider={false}
+      >
+        {/* The slider sits inline with the switch (design), but a 160px track
+            needs the room — below `sm` it drops and the switch alone remains. */}
+        <span className="hidden items-center gap-2 sm:flex">
           <input
             id="ui-sound-volume"
             type="range"
             min="0"
             max="100"
             step="5"
-            value={Math.round(volume * 100)}
+            value={percent}
             onChange={handleVolumeChange}
             disabled={!enabled}
-            className="ui-range mt-3 w-full disabled:opacity-40"
+            aria-label="Lautstärke"
+            data-no-sound
+            className="ui-range w-[160px] disabled:opacity-40"
             style={{
-              background: `linear-gradient(to right, var(--primary) ${Math.round(volume * 100)}%, var(--muted) ${Math.round(volume * 100)}%)`,
+              background: `linear-gradient(to right, var(--foreground) ${percent}%, var(--surface-2) ${percent}%)`,
             }}
           />
-        </div>
-      </CardContent>
-    </Card>
+          <span className="w-[34px] text-right text-[11px] tabular-nums text-muted-foreground">
+            {percent} %
+          </span>
+        </span>
+        <Switch
+          checked={enabled}
+          onCheckedChange={handleToggle}
+          aria-label="Sounds umschalten"
+          data-no-sound
+        />
+      </SettingsRow>
+    </SettingsCard>
   );
 }

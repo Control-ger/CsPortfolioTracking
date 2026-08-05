@@ -1,7 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
-import { Button } from "@shared/components/ui/button";
-import { Input } from "@shared/components/ui/input";
+import { AppWindow } from "lucide-react";
 
+import { SettingsKeyRow, SettingsKeyInput } from "@shared/components/ui/settings-card";
+
+/** Server-host row of the "API-Schlüssel" card (last row — no divider). */
 export function ServerConfigSection({
   serverUrl,
   serverConfigLoading,
@@ -13,47 +14,43 @@ export function ServerConfigSection({
   onTestConnection,
   onSave,
 }) {
+  const state = serverConfigError
+    ? serverConfigError
+    : serverConfigMessage
+      ? serverConfigMessage
+      : serverConfigLoading
+        ? "wird geladen …"
+        : "Ziel für Sync & Server";
+  const stateTone = serverConfigError ? "danger" : serverConfigMessage ? "success" : "muted";
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Server Verbindung</CardTitle>
-        <CardDescription>
-          URL fuer Sync und Server-Features. Lokal gespeichert im Desktop-Profil.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {serverConfigError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            {serverConfigError}
-          </div>
-        ) : null}
-        {serverConfigMessage ? (
-          <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/12 p-3 text-sm text-emerald-300">
-            {serverConfigMessage}
-          </div>
-        ) : null}
-        <Input
-          value={serverUrl}
-          onChange={onUrlChange}
-          placeholder="cs2.clustercontrol.cc"
-          disabled={serverConfigLoading || serverConfigSaving || serverConfigTesting}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            disabled={serverConfigLoading || serverConfigTesting || !serverUrl.trim()}
-            onClick={onTestConnection}
-          >
-            {serverConfigTesting ? "Teste..." : "Verbindung testen"}
-          </Button>
-          <Button
-            disabled={serverConfigLoading || serverConfigSaving || !serverUrl.trim()}
-            onClick={onSave}
-          >
-            {serverConfigSaving ? "Speichert..." : "Speichern"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <SettingsKeyRow name="Server-Host" state={state} stateTone={stateTone} divider={false}>
+      <SettingsKeyInput
+        value={serverUrl}
+        onChange={onUrlChange}
+        placeholder="cs2.clustercontrol.cc"
+        disabled={serverConfigLoading || serverConfigSaving || serverConfigTesting}
+      />
+      <span className="flex gap-2">
+        <button
+          type="button"
+          title="Kann ein Chromium-Fenster für die Cloudflare-Bestätigung öffnen"
+          onClick={onTestConnection}
+          disabled={serverConfigLoading || serverConfigTesting || !serverUrl.trim()}
+          className="inline-flex h-[34px] items-center gap-1.5 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
+        >
+          <AppWindow className="size-[13px] shrink-0 opacity-70" />
+          {serverConfigTesting ? "Testet…" : "Verbindung testen"}
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={serverConfigLoading || serverConfigSaving || !serverUrl.trim()}
+          className="h-[34px] whitespace-nowrap rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {serverConfigSaving ? "Speichert…" : "Speichern"}
+        </button>
+      </span>
+    </SettingsKeyRow>
   );
 }

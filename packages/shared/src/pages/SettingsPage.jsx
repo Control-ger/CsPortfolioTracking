@@ -1,15 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Eye, LayoutGrid, Package, FolderCog, Cog } from "lucide-react";
+import { ArrowLeft, Eye, LayoutGrid, Package, FolderCog, Cog, Search, CreditCard } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { useTheme } from "@shared/contexts";
 
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
-import { Badge } from "@shared/components/ui/badge";
-import { Button } from "@shared/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components";
+import { StatusPill } from "@shared/components/ui/status-pill";
+import { SegmentedControl } from "@shared/components/ui/segmented-control";
+import {
+  SettingsCard,
+  SettingsCardBody,
+  SettingsCardHeader,
+  SettingsRow,
+  SettingsTile,
+  SettingsNote,
+  SettingsBanner,
+} from "@shared/components/ui/settings-card";
+import { Switch } from "@shared/components/ui/switch";
 import {
   fetchFeeSettings,
   updateFeeSettings,
@@ -62,8 +70,114 @@ const DESKTOP_SIDEBAR_ITEMS = [
   { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
 ];
 
+// Left-hand category column. `keywords` only feeds the search box — they are the
+// words a user is likely to type for a setting that lives inside the category
+// but is not in its title ("Lautstärke" for Darstellung, "Vault" for Verbindungen).
+const SETTINGS_CATEGORIES = [
+  {
+    id: "look",
+    label: "Darstellung",
+    hint: "Theme, Sounds, Fenster",
+    keywords: "theme dark light hell dunkel system sound lautstärke titelleiste fenster buttons",
+  },
+  {
+    id: "money",
+    label: "Währung & Gebühren",
+    hint: "Anzeige, Fees, Kurs",
+    keywords: "währung currency euro dollar wechselkurs gebühren fee seller auszahlung einzahlung fx",
+  },
+  {
+    id: "prices",
+    label: "Preise & Sync",
+    hint: "Quelle, CSFloat, Steam",
+    keywords: "preis preisquelle live csfloat steam watchlist buy orders import sync",
+  },
+  {
+    id: "notify",
+    label: "Benachrichtigungen",
+    hint: "Desktop und Web Push",
+    keywords: "benachrichtigung notification push ban welle vac updates impact",
+  },
+  {
+    id: "conn",
+    label: "Verbindungen",
+    hint: "API-Keys, Server, Vault",
+    desktopOnly: true,
+    keywords: "api key schlüssel skinbaron authid server host cloudflare secret vault passwort",
+  },
+  {
+    id: "about",
+    label: "Über die App",
+    hint: "Version, Updates",
+    desktopOnly: true,
+    keywords: "version update aktualisierung github release info",
+  },
+];
+
+const LIGHT_SWATCH = "linear-gradient(oklch(93% .004 260) 0 11px, oklch(98% .003 260) 11px 100%)";
+const DARK_SWATCH = "linear-gradient(oklch(25% .011 260) 0 11px, oklch(16.5% .01 260) 11px 100%)";
+const SYSTEM_SWATCH = `linear-gradient(103deg, transparent 0 49.5%, oklch(100% 0 0 / .16) 49.5% 50.5%, oklch(16.5% .01 260) 50.5% 100%), ${LIGHT_SWATCH}`;
+
+const IMPACT_LEVEL_LABELS = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+
+/** Level pill strip of a notification row. */
+function ImpactLevelPicker({ value, disabled, onSelect }) {
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      {IMPACT_LEVELS.map((level) => {
+        const active = value === level;
+        return (
+          <button
+            key={level}
+            type="button"
+            disabled={disabled}
+            onClick={() => onSelect(level)}
+            className={`h-[26px] rounded-full border px-2.5 text-[11px] font-bold transition-colors disabled:opacity-50 ${
+              active
+                ? "border-info/45 bg-info/12 text-info"
+                : "border-border bg-transparent text-muted-foreground hover:border-border-strong"
+            }`}
+          >
+            {IMPACT_LEVEL_LABELS[level]}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
+/** One "Ereignis | Mindest-Impact | Aktiv" row of the notification table. */
+function NotificationRow({ title, description, enabled, onToggle, level, onLevelSelect, saving, divider = true }) {
+  return (
+    <div
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3.5 lg:grid-cols-[minmax(0,1fr)_300px_62px] ${
+        divider ? "border-b border-border-soft" : ""
+      }`}
+    >
+      <span className="min-w-0">
+        <span className="block text-[13px] font-semibold text-foreground">{title}</span>
+        <span className="mt-[3px] block text-[11px] leading-[1.5] text-muted-foreground">
+          {description}
+        </span>
+      </span>
+      {/* The level strip only exists while the event is on — a threshold for a
+          channel that sends nothing is noise. */}
+      <span className="order-3 col-span-2 lg:order-none lg:col-span-1">
+        {onLevelSelect && enabled ? (
+          <ImpactLevelPicker value={level} disabled={saving} onSelect={onLevelSelect} />
+        ) : null}
+      </span>
+      <span className="flex justify-end">
+        <Switch checked={enabled} onCheckedChange={onToggle} disabled={saving} aria-label={title} />
+      </span>
+    </div>
+  );
+}
+
 export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [form, setForm] = useState(DEFAULT_FORM);
+  // Baselines for the header's dirty state: what the server last confirmed.
+  const [savedForm, setSavedForm] = useState(DEFAULT_FORM);
   const [source, setSource] = useState("defaults");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -94,6 +208,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [vaultStatus, setVaultStatus] = useState(null);
   const [vaultActionSaving, setVaultActionSaving] = useState(false);
   const [priceSourceMode, setPriceSourceMode] = useState("auto");
+  const [savedPriceSourceMode, setSavedPriceSourceMode] = useState("auto");
   const [priceSourceSaving, setPriceSourceSaving] = useState(false);
   const [priceSourceError, setPriceSourceError] = useState("");
   const [priceSourceSuccess, setPriceSourceSuccess] = useState("");
@@ -112,6 +227,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [webPushError, setWebPushError] = useState("");
   const [webPushSuccess, setWebPushSuccess] = useState("");
   const [currencySearchTerm, setCurrencySearchTerm] = useState("");
+  const [categorySearchTerm, setCategorySearchTerm] = useState("");
   const [appVersion, setAppVersion] = useState("");
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -150,8 +266,48 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const activePortfolioTab = new URLSearchParams(location.search).get("tab") || "overview";
   const requestedSettingsTab = String(searchParams.get("settingsTab") || "").trim().toLowerCase();
-  const activeSettingsTab = requestedSettingsTab === "api-remote" ? "api-remote" : "general";
+  const requestedCategory = String(searchParams.get("cat") || "").trim().toLowerCase();
   const requestedSettingsSection = String(searchParams.get("section") || "").trim().toLowerCase();
+
+  const availableCategories = SETTINGS_CATEGORIES.filter(
+    (category) => !category.desktopOnly || desktopRuntime,
+  );
+
+  // Category resolution keeps the old deep links alive: `settingsTab=api-remote`
+  // was the API/Remote tab (now "Verbindungen") and `section=push-notifications`
+  // pointed at the notification block.
+  const activeCategory = (() => {
+    const known = availableCategories.some((category) => category.id === requestedCategory);
+    if (known) {
+      return requestedCategory;
+    }
+    if (requestedSettingsSection === "push-notifications" || requestedSettingsSection === "push" || requestedSettingsSection === "browser-push") {
+      return "notify";
+    }
+    if (requestedSettingsTab === "api-remote" && desktopRuntime) {
+      return "conn";
+    }
+    return "look";
+  })();
+
+  const selectCategory = (categoryId) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("cat", categoryId);
+    nextParams.delete("settingsTab");
+    nextParams.delete("section");
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const notificationChannels = [
+    ...(desktopRuntime ? [{ value: "desktop", label: "Desktop" }] : []),
+    ...(!isElectronRuntime ? [{ value: "push", label: "Web Push" }] : []),
+  ];
+  const [notificationChannel, setNotificationChannel] = useState(() =>
+    isDesktopRuntime() ? "desktop" : "push",
+  );
+  const activeNotificationChannel = notificationChannels.some((c) => c.value === notificationChannel)
+    ? notificationChannel
+    : notificationChannels[0]?.value;
 
   const isSidebarItemActive = (item) => {
     if (item.key === "settings") {
@@ -179,7 +335,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         ]);
 
         const feeData = feeResponse?.data || {};
-        setForm({
+        const loadedForm = {
           fxFeePercent: toInputValue(feeData.fxFeePercent, DEFAULT_FORM.fxFeePercent),
           sellerFeePercent: toInputValue(feeData.sellerFeePercent, DEFAULT_FORM.sellerFeePercent),
           withdrawalFeePercent: toInputValue(
@@ -191,7 +347,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             feeData.depositFeeFixedEur,
             DEFAULT_FORM.depositFeeFixedEur,
           ),
-        });
+        };
+        setForm(loadedForm);
+        setSavedForm(loadedForm);
         setSource(feeData.source === "db" ? "db" : "defaults");
 
         const keyStatus = keyStatusResponse?.data || { configured: false, lastFour: null };
@@ -199,7 +357,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         const skinBaronStatus = skinBaronStatusResponse?.data || {};
         setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(skinBaronStatus));
         const priceSourceData = priceSourceResponse?.data || {};
-        setPriceSourceMode(normalizePriceSourceMode(priceSourceData.mode));
+        const loadedPriceSource = normalizePriceSourceMode(priceSourceData.mode);
+        setPriceSourceMode(loadedPriceSource);
+        setSavedPriceSourceMode(loadedPriceSource);
 
         setEncryptionReady(
           desktopRuntime
@@ -575,28 +735,16 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     void loadWebPushState();
   }, [webPushSupported]);
 
+  // A deep link into the push settings must also select the channel it means —
+  // landing on the Desktop channel would show a table without the row asked for.
   useEffect(() => {
     if (!requestedSettingsSection) {
       return;
     }
-    const anchorMap = {
-      "push-notifications": "settings-section-push-notifications",
-      push: "settings-section-push-notifications",
-      "browser-push": "settings-section-push-notifications",
-    };
-    const anchorId = anchorMap[requestedSettingsSection];
-    if (!anchorId) {
-      return;
+    if (["push-notifications", "push", "browser-push"].includes(requestedSettingsSection)) {
+      setNotificationChannel(isElectronRuntime ? "desktop" : "push");
     }
-
-    const timerId = window.setTimeout(() => {
-      const anchor = document.getElementById(anchorId);
-      if (anchor) {
-        anchor.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 120);
-    return () => window.clearTimeout(timerId);
-  }, [requestedSettingsSection, activeSettingsTab]);
+  }, [requestedSettingsSection, isElectronRuntime]);
 
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -641,40 +789,91 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     }
   };
 
-  const handleSave = async () => {
-    try {
+  const feeDirty = useMemo(
+    () => Object.keys(DEFAULT_FORM).some((key) => String(form[key]) !== String(savedForm[key])),
+    [form, savedForm],
+  );
+  const priceSourceDirty = priceSourceMode !== savedPriceSourceMode;
+  const dirty = feeDirty || priceSourceDirty;
+  const savingAny = saving || priceSourceSaving;
+
+  const handleSaveFees = async () => {
+    const payload = {
+      fxFeePercent: Number(form.fxFeePercent),
+      sellerFeePercent: Number(form.sellerFeePercent),
+      withdrawalFeePercent: Number(form.withdrawalFeePercent),
+      depositFeePercent: Number(form.depositFeePercent),
+      depositFeeFixedEur: Number(form.depositFeeFixedEur),
+    };
+
+    const response = await updateFeeSettings(payload);
+    const saved = response?.data || payload;
+
+    const nextForm = {
+      fxFeePercent: toInputValue(saved.fxFeePercent, DEFAULT_FORM.fxFeePercent),
+      sellerFeePercent: toInputValue(saved.sellerFeePercent, DEFAULT_FORM.sellerFeePercent),
+      withdrawalFeePercent: toInputValue(
+        saved.withdrawalFeePercent,
+        DEFAULT_FORM.withdrawalFeePercent,
+      ),
+      depositFeePercent: toInputValue(saved.depositFeePercent, DEFAULT_FORM.depositFeePercent),
+      depositFeeFixedEur: toInputValue(saved.depositFeeFixedEur, DEFAULT_FORM.depositFeeFixedEur),
+    };
+    setForm(nextForm);
+    setSavedForm(nextForm);
+    setSource("db");
+  };
+
+  const handleSavePriceSource = async () => {
+    const response = await updatePriceSourcePreference(priceSourceMode);
+    const saved = normalizePriceSourceMode(response?.data?.mode || priceSourceMode);
+    setPriceSourceMode(saved);
+    setSavedPriceSourceMode(saved);
+  };
+
+  /**
+   * Header save. Fees and the price-source preference are the only settings that
+   * do not persist on change, so they are the page's dirty set — everything else
+   * (theme, currency, toggles) writes through immediately.
+   */
+  const handleSaveAll = async () => {
+    setError("");
+    setSuccess("");
+    setPriceSourceError("");
+    setPriceSourceSuccess("");
+
+    if (feeDirty) {
       setSaving(true);
-      setError("");
-
-      const payload = {
-        fxFeePercent: Number(form.fxFeePercent),
-        sellerFeePercent: Number(form.sellerFeePercent),
-        withdrawalFeePercent: Number(form.withdrawalFeePercent),
-        depositFeePercent: Number(form.depositFeePercent),
-        depositFeeFixedEur: Number(form.depositFeeFixedEur),
-      };
-
-      const response = await updateFeeSettings(payload);
-      const saved = response?.data || payload;
-
-      setForm({
-        fxFeePercent: toInputValue(saved.fxFeePercent, DEFAULT_FORM.fxFeePercent),
-        sellerFeePercent: toInputValue(saved.sellerFeePercent, DEFAULT_FORM.sellerFeePercent),
-        withdrawalFeePercent: toInputValue(
-          saved.withdrawalFeePercent,
-          DEFAULT_FORM.withdrawalFeePercent,
-        ),
-        depositFeePercent: toInputValue(saved.depositFeePercent, DEFAULT_FORM.depositFeePercent),
-        depositFeeFixedEur: toInputValue(saved.depositFeeFixedEur, DEFAULT_FORM.depositFeeFixedEur),
-      });
-      setSource("db");
-      setSuccess("Fee-Settings gespeichert.");
-    } catch (saveError) {
-      setError(saveError.message || "Fee-Settings konnten nicht gespeichert werden.");
-      setSuccess("");
-    } finally {
-      setSaving(false);
+      try {
+        await handleSaveFees();
+        setSuccess("Gebühren gespeichert.");
+      } catch (saveError) {
+        setError(saveError.message || "Fee-Settings konnten nicht gespeichert werden.");
+      } finally {
+        setSaving(false);
+      }
     }
+
+    if (priceSourceDirty) {
+      setPriceSourceSaving(true);
+      try {
+        await handleSavePriceSource();
+        setPriceSourceSuccess("Gespeichert.");
+      } catch (saveError) {
+        setPriceSourceError(saveError?.message || "Preisquelle konnte nicht gespeichert werden.");
+      } finally {
+        setPriceSourceSaving(false);
+      }
+    }
+  };
+
+  const handleDiscardAll = () => {
+    setForm(savedForm);
+    setPriceSourceMode(savedPriceSourceMode);
+    setError("");
+    setSuccess("");
+    setPriceSourceError("");
+    setPriceSourceSuccess("");
   };
 
   const handleUpdateSkinBaronSessionCookie = async () => {
@@ -691,7 +890,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       const trimmedCookie = skinBaronSessionCookie.trim();
       await updateSkinBaronSessionCookie(trimmedCookie);
 
-      setSkinBaronApiKeySuccess("Session-Cookie wurde gespeichert und der Purchases-Zugriff wurde erfolgreich geprueft.");
+      setSkinBaronApiKeySuccess("Session-Cookie gespeichert und Purchases-Zugriff geprüft.");
       setSkinBaronSessionCookie("");
 
       const statusResponse = await fetchSkinBaronApiKeyStatus();
@@ -716,7 +915,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       }
 
       await connectSkinBaronSessionCookieViaBrowser();
-      setSkinBaronApiKeySuccess("Session-Cookie wurde per Browser verbunden und verifiziert.");
+      setSkinBaronApiKeySuccess("Per Browser verbunden und verifiziert.");
       setSkinBaronSessionCookie("");
 
       const statusResponse = await fetchSkinBaronApiKeyStatus();
@@ -829,27 +1028,10 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     }
   };
 
-  
   const handlePriceSourceChange = (value) => {
     setPriceSourceMode(value);
     setPriceSourceError("");
     setPriceSourceSuccess("");
-  };
-
-  const handlePriceSourceSave = async () => {
-    try {
-      setPriceSourceSaving(true);
-      setPriceSourceError("");
-      setPriceSourceSuccess("");
-      const response = await updatePriceSourcePreference(priceSourceMode);
-      const saved = normalizePriceSourceMode(response?.data?.mode || priceSourceMode);
-      setPriceSourceMode(saved);
-      setPriceSourceSuccess("Preisquellen-Praeferenz gespeichert.");
-    } catch (saveError) {
-      setPriceSourceError(saveError?.message || "Preisquellen-Praeferenz konnte nicht gespeichert werden.");
-    } finally {
-      setPriceSourceSaving(false);
-    }
   };
 
   const themeModeLabel = themeMode === "system"
@@ -858,426 +1040,82 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       ? "Dunkel"
       : "Hell";
 
-  const renderGeneralTab = () => {
-    return (
-      <div className="space-y-4">
-        <Card id="settings-section-push-notifications">
-          <CardHeader>
-            <CardTitle>Darstellung</CardTitle>
-            <CardDescription>
-              Waehle, ob die App hell, dunkel oder automatisch per Systempraeferenz laufen soll.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-3">
-              {[
-                {
-                  value: "system",
-                  label: "System",
-                  hint: `Automatisch (${systemPrefersDark ? "dunkel" : "hell"})`,
-                },
-                { value: "light", label: "Hell", hint: "Immer helles Design" },
-                { value: "dark", label: "Dunkel", hint: "Immer dunkles Design" },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setThemeMode(option.value)}
-                  className={`rounded-xl border p-3 text-left transition-colors ${
-                    themeMode === option.value
-                      ? "border-primary/40 bg-primary/12 shadow-none dark:shadow-[0_10px_22px_rgba(255,255,255,0.12)]"
-                      : "border-border bg-transparent hover:bg-accent/55 dark:border-border/75 dark:bg-card/65"
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-foreground">{option.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{option.hint}</p>
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
-              <p className="text-xs text-muted-foreground">
-                Aktiver Modus: <span className="font-semibold text-foreground">{themeModeLabel}</span>
-              </p>
-              <ThemeToggle />
-            </div>
-          </CardContent>
-        </Card>
+  // Credentials that are missing or no longer valid — the only badge in the nav
+  // that carries a real signal rather than a count of controls.
+  const connectionAttentionCount = desktopRuntime
+    ? [
+        !apiKeyStatus.configured,
+        !(skinBaronApiKeyStatus?.importReady === true
+          || skinBaronApiKeyStatus?.sessionCookieAccess?.allowed === true),
+        desktopRuntime && !serverUrl.trim(),
+      ].filter(Boolean).length
+    : 0;
 
-        {desktopRuntime && <WindowControlsSettingsSection />}
+  const normalizedCategorySearch = categorySearchTerm.trim().toLowerCase();
+  const visibleCategories = normalizedCategorySearch
+    ? availableCategories.filter((category) =>
+        `${category.label} ${category.hint} ${category.keywords}`
+          .toLowerCase()
+          .includes(normalizedCategorySearch),
+      )
+    : availableCategories;
 
-        <SoundSettingsSection />
-
-        <CurrencySettingsSection
-          currency={currencyContext.currency}
-          currencies={currencyContext.currencies}
-          setCurrency={currencyContext.setCurrency}
-          exchangeRates={currencyContext.exchangeRates}
-          ratesLoading={currencyContext.ratesLoading}
-          popularCurrencyCodes={currencyContext.popularCurrencyCodes || []}
-          currencySearchTerm={currencySearchTerm}
-          setCurrencySearchTerm={setCurrencySearchTerm}
+  const renderLookCategory = () => (
+    <>
+      <SettingsCard id="settings-section-appearance">
+        <SettingsCardHeader
+          title="Darstellung"
+          description="Hell, dunkel oder automatisch nach Systempräferenz."
         />
+        <SettingsCardBody className="flex flex-col gap-3.5">
+          <div className="grid gap-2.5 sm:grid-cols-3">
+            {[
+              {
+                value: "system",
+                label: "System",
+                hint: `Folgt dem Betriebssystem (${systemPrefersDark ? "dunkel" : "hell"})`,
+                swatch: SYSTEM_SWATCH,
+              },
+              { value: "light", label: "Hell", hint: "Immer helles Design", swatch: LIGHT_SWATCH },
+              { value: "dark", label: "Dunkel", hint: "Immer dunkles Design", swatch: DARK_SWATCH },
+            ].map((option) => (
+              <SettingsTile
+                key={option.value}
+                active={themeMode === option.value}
+                label={option.label}
+                hint={option.hint}
+                swatch={option.swatch}
+                onClick={() => setThemeMode(option.value)}
+              />
+            ))}
+          </div>
+          <SettingsNote>
+            <span>
+              Aktiver Modus: <span className="font-bold text-foreground">{themeModeLabel}</span>
+            </span>
+            <span>Gilt für Desktop und Web-Client</span>
+          </SettingsNote>
+        </SettingsCardBody>
+      </SettingsCard>
 
-        <PriceSourceSettingsSection
-          priceSourceMode={priceSourceMode}
-          priceSourceSaving={priceSourceSaving}
-          priceSourceError={priceSourceError}
-          priceSourceSuccess={priceSourceSuccess}
-          onPriceSourceChange={handlePriceSourceChange}
-          onPriceSourceSave={handlePriceSourceSave}
-        />
+      <SoundSettingsSection />
 
-        <WebPushSettingsSection
-          webPushSupported={webPushSupported}
-          webPushLoading={webPushLoading}
-          webPushError={webPushError}
-          webPushSuccess={webPushSuccess}
-          webPushPermission={webPushPermission}
-          webPushConfigured={webPushConfigured}
-          webPushSubscribed={webPushSubscribed}
-          webPushSaving={webPushSaving}
-          onEnable={handleEnableWebPush}
-          onDisable={handleDisableWebPush}
-        />
+      {desktopRuntime ? <WindowControlsSettingsSection /> : null}
+    </>
+  );
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Benachrichtigungen</CardTitle>
-            <CardDescription>
-              Steuere, wofür du System-Benachrichtigungen und Web-Push-Nachrichten erhältst.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {desktopRuntime ? (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">System-Benachrichtigungen</p>
-
-                {/* VAC Ban-Welle — desktop */}
-                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">VAC Ban-Welle erkannt</p>
-                      <p className="text-xs text-muted-foreground">Systembenachrichtigung bei erhöhter Ban-Aktivität in CS2.</p>
-                    </div>
-                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyBanWaveDesktop", notifyBanWaveDesktop, setNotifyBanWaveDesktop)}>
-                      {notifyBanWaveDesktop ? "Deaktivieren" : "Aktivieren"}
-                    </Button>
-                  </div>
-                  {notifyBanWaveDesktop ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
-                      {IMPACT_LEVELS.map((level) => {
-                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
-                        const active = notifyBanWaveDesktopMinLevel === level;
-                        return (
-                          <button
-                            key={level}
-                            disabled={notifySaving}
-                            onClick={() => void handleToggleNotifyPref("notifyBanWaveDesktopMinLevel", notifyBanWaveDesktopMinLevel, setNotifyBanWaveDesktopMinLevel, level)}
-                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
-                          >
-                            {labels[level]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* CS2 Updates — desktop */}
-                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">CS2 Updates</p>
-                      <p className="text-xs text-muted-foreground">Systembenachrichtigung bei neuen CS2 Game-Updates im Feed.</p>
-                    </div>
-                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyCsUpdatesDesktop", notifyCsUpdatesDesktop, setNotifyCsUpdatesDesktop)}>
-                      {notifyCsUpdatesDesktop ? "Deaktivieren" : "Aktivieren"}
-                    </Button>
-                  </div>
-                  {notifyCsUpdatesDesktop ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
-                      {IMPACT_LEVELS.map((level) => {
-                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
-                        const active = notifyCsUpdatesDesktopMinLevel === level;
-                        return (
-                          <button
-                            key={level}
-                            disabled={notifySaving}
-                            onClick={() => void handleToggleNotifyPref("notifyCsUpdatesDesktopMinLevel", notifyCsUpdatesDesktopMinLevel, setNotifyCsUpdatesDesktopMinLevel, level)}
-                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
-                          >
-                            {labels[level]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* Steam Sync — no level selector */}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                  <div>
-                    <p className="text-sm font-medium">Steam Sync (neue Items)</p>
-                    <p className="text-xs text-muted-foreground">Systembenachrichtigung wenn Steam Sync neue Items findet.</p>
-                  </div>
-                  <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifySteamSyncDesktop", notifySteamSyncDesktop, setNotifySteamSyncDesktop)}>
-                    {notifySteamSyncDesktop ? "Deaktivieren" : "Aktivieren"}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            {!isElectronRuntime ? (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Web Push</p>
-
-                {/* CS2 Updates — web push */}
-                <div className="space-y-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">CS2 Updates</p>
-                      <p className="text-xs text-muted-foreground">Web-Push-Nachricht bei neuen CS2-Updates.</p>
-                    </div>
-                    <Button variant="outline" disabled={notifySaving} onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPush", notifyCsUpdatesWebPush, setNotifyCsUpdatesWebPush)}>
-                      {notifyCsUpdatesWebPush ? "Deaktivieren" : "Aktivieren"}
-                    </Button>
-                  </div>
-                  {notifyCsUpdatesWebPush ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs text-muted-foreground">Mindest-Impact:</p>
-                      {IMPACT_LEVELS.map((level) => {
-                        const labels = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
-                        const active = notifyCsUpdatesWebPushMinLevel === level;
-                        return (
-                          <button
-                            key={level}
-                            disabled={notifySaving}
-                            onClick={() => void handleToggleNotifyPref("notifyCsUpdatesWebPushMinLevel", notifyCsUpdatesWebPushMinLevel, setNotifyCsUpdatesWebPushMinLevel, level)}
-                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${active ? "border-primary/40 bg-primary/12 text-foreground" : "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/50"}`}
-                          >
-                            {labels[level]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            {notifyError ? (
-              <p className="text-xs text-amber-400">{notifyError}</p>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {desktopRuntime ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>CSFloat Watchlist-Sync</CardTitle>
-              <CardDescription>
-                Übernimmt Items aus deiner CSFloat-Watchlist automatisch in die Electron-Watchlist.
-                Bestehende Einträge bleiben erhalten; es wird nur hinzugefügt, nie entfernt.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                <div>
-                  <p className="text-sm font-medium">Automatischer Import</p>
-                  <p className="text-xs text-muted-foreground">
-                    {csfloatWatchlistAutoImport
-                      ? "Aktiv: bei jedem CSFloat-Sync werden neue Watchlist-Items übernommen."
-                      : "Inaktiv: nur per manuellem Import unten."}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  disabled={csfloatWatchlistSaving}
-                  onClick={handleToggleCsfloatWatchlistAutoImport}
-                >
-                  {csfloatWatchlistSaving
-                    ? "Speichert..."
-                    : csfloatWatchlistAutoImport
-                      ? "Deaktivieren"
-                      : "Aktivieren"}
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Einmaligen Import jetzt ausführen.
-                </p>
-                <Button
-                  variant="outline"
-                  disabled={csfloatWatchlistImporting}
-                  onClick={handleImportCsfloatWatchlistNow}
-                >
-                  {csfloatWatchlistImporting ? "Importiert..." : "Jetzt importieren"}
-                </Button>
-              </div>
-              {csfloatWatchlistMessage ? (
-                <p className="text-xs text-emerald-400">{csfloatWatchlistMessage}</p>
-              ) : null}
-              {csfloatWatchlistError ? (
-                <p className="text-xs text-amber-400">{csfloatWatchlistError}</p>
-              ) : null}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {desktopRuntime ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>CSFloat Buy Order-Sync</CardTitle>
-              <CardDescription>
-                Übernimmt Items aus deinen CSFloat Buy Orders automatisch in die Watchlist.
-                Bestehende Einträge bleiben erhalten; es wird nur hinzugefügt, nie entfernt.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
-                <div>
-                  <p className="text-sm font-medium">Automatischer Import</p>
-                  <p className="text-xs text-muted-foreground">
-                    {csfloatBuyOrderAutoImport
-                      ? "Aktiv: bei jedem Watchlist-Load werden neue Buy Order-Items übernommen."
-                      : "Inaktiv: nur per manuellem Import unten."}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  disabled={csfloatBuyOrderSaving}
-                  onClick={handleToggleCsfloatBuyOrderAutoImport}
-                >
-                  {csfloatBuyOrderSaving
-                    ? "Speichert..."
-                    : csfloatBuyOrderAutoImport
-                      ? "Deaktivieren"
-                      : "Aktivieren"}
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Einmaligen Import jetzt ausführen.
-                </p>
-                <Button
-                  variant="outline"
-                  disabled={csfloatBuyOrderImporting}
-                  onClick={handleImportCsfloatBuyOrdersNow}
-                >
-                  {csfloatBuyOrderImporting ? "Importiert..." : "Jetzt importieren"}
-                </Button>
-              </div>
-              {csfloatBuyOrderMessage ? (
-                <p className="text-xs text-emerald-400">{csfloatBuyOrderMessage}</p>
-              ) : null}
-              {csfloatBuyOrderError ? (
-                <p className="text-xs text-amber-400">{csfloatBuyOrderError}</p>
-              ) : null}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {desktopRuntime ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Über die App</CardTitle>
-              <CardDescription>
-                Installierte Version der Desktop-App.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-border bg-transparent p-3 dark:border-border/70 dark:bg-card/65">
-                <p className="text-sm text-muted-foreground">Version</p>
-                <Badge variant="outline" className="border-border/70 font-mono text-foreground">
-                  {appVersion ? `v${appVersion}` : "unbekannt"}
-                </Badge>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleCheckForUpdates()}
-                  disabled={updateChecking || updateStatus?.state === "checking"}
-                >
-                  {updateChecking || updateStatus?.state === "checking"
-                    ? "Suche nach Updates..."
-                    : "Nach Updates suchen"}
-                </Button>
-
-                {updateStatus?.state === "available" ? (
-                  <Button
-                    size="sm"
-                    onClick={() => void handleDownloadUpdate()}
-                    disabled={updateDownloading}
-                  >
-                    {updateDownloading ? "Wird heruntergeladen..." : "Jetzt herunterladen"}
-                  </Button>
-                ) : null}
-
-                {/* This install cannot update itself, or the updater failed -
-                    the release page is the only remaining route. */}
-                {updateStatus?.state === "manual" || updateStatus?.state === "error" ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void openAppReleasesPage(updateStatus?.url)}
-                  >
-                    Auf GitHub herunterladen
-                  </Button>
-                ) : null}
-
-                {updateStatus?.state === "downloaded" ? (
-                  <Button size="sm" onClick={() => void handleInstallUpdate()}>
-                    Neustarten &amp; installieren
-                  </Button>
-                ) : null}
-              </div>
-
-              {updateStatus ? (
-                <p
-                  className={`text-xs ${
-                    updateStatus.state === "error"
-                      ? "text-amber-400"
-                      : updateStatus.state === "manual"
-                        ? "text-amber-400"
-                        : updateStatus.state === "available" || updateStatus.state === "downloaded"
-                        ? "text-emerald-400"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {updateStatus.state === "available"
-                    ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}.`
-                    : updateStatus.state === "manual"
-                    ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}. Diese Installation kann sich nicht selbst aktualisieren — bitte manuell von GitHub laden.`
-                    : updateStatus.state === "downloading"
-                      ? `Wird heruntergeladen... ${Math.round(Number(updateStatus.percent || 0))}%`
-                      : updateStatus.state === "downloaded"
-                        ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} bereit zur Installation.`
-                        : updateStatus.state === "installing"
-                          ? "Wird installiert — bitte die Passwortabfrage bestätigen."
-                          : updateStatus.state === "handoff"
-                          ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} wurde im System-Installer geöffnet — App schließen und dort bestätigen.`
-                          : updateStatus.state === "not-available"
-                          ? "Du hast die neueste Version."
-                          : updateStatus.state === "dev"
-                            ? "Update-Suche ist nur in der installierten App verfügbar."
-                            : updateStatus.state === "error"
-                              ? `${updateStatus.message || "Update-Suche fehlgeschlagen."} Alternativ manuell von GitHub laden.`
-                              : ""}
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
-        ) : null}
-
-      </div>
-    );
-  };
-
-  const renderFeesTab = () => {
-    return (
+  const renderMoneyCategory = () => (
+    <>
+      <CurrencySettingsSection
+        currency={currencyContext.currency}
+        currencies={currencyContext.currencies}
+        setCurrency={currencyContext.setCurrency}
+        exchangeRates={currencyContext.exchangeRates}
+        ratesLoading={currencyContext.ratesLoading}
+        popularCurrencyCodes={currencyContext.popularCurrencyCodes || []}
+        currencySearchTerm={currencySearchTerm}
+        setCurrencySearchTerm={setCurrencySearchTerm}
+      />
       <FeeSettingsSection
         form={form}
         source={source}
@@ -1286,51 +1124,223 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         error={error}
         success={success}
         handleChange={handleChange}
-        handleSave={handleSave}
       />
-    );
-  };
+    </>
+  );
 
-  const renderApiKeyTab = () => {
+  const renderPricesCategory = () => (
+    <>
+      <PriceSourceSettingsSection
+        priceSourceMode={priceSourceMode}
+        priceSourceError={priceSourceError}
+        priceSourceSuccess={priceSourceSuccess}
+        onPriceSourceChange={handlePriceSourceChange}
+      />
+
+      {desktopRuntime ? (
+        <SettingsCard id="settings-section-csfloat-sync">
+          <SettingsCardHeader
+            title="CSFloat-Sync"
+            description="Watchlist und Buy Orders übernehmen. Es wird nur hinzugefügt, nie entfernt."
+          />
+          <SettingsRow
+            title="Watchlist automatisch importieren"
+            description={
+              csfloatWatchlistAutoImport
+                ? "Aktiv: bei jedem CSFloat-Sync werden neue Watchlist-Items übernommen."
+                : "Inaktiv: nur per manuellem Import."
+            }
+          >
+            <button
+              type="button"
+              onClick={handleImportCsfloatWatchlistNow}
+              disabled={csfloatWatchlistImporting}
+              className="h-8 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
+            >
+              {csfloatWatchlistImporting ? "Importiert…" : "Jetzt importieren"}
+            </button>
+            <Switch
+              checked={csfloatWatchlistAutoImport}
+              onCheckedChange={handleToggleCsfloatWatchlistAutoImport}
+              disabled={csfloatWatchlistSaving}
+              aria-label="Watchlist automatisch importieren"
+            />
+          </SettingsRow>
+          <SettingsRow
+            title="Buy Orders synchronisieren"
+            description={
+              csfloatBuyOrderAutoImport
+                ? "Aktiv: bei jedem Watchlist-Load werden neue Buy Order-Items übernommen."
+                : "Inaktiv: nur per manuellem Import."
+            }
+            divider={Boolean(
+              csfloatWatchlistMessage || csfloatWatchlistError || csfloatBuyOrderMessage || csfloatBuyOrderError,
+            )}
+          >
+            <button
+              type="button"
+              onClick={handleImportCsfloatBuyOrdersNow}
+              disabled={csfloatBuyOrderImporting}
+              className="h-8 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
+            >
+              {csfloatBuyOrderImporting ? "Importiert…" : "Jetzt importieren"}
+            </button>
+            <Switch
+              checked={csfloatBuyOrderAutoImport}
+              onCheckedChange={handleToggleCsfloatBuyOrderAutoImport}
+              disabled={csfloatBuyOrderSaving}
+              aria-label="Buy Orders synchronisieren"
+            />
+          </SettingsRow>
+          {csfloatWatchlistMessage || csfloatWatchlistError || csfloatBuyOrderMessage || csfloatBuyOrderError ? (
+            <div className="flex flex-col gap-1 px-5 py-3 text-[11px]">
+              {csfloatWatchlistMessage ? <p className="text-success">{csfloatWatchlistMessage}</p> : null}
+              {csfloatWatchlistError ? <p className="text-warn">{csfloatWatchlistError}</p> : null}
+              {csfloatBuyOrderMessage ? <p className="text-success">{csfloatBuyOrderMessage}</p> : null}
+              {csfloatBuyOrderError ? <p className="text-warn">{csfloatBuyOrderError}</p> : null}
+            </div>
+          ) : null}
+        </SettingsCard>
+      ) : null}
+    </>
+  );
+
+  const renderNotifyCategory = () => {
+    const isPushChannel = activeNotificationChannel === "push";
+    const rows = isPushChannel
+      ? [
+          {
+            id: "cs-updates-push",
+            title: "CS2 Updates",
+            description: "Web-Push-Nachricht bei neuen CS2-Updates.",
+            enabled: notifyCsUpdatesWebPush,
+            onToggle: () =>
+              void handleToggleNotifyPref(
+                "notifyCsUpdatesWebPush",
+                notifyCsUpdatesWebPush,
+                setNotifyCsUpdatesWebPush,
+              ),
+            level: notifyCsUpdatesWebPushMinLevel,
+            onLevelSelect: (level) =>
+              void handleToggleNotifyPref(
+                "notifyCsUpdatesWebPushMinLevel",
+                notifyCsUpdatesWebPushMinLevel,
+                setNotifyCsUpdatesWebPushMinLevel,
+                level,
+              ),
+          },
+        ]
+      : [
+          {
+            id: "ban-wave",
+            title: "VAC Ban-Welle erkannt",
+            description: "Bei erhöhter Ban-Aktivität in CS2.",
+            enabled: notifyBanWaveDesktop,
+            onToggle: () =>
+              void handleToggleNotifyPref(
+                "notifyBanWaveDesktop",
+                notifyBanWaveDesktop,
+                setNotifyBanWaveDesktop,
+              ),
+            level: notifyBanWaveDesktopMinLevel,
+            onLevelSelect: (level) =>
+              void handleToggleNotifyPref(
+                "notifyBanWaveDesktopMinLevel",
+                notifyBanWaveDesktopMinLevel,
+                setNotifyBanWaveDesktopMinLevel,
+                level,
+              ),
+          },
+          {
+            id: "cs-updates",
+            title: "CS2 Updates",
+            description: "Neue Game-Updates im Feed.",
+            enabled: notifyCsUpdatesDesktop,
+            onToggle: () =>
+              void handleToggleNotifyPref(
+                "notifyCsUpdatesDesktop",
+                notifyCsUpdatesDesktop,
+                setNotifyCsUpdatesDesktop,
+              ),
+            level: notifyCsUpdatesDesktopMinLevel,
+            onLevelSelect: (level) =>
+              void handleToggleNotifyPref(
+                "notifyCsUpdatesDesktopMinLevel",
+                notifyCsUpdatesDesktopMinLevel,
+                setNotifyCsUpdatesDesktopMinLevel,
+                level,
+              ),
+          },
+          {
+            id: "steam-sync",
+            title: "Steam Sync (neue Items)",
+            description: "Wenn der Sync neue Items findet.",
+            enabled: notifySteamSyncDesktop,
+            onToggle: () =>
+              void handleToggleNotifyPref(
+                "notifySteamSyncDesktop",
+                notifySteamSyncDesktop,
+                setNotifySteamSyncDesktop,
+              ),
+            level: null,
+            onLevelSelect: null,
+          },
+        ];
+
     return (
-      <CsFloatApiKeySection
-        apiKey={apiKey}
-        apiKeyLoading={apiKeyLoading}
-        apiKeySaving={apiKeySaving}
-        apiKeyStatus={apiKeyStatus}
-        showApiKey={showApiKey}
-        apiKeyError={apiKeyError}
-        apiKeySuccess={apiKeySuccess}
-        encryptionReady={encryptionReady}
-        desktopRuntime={desktopRuntime}
-        onApiKeyChange={handleApiKeyChange}
-        onToggleShowApiKey={() => setShowApiKey(!showApiKey)}
-        onUpdate={handleUpdateCsFloatApiKey}
-      />
+      <SettingsCard id="settings-section-push-notifications">
+        <SettingsCardHeader
+          title="Benachrichtigungen"
+          description="Ein Ereignis pro Zeile, Kanal und Mindest-Impact direkt daneben."
+          action={
+            notificationChannels.length > 1 ? (
+              <SegmentedControl
+                items={notificationChannels}
+                value={activeNotificationChannel}
+                onChange={setNotificationChannel}
+                size="sm"
+              />
+            ) : null
+          }
+        />
+        <div className="hidden grid-cols-[minmax(0,1fr)_300px_62px] items-center gap-3 border-b border-border px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground lg:grid">
+          <span>Ereignis</span>
+          <span>Mindest-Impact</span>
+          <span className="text-right">Aktiv</span>
+        </div>
+        {rows.map((row, index) => (
+          <NotificationRow
+            key={row.id}
+            title={row.title}
+            description={row.description}
+            enabled={row.enabled}
+            onToggle={row.onToggle}
+            level={row.level}
+            onLevelSelect={row.onLevelSelect}
+            saving={notifySaving}
+            divider={index < rows.length - 1 || isPushChannel || Boolean(notifyError)}
+          />
+        ))}
+        {isPushChannel ? (
+          <WebPushSettingsSection
+            webPushSupported={webPushSupported}
+            webPushLoading={webPushLoading}
+            webPushError={webPushError}
+            webPushSuccess={webPushSuccess}
+            webPushPermission={webPushPermission}
+            webPushConfigured={webPushConfigured}
+            webPushSubscribed={webPushSubscribed}
+            webPushSaving={webPushSaving}
+            onEnable={handleEnableWebPush}
+            onDisable={handleDisableWebPush}
+          />
+        ) : null}
+        {notifyError ? <p className="px-5 py-3 text-[11px] text-warn">{notifyError}</p> : null}
+      </SettingsCard>
     );
   };
 
-  const renderSkinBaronApiKeyTab = () => {
-    return (
-      <SkinBaronApiKeySection
-        skinBaronStatusLoading={skinBaronStatusLoading}
-        skinBaronApiKeyStatus={skinBaronApiKeyStatus}
-        skinBaronApiKeyError={skinBaronApiKeyError}
-        skinBaronApiKeySuccess={skinBaronApiKeySuccess}
-        skinBaronSessionCookie={skinBaronSessionCookie}
-        showSkinBaronSessionCookie={showSkinBaronSessionCookie}
-        skinBaronSessionSaving={skinBaronSessionSaving}
-        skinBaronSessionBrowserConnecting={skinBaronSessionBrowserConnecting}
-        encryptionReady={encryptionReady}
-        onSessionCookieChange={handleSkinBaronSessionCookieChange}
-        onToggleShowSessionCookie={() => setShowSkinBaronSessionCookie(!showSkinBaronSessionCookie)}
-        onSaveSessionCookie={handleUpdateSkinBaronSessionCookie}
-        onConnectViaBrowser={handleConnectSkinBaronSessionViaBrowser}
-      />
-    );
-  };
-
-  const renderSecretVaultCard = () => {
+  const renderVaultCard = () => {
     if (!desktopRuntime || !window.electronAPI?.secrets?.getVaultStatus) {
       return null;
     }
@@ -1341,79 +1351,97 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     const autoLockEnabled = vaultStatus?.policy?.autoLockOnIdle === true;
 
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Secret Vault</CardTitle>
-          <CardDescription>
-            Lokale API-Secrets bleiben verschluesselt. Unlock ist nach jedem App-Start erforderlich.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant="outline"
-              className={isUnlocked ? "border-emerald-400/35 text-emerald-300" : "border-amber-400/35 text-amber-300"}
-            >
-              {isUnlocked ? "Entsperrt" : "Gesperrt"}
-            </Badge>
-            <Badge variant="outline" className="border-border/70 text-muted-foreground">
-              {isConfigured ? "App-Passwort gesetzt" : "App-Passwort fehlt"}
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Optional: Auto-Sperre nach {idleMinutes} Minuten Inaktivitaet.
-          </p>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 p-3">
-            <div>
-              <p className="text-sm font-medium">Auto-Sperre</p>
-              <p className="text-xs text-muted-foreground">
-                {autoLockEnabled
-                  ? `Aktiv: sperrt nach ${idleMinutes} Minuten Inaktivitaet`
-                  : "Inaktiv: nur bei Neustart oder explizitem Sperren"}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              disabled={vaultActionSaving || !window.electronAPI?.secrets?.setVaultPreferences}
-              onClick={async () => {
-                try {
-                  setVaultActionSaving(true);
-                  const result = await window.electronAPI.secrets.setVaultPreferences({
-                    autoLockEnabled: !autoLockEnabled,
-                  });
-                  setVaultStatus(result?.status || vaultStatus);
-                } catch (error) {
-                  setError(error?.message || "Secret-Vault Einstellungen konnten nicht gespeichert werden.");
-                } finally {
-                  setVaultActionSaving(false);
-                }
-              }}
-            >
-              {vaultActionSaving ? "Speichert..." : autoLockEnabled ? "Auto-Sperre deaktivieren" : "Auto-Sperre aktivieren"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <SettingsCard id="settings-section-vault">
+        <SettingsCardHeader
+          title="Secret Vault"
+          description="Verschlüsselter Speicher für Schlüssel und Sessions. Unlock ist nach jedem App-Start erforderlich."
+          action={
+            <>
+              <StatusPill tone={isUnlocked ? "success" : "warn"} dot>
+                {isUnlocked ? "Entsperrt" : "Gesperrt"}
+              </StatusPill>
+              <StatusPill tone={isConfigured ? "neutral" : "danger"}>
+                {isConfigured ? "App-Passwort gesetzt" : "App-Passwort fehlt"}
+              </StatusPill>
+            </>
+          }
+        />
+        <SettingsRow
+          title="Auto-Sperre"
+          description={
+            autoLockEnabled
+              ? `Aktiv: sperrt nach ${idleMinutes} Minuten Inaktivität`
+              : "Inaktiv: nur bei Neustart oder explizitem Sperren"
+          }
+          divider={false}
+        >
+          <Switch
+            checked={autoLockEnabled}
+            disabled={vaultActionSaving || !window.electronAPI?.secrets?.setVaultPreferences}
+            aria-label="Auto-Sperre"
+            onCheckedChange={async () => {
+              try {
+                setVaultActionSaving(true);
+                const result = await window.electronAPI.secrets.setVaultPreferences({
+                  autoLockEnabled: !autoLockEnabled,
+                });
+                setVaultStatus(result?.status || vaultStatus);
+              } catch (error) {
+                setError(error?.message || "Secret-Vault Einstellungen konnten nicht gespeichert werden.");
+              } finally {
+                setVaultActionSaving(false);
+              }
+            }}
+          />
+        </SettingsRow>
+      </SettingsCard>
     );
   };
 
-  const renderRemoteConnectionsTab = () => {
-    if (!desktopRuntime) {
-      return (
-        <Card>
-          <CardHeader>
-            <CardTitle>API & Verbindungen</CardTitle>
-            <CardDescription>
-              Diese Einstellungen sind nur in der Desktop-App verfuegbar.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        {renderSecretVaultCard()}
+  const renderConnCategory = () => (
+    <>
+      <SettingsCard id="settings-section-api-keys">
+        <SettingsCardHeader
+          title="API-Schlüssel"
+          description="Keys liegen im Secret Vault und verlassen das Gerät nicht."
+        />
+        <SettingsBanner tone="info" icon={<CreditCard className="size-4 text-info" />}>
+          <span className="font-bold text-foreground">
+            Testen und Speichern können ein Browserfenster öffnen.
+          </span>{" "}
+          Verlangt SkinBaron einen Login oder Cloudflare beim Server eine Bestätigung, startet die
+          App ein eingebettetes Chromium-Fenster. Schließe es erst, wenn die Anmeldung durch ist —
+          die Session wird danach im Vault abgelegt.
+        </SettingsBanner>
+        <CsFloatApiKeySection
+          apiKey={apiKey}
+          apiKeyLoading={apiKeyLoading}
+          apiKeySaving={apiKeySaving}
+          apiKeyStatus={apiKeyStatus}
+          showApiKey={showApiKey}
+          apiKeyError={apiKeyError}
+          apiKeySuccess={apiKeySuccess}
+          encryptionReady={encryptionReady}
+          desktopRuntime={desktopRuntime}
+          onApiKeyChange={handleApiKeyChange}
+          onToggleShowApiKey={() => setShowApiKey(!showApiKey)}
+          onUpdate={handleUpdateCsFloatApiKey}
+        />
+        <SkinBaronApiKeySection
+          skinBaronStatusLoading={skinBaronStatusLoading}
+          skinBaronApiKeyStatus={skinBaronApiKeyStatus}
+          skinBaronApiKeyError={skinBaronApiKeyError}
+          skinBaronApiKeySuccess={skinBaronApiKeySuccess}
+          skinBaronSessionCookie={skinBaronSessionCookie}
+          showSkinBaronSessionCookie={showSkinBaronSessionCookie}
+          skinBaronSessionSaving={skinBaronSessionSaving}
+          skinBaronSessionBrowserConnecting={skinBaronSessionBrowserConnecting}
+          encryptionReady={encryptionReady}
+          onSessionCookieChange={handleSkinBaronSessionCookieChange}
+          onToggleShowSessionCookie={() => setShowSkinBaronSessionCookie(!showSkinBaronSessionCookie)}
+          onSaveSessionCookie={handleUpdateSkinBaronSessionCookie}
+          onConnectViaBrowser={handleConnectSkinBaronSessionViaBrowser}
+        />
         {window.electronAPI?.serverConfig ? (
           <ServerConfigSection
             serverUrl={serverUrl}
@@ -1471,75 +1499,246 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             }}
           />
         ) : null}
-        {renderSkinBaronApiKeyTab()}
-        {renderApiKeyTab()}
-      </div>
+      </SettingsCard>
+
+      {renderVaultCard()}
+    </>
+  );
+
+  const renderAboutCategory = () => {
+    const updateMessage = !updateStatus
+      ? ""
+      : updateStatus.state === "available"
+        ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}.`
+        : updateStatus.state === "manual"
+          ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}. Diese Installation kann sich nicht selbst aktualisieren — bitte manuell von GitHub laden.`
+          : updateStatus.state === "downloading"
+            ? `Wird heruntergeladen… ${Math.round(Number(updateStatus.percent || 0))}%`
+            : updateStatus.state === "downloaded"
+              ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} bereit zur Installation.`
+              : updateStatus.state === "installing"
+                ? "Wird installiert — bitte die Passwortabfrage bestätigen."
+                : updateStatus.state === "handoff"
+                  ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} wurde im System-Installer geöffnet — App schließen und dort bestätigen.`
+                  : updateStatus.state === "not-available"
+                    ? "Du hast die neueste Version."
+                    : updateStatus.state === "dev"
+                      ? "Update-Suche ist nur in der installierten App verfügbar."
+                      : updateStatus.state === "error"
+                        ? `${updateStatus.message || "Update-Suche fehlgeschlagen."} Alternativ manuell von GitHub laden.`
+                        : "";
+    const updateTone =
+      updateStatus?.state === "error" || updateStatus?.state === "manual"
+        ? "text-warn"
+        : updateStatus?.state === "available" || updateStatus?.state === "downloaded"
+          ? "text-success"
+          : "text-muted-foreground";
+
+    const facts = [
+      { label: "App-Version", value: appVersion ? `v${appVersion}` : "unbekannt" },
+      { label: "Server-Host", value: serverUrl || "nicht gesetzt" },
+      { label: "Anzeigewährung", value: currencyContext.currency },
+      {
+        label: "Live-Preisquelle",
+        value:
+          savedPriceSourceMode === "csfloat"
+            ? "Nur CSFloat"
+            : savedPriceSourceMode === "steam"
+              ? "Nur Steam"
+              : "Auto",
+      },
+    ];
+
+    return (
+      <SettingsCard id="settings-section-about">
+        <SettingsCardHeader title="Über die App" description="Version, Datenstand und Wartung." />
+        <SettingsCardBody className="grid gap-2.5 sm:grid-cols-2">
+          {facts.map((fact) => (
+            <div
+              key={fact.label}
+              className="flex items-center justify-between gap-3 rounded-[12px] border border-border-soft bg-surface-1 px-3.5 py-3"
+            >
+              <span className="text-[12px] text-muted-foreground">{fact.label}</span>
+              <span className="truncate text-[13px] font-bold tabular-nums text-foreground">
+                {fact.value}
+              </span>
+            </div>
+          ))}
+        </SettingsCardBody>
+        <div className="flex flex-wrap items-center gap-2 px-5 pb-[18px]">
+          <button
+            type="button"
+            onClick={() => void handleCheckForUpdates()}
+            disabled={updateChecking || updateStatus?.state === "checking"}
+            className="h-[34px] rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
+          >
+            {updateChecking || updateStatus?.state === "checking"
+              ? "Suche nach Updates…"
+              : "Nach Updates suchen"}
+          </button>
+
+          {updateStatus?.state === "available" ? (
+            <button
+              type="button"
+              onClick={() => void handleDownloadUpdate()}
+              disabled={updateDownloading}
+              className="h-[34px] rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {updateDownloading ? "Wird heruntergeladen…" : "Jetzt herunterladen"}
+            </button>
+          ) : null}
+
+          {/* This install cannot update itself, or the updater failed —
+              the release page is the only remaining route. */}
+          {updateStatus?.state === "manual" || updateStatus?.state === "error" ? (
+            <button
+              type="button"
+              onClick={() => void openAppReleasesPage(updateStatus?.url)}
+              className="h-[34px] rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2"
+            >
+              Auf GitHub herunterladen
+            </button>
+          ) : null}
+
+          {updateStatus?.state === "downloaded" ? (
+            <button
+              type="button"
+              onClick={() => void handleInstallUpdate()}
+              className="h-[34px] rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Neustarten &amp; installieren
+            </button>
+          ) : null}
+
+          {updateMessage ? (
+            <p className={`w-full text-[11px] ${updateTone}`}>{updateMessage}</p>
+          ) : null}
+        </div>
+      </SettingsCard>
     );
   };
 
+  const categoryPanels = {
+    look: renderLookCategory,
+    money: renderMoneyCategory,
+    prices: renderPricesCategory,
+    notify: renderNotifyCategory,
+    conn: renderConnCategory,
+    about: renderAboutCategory,
+  };
+
   const settingsContent = (
-    <div className="w-full space-y-6">
-      {/* Header */}
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button
-            asChild
-            variant="ghost"
-            size="icon"
-            className={`shrink-0 ${useDesktopSidebarShell ? "lg:hidden" : ""}`}
+    <div className="w-full">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            to="/"
+            aria-label="Zurück"
+            className={`inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground ${
+              useDesktopSidebarShell ? "lg:hidden" : ""
+            }`}
           >
-            <Link to="/">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
-            <p className="text-sm text-muted-foreground">
-              Allgemeine Einstellungen und API/Remote-Konfiguration
+            <ArrowLeft className="size-5" />
+          </Link>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-foreground">
+              Einstellungen
+            </h1>
+            <p className="mt-1 truncate text-[12px] text-muted-foreground">
+              {desktopRuntime ? "Desktop-App" : "Web-App"}
+              {appVersion ? ` · Version ${appVersion}` : ""}
+              {serverUrl ? ` · Server ${serverUrl}` : ""}
             </p>
           </div>
         </div>
-        <div className={`flex items-center gap-2 ${useDesktopSidebarShell ? "lg:hidden" : ""}`}>
-          <ThemeToggle />
-          <div className="hidden sm:block">
+        <div className="flex items-center gap-2">
+          <StatusPill tone={dirty ? "warn" : "success"} size="default" dot>
+            {dirty ? "Nicht gespeicherte Änderungen" : "Alles gespeichert"}
+          </StatusPill>
+          <button
+            type="button"
+            onClick={() => void handleSaveAll()}
+            disabled={!dirty || savingAny}
+            className="h-9 whitespace-nowrap rounded-[10px] bg-primary px-4 text-[13px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            {savingAny ? "Speichert…" : "Änderungen speichern"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDiscardAll}
+            disabled={!dirty || savingAny}
+            className="h-9 whitespace-nowrap rounded-[10px] border border-border-strong px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
+          >
+            Verwerfen
+          </button>
+          <div className={`ml-1 items-center gap-2 ${useDesktopSidebarShell ? "hidden" : "flex"}`}>
             <UserMenu />
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="space-y-4">
-        <Tabs
-          value={activeSettingsTab}
-          onValueChange={(nextValue) => {
-            const normalizedTab = nextValue === "api-remote" ? "api-remote" : "general";
-            const nextParams = new URLSearchParams(searchParams);
-            nextParams.set("settingsTab", normalizedTab);
-            setSearchParams(nextParams, { replace: true });
-          }}
-          className="w-full"
-        >
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-0 border-b border-border/70 bg-transparent p-0">
-            <TabsTrigger
-              value="general"
-              className="h-11 rounded-none border-b-2 border-b-transparent px-3 text-xs sm:text-sm data-[state=active]:border-b-foreground data-[state=active]:text-foreground"
-            >
-              Allgemein
-            </TabsTrigger>
-            <TabsTrigger
-              value="api-remote"
-              className="h-11 rounded-none border-b-2 border-b-transparent px-3 text-xs sm:text-sm data-[state=active]:border-b-foreground data-[state=active]:text-foreground"
-            >
-              API & Remote
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="general" className="space-y-4 pt-1">
-            {renderGeneralTab()}
-            {renderFeesTab()}
-          </TabsContent>
-          <TabsContent value="api-remote" className="space-y-4 pt-1">
-            {renderRemoteConnectionsTab()}
-          </TabsContent>
-        </Tabs>
+      <div className="mt-[18px] grid items-start gap-[18px] lg:grid-cols-[268px_minmax(0,1fr)]">
+        <aside className="flex flex-col gap-3 lg:sticky lg:top-[18px]">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={categorySearchTerm}
+              onChange={(event) => setCategorySearchTerm(event.target.value)}
+              placeholder="Einstellung suchen…"
+              className="h-[38px] w-full rounded-[10px] border border-border bg-card pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
+            />
+          </label>
+
+          <div className="flex flex-col gap-0.5 rounded-[16px] border border-border bg-card p-1.5">
+            {visibleCategories.map((category) => {
+              const active = category.id === activeCategory;
+              const badge = category.id === "conn" ? connectionAttentionCount : 0;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => selectCategory(category.id)}
+                  className={`flex w-full items-center justify-between gap-2.5 rounded-[12px] border border-transparent px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-surface-2"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-bold">{category.label}</span>
+                    <span className="mt-0.5 block text-[11px] font-medium opacity-70">
+                      {category.hint}
+                    </span>
+                  </span>
+                  {badge > 0 ? (
+                    <span
+                      className={`grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-extrabold ${
+                        active ? "bg-primary-foreground/15" : "bg-warn/15 text-warn"
+                      }`}
+                    >
+                      {badge}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+            {visibleCategories.length === 0 ? (
+              <p className="px-3 py-2.5 text-[12px] text-muted-foreground">
+                Keine Kategorie passt zu „{categorySearchTerm}“.
+              </p>
+            ) : null}
+          </div>
+
+          {desktopRuntime ? (
+            <p className="px-1 text-[11px] leading-[1.5] text-muted-foreground">
+              API-, Server- und Vault-Einstellungen liegen gebündelt unter Verbindungen.
+            </p>
+          ) : null}
+        </aside>
+
+        <div className="flex min-w-0 flex-col gap-3.5">
+          {(categoryPanels[activeCategory] || renderLookCategory)()}
+        </div>
       </div>
     </div>
   );
