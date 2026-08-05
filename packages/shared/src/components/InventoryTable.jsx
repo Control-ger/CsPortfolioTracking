@@ -1,73 +1,43 @@
 import React, { useMemo, useState } from "react";
-import { Badge } from "@shared/components/ui/badge";
-import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { ItemListRow } from "@shared/components/ItemListRow";
 import { LayeredGroupIcon } from "@shared/components/LayeredGroupIcon";
+import { ItemThumb } from "@shared/components/ui/item-thumb";
+import { RoiMeter } from "@shared/components/ui/data-display";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@shared/components/ui/table";
+  GridTable,
+  GridTableEmpty,
+  GridTableFoot,
+  GridTableHead,
+  GridTableRow,
+} from "@shared/components/ui/grid-table";
 
-import { Abbr } from "@shared/components/AbbreviationTooltip";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
-const ItemThumbnail = ({ imageUrl, name }) => (
-  <div className="h-14 w-14 overflow-hidden rounded-xl border border-border/75 bg-muted/25 p-1">
-    {imageUrl ? (
-      <img
-        src={imageUrl}
-        alt={name}
-        className="h-full w-full object-contain"
-        loading="lazy"
-        decoding="async"
-      />
-    ) : (
-      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-        N/A
-      </div>
-    )}
-  </div>
-);
+/**
+ * Column template of the Inventar design's table. Head, rows and nested cluster
+ * rows all share it — see `GridTable`.
+ */
+const COLUMNS = "minmax(0,1fr) 54px 92px 100px 76px 116px";
+
+const SORT_OPTIONS = [
+  { key: "roi", label: "ROI" },
+  { key: "value", label: "Positionswert" },
+  { key: "quantity", label: "Menge" },
+  { key: "item", label: "Name" },
+];
 
 function formatSignedCurrency(value, formatPrice) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (!Number.isFinite(Number(value))) {
     return "-";
   }
 
-  const sign = value >= 0 ? "+" : "-";
-  return `${sign}${formatPrice(Math.abs(value))}`;
-}
-
-function formatSignedPercent(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "-";
-  }
-
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+  const numeric = Number(value);
+  return `${numeric >= 0 ? "+" : "-"}${formatPrice(Math.abs(numeric))}`;
 }
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-// Absolute profit/loss for a single position row, mirroring group.totalProfit.
-function resolveItemProfitValue(item) {
-  const direct = Number(item?.profitEuro);
-  if (Number.isFinite(direct)) {
-    return direct;
-  }
-
-  const currentValue = Number(item?.currentValue);
-  const totalInvested = Number(item?.totalInvested);
-  if (Number.isFinite(currentValue) && Number.isFinite(totalInvested)) {
-    return currentValue - totalInvested;
-  }
-
-  return null;
 }
 
 function formatSignedPercentOneDecimal(value) {
@@ -87,78 +57,51 @@ function formatSharePercent(value) {
 }
 
 function deltaClassName(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (!isFiniteNumber(value)) {
     return "text-muted-foreground";
   }
 
-  return value >= 0 ? "text-emerald-400" : "text-red-400";
+  return value >= 0 ? "text-success" : "text-danger";
 }
 
-function freshnessBadgeClass(status) {
-  switch (status) {
-    case "fresh":
-      return "border-emerald-400/35 bg-emerald-500/12 text-emerald-300";
-    case "aging":
-      return "border-amber-400/35 bg-amber-500/12 text-amber-300";
-    case "stale":
-      return "border-red-400/35 bg-red-500/12 text-red-300";
-    default:
-      return "border-muted text-muted-foreground";
+/** Unit purchase price of a row, in whichever field the source populated. */
+function resolveUnitBuyPrice(item) {
+  const candidates = [item?.costBasisUnit, item?.buyPrice];
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
   }
+  return null;
 }
 
-function ChangeCell({ euro, percent, formatPrice }) {
-  if (typeof percent !== "number" || Number.isNaN(percent)) {
-    return <span className="text-xs text-muted-foreground">-</span>;
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-0.5">
-      <span className={`text-xs font-semibold ${deltaClassName(percent)}`}>
-        {formatSignedPercent(percent)}
-      </span>
-      <span className={`text-[10px] ${deltaClassName(euro)}`}>
-        {formatSignedCurrency(euro, formatPrice)}
-      </span>
-    </div>
-  );
+/**
+ * Every id a row can be addressed by. Group members reference desktop-local
+ * client ids or server ids depending on where the group was created, so the
+ * selection highlight has to match on any of them.
+ */
+function rowIdentities(entity) {
+  return [entity?.id, entity?.clientId, entity?.serverId]
+    .map((entry) => String(entry ?? "").trim())
+    .filter(Boolean);
 }
 
-function FreshnessCell({ item }) {
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <Badge variant="outline" className={freshnessBadgeClass(item.freshnessStatus)}>
-        {item.freshnessLabel || "unbekannt"}
-      </Badge>
-      {item.lastPriceUpdateAt ? (
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {item.lastPriceUpdateAt}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
+/** Sort header: same typography as the design's static labels, plus a toggle. */
 function SortHeaderButton({ label, align = "left", isActive, sortDirection, onClick }) {
   return (
     <button
       type="button"
-      className={`inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold uppercase tracking-wide transition-colors hover:bg-muted/70 ${
+      className={`inline-flex items-center gap-1 transition-colors hover:text-foreground ${
         align === "right" ? "ml-auto" : ""
-      } ${isActive ? "text-foreground" : "text-muted-foreground"}`}
+      } ${isActive ? "text-foreground" : ""}`}
       onClick={onClick}
-      title={`${label} sortieren`}
+      title={`Nach ${label} sortieren`}
     >
       <span>{label}</span>
       {isActive ? (
-        sortDirection === "asc" ? (
-          <ChevronUp className="h-3.5 w-3.5" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5" />
-        )
-      ) : (
-        <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
-      )}
+        <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>
+      ) : null}
     </button>
   );
 }
@@ -169,10 +112,13 @@ export function InventoryTable({
   onSelectGroup,
   onSelectCluster,
   groups = [],
+  selectedId = null,
+  sortKey = "roi",
+  sortDirection = "desc",
+  onSortChange,
+  unfilteredCount = null,
 }) {
   const { formatPrice } = useCurrency();
-  const [sortKey, setSortKey] = useState("roi");
-  const [sortDirection, setSortDirection] = useState("desc");
   const [expandedGroupIds, setExpandedGroupIds] = useState({});
 
   const toggleExpanded = (groupId) => {
@@ -217,6 +163,8 @@ export function InventoryTable({
           return String(item.name || "").toLowerCase();
         case "quantity":
           return Number(item.quantity || 0);
+        case "value":
+          return Number(item.currentValue || 0);
         case "livePrice":
           return getLiveSortValue(item);
         case "roi":
@@ -231,6 +179,7 @@ export function InventoryTable({
           return String(group.name || "").toLowerCase();
         case "quantity":
           return Number(group.totalQuantity || 0);
+        case "value":
         case "livePrice":
           return Number(group.totalValue || 0);
         case "roi":
@@ -263,9 +212,7 @@ export function InventoryTable({
         return !allMemberIdsGrouped;
       }
 
-      const aliasIds = [item?.id, item?.clientId, item?.serverId]
-        .map((entry) => String(entry ?? "").trim())
-        .filter(Boolean);
+      const aliasIds = rowIdentities(item);
       if (aliasIds.length === 0) {
         return true;
       }
@@ -299,396 +246,477 @@ export function InventoryTable({
     return rows;
   }, [groupedMemberIds, groups, investments, sortDirection, sortKey]);
 
+  // Footer total: sum of what the table actually shows, so a category filter is
+  // reflected instead of silently reporting the whole portfolio.
+  const visibleTotalValue = useMemo(
+    () =>
+      sortedRows.reduce((sum, row) => {
+        const value =
+          row.kind === "group" ? Number(row.group?.totalValue) : Number(row.item?.currentValue);
+        return Number.isFinite(value) ? sum + value : sum;
+      }, 0),
+    [sortedRows],
+  );
+
   const toggleSort = (nextKey) => {
-    if (sortKey === nextKey) {
-      setSortDirection((currentDirection) => (currentDirection === "asc" ? "desc" : "asc"));
+    if (typeof onSortChange !== "function") {
       return;
     }
 
-    setSortKey(nextKey);
-    setSortDirection(nextKey === "item" ? "asc" : "desc");
+    if (sortKey === nextKey) {
+      onSortChange(nextKey, sortDirection === "asc" ? "desc" : "asc");
+      return;
+    }
+
+    onSortChange(nextKey, nextKey === "item" ? "asc" : "desc");
   };
+
+  const selectionKey = String(selectedId ?? "").trim();
+  const isSelected = (entity) =>
+    selectionKey !== "" && rowIdentities(entity).includes(selectionKey);
 
   return (
     <>
-      {/* Desktop-View (md und höher) - Smart Columns: Item | Menge | Live | ROI% */}
+      {/* Desktop: Position | Menge | Einkauf | Live | 7T | ROI */}
       <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>
-                <SortHeaderButton
-                  label="Item"
-                  isActive={sortKey === "item"}
-                  sortDirection={sortDirection}
-                  onClick={() => toggleSort("item")}
-                />
-              </TableHead>
-              <TableHead className="text-right">
-                <SortHeaderButton
-                  label="Menge"
-                  align="right"
-                  isActive={sortKey === "quantity"}
-                  sortDirection={sortDirection}
-                  onClick={() => toggleSort("quantity")}
-                />
-              </TableHead>
-              <TableHead className="text-right">
-                <SortHeaderButton
-                  label="Live Preis"
-                  align="right"
-                  isActive={sortKey === "livePrice"}
-                  sortDirection={sortDirection}
-                  onClick={() => toggleSort("livePrice")}
-                />
-              </TableHead>
-              <TableHead className="text-right">
-                <SortHeaderButton
-                  label={<Abbr term="ROI" />}
-                  align="right"
-                  isActive={sortKey === "roi"}
-                  sortDirection={sortDirection}
-                  onClick={() => toggleSort("roi")}
-                />
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedRows.map((row) => {
-              if (row.kind !== "group") {
-                const item = row.item;
-                const itemProfit = resolveItemProfitValue(item);
-                return (
-                  <TableRow
-                    key={item.id}
-                    className="group cursor-pointer border-border/70 transition-colors hover:bg-accent/40"
-                    onClick={() => onSelectItem(item)}
-                  >
-                    <TableCell className="font-medium text-sm">
-                      <div className="flex items-center gap-3">
-                        <ItemThumbnail imageUrl={item.imageUrl} name={item.name} />
-                        <span className="flex flex-col">
-                          <span className="font-semibold transition-colors group-hover:text-primary">
-                            {item.name}
-                          </span>
-                          <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                            <span>{item.type}</span>
-                            <Badge variant="outline" className="text-[9px]">
-                              {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
-                            </Badge>
-                          </span>
-                        </span>
-                      </div>
-                    </TableCell>
+        <GridTable>
+          <GridTableHead columns={COLUMNS}>
+            <SortHeaderButton
+              label="Position"
+              isActive={sortKey === "item"}
+              sortDirection={sortDirection}
+              onClick={() => toggleSort("item")}
+            />
+            <span className="text-right">
+              <SortHeaderButton
+                label="Menge"
+                align="right"
+                isActive={sortKey === "quantity"}
+                sortDirection={sortDirection}
+                onClick={() => toggleSort("quantity")}
+              />
+            </span>
+            <span className="text-right">Einkauf</span>
+            <span className="text-right">
+              <SortHeaderButton
+                label="Live"
+                align="right"
+                isActive={sortKey === "livePrice"}
+                sortDirection={sortDirection}
+                onClick={() => toggleSort("livePrice")}
+              />
+            </span>
+            <span className="text-right" title="Preisänderung der letzten 7 Tage">
+              7T
+            </span>
+            <span className="text-right">
+              <SortHeaderButton
+                label="ROI"
+                align="right"
+                isActive={sortKey === "roi"}
+                sortDirection={sortDirection}
+                onClick={() => toggleSort("roi")}
+              />
+            </span>
+          </GridTableHead>
 
-                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                      {item.quantity}x
-                    </TableCell>
-
-                    <TableCell
-                      className={`text-right text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
-                    >
-                      {item.isLive ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <span>{formatPrice(item.livePrice)}</span>
-                          {itemProfit !== null ? (
-                            <span className={`text-[10px] ${deltaClassName(itemProfit)}`}>
-                              {formatSignedCurrency(itemProfit, formatPrice)}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">
-                              {item.lastPriceUpdateAt || item.freshnessLabel || "unbekannt"}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-end">
-                          <span className="text-xs text-muted-foreground">Kein Preis verfuegbar</span>
-                        </div>
-                      )}
-                    </TableCell>
-
-                    <TableCell className="text-right">
-                      {item.isLive && isFiniteNumber(item.roi) ? (
-                        <span
-                          className={`text-sm font-bold ${item.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                        >
-                          {formatSignedPercentOneDecimal(item.roi)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground opacity-50">-</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              }
-
-              const group = row.group;
-              const isExpanded = Boolean(expandedGroupIds[group.id]);
-              const profitClassName = deltaClassName(group.totalProfit);
-              const roiClassName = deltaClassName(group.roiPercent);
-
-              return (
-                <React.Fragment key={`group-${group.id}`}>
-                  <TableRow
-                    className="group cursor-pointer border-border/70 transition-colors hover:bg-accent/40"
-                    onClick={() => {
-                      toggleExpanded(group.id);
-                      if (typeof onSelectGroup === "function") {
-                        onSelectGroup(group);
-                      }
-                    }}
-                  >
-                    <TableCell className="font-medium text-sm">
-                      <div className="flex items-center gap-4">
-                        <LayeredGroupIcon visuals={group.topVisuals} fallbackLabel={group.name} />
-                        <span className="flex flex-col">
-                          <span className="font-semibold transition-colors group-hover:text-primary">
-                            {group.name}
-                          </span>
-                          <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                            <Badge variant="outline" className="text-[9px]">
-                              Gruppe
-                            </Badge>
-                            <span>{group.clusterCount} Cluster</span>
-                            <span>|</span>
-                            <span>{group.memberCount} Positionen</span>
-                          </span>
-                        </span>
-                      </div>
-                    </TableCell>
-
-                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                      {group.totalQuantity}x
-                    </TableCell>
-
-                    <TableCell
-                      className={`text-right text-sm font-bold ${group.totalValue > 0 ? "text-primary" : "text-muted-foreground"}`}
-                    >
-                      <div className="flex flex-col items-end gap-1">
-                        <span>{formatPrice(group.totalValue)}</span>
-                        <span className={`text-[10px] ${profitClassName}`}>
-                          {formatSignedCurrency(group.totalProfit, formatPrice)}
-                        </span>
-                      </div>
-                    </TableCell>
-
-                    <TableCell className="text-right">
-                      <span className={`text-sm font-bold ${roiClassName}`}>
-                        {formatSignedPercentOneDecimal(group.roiPercent)}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-
-                  {isExpanded && group.clusters ? (
-                    group.clusters.map((cluster) => (
-                      <TableRow
-                        key={`cluster-${cluster.id}`}
-                        className="cursor-pointer border-border/50 bg-muted/20 transition-colors hover:bg-accent/30"
-                        onClick={() => {
-                          if (typeof onSelectCluster === "function") {
-                            onSelectCluster(group, cluster);
-                          }
-                        }}
-                      >
-                        <TableCell className="font-medium text-sm pl-12">
-                          <div className="flex items-center gap-3">
-                            <ItemThumbnail imageUrl={cluster.imageUrl} name={cluster.name} />
-                            <span className="flex flex-col">
-                              <span className="font-semibold">
-                                {cluster.name}
-                              </span>
-                              <span className="flex items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                                <span>{cluster.quantity} Stk.</span>
-                                <span>|</span>
-                                <span>{formatSharePercent(cluster.sharePercent)}</span>
-                              </span>
-                            </span>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-right font-mono text-xs text-muted-foreground pl-12">
-                          {cluster.quantity}x
-                        </TableCell>
-
-                        <TableCell className="text-right text-sm font-bold text-muted-foreground pl-12">
-                          {formatPrice(cluster.totalValue)}
-                        </TableCell>
-
-                        <TableCell className="text-right pl-12">
-                          <span className={`text-sm font-bold ${deltaClassName(cluster.roiPercent)}`}>
-                            {formatSignedPercentOneDecimal(cluster.roiPercent)}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : null}
-                </React.Fragment>
-              );
-            })}
-
-          </TableBody>
-        </Table>
-      </div>
-
-        {/* Mobile-View (unter md) */}
-        <div className="space-y-3 px-2 md:hidden">
-          {/* Sort Controls - Compact Horizontal */}
-          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/75 p-2.5">
-            <span className="text-[10px] uppercase text-muted-foreground shrink-0 pl-1">Sortierung</span>
-            <div className="flex flex-1 gap-1 overflow-x-auto no-scrollbar">
-              {[
-                { key: "item", label: "Item", short: "Name" },
-                { key: "quantity", label: "Menge", short: "Anz." },
-                { key: "livePrice", label: "Live Preis", short: "Preis" },
-                { key: "roi", label: "ROI", short: "ROI" },
-              ].map(({ key, label, short }) => {
-                const isActive = sortKey === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => toggleSort(key)}
-                    className={`shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-[0_8px_18px_rgba(255,255,255,0.14)]"
-                        : "bg-muted/35 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                    }`}
-                    title={`${label} ${sortDirection === "asc" ? "↑" : "↓"}`}
-                  >
-                    <span className="sm:hidden">{short}</span>
-                    <span className="hidden sm:inline">{label}</span>
-                    {isActive && (
-                      <span className="ml-0.5 text-[10px]">
-                        {sortDirection === "asc" ? "↑" : "↓"}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {sortedRows.length === 0 ? (
+            <GridTableEmpty>Keine Positionen für diese Filter.</GridTableEmpty>
+          ) : null}
 
           {sortedRows.map((row) => {
             if (row.kind !== "group") {
               const item = row.item;
+              const unitBuyPrice = resolveUnitBuyPrice(item);
+              const change7d = Number(item?.change7dPercent);
               const roiValue = isFiniteNumber(item.roi) ? item.roi : null;
 
               return (
-                <ItemListRow
+                <GridTableRow
                   key={item.id}
-                  item={{
-                    ...item,
-                    currentPrice: item.isLive ? item.livePrice : null,
-                    currentPriceUsd: null,
-                    roi: roiValue,
-                    trend: item.isLive && roiValue !== null ? (roiValue >= 0 ? "up" : "down") : null,
-                    changeLabel: item.isLive ? formatSignedPercentOneDecimal(roiValue) : "-",
-                  }}
+                  columns={COLUMNS}
+                  selected={isSelected(item)}
                   onClick={() => onSelectItem(item)}
-                />
+                >
+                  <div className="flex min-w-0 items-center gap-[11px]">
+                    <ItemThumb
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="size-[34px] rounded-lg"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-bold">{item.name}</span>
+                      <span className="mt-[3px] flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                        <span className="truncate">
+                          {item.type} · {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
+                        </span>
+                        {item.hasBuyOrder && Number(item.buyOrderBestPriceUsd) > 0 ? (
+                          <span
+                            title="Offene CSFloat-Buyorder"
+                            className="shrink-0 rounded-[5px] bg-info/16 px-1.5 py-px text-[9px] font-extrabold tracking-[0.04em] text-info"
+                          >
+                            BO{" "}
+                            {formatPrice(Number(item.buyOrderBestPriceUsd), {
+                              useUsd: true,
+                              buyPriceUsd: Number(item.buyOrderBestPriceUsd),
+                            })}
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
+                  </div>
+
+                  <span className="text-right text-xs tabular-nums text-muted-foreground">
+                    {item.quantity}x
+                  </span>
+
+                  <span className="text-right text-[12.5px] tabular-nums text-muted-foreground">
+                    {unitBuyPrice === null ? "-" : formatPrice(unitBuyPrice)}
+                  </span>
+
+                  <span className="text-right text-[13.5px] font-bold tabular-nums">
+                    {item.isLive ? (
+                      formatPrice(item.livePrice)
+                    ) : (
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        kein Preis
+                      </span>
+                    )}
+                  </span>
+
+                  <span
+                    className={`text-right text-[11.5px] font-semibold tabular-nums ${deltaClassName(
+                      Number.isFinite(change7d) ? change7d : null,
+                    )}`}
+                    title={
+                      Number.isFinite(change7d)
+                        ? "Preisänderung der letzten 7 Tage"
+                        : "Keine 7-Tage-Historie vorhanden"
+                    }
+                  >
+                    {Number.isFinite(change7d) ? formatSignedPercentOneDecimal(change7d) : "–"}
+                  </span>
+
+                  <span className="flex items-center justify-end gap-2">
+                    {item.isLive && roiValue !== null ? (
+                      <>
+                        <RoiMeter value={roiValue} />
+                        <span
+                          className={`min-w-[58px] text-right text-[12.5px] font-extrabold tabular-nums ${deltaClassName(roiValue)}`}
+                        >
+                          {formatSignedPercentOneDecimal(roiValue)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="min-w-[58px] text-right text-muted-foreground opacity-50">
+                        -
+                      </span>
+                    )}
+                  </span>
+                </GridTableRow>
               );
             }
 
             const group = row.group;
             const isExpanded = Boolean(expandedGroupIds[group.id]);
-            const profitClassName = deltaClassName(group.totalProfit);
-            const roiClassName = deltaClassName(group.roiPercent);
+            const weightedBuyUnitPrice = Number(group.weightedBuyUnitPrice);
 
             return (
-              <div
-                key={`group-${group.id}`}
-                className="overflow-hidden rounded-2xl border border-border/70 bg-card/75 shadow-[0_14px_30px_rgba(0,0,0,0.2)]"
-              >
-                <button
-                  type="button"
+              <React.Fragment key={`group-${group.id}`}>
+                <GridTableRow
+                  columns={COLUMNS}
+                  selected={isSelected(group)}
                   onClick={() => {
                     toggleExpanded(group.id);
                     if (typeof onSelectGroup === "function") {
                       onSelectGroup(group);
                     }
                   }}
-                  className="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:bg-accent/40 active:scale-[0.995]"
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <LayeredGroupIcon visuals={group.topVisuals} fallbackLabel={group.name} />
-                    <div className="min-w-0 flex-1">
-                      <h4 className="truncate text-sm font-semibold">{group.name}</h4>
-                      <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                        <Badge variant="outline" className="text-[9px]">
+                  <div className="flex min-w-0 items-center gap-[11px]">
+                    {/* "sm" keeps the stacked icon inside the dense row's 34px band. */}
+                    <LayeredGroupIcon
+                      visuals={group.topVisuals}
+                      fallbackLabel={group.name}
+                      size="sm"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-bold">{group.name}</span>
+                      <span className="mt-[3px] flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                        <span className="rounded-[5px] border border-border px-1.5 py-px text-[9px]">
                           Gruppe
-                        </Badge>
-                        <span>{group.clusterCount} Cluster</span>
-                        <span>|</span>
-                        <span>{group.memberCount} Positionen</span>
-                        <span>|</span>
-                        <span>{group.totalQuantity}x</span>
+                        </span>
+                        <span className="truncate">
+                          {group.clusterCount} Cluster · {group.memberCount} Positionen
+                        </span>
+                        {isExpanded ? (
+                          <ChevronUp className="size-3 shrink-0" />
+                        ) : (
+                          <ChevronDown className="size-3 shrink-0" />
+                        )}
                       </span>
-                    </div>
+                    </span>
                   </div>
-                  <div className="flex flex-shrink-0 items-center gap-2">
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span
-                        className={`text-sm font-bold ${group.totalValue > 0 ? "text-primary" : "text-muted-foreground"}`}
-                      >
-                        {formatPrice(group.totalValue)}
-                      </span>
-                      <span className={`text-[10px] font-semibold ${roiClassName}`}>
-                        {formatSignedPercentOneDecimal(group.roiPercent)}
-                      </span>
-                      <span className={`text-[10px] ${profitClassName}`}>
-                        {formatSignedCurrency(group.totalProfit, formatPrice)}
-                      </span>
-                    </div>
-                    {isExpanded ? (
-                      <ChevronUp className="h-4 w-4 text-muted-foreground/85" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground/85" />
-                    )}
-                  </div>
-                </button>
 
-                {isExpanded && Array.isArray(group.clusters) ? (
-                  <div className="space-y-2 border-t border-border/60 bg-background/35 p-2">
-                    {group.clusters.map((cluster) => (
-                      <button
+                  <span className="text-right text-xs tabular-nums text-muted-foreground">
+                    {group.totalQuantity}x
+                  </span>
+
+                  <span className="text-right text-[12.5px] tabular-nums text-muted-foreground">
+                    {Number.isFinite(weightedBuyUnitPrice) && weightedBuyUnitPrice > 0
+                      ? formatPrice(weightedBuyUnitPrice)
+                      : "-"}
+                  </span>
+
+                  <span className="text-right text-[13.5px] font-bold tabular-nums">
+                    {formatPrice(group.totalValue)}
+                  </span>
+
+                  {/* Groups aggregate across items and carry no 7-day series of
+                      their own. Printing their absolute P/L here instead would
+                      put euros and percent in one column. */}
+                  <span
+                    className="text-right text-[11.5px] text-muted-foreground"
+                    title="Gruppen haben keine 7-Tage-Historie"
+                  >
+                    –
+                  </span>
+
+                  <span className="flex items-center justify-end gap-2">
+                    <RoiMeter value={group.roiPercent} />
+                    <span
+                      className={`min-w-[58px] text-right text-[12.5px] font-extrabold tabular-nums ${deltaClassName(group.roiPercent)}`}
+                    >
+                      {formatSignedPercentOneDecimal(group.roiPercent)}
+                    </span>
+                  </span>
+                </GridTableRow>
+
+                {isExpanded && group.clusters
+                  ? group.clusters.map((cluster) => (
+                      <GridTableRow
                         key={`cluster-${cluster.id}`}
-                        type="button"
+                        columns={COLUMNS}
+                        indent
                         onClick={() => {
                           if (typeof onSelectCluster === "function") {
                             onSelectCluster(group, cluster);
                           }
                         }}
-                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/55 bg-card/60 p-2.5 text-left transition-colors hover:bg-accent/30 active:scale-[0.995]"
                       >
-                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          <ItemThumbnail imageUrl={cluster.imageUrl} name={cluster.name} />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">{cluster.name}</p>
-                            <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                              <span>{cluster.quantity} Stk.</span>
-                              <span>|</span>
-                              <span>{formatSharePercent(cluster.sharePercent)}</span>
+                        <div className="flex min-w-0 items-center gap-[11px]">
+                          <ItemThumb
+                            src={cluster.imageUrl}
+                            alt={cluster.name}
+                            className="size-[30px] rounded-lg"
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate text-[12.5px] font-semibold">
+                              {cluster.name}
                             </span>
-                          </div>
-                        </div>
-                        <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
-                          <span className="text-sm font-bold text-muted-foreground">
-                            {formatPrice(cluster.totalValue)}
+                            <span className="mt-[3px] block truncate text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                              {cluster.quantity} Stk. · {formatSharePercent(cluster.sharePercent)}
+                            </span>
                           </span>
-                          <span className={`text-[10px] font-semibold ${deltaClassName(cluster.roiPercent)}`}>
+                        </div>
+
+                        <span className="text-right text-xs tabular-nums text-muted-foreground">
+                          {cluster.quantity}x
+                        </span>
+
+                        <span className="text-right text-[12.5px] tabular-nums text-muted-foreground">
+                          {Number.isFinite(Number(cluster.buyUnitPrice)) &&
+                          Number(cluster.buyUnitPrice) > 0
+                            ? formatPrice(Number(cluster.buyUnitPrice))
+                            : "-"}
+                        </span>
+
+                        <span className="text-right text-[13px] font-semibold tabular-nums text-muted-foreground">
+                          {formatPrice(cluster.totalValue)}
+                        </span>
+
+                        <span className="text-right text-[11.5px] text-muted-foreground">–</span>
+
+                        <span className="flex items-center justify-end gap-2">
+                          <RoiMeter value={cluster.roiPercent} />
+                          <span
+                            className={`min-w-[58px] text-right text-[12.5px] font-bold tabular-nums ${deltaClassName(cluster.roiPercent)}`}
+                          >
                             {formatSignedPercentOneDecimal(cluster.roiPercent)}
                           </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+                        </span>
+                      </GridTableRow>
+                    ))
+                  : null}
+              </React.Fragment>
             );
           })}
 
+          <GridTableFoot>
+            <span>
+              {unfilteredCount != null && unfilteredCount !== sortedRows.length
+                ? `${sortedRows.length} von ${unfilteredCount} Positionen`
+                : `${sortedRows.length} Positionen`}
+            </span>
+            <span>Gesamtwert {formatPrice(visibleTotalValue)}</span>
+          </GridTableFoot>
+        </GridTable>
+      </div>
+
+      {/* Mobile: the sidebar is desktop-only, so the sort strip stays inline here. */}
+      <div className="space-y-3 px-2 md:hidden">
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2.5">
+          <span className="shrink-0 pl-1 text-[10px] uppercase text-muted-foreground">
+            Sortierung
+          </span>
+          <div className="no-scrollbar flex flex-1 gap-1 overflow-x-auto">
+            {SORT_OPTIONS.map(({ key, label }) => {
+              const isActive = sortKey === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleSort(key)}
+                  className={`shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-surface-2 text-muted-foreground hover:text-foreground"
+                  }`}
+                  title={`${label} ${sortDirection === "asc" ? "↑" : "↓"}`}
+                >
+                  {label}
+                  {isActive ? (
+                    <span className="ml-0.5 text-[10px]">
+                      {sortDirection === "asc" ? "↑" : "↓"}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
         </div>
+
+        {sortedRows.map((row) => {
+          if (row.kind !== "group") {
+            const item = row.item;
+            const roiValue = isFiniteNumber(item.roi) ? item.roi : null;
+
+            return (
+              <ItemListRow
+                key={item.id}
+                item={{
+                  ...item,
+                  currentPrice: item.isLive ? item.livePrice : null,
+                  currentPriceUsd: null,
+                  roi: roiValue,
+                  trend: item.isLive && roiValue !== null ? (roiValue >= 0 ? "up" : "down") : null,
+                  changeLabel: item.isLive ? formatSignedPercentOneDecimal(roiValue) : "-",
+                }}
+                onClick={() => onSelectItem(item)}
+              />
+            );
+          }
+
+          const group = row.group;
+          const isExpanded = Boolean(expandedGroupIds[group.id]);
+          const profitClassName = deltaClassName(group.totalProfit);
+          const roiClassName = deltaClassName(group.roiPercent);
+
+          return (
+            <div
+              key={`group-${group.id}`}
+              className="overflow-hidden rounded-2xl border border-border bg-card"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  toggleExpanded(group.id);
+                  if (typeof onSelectGroup === "function") {
+                    onSelectGroup(group);
+                  }
+                }}
+                className="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:bg-surface-1 active:scale-[0.995]"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <LayeredGroupIcon visuals={group.topVisuals} fallbackLabel={group.name} />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="truncate text-sm font-semibold">{group.name}</h4>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                      <span className="rounded-[5px] border border-border px-1.5 py-px text-[9px]">
+                        Gruppe
+                      </span>
+                      <span>{group.clusterCount} Cluster</span>
+                      <span>|</span>
+                      <span>{group.memberCount} Positionen</span>
+                      <span>|</span>
+                      <span>{group.totalQuantity}x</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-sm font-bold">{formatPrice(group.totalValue)}</span>
+                    <span className={`text-[10px] font-semibold ${roiClassName}`}>
+                      {formatSignedPercentOneDecimal(group.roiPercent)}
+                    </span>
+                    <span className={`text-[10px] ${profitClassName}`}>
+                      {formatSignedCurrency(group.totalProfit, formatPrice)}
+                    </span>
+                  </div>
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground/85" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground/85" />
+                  )}
+                </div>
+              </button>
+
+              {isExpanded && Array.isArray(group.clusters) ? (
+                <div className="space-y-2 border-t border-border-soft bg-surface-1 p-2">
+                  {group.clusters.map((cluster) => (
+                    <button
+                      key={`cluster-${cluster.id}`}
+                      type="button"
+                      onClick={() => {
+                        if (typeof onSelectCluster === "function") {
+                          onSelectCluster(group, cluster);
+                        }
+                      }}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-surface-2 active:scale-[0.995]"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                        <ItemThumb
+                          src={cluster.imageUrl}
+                          alt={cluster.name}
+                          className="size-11 rounded-xl"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{cluster.name}</p>
+                          <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
+                            <span>{cluster.quantity} Stk.</span>
+                            <span>|</span>
+                            <span>{formatSharePercent(cluster.sharePercent)}</span>
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
+                        <span className="text-sm font-bold text-muted-foreground">
+                          {formatPrice(cluster.totalValue)}
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold ${deltaClassName(cluster.roiPercent)}`}
+                        >
+                          {formatSignedPercentOneDecimal(cluster.roiPercent)}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     </>
   );
 }

@@ -1,9 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { PortfolioChart } from "./PortfolioChart";
 import { ItemListRow } from "./ItemListRow";
-import { X, Trash2, ArrowDownUp } from "lucide-react";
+import { AlignLeft, Bell, List, Trash2 } from "lucide-react";
+import { ItemThumb } from "./ui/item-thumb";
+import { Sparkline } from "./ui/data-display";
+import {
+  GridTable,
+  GridTableEmpty,
+  GridTableFoot,
+  GridTableHead,
+  GridTableRow,
+} from "./ui/grid-table";
+import {
+  Inspector,
+  InspectorBlock,
+  InspectorEmpty,
+  InspectorFooter,
+  InspectorHeader,
+  InspectorPrice,
+} from "./ui/inspector";
+import {
+  FilterChip,
+  FilterGroup,
+  FilterScopeButton,
+  FilterScopeIcon,
+  FilterSidebar,
+  FilterSortButton,
+  SoonBadge,
+} from "./ui/filter-sidebar";
+import {
+  parseHistoryTimestamp,
+  resolveHistoryChangePercent,
+  resolveHistoryValueUsd,
+  resolveWatchlistChangePercent,
+  sliceHistoryByDays,
+} from "@shared/lib/portfolioHelpers";
 import {
   fetchCsFloatBuyOrdersData,
   deleteWatchlistItemData,
@@ -108,10 +141,39 @@ function buildBuyOrderRowsForItem(item, orders = []) {
   });
 }
 
+/** Item | Live | 24h | 7T | 30T | Verlauf | Zielpreis — the Watchlist design's grid. */
+const WATCHLIST_COLUMNS = "minmax(0,1fr) 84px 66px 66px 66px 84px 96px";
+
+const WATCHLIST_ALL_CATEGORIES = "__all__";
+
+/**
+ * Sidebar "Ansicht" filters.
+ *
+ * `soon` marks the alert scope: the schema has an `alert_price_usd` column, but
+ * the sync path writes it as NULL unconditionally and it never reaches the
+ * client, so there is nothing to filter on yet. It is rendered disabled rather
+ * than omitted, to keep the planned shape of the view visible.
+ */
+const WATCHLIST_SCOPES = [
+  { key: "all", label: "Alle", Icon: List },
+  { key: "alerts", label: "Mit Alarm", Icon: Bell, soon: true },
+  { key: "orders", label: "Buyorders", Icon: AlignLeft },
+];
+
+/** Trailing window for the row sparkline and the detail chart. */
+const WATCHLIST_RANGES = [
+  { key: 7, label: "7 Tage" },
+  { key: 30, label: "30 Tage" },
+  { key: 90, label: "90 Tage" },
+];
+
 const WATCHLIST_SORT_OPTIONS = [
-  { key: "name", label: "Name" },
-  { key: "roi", label: "ROI %" },
+  { key: "d7", label: "7T-Veränderung" },
+  { key: "d1", label: "24h-Veränderung" },
+  { key: "d30", label: "30T-Veränderung" },
   { key: "price", label: "Preis" },
+  { key: "target", label: "Abstand zum Ziel", soon: true },
+  { key: "name", label: "Name A–Z" },
 ];
 
 function getWatchlistSortValue(item, key) {
@@ -126,12 +188,14 @@ function getWatchlistSortValue(item, key) {
     const price = Number(item?.currentPrice);
     return Number.isFinite(price) ? price : Number.NEGATIVE_INFINITY;
   }
-  // roi / percentage change
-  const roi = Number(item?.roi);
-  if (Number.isFinite(roi)) {
-    return roi;
+  // Change columns read the values derived in `decorateWatchlistRow`. Reading
+  // `roi`/`changePercent` off the raw row (as this once did) made every entry
+  // tie at -Infinity, collapsing the sort into the name tie-break.
+  if (key === "d1" || key === "d7" || key === "d30") {
+    const change = Number(item?.[key]);
+    return Number.isFinite(change) ? change : Number.NEGATIVE_INFINITY;
   }
-  const change = Number(item?.changePercent);
+  const change = resolveWatchlistChangePercent(item);
   return Number.isFinite(change) ? change : Number.NEGATIVE_INFINITY;
 }
 
@@ -162,36 +226,79 @@ function sortWatchlistItems(items, sortKey, sortDirection) {
   });
 }
 
+/**
+ * Attach the three change windows the design's table asks for.
+ *
+ * Only a 7-day change ships from the API (`priceChangePercent`); 24h and 30d are
+ * derived from the row's own `priceHistory`. `d7` prefers the derived value too
+ * so all three columns come from one series and cannot disagree, and falls back
+ * to the server number when the history is too short to answer.
+ */
+function decorateWatchlistRow(item) {
+  const history = Array.isArray(item?.priceHistory) ? item.priceHistory : [];
+  const derived7d = resolveHistoryChangePercent(history, 7);
+
+  return {
+    ...item,
+    d1: resolveHistoryChangePercent(history, 1),
+    d7: derived7d ?? resolveWatchlistChangePercent(item),
+    d30: resolveHistoryChangePercent(history, 30),
+  };
+}
+
+function formatSignedPercentOneDecimal(value) {
+  if (!Number.isFinite(value)) {
+    return "–";
+  }
+  return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(1)} %`;
+}
+
+function changeToneClass(value) {
+  if (!Number.isFinite(value)) {
+    return "text-muted-foreground";
+  }
+  if (value === 0) {
+    return "text-muted-foreground";
+  }
+  return value > 0 ? "text-success" : "text-danger";
+}
+
+/** "Beobachtet seit" — desktop rows carry `createdAt`; web rows do not. */
+function formatWatchedSince(item) {
+  const timestamp = parseHistoryTimestamp(item?.createdAt || item?.addedAt);
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+  return new Date(timestamp).toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 function WatchlistItemsLoadingSkeleton() {
   return (
-    <Card>
-      <CardHeader className="pb-2 sm:pb-4">
-        <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 sm:space-y-3">
-        {[1, 2, 3, 4].map((entry) => (
-          <div
-            key={entry}
-            className="flex w-full items-center justify-between gap-3 rounded-md border border-border bg-transparent p-3 shadow-none dark:rounded-2xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_14px_30px_rgba(0,0,0,0.2)]"
-          >
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Skeleton className="h-12 w-12 flex-shrink-0 rounded-xl sm:h-14 sm:w-14" />
-              <div className="min-w-0 flex-1 space-y-2">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-              </div>
-            </div>
-            <div className="flex flex-shrink-0 items-center gap-2">
-              <div className="flex flex-col items-end gap-1">
-                <Skeleton className="h-4 w-4 rounded-full" />
-                <Skeleton className="h-3 w-10" />
-              </div>
-              <Skeleton className="h-4 w-4 rounded-full" />
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+    <GridTable>
+      <GridTableHead columns={WATCHLIST_COLUMNS}>
+        <span>Item</span>
+        <span className="text-right">Live</span>
+        <span className="text-right">24h</span>
+        <span className="text-right">7T</span>
+        <span className="text-right">30T</span>
+        <span className="text-right">Verlauf</span>
+        <span className="text-right">Zielpreis</span>
+      </GridTableHead>
+      {[1, 2, 3, 4, 5].map((entry) => (
+        <div
+          key={entry}
+          className="flex items-center gap-[11px] border-b border-border-soft px-4 py-[9px]"
+        >
+          <Skeleton className="size-[34px] shrink-0 rounded-lg" />
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="ml-auto h-4 w-16" />
+        </div>
+      ))}
+    </GridTable>
   );
 }
 
@@ -210,8 +317,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
-  const [sortKey, setSortKey] = useState("name");
-  const [sortDirection, setSortDirection] = useState("asc");
+  const [sortKey, setSortKey] = useState("d7");
+  const [sortDirection, setSortDirection] = useState("desc");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [category, setCategory] = useState(WATCHLIST_ALL_CATEGORIES);
+  const [scope, setScope] = useState("all");
+  const [range, setRange] = useState(90);
+  const [isImportingCsFloat, setIsImportingCsFloat] = useState(false);
   const [watchlistMutationVersion, setWatchlistMutationVersion] = useState(getWatchlistMutationVersion);
   const handledMutationVersionRef = useRef(getWatchlistMutationVersion());
   const itemRefs = useRef(new Map());
@@ -222,25 +334,56 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     () => buildBuyOrderRowsForItem(selectedItem, buyOrderOrders),
     [selectedItem, buyOrderOrders],
   );
-  const sortedWatchlistItems = useMemo(
-    () => sortWatchlistItems(watchlistItems, sortKey, sortDirection),
-    [watchlistItems, sortKey, sortDirection],
+  // The three change windows are derived once per load, not per render: they
+  // walk the whole (hourly, ~1500-point) history three times per row.
+  const decoratedItems = useMemo(
+    () => watchlistItems.map(decorateWatchlistRow),
+    [watchlistItems],
   );
-  const handleSortKeyChange = useCallback((nextKey) => {
-    setSortKey((currentKey) => {
-      if (currentKey === nextKey) {
-        setSortDirection((currentDirection) => (currentDirection === "asc" ? "desc" : "asc"));
-        return currentKey;
+
+  // Categories come from the item types actually on the watchlist, so the chip
+  // row tracks the catalog instead of a hardcoded list.
+  const watchlistCategories = useMemo(() => {
+    const seen = new Map();
+    watchlistItems.forEach((item) => {
+      const key = String(item?.type || "").trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.set(key, { key, label: String(item?.type || "").trim() || "Ohne Typ", count: 0 });
       }
-      // Names read best ascending (A→Z); numeric metrics best descending (highest first).
-      setSortDirection(nextKey === "name" ? "asc" : "desc");
-      return nextKey;
+      seen.get(key).count += 1;
     });
-  }, []);
+    return Array.from(seen.values()).sort((left, right) =>
+      left.label.localeCompare(right.label, "de"),
+    );
+  }, [watchlistItems]);
+
+  const activeCategory = watchlistCategories.some((entry) => entry.key === category)
+    ? category
+    : WATCHLIST_ALL_CATEGORIES;
+
+  const buyOrderItemCount = useMemo(
+    () => decoratedItems.filter((item) => item?.hasBuyOrder).length,
+    [decoratedItems],
+  );
+
+  const sortedWatchlistItems = useMemo(() => {
+    let scoped = decoratedItems;
+    if (scope === "orders") {
+      scoped = scoped.filter((item) => item?.hasBuyOrder);
+    }
+    if (activeCategory !== WATCHLIST_ALL_CATEGORIES) {
+      scoped = scoped.filter(
+        (item) => String(item?.type || "").trim().toLowerCase() === activeCategory,
+      );
+    }
+    return sortWatchlistItems(scoped, sortKey, sortDirection);
+  }, [decoratedItems, scope, activeCategory, sortKey, sortDirection]);
+  // Decorated here as well as in the list: the selection survives a reload via
+  // `nextItems.find(...)`, which hands back a raw row without the change fields.
   const selectedItemWithBuyOrderRows = useMemo(() => (
     selectedItem
       ? {
-          ...selectedItem,
+          ...decorateWatchlistRow(selectedItem),
           buyOrderRows: selectedItemBuyOrderRows,
         }
       : null
@@ -546,6 +689,20 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     }
   };
 
+  // Manual counterpart to the opt-in auto-import: forces a CSFloat watchlist
+  // pull past the 60s cooldown. Add-only, so it can be re-run safely.
+  const handleImportCsFloatWatchlist = async () => {
+    setIsImportingCsFloat(true);
+    try {
+      await importCsFloatWatchlistData({ force: true });
+      await loadWatchlistData({ showLoading: false });
+    } catch (importError) {
+      setError(importError?.message || "CSFloat-Import fehlgeschlagen.");
+    } finally {
+      setIsImportingCsFloat(false);
+    }
+  };
+
   const handleDeleteClick = () => {
     setShowDeleteConfirm(true);
   };
@@ -563,264 +720,554 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     }
   };
 
+  const handleSortSelect = (nextKey) => {
+    if (nextKey === sortKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    // Names read best ascending (A→Z); numeric metrics best descending.
+    setSortKey(nextKey);
+    setSortDirection(nextKey === "name" ? "asc" : "desc");
+  };
+
+  const watchedSince = formatWatchedSince(selectedItemWithBuyOrderRows);
+  const selectedBestBuyOrder = selectedItemBuyOrderRows[0] || null;
+  const selectedD1 = Number(selectedItemWithBuyOrderRows?.d1);
+  // The detail chart keeps its own 7T/30T/1J/MAX control, so it gets the full
+  // series. "Zeitraum" governs the table's Verlauf column — two range controls
+  // narrowing the same chart would just fight each other.
+  const selectedChartHistory = Array.isArray(selectedItemWithBuyOrderRows?.priceHistory)
+    ? selectedItemWithBuyOrderRows.priceHistory
+    : [];
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Watchlist</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Deine beobachteten Items mit aktuellem Verlauf.
-          </p>
-        </div>
-      </div>
+    <div className="lg:-mx-2 lg:flex lg:items-stretch">
+      <FilterSidebar
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen((current) => !current)}
+        collapsed={
+          <div className="mt-1 flex flex-col items-stretch gap-0.5">
+            {WATCHLIST_SCOPES.map((entry) => (
+              <FilterScopeIcon
+                key={entry.key}
+                label={entry.label}
+                icon={<entry.Icon className="size-[17px]" />}
+                soon={entry.soon}
+                active={scope === entry.key}
+                onClick={() => setScope(entry.key)}
+              />
+            ))}
+          </div>
+        }
+      >
+        <FilterGroup label="Ansicht">
+          <div className="flex flex-col">
+            {WATCHLIST_SCOPES.map((entry) => (
+              <FilterScopeButton
+                key={entry.key}
+                label={entry.label}
+                soon={entry.soon}
+                count={
+                  entry.key === "all"
+                    ? decoratedItems.length
+                    : entry.key === "orders"
+                      ? buyOrderItemCount
+                      : null
+                }
+                active={scope === entry.key}
+                onClick={() => setScope(entry.key)}
+              />
+            ))}
+          </div>
+        </FilterGroup>
 
-      {error && (
-        <div className="rounded-lg bg-destructive/10 p-2 sm:p-4 text-xs sm:text-sm text-destructive">
-          {error}
-        </div>
-      )}
+        {watchlistCategories.length > 1 ? (
+          <FilterGroup label="Kategorie">
+            <div className="flex flex-wrap gap-1">
+              <FilterChip
+                active={activeCategory === WATCHLIST_ALL_CATEGORIES}
+                onClick={() => setCategory(WATCHLIST_ALL_CATEGORIES)}
+              >
+                Alle
+              </FilterChip>
+              {watchlistCategories.map((entry) => (
+                <FilterChip
+                  key={entry.key}
+                  active={activeCategory === entry.key}
+                  onClick={() => setCategory(entry.key)}
+                  title={`${entry.count} Items`}
+                >
+                  {entry.label}
+                </FilterChip>
+              ))}
+            </div>
+          </FilterGroup>
+        ) : null}
 
-      {loading ? (
-        <WatchlistItemsLoadingSkeleton />
-      ) : watchlistItems.length === 0 ? (
-        <Card>
-          <CardContent className="p-4 sm:p-8 text-center text-muted-foreground">
-            <p className="text-sm">
-              Keine Items in der Watchlist. Nutze die Suche oben und fuege
-              neue Items hinzu.
+        <FilterGroup label="Zeitraum">
+          <div className="flex flex-col">
+            {WATCHLIST_RANGES.map((entry) => (
+              <FilterSortButton
+                key={entry.key}
+                active={range === entry.key}
+                onClick={() => setRange(entry.key)}
+              >
+                {entry.label}
+              </FilterSortButton>
+            ))}
+          </div>
+        </FilterGroup>
+
+        <FilterGroup label="Sortierung">
+          <div className="flex flex-col">
+            {WATCHLIST_SORT_OPTIONS.map((option) => (
+              <FilterSortButton
+                key={option.key}
+                active={sortKey === option.key}
+                direction={sortDirection}
+                soon={option.soon}
+                onClick={() => handleSortSelect(option.key)}
+              >
+                {option.label}
+              </FilterSortButton>
+            ))}
+          </div>
+        </FilterGroup>
+      </FilterSidebar>
+
+      <div className="min-w-0 flex-1 space-y-4 lg:px-5 lg:py-[18px]">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-extrabold tracking-[-0.01em] sm:text-2xl">Watchlist</h2>
+            <p className="mt-[7px] text-xs text-muted-foreground">
+              {sortedWatchlistItems.length}
+              {sortedWatchlistItems.length === decoratedItems.length
+                ? ""
+                : ` von ${decoratedItems.length}`}{" "}
+              Items · {buyOrderItemCount} mit Buyorder · Preise aus dem Server-Cache
             </p>
-          </CardContent>
-        </Card>
-      ) : (
-         <div className="grid gap-3 sm:gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
-           <div className="space-y-3 sm:space-y-4">
-             <Card>
-               <CardHeader className="pb-2 sm:pb-4">
-                 <div className="flex flex-wrap items-center justify-between gap-2">
-                   <CardTitle className="text-base sm:text-lg">Watchlist Items</CardTitle>
-                   <div className="flex items-center gap-1">
-                     <ArrowDownUp className="h-3.5 w-3.5 text-muted-foreground" />
-                     {WATCHLIST_SORT_OPTIONS.map((option) => {
-                       const isActive = sortKey === option.key;
-                       return (
-                         <button
-                           key={option.key}
-                           type="button"
-                           onClick={() => handleSortKeyChange(option.key)}
-                           className={`inline-flex items-center gap-0.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                             isActive
-                               ? "bg-primary/10 text-primary"
-                               : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                           }`}
-                           aria-pressed={isActive}
-                         >
-                           {option.label}
-                           {isActive ? (
-                             <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>
-                           ) : null}
-                         </button>
-                       );
-                     })}
-                   </div>
-                 </div>
-               </CardHeader>
-               <CardContent>
-                 <div className="space-y-2 sm:space-y-3">
-                   {sortedWatchlistItems.map((item) => (
-                     <div
-                       key={item.id}
-                       ref={(node) => {
-                         if (node) {
-                           itemRefs.current.set(item.id, node);
-                           return;
-                         }
-                         itemRefs.current.delete(item.id);
-                       }}
-                        className={`transition-colors ${
-                          selectedItem?.id === item.id
-                            ? "rounded-md border border-primary/40 bg-primary/10 shadow-none dark:rounded-2xl dark:bg-primary/14 dark:shadow-[0_14px_28px_rgba(255,255,255,0.12)]"
-                            : ""
-                        }`}
-                     >
-                       <ItemListRow
-                         item={item}
-                         onClick={() => {
-                           setSelectedItem(item);
-                           if (window.innerWidth < BREAKPOINTS.MOBILE) {
-                             setIsModalOpen(true);
-                           }
-                         }}
-                       />
-                     </div>
-                   ))}
-                 </div>
-               </CardContent>
-             </Card>
-           </div>
+          </div>
+          {isDesktopRuntime ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-[34px]"
+              disabled={isImportingCsFloat}
+              onClick={() => void handleImportCsFloatWatchlist()}
+            >
+              {isImportingCsFloat ? "Importiere…" : "CSFloat importieren"}
+            </Button>
+          ) : null}
+        </div>
 
-          <div className="hidden md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-            {selectedItemWithBuyOrderRows ? (
-              <Card>
-                <CardHeader className="pb-2 sm:pb-4">
-                  <div className="flex items-start justify-between gap-2 sm:gap-3">
-                    <div className="flex min-w-0 gap-2 sm:gap-4">
-                      <div className="h-14 w-14 sm:h-20 sm:w-20 overflow-hidden rounded-xl border border-border/75 bg-muted/25 flex-shrink-0">
-                        {selectedItemWithBuyOrderRows.imageUrl ? (
-                          <img
-                            src={selectedItemWithBuyOrderRows.imageUrl}
-                            alt={selectedItemWithBuyOrderRows.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                            N/A
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <CardTitle className="text-base sm:text-lg truncate">{selectedItemWithBuyOrderRows.name}</CardTitle>
-                        <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                          Interaktiver Preisverlauf
-                        </p>
-                        {hasFiniteNumber(selectedItemWithBuyOrderRows.currentPrice) && (
-                          <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-muted-foreground">
-                            <p>
-                              Aktuell: {formatPrice(Number(selectedItemWithBuyOrderRows.currentPrice))}
-                            </p>
-                            {selectedItemWithBuyOrderRows?.hasBuyOrder && Number(selectedItemWithBuyOrderRows?.buyOrderBestPriceUsd || 0) > 0 ? (
-                              <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-100 px-2 py-0.5 font-medium text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
-                                Meine Buyorder: {formatPrice(Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd), {
-                                  useUsd: true,
-                                  buyPriceUsd: Number(selectedItemWithBuyOrderRows.buyOrderBestPriceUsd),
-                                })}
-                                {Number(selectedItemWithBuyOrderRows?.buyOrderCount || 0) > 1
-                                  ? ` (${Number(selectedItemWithBuyOrderRows.buyOrderCount)} Orders)`
-                                  : ""}
-                              </p>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedItem(null)}
-                      className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+        {error ? (
+          <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-[12.5px] text-danger">
+            {error}
+          </div>
+        ) : null}
+
+        {loading ? (
+          <WatchlistItemsLoadingSkeleton />
+        ) : watchlistItems.length === 0 ? (
+          <Card>
+            <CardContent className="p-4 text-center text-muted-foreground sm:p-8">
+              <p className="text-sm">
+                Keine Items in der Watchlist. Nutze die Suche oben und fuege neue Items hinzu.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_356px]">
+            <div className="min-w-0">
+              {/* Desktop: Item | Live | 24h | 7T | 30T | Verlauf | Zielpreis */}
+              <div className="hidden md:block">
+                <GridTable>
+                  <GridTableHead columns={WATCHLIST_COLUMNS}>
+                    <span>Item</span>
+                    <span className="text-right">Live</span>
+                    <span className="text-right" title="Preisänderung der letzten 24 Stunden">
+                      24h
+                    </span>
+                    <span className="text-right" title="Preisänderung der letzten 7 Tage">
+                      7T
+                    </span>
+                    <span className="text-right" title="Preisänderung der letzten 30 Tage">
+                      30T
+                    </span>
+                    <span className="text-right">Verlauf</span>
+                    {/* No "Bald" badge here — at 96px it pushed the label into
+                        the Verlauf column. The sidebar and the inspector row
+                        already carry the marker. */}
+                    <span
+                      className="text-right opacity-45"
+                      title="Zielpreise und Alarme sind noch nicht verfügbar"
                     >
-                      <X className="h-4 w-4 sm:h-5 sm:w-5" />
-                    </button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {selectedItemWithBuyOrderRows.priceHistory &&
-                  selectedItemWithBuyOrderRows.priceHistory.length > 0 ? (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold">Preisentwicklung</h3>
+                      Zielpreis
+                    </span>
+                  </GridTableHead>
+
+                  {sortedWatchlistItems.length === 0 ? (
+                    <GridTableEmpty>Keine Items für diese Filter.</GridTableEmpty>
+                  ) : null}
+
+                  {sortedWatchlistItems.map((item) => {
+                    const historyValues = sliceHistoryByDays(item.priceHistory, range).map(
+                      (entry) => Number(resolveHistoryValueUsd(entry)),
+                    );
+                    const hasItemBuyOrder =
+                      item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0;
+
+                    return (
+                      <GridTableRow
+                        key={item.id}
+                        columns={WATCHLIST_COLUMNS}
+                        selected={selectedItem?.id === item.id}
+                        ref={(node) => {
+                          if (node) {
+                            itemRefs.current.set(item.id, node);
+                            return;
+                          }
+                          itemRefs.current.delete(item.id);
+                        }}
+                        onClick={() => setSelectedItem(item)}
+                      >
+                        <div className="flex min-w-0 items-center gap-[11px]">
+                          <ItemThumb
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="size-[30px] rounded-none border-border-soft"
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate text-[13px] font-bold">
+                              {item.name}
+                            </span>
+                            <span className="mt-[3px] flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                              <span className="truncate">{item.type || "Item"}</span>
+                              {hasItemBuyOrder ? (
+                                <span
+                                  title="Offene CSFloat-Buyorder"
+                                  className="shrink-0 bg-info/16 px-1.5 py-px text-[9px] font-extrabold tracking-[0.04em] text-info"
+                                >
+                                  BO{" "}
+                                  {formatPrice(Number(item.buyOrderBestPriceUsd), {
+                                    useUsd: true,
+                                    buyPriceUsd: Number(item.buyOrderBestPriceUsd),
+                                  })}
+                                </span>
+                              ) : null}
+                            </span>
+                          </span>
+                        </div>
+
+                        <span className="text-right text-[13.5px] font-bold tabular-nums">
+                          {hasFiniteNumber(item.currentPrice) ? (
+                            formatPrice(Number(item.currentPrice))
+                          ) : (
+                            <span className="text-[11px] font-medium text-muted-foreground">
+                              –
+                            </span>
+                          )}
+                        </span>
+
+                        {[item.d1, item.d7, item.d30].map((change, index) => (
+                          <span
+                            key={index}
+                            className={`text-right text-xs font-bold tabular-nums ${changeToneClass(change)}`}
+                          >
+                            {formatSignedPercentOneDecimal(change)}
+                          </span>
+                        ))}
+
+                        {/* Colour is left to the sparkline, which derives it from
+                            the samples it actually draws. Forcing it from `d7`
+                            painted a 90-day decline green whenever the last week
+                            happened to be flat. */}
+                        <span className="flex items-center justify-end">
+                          <Sparkline values={historyValues} width={80} height={26} />
+                        </span>
+
+                        {/* Target prices are not implemented yet — the column is
+                            rendered so the planned layout is visible, but it
+                            deliberately carries no value. */}
+                        <span className="flex items-center justify-end gap-1.5 text-right opacity-40">
+                          <Bell className="size-[13px]" aria-hidden="true" />
+                          <span className="text-xs tabular-nums text-muted-foreground">–</span>
+                        </span>
+                      </GridTableRow>
+                    );
+                  })}
+
+                  <GridTableFoot>
+                    <span>
+                      {sortedWatchlistItems.length === decoratedItems.length
+                        ? `${sortedWatchlistItems.length} Items`
+                        : `${sortedWatchlistItems.length} von ${decoratedItems.length} Items`}
+                    </span>
+                    <span>
+                      Verlauf: {WATCHLIST_RANGES.find((entry) => entry.key === range)?.label}
+                    </span>
+                  </GridTableFoot>
+                </GridTable>
+              </div>
+
+              {/* Mobile: card list plus the sort strip the sidebar would carry. */}
+              <div className="space-y-2 md:hidden">
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2.5">
+                  <span className="shrink-0 pl-1 text-[10px] uppercase text-muted-foreground">
+                    Sortierung
+                  </span>
+                  <div className="no-scrollbar flex flex-1 gap-1 overflow-x-auto">
+                    {WATCHLIST_SORT_OPTIONS.filter((option) => !option.soon).map((option) => {
+                      const isActive = sortKey === option.key;
+                      return (
                         <button
-                          onClick={() => setShowAbsolute(!showAbsolute)}
-                          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                          key={option.key}
+                          type="button"
+                          onClick={() => handleSortSelect(option.key)}
+                          aria-pressed={isActive}
+                          className={`shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+                            isActive
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-surface-2 text-muted-foreground hover:text-foreground"
+                          }`}
                         >
-                          {showAbsolute ? (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">{currency}</span>
-                          ) : (
-                            <span className="text-muted-foreground/50">{currency}</span>
-                          )}
-                          /
-                          {showAbsolute ? (
-                            <span className="text-muted-foreground/50">%</span>
-                          ) : (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">%</span>
-                          )}
+                          {option.label}
+                          {isActive ? (
+                            <span aria-hidden="true" className="ml-0.5 text-[10px]">
+                              {sortDirection === "asc" ? "↑" : "↓"}
+                            </span>
+                          ) : null}
                         </button>
-                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {sortedWatchlistItems.map((item) => (
+                  <ItemListRow
+                    key={item.id}
+                    item={item}
+                    onClick={() => {
+                      setSelectedItem(item);
+                      if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                        setIsModalOpen(true);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Visible from md, where the mobile detail modal stops firing. */}
+            <div className="hidden md:block lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto">
+              {selectedItemWithBuyOrderRows ? (
+                <Inspector>
+                  <InspectorHeader
+                    thumb={
+                      <ItemThumb
+                        src={selectedItemWithBuyOrderRows.imageUrl}
+                        alt={selectedItemWithBuyOrderRows.name}
+                        className="size-16 rounded-none border-border-soft p-1"
+                      />
+                    }
+                    title={selectedItemWithBuyOrderRows.name}
+                    // "Beobachtet seit" lives in the stat rows below; repeating
+                    // it here only truncated the line.
+                    meta={selectedItemWithBuyOrderRows.type || "Item"}
+                    onClose={() => setSelectedItem(null)}
+                  />
+
+                  <InspectorPrice
+                    value={
+                      hasFiniteNumber(selectedItemWithBuyOrderRows.currentPrice)
+                        ? formatPrice(Number(selectedItemWithBuyOrderRows.currentPrice))
+                        : "Kein Preis"
+                    }
+                    delta={
+                      Number.isFinite(selectedD1)
+                        ? `${formatSignedPercentOneDecimal(selectedD1)} (24h)`
+                        : null
+                    }
+                    tone={
+                      !Number.isFinite(selectedD1)
+                        ? "muted"
+                        : selectedD1 >= 0
+                          ? "success"
+                          : "danger"
+                    }
+                  />
+
+                  {Array.isArray(selectedChartHistory) && selectedChartHistory.length > 0 ? (
+                    <InspectorBlock
+                      label="Preisentwicklung"
+                      aside={
+                        <button
+                          type="button"
+                          onClick={() => setShowAbsolute((current) => !current)}
+                          className="font-extrabold uppercase tracking-[0.12em] transition-colors hover:text-foreground"
+                          title="Zwischen Absolutwert und Wachstum umschalten"
+                        >
+                          {showAbsolute ? currency : "%"}
+                        </button>
+                      }
+                    >
                       <PortfolioChart
-                        history={selectedItemWithBuyOrderRows.priceHistory}
+                        history={selectedChartHistory}
                         color={
-                          selectedItemWithBuyOrderRows.trend === "down" ? "#ef4444" : "#22c55e"
+                          Number.isFinite(selectedD1) && selectedD1 < 0 ? "#ef4444" : "#22c55e"
                         }
                         valueLabel="Preis"
-                        title="Preisentwicklung"
+                        title=""
                         showAbsolute={showAbsolute}
-                        disableDarkGlass
+                        flat
                       />
-                    </div>
+                    </InspectorBlock>
                   ) : (
-                    <div className="p-4 text-center text-sm text-muted-foreground">
-                      Keine Preishistorie verfuegbar.
-                    </div>
+                    <InspectorBlock label="Preisentwicklung">
+                      <p className="mt-2 text-[12px] text-muted-foreground">
+                        Keine Preishistorie verfuegbar.
+                      </p>
+                    </InspectorBlock>
                   )}
-                  <div className={`mt-4 rounded-xl border p-4 ${
-                    selectedItemBuyOrderRows.length > 0
-                      ? "border-sky-300 bg-sky-100/50 dark:border-sky-400/40 dark:bg-sky-400/5"
-                      : "border-border/70 bg-card/65"
-                  }`}>
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h4 className="flex items-center gap-2 text-sm font-semibold">
-                        Meine Buyorders (CSFloat)
-                        {selectedItemBuyOrderRows.length > 0 ? (
-                          <span className="rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
-                            Aktiv
-                          </span>
-                        ) : null}
-                      </h4>
-                      {selectedItemBuyOrderRows.length > 0 ? (
-                        <span className="text-xs text-muted-foreground">
-                          {selectedItemBuyOrderRows.reduce((sum, row) => sum + Number(row.orders || 0), 0)} Orders,{" "}
-                          {selectedItemBuyOrderRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0)} Menge
-                        </span>
-                      ) : null}
+
+                  {[
+                    { label: "24 Stunden", value: selectedItemWithBuyOrderRows.d1 },
+                    { label: "7 Tage", value: selectedItemWithBuyOrderRows.d7 },
+                    { label: "30 Tage", value: selectedItemWithBuyOrderRows.d30 },
+                  ].map((entry) => (
+                    <div
+                      key={entry.label}
+                      className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-[9px]"
+                    >
+                      <span className="text-[11.5px] font-semibold text-muted-foreground">
+                        {entry.label}
+                      </span>
+                      <span
+                        className={`text-[12.5px] font-extrabold tabular-nums ${changeToneClass(entry.value)}`}
+                      >
+                        {formatSignedPercentOneDecimal(entry.value)}
+                      </span>
                     </div>
+                  ))}
+
+                  {/* Not implemented — shown disabled so the planned row is visible. */}
+                  <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-[9px] opacity-45">
+                    <span className="flex items-center gap-2 text-[11.5px] font-semibold text-muted-foreground">
+                      Abstand zum Zielpreis
+                      <SoonBadge />
+                    </span>
+                    <span className="text-[12.5px] font-extrabold tabular-nums text-muted-foreground">
+                      –
+                    </span>
+                  </div>
+
+                  {watchedSince ? (
+                    <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-[9px]">
+                      <span className="text-[11.5px] font-semibold text-muted-foreground">
+                        Beobachtet seit
+                      </span>
+                      <span className="text-[12.5px] font-extrabold tabular-nums">
+                        {watchedSince}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  <InspectorBlock
+                    label="Buyorders · CSFloat"
+                    aside={
+                      selectedBestBuyOrder
+                        ? formatPrice(Number(selectedBestBuyOrder.priceUsd), {
+                            useUsd: true,
+                            buyPriceUsd: Number(selectedBestBuyOrder.priceUsd),
+                          })
+                        : null
+                    }
+                  >
                     {selectedItemBuyOrderRows.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="mt-2 text-[12px] text-muted-foreground">
                         Du hast aktuell keine Buyorders bei CSFloat fuer dieses Item gesetzt.
                       </p>
                     ) : (
-                      <div className="overflow-hidden rounded-lg border border-border/60">
-                        <table className="w-full text-xs sm:text-sm">
-                          <thead className="bg-muted/30 text-left text-muted-foreground">
-                            <tr>
-                              <th className="px-3 py-2 font-medium">Preis</th>
-                              <th className="px-3 py-2 font-medium">Orders</th>
-                              <th className="px-3 py-2 font-medium">Menge</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedItemBuyOrderRows.slice(0, 12).map((row, index) => (
-                              <tr key={`${row.priceUsd}-${index}`} className="border-t border-border/50">
-                                <td className="px-3 py-2 text-sky-700 dark:text-sky-300">
-                                  {formatPrice(Number(row.priceUsd), {
-                                    useUsd: true,
-                                    buyPriceUsd: Number(row.priceUsd),
-                                  })}
-                                </td>
-                                <td className="px-3 py-2">{Number(row.orders || 0)}</td>
-                                <td className="px-3 py-2">{Number(row.quantity || 0)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div className="mt-2.5">
+                        <div className="grid grid-cols-[minmax(0,1fr)_52px_58px] gap-2 border-b border-border-soft pb-1.5 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+                          <span>Preis</span>
+                          <span className="text-right">Orders</span>
+                          <span className="text-right">Menge</span>
+                        </div>
+                        {selectedItemBuyOrderRows.slice(0, 12).map((row, index) => (
+                          <div
+                            key={`${row.priceUsd}-${index}`}
+                            className="grid grid-cols-[minmax(0,1fr)_52px_58px] gap-2 border-b border-border-soft py-2 text-xs tabular-nums"
+                          >
+                            <span className="font-bold">
+                              {formatPrice(Number(row.priceUsd), {
+                                useUsd: true,
+                                buyPriceUsd: Number(row.priceUsd),
+                              })}
+                            </span>
+                            <span className="text-right text-muted-foreground">
+                              {Number(row.orders || 0)}
+                            </span>
+                            <span className="text-right text-muted-foreground">
+                              {Number(row.quantity || 0)}
+                            </span>
+                          </div>
+                        ))}
+                        <p className="pt-2 text-[10.5px] text-muted-foreground">
+                          {selectedItemBuyOrderRows.reduce(
+                            (sum, row) => sum + Number(row.orders || 0),
+                            0,
+                          )}{" "}
+                          Orders ·{" "}
+                          {selectedItemBuyOrderRows.reduce(
+                            (sum, row) => sum + Number(row.quantity || 0),
+                            0,
+                          )}{" "}
+                          Menge
+                        </p>
                       </div>
                     )}
+
                     {isDesktopRuntime && buyOrderDebug ? (
-                      <p className="mt-3 font-mono text-[10px] text-muted-foreground">
-                        Debug: client={buyOrderDebug.clientSource || "-"} | upstream={buyOrderDebug.upstreamSource || "-"} | pages={Number(buyOrderDebug.pagesFetched || 0)} | raw={Number(buyOrderDebug.rawOrders || 0)} | summary={Number(buyOrderDebug.summaryItems || 0)} | cache={buyOrderDebug.fromCache ? "yes" : "no"} | errors={Number(buyOrderDebug.errorCount || 0)} | firstError={buyOrderDebug.firstErrorCode || "-"}({Number(buyOrderDebug.firstErrorStatus || 0) || "-"}) | boError={buyOrderDebug.buyOrdersErrorCode || "-"}({Number(buyOrderDebug.buyOrdersErrorStatus || 0) || "-"})
+                      <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                        Debug: client={buyOrderDebug.clientSource || "-"} | upstream=
+                        {buyOrderDebug.upstreamSource || "-"} | pages=
+                        {Number(buyOrderDebug.pagesFetched || 0)} | raw=
+                        {Number(buyOrderDebug.rawOrders || 0)} | summary=
+                        {Number(buyOrderDebug.summaryItems || 0)} | cache=
+                        {buyOrderDebug.fromCache ? "yes" : "no"} | errors=
+                        {Number(buyOrderDebug.errorCount || 0)} | firstError=
+                        {buyOrderDebug.firstErrorCode || "-"}(
+                        {Number(buyOrderDebug.firstErrorStatus || 0) || "-"}) | boError=
+                        {buyOrderDebug.buyOrdersErrorCode || "-"}(
+                        {Number(buyOrderDebug.buyOrdersErrorStatus || 0) || "-"})
                       </p>
                     ) : null}
-                  </div>
+                  </InspectorBlock>
 
-                  {/* Delete Section - Desktop */}
-                  <div className="mt-6 border-t pt-4">
+                  <InspectorFooter>
+                    <Button
+                      variant="softDanger"
+                      size="sm"
+                      onClick={handleDeleteClick}
+                      className="h-8 flex-1"
+                    >
+                      <Trash2 className="mr-2 size-4" />
+                      Entfernen
+                    </Button>
+                    {/* "Zu Investments" needs a buy price and a purchase date the
+                        watchlist does not hold — disabled until that flow exists. */}
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={handleDeleteClick}
-                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                      disabled
+                      title="Noch nicht verfügbar"
+                      className="h-8 flex-1 gap-1.5"
                     >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Aus Watchlist entfernen
+                      Zu Investments
+                      <SoonBadge />
                     </Button>
-                  </div>
+                  </InspectorFooter>
 
                   <DeleteConfirmModal
                     isOpen={showDeleteConfirm}
@@ -830,18 +1277,18 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     itemName={selectedItem?.name}
                     description="aus deiner Watchlist entfernen"
                   />
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-8 text-center text-muted-foreground">
-                  <p>Waehle ein Item aus, um den Preisverlauf anzuzeigen.</p>
-                </CardContent>
-              </Card>
-            )}
+                </Inspector>
+              ) : (
+                <InspectorEmpty>
+                  Wähle ein Item aus,
+                  <br />
+                  um den Preisverlauf anzuzeigen.
+                </InspectorEmpty>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <WatchlistItemModal
         isOpen={isModalOpen}

@@ -1,8 +1,21 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
+import { List, Package, TrendingUp } from "lucide-react";
 import { Skeleton } from "./ui/skeleton.jsx";
-import { Button } from "./ui/button.jsx";
-import { BREAKPOINTS } from "../lib/index.js";
-import { resolveLiveClusterItem, withBuyOrderFields } from "../lib/portfolioHelpers.js";
+import { SegmentedControl } from "./ui/segmented-control.jsx";
+import {
+  FilterChip,
+  FilterGroup,
+  FilterScopeButton,
+  FilterScopeIcon,
+  FilterSidebar,
+  FilterSortButton,
+} from "./ui/filter-sidebar.jsx";
+import {
+  normalizeBucket,
+  resolveLiveClusterItem,
+  withBuyOrderFields,
+} from "../lib/portfolioHelpers.js";
+import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const InventoryTable = lazy(() =>
   import("./InventoryTable.jsx").then((module) => ({
@@ -20,8 +33,51 @@ const ItemDetailPanel = lazy(() =>
   })),
 );
 
+const SCOPES = [
+  // The collapsed rail shows icons, not initials — "Investments" and "Inventar"
+  // share a first syllable, so no short abbreviation distinguishes them.
+  { key: "investment", label: "Investments", Icon: TrendingUp },
+  { key: "inventory", label: "Inventar", Icon: Package },
+  { key: "all", label: "Alles", Icon: List },
+];
+
+const SORTS = [
+  { key: "roi", label: "ROI" },
+  { key: "value", label: "Positionswert" },
+  { key: "quantity", label: "Menge" },
+  { key: "item", label: "Name" },
+];
+
+const ALL_CATEGORIES = "__all__";
+
+/** The bucket a row belongs to, matching PortfolioPage's scope filter. */
+function resolveRowBucket(item) {
+  return normalizeBucket(
+    item?.bucket,
+    String(item?.platform || item?.source || "").toLowerCase() === "steam_inventory"
+      ? "inventory"
+      : "investment",
+  );
+}
+
+function categoryKey(item) {
+  return String(item?.type || "").trim().toLowerCase();
+}
+
+function categoryLabel(item) {
+  // Catalog types arrive lowercase ("skin", "sticker"); the chip row is a label,
+  // not a raw value dump.
+  const raw = String(item?.type || "").trim();
+  return raw === "" ? "Ohne Typ" : raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
 /**
  * Inventory tab content for the Portfolio page.
+ *
+ * Layout follows the Inventar design: a collapsible filter rail owns scope,
+ * category and sort; the content column carries the header, the dense table and
+ * the inspector. Scope stays lifted to PortfolioPage (it keys the row filter and
+ * is shared with other surfaces); category and sort are view-local.
  */
 export function PortfolioInventorySection({
   forceMount,
@@ -47,71 +103,242 @@ export function PortfolioInventorySection({
   enrichedInvestments,
   inventoryBuyOrderSummary,
 }) {
+  const { formatPrice } = useCurrency();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [category, setCategory] = useState(ALL_CATEGORIES);
+  const [sortKey, setSortKey] = useState("roi");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  // Scope counts have to come from the unfiltered rows — `inventoryTabItems` is
+  // already narrowed to the active scope, so it can only ever count itself.
+  const scopeCounts = useMemo(() => {
+    const counts = { investment: 0, inventory: 0, all: 0 };
+    (Array.isArray(enrichedInvestments) ? enrichedInvestments : []).forEach((item) => {
+      counts.all += 1;
+      counts[resolveRowBucket(item)] += 1;
+    });
+    return counts;
+  }, [enrichedInvestments]);
+
+  const scopedGroups = useMemo(
+    () =>
+      (Array.isArray(portfolioGroupSummaries) ? portfolioGroupSummaries : []).filter(
+        (group) =>
+          inventoryScope === "all" || String(group?.bucket || "investment") === inventoryScope,
+      ),
+    [portfolioGroupSummaries, inventoryScope],
+  );
+
+  // Categories are derived from what is actually in the scope rather than from a
+  // fixed list, so a catalog that gains a type does not need a code change.
+  const categories = useMemo(() => {
+    const seen = new Map();
+    (Array.isArray(inventoryTabItems) ? inventoryTabItems : []).forEach((item) => {
+      const key = categoryKey(item);
+      if (!seen.has(key)) {
+        seen.set(key, { key, label: categoryLabel(item), count: 0 });
+      }
+      seen.get(key).count += 1;
+    });
+    return Array.from(seen.values()).sort((left, right) =>
+      left.label.localeCompare(right.label, "de"),
+    );
+  }, [inventoryTabItems]);
+
+  const activeCategory = categories.some((entry) => entry.key === category)
+    ? category
+    : ALL_CATEGORIES;
+
+  // A category filter narrows single positions only. Groups aggregate across
+  // types, so filtering them by one type would show a partial group total.
+  const filteredItems = useMemo(() => {
+    const rows = Array.isArray(inventoryTabItems) ? inventoryTabItems : [];
+    const withOrders = rows.map((item) => withBuyOrderFields(item, inventoryBuyOrderSummary));
+    if (activeCategory === ALL_CATEGORIES) {
+      return withOrders;
+    }
+    return withOrders.filter((item) => categoryKey(item) === activeCategory);
+  }, [inventoryTabItems, inventoryBuyOrderSummary, activeCategory]);
+
+  const visibleGroups = activeCategory === ALL_CATEGORIES ? scopedGroups : [];
+
+  const selectedId = selectedItem?.id ?? null;
+  const scopeLabel = SCOPES.find((entry) => entry.key === inventoryScope)?.label ?? "Inventar";
+
+  const handleSortChange = (nextKey, nextDirection) => {
+    setSortKey(nextKey);
+    setSortDirection(nextDirection);
+  };
+
+  const handleSortSelect = (nextKey) => {
+    if (nextKey === sortKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDirection(nextKey === "item" ? "asc" : "desc");
+  };
+
+  const totalScopeValue = useMemo(
+    () =>
+      (Array.isArray(inventoryTabItems) ? inventoryTabItems : []).reduce((sum, item) => {
+        const value = Number(item?.currentValue);
+        return Number.isFinite(value) ? sum + value : sum;
+      }, 0),
+    [inventoryTabItems],
+  );
+
   return (
-    <div forceMount={forceMount} className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
-      <div className="md:col-span-2 space-y-2">
-        <h3 className="text-base font-semibold">Ansicht</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant={inventoryScope === "investment" ? "default" : "outline"}
-            onClick={() => onInventoryScopeChange("investment")}
-          >
-            Investments
-          </Button>
-          <Button
-            size="sm"
-            variant={inventoryScope === "inventory" ? "default" : "outline"}
-            onClick={() => onInventoryScopeChange("inventory")}
-          >
-            Inventar
-          </Button>
-          <Button
-            size="sm"
-            variant={inventoryScope === "all" ? "default" : "outline"}
-            onClick={() => onInventoryScopeChange("all")}
-          >
-            Alles
-          </Button>
-        </div>
-      </div>
+    <div forceMount={forceMount} className="lg:-mx-2 lg:flex lg:items-stretch">
+      <FilterSidebar
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen((current) => !current)}
+        collapsed={
+          <div className="mt-1 flex flex-col items-stretch gap-0.5">
+            {SCOPES.map((scope) => (
+              <FilterScopeIcon
+                key={scope.key}
+                label={scope.label}
+                icon={<scope.Icon className="size-[17px]" />}
+                active={inventoryScope === scope.key}
+                onClick={() => onInventoryScopeChange(scope.key)}
+              />
+            ))}
+          </div>
+        }
+      >
+        <FilterGroup label="Bereich">
+          <div className="flex flex-col">
+            {SCOPES.map((scope) => (
+              <FilterScopeButton
+                key={scope.key}
+                label={scope.label}
+                count={scopeCounts[scope.key]}
+                active={inventoryScope === scope.key}
+                onClick={() => onInventoryScopeChange(scope.key)}
+              />
+            ))}
+          </div>
+        </FilterGroup>
 
-      <div className="overflow-x-auto md:col-span-1 sm:rounded-2xl sm:border sm:border-border/70 sm:bg-card/65">
-        <Suspense
-          fallback={
-            <div className="space-y-3 p-4">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
+        {categories.length > 1 ? (
+          <FilterGroup label="Kategorie">
+            <div className="flex flex-wrap gap-1">
+              <FilterChip
+                active={activeCategory === ALL_CATEGORIES}
+                onClick={() => setCategory(ALL_CATEGORIES)}
+              >
+                Alle
+              </FilterChip>
+              {categories.map((entry) => (
+                <FilterChip
+                  key={entry.key}
+                  active={activeCategory === entry.key}
+                  onClick={() => setCategory(entry.key)}
+                  title={`${entry.count} Positionen`}
+                >
+                  {entry.label}
+                </FilterChip>
+              ))}
             </div>
-          }
-        >
-          <InventoryTable
-            investments={inventoryTabItems}
-            groups={(Array.isArray(portfolioGroupSummaries) ? portfolioGroupSummaries : []).filter(
-              (group) =>
-                inventoryScope === "all" ||
-                String(group?.bucket || "investment") === inventoryScope,
-            )}
-            onSelectItem={onSelectItem}
-            onSelectGroup={onSelectGroup}
-            onSelectCluster={onSelectCluster}
-          />
-        </Suspense>
-      </div>
+          </FilterGroup>
+        ) : null}
 
-      <div className="hidden md:col-span-1 md:sticky md:top-20 md:block md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-        <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-2xl" />}>
-          <ItemDetailPanel
-            item={selectedItemWithLiveAndBuyOrders || selectedItem}
-            history={selectedItemHistory}
-            historyLoading={selectedItemHistoryLoading}
-            onExcludeChange={isDesktopRuntime ? onExcludeChange : undefined}
-            onBucketChange={isDesktopRuntime ? onBucketChange : undefined}
-            canToggleExclude={canToggleExclude}
-            canToggleBucket={canToggleBucket}
+        <FilterGroup label="Sortierung">
+          <div className="flex flex-col">
+            {SORTS.map((sort) => (
+              <FilterSortButton
+                key={sort.key}
+                active={sortKey === sort.key}
+                direction={sortDirection}
+                onClick={() => handleSortSelect(sort.key)}
+              >
+                {sort.label}
+              </FilterSortButton>
+            ))}
+          </div>
+        </FilterGroup>
+
+        {activeCategory !== ALL_CATEGORIES ? (
+          <p className="text-[10.5px] leading-[1.5] text-muted-foreground">
+            Gruppen bündeln mehrere Typen und sind deshalb nur ohne Kategoriefilter sichtbar.
+          </p>
+        ) : null}
+      </FilterSidebar>
+
+      <div className="min-w-0 flex-1 space-y-4 lg:px-5 lg:py-[18px]">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-extrabold tracking-[-0.01em] sm:text-2xl">Inventar</h3>
+            <p className="mt-[7px] text-xs text-muted-foreground">
+              {scopeLabel} · {filteredItems.length} Positionen
+              {visibleGroups.length > 0
+                ? ` · ${visibleGroups.length} ${visibleGroups.length === 1 ? "Gruppe" : "Gruppen"}`
+                : ""}{" "}
+              · {formatPrice(totalScopeValue)}
+            </p>
+          </div>
+
+          {/* Below lg the sidebar is hidden, so the scope switch moves inline. */}
+          <SegmentedControl
+            className="lg:hidden"
+            size="sm"
+            value={inventoryScope}
+            onChange={onInventoryScopeChange}
+            items={SCOPES.map((scope) => ({
+              value: scope.key,
+              label: scope.label,
+              count: scopeCounts[scope.key],
+            }))}
           />
-        </Suspense>
+        </div>
+
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_356px]">
+          <div className="min-w-0">
+            <Suspense
+              fallback={
+                <div className="space-y-3 p-4">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              }
+            >
+              <InventoryTable
+                investments={filteredItems}
+                groups={visibleGroups}
+                onSelectItem={onSelectItem}
+                onSelectGroup={onSelectGroup}
+                onSelectCluster={onSelectCluster}
+                selectedId={selectedId}
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                onSortChange={handleSortChange}
+                unfilteredCount={
+                  (Array.isArray(inventoryTabItems) ? inventoryTabItems.length : 0) +
+                  scopedGroups.length
+                }
+              />
+            </Suspense>
+          </div>
+
+          {/* Visible from md, because that is where the mobile detail modal stops
+              firing (BREAKPOINTS.MOBILE = 768). Between md and lg it sits under
+              the table; from lg it becomes the right-hand column. */}
+          <div className="hidden md:block lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto">
+            <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-[14px]" />}>
+              <ItemDetailPanel
+                item={selectedItemWithLiveAndBuyOrders || selectedItem}
+                history={selectedItemHistory}
+                historyLoading={selectedItemHistoryLoading}
+                onExcludeChange={isDesktopRuntime ? onExcludeChange : undefined}
+                onBucketChange={isDesktopRuntime ? onBucketChange : undefined}
+                canToggleExclude={canToggleExclude}
+                canToggleBucket={canToggleBucket}
+              />
+            </Suspense>
+          </div>
+        </div>
       </div>
 
       {modals.map((modal) =>

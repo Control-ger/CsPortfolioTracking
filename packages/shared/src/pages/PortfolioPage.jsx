@@ -5298,7 +5298,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           <PortfolioWatchlistSection
             forceMount={visitedTabs.has("watchlist")}
             watchlistFocusTarget={watchlistFocusTarget}
-            handleWatchlistWarningsChange={handleWatchlistWarningsChange}
+            onWarningsChange={handleWatchlistWarningsChange}
           />
           </TabsContent>
           <TabsContent value="search" forceMount={visitedTabs.has("search") || undefined}>
