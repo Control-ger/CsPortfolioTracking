@@ -119,6 +119,126 @@ export function formatDateSafe(value) {
 }
 
 /**
+ * USD value of a price-history entry.
+ *
+ * The same series reaches the frontend under several key spellings depending on
+ * the path it took (server DTO, desktop merge, sidecar proxy). Internal unit is
+ * USD — `priceEur` is deliberately NOT a fallback, because silently mixing
+ * currencies on one axis is worse than a gap.
+ *
+ * Shared by PortfolioChart and the watchlist sparkline so the two cannot
+ * disagree about whether a row has history.
+ */
+export function resolveHistoryValueUsd(entry) {
+  return (
+    entry?.priceUsd ?? entry?.price_usd ?? entry?.valueUsd ?? entry?.wert ?? entry?.value
+  );
+}
+
+/**
+ * Timestamp of a price-history entry's `date`.
+ *
+ * A bare `YYYY-MM-DD` is pinned to local midnight rather than parsed as UTC, so
+ * a day bucket lands on the day the user sees. `YYYY-MM-DD HH:MM:SS` (the MySQL
+ * spelling) is normalised to ISO first, because Safari rejects the space form.
+ */
+export function parseHistoryTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const localTimestamp = new Date(`${value}T00:00:00`).getTime();
+    return Number.isNaN(localTimestamp) ? null : localTimestamp;
+  }
+
+  const normalizedValue =
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(value)
+      ? value.replace(" ", "T")
+      : value;
+
+  const timestamp = new Date(normalizedValue).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+/**
+ * Percent change of a price series over the trailing `days` window.
+ *
+ * The watchlist API only ships a 7-day change (`priceChangePercent`), but the
+ * design's table wants 24h / 7T / 30T. All three are derived here from the one
+ * `priceHistory` the row already carries, so the three columns are guaranteed
+ * mutually consistent rather than mixing a server number with local ones.
+ *
+ * Returns `null` when the series cannot honestly answer for that window: fewer
+ * than two samples, a non-positive baseline, or a series that does not reach
+ * far enough back (a "30T" computed over 9 days of data is a wrong number, not
+ * an approximate one). The 20% slack absorbs a missing cron run at the edge.
+ */
+export function resolveHistoryChangePercent(history, days) {
+  const rows = (Array.isArray(history) ? history : [])
+    .map((entry) => ({
+      ts: parseHistoryTimestamp(entry?.date),
+      value: Number(resolveHistoryValueUsd(entry)),
+    }))
+    .filter((row) => Number.isFinite(row.ts) && Number.isFinite(row.value))
+    .sort((left, right) => left.ts - right.ts);
+
+  if (rows.length < 2) {
+    return null;
+  }
+
+  const latest = rows[rows.length - 1];
+  const targetTs = latest.ts - days * 24 * 60 * 60 * 1000;
+
+  // Newest sample at or before the window start.
+  let baseline = null;
+  for (const row of rows) {
+    if (row.ts > targetTs) {
+      break;
+    }
+    baseline = row;
+  }
+
+  if (!baseline) {
+    const spanDays = (latest.ts - rows[0].ts) / (24 * 60 * 60 * 1000);
+    if (spanDays < days * 0.8) {
+      return null;
+    }
+    baseline = rows[0];
+  }
+
+  if (!(baseline.value > 0)) {
+    return null;
+  }
+
+  return ((latest.value - baseline.value) / baseline.value) * 100;
+}
+
+/** Trailing slice of a price series, used for the range-scoped sparkline. */
+export function sliceHistoryByDays(history, days) {
+  const rows = Array.isArray(history) ? history : [];
+  if (rows.length === 0 || !Number.isFinite(days)) {
+    return rows;
+  }
+
+  const timestamps = rows
+    .map((entry) => parseHistoryTimestamp(entry?.date))
+    .filter((ts) => Number.isFinite(ts));
+  if (timestamps.length === 0) {
+    return rows;
+  }
+
+  const cutoff = Math.max(...timestamps) - days * 24 * 60 * 60 * 1000;
+  const scoped = rows.filter((entry) => {
+    const ts = parseHistoryTimestamp(entry?.date);
+    return Number.isFinite(ts) && ts >= cutoff;
+  });
+
+  // A window with almost nothing in it plots worse than the full series.
+  return scoped.length >= 2 ? scoped : rows;
+}
+
+/**
  * Resolve the watchlist change percent from an item object, trying multiple field names.
  */
 export function resolveWatchlistChangePercent(item) {

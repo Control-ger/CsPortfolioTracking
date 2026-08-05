@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { Skeleton } from "./ui/skeleton";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { parseHistoryTimestamp, resolveHistoryValueUsd } from "@shared/lib/portfolioHelpers";
 
 const RANGE_OPTIONS = [
   { key: "7T", label: "7T", days: 7 },
@@ -14,25 +15,6 @@ const RANGE_OPTIONS = [
   { key: "MAX", label: "MAX", days: null },
 ];
 
-function parseDateToTimestamp(value) {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const localDate = new Date(`${value}T00:00:00`);
-    const localTimestamp = localDate.getTime();
-    return Number.isNaN(localTimestamp) ? null : localTimestamp;
-  }
-
-  const normalizedValue =
-    typeof value === "string" && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(value)
-      ? value.replace(" ", "T")
-      : value;
-
-  const timestamp = new Date(normalizedValue).getTime();
-  return Number.isNaN(timestamp) ? null : timestamp;
-}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Above this visible span the X axis switches from day labels to month labels.
@@ -196,16 +178,8 @@ function normalizeHistory(history) {
 
   return history
     .map((entry, index) => {
-      const timestamp = parseDateToTimestamp(entry?.date);
-      // Internal unit is USD (source of truth). Read USD fields only — priceEur is
-      // deliberately NOT a fallback to avoid silently mixing currencies on the axis.
-      const rawValue =
-        entry?.priceUsd ??
-        entry?.price_usd ??
-        entry?.valueUsd ??
-        entry?.wert ??
-        entry?.value;
-      const wert = Number(rawValue);
+      const timestamp = parseHistoryTimestamp(entry?.date);
+      const wert = Number(resolveHistoryValueUsd(entry));
       const investedValue = Number(
         entry?.invested ??
           entry?.investedValue ??
