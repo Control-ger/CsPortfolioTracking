@@ -156,7 +156,7 @@ export function UserMenu({
           {/* A plain coloured dot would read as "online/offline"; the warning
               glyph makes it unambiguous that something needs attention. */}
           {sessionUnhealthy && (
-            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-card bg-amber-500 text-card">
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-card bg-warn text-card">
               <AlertTriangle className="h-2.5 w-2.5" strokeWidth={3} />
             </span>
           )}
@@ -170,7 +170,7 @@ export function UserMenu({
       >
         {sessionUnhealthy && (
           <>
-            <div className="flex gap-2 rounded-xl bg-amber-500/10 px-2 py-2 text-amber-200">
+            <div className="flex gap-2 rounded-xl bg-warn/10 px-2 py-2 text-foreground">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span className="text-[11px] leading-snug">{sessionBadgeLabel}</span>
             </div>

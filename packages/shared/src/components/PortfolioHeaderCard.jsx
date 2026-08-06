@@ -36,8 +36,8 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
   if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
     return {
       label: "keine live quotes",
-      tone: "text-slate-300",
-      iconClass: "rounded-full border border-slate-500/35 bg-slate-500/12 p-2 text-slate-300",
+      tone: "text-muted-foreground",
+      iconClass: "rounded-full border border-border bg-surface-2 p-2 text-muted-foreground",
       icon: "clock",
     };
   }
@@ -45,8 +45,8 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
   if (!Number.isFinite(oldestAgeSeconds)) {
     return {
       label: "status unbekannt",
-      tone: "text-slate-300",
-      iconClass: "rounded-full border border-slate-500/35 bg-slate-500/12 p-2 text-slate-300",
+      tone: "text-muted-foreground",
+      iconClass: "rounded-full border border-border bg-surface-2 p-2 text-muted-foreground",
       icon: "clock",
     };
   }
@@ -54,8 +54,8 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
   if (oldestAgeSeconds <= 90 * 60) {
     return {
       label: "im plan",
-      tone: "text-emerald-300",
-      iconClass: "rounded-full border border-emerald-400/30 bg-emerald-500/12 p-2 text-emerald-300",
+      tone: "text-success",
+      iconClass: "rounded-full border border-success/30 bg-success/10 p-2 text-success",
       icon: "clock",
     };
   }
@@ -63,16 +63,16 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
   if (oldestAgeSeconds <= 3 * 60 * 60) {
     return {
       label: "verzoegert",
-      tone: "text-amber-300",
-      iconClass: "rounded-full border border-amber-400/30 bg-amber-500/12 p-2 text-amber-300",
+      tone: "text-warn",
+      iconClass: "rounded-full border border-warn/30 bg-warn/10 p-2 text-warn",
       icon: "refresh",
     };
   }
 
   return {
     label: "nachlauf",
-    tone: "text-red-300",
-    iconClass: "rounded-full border border-red-400/30 bg-red-500/12 p-2 text-red-300",
+    tone: "text-danger",
+    iconClass: "rounded-full border border-danger/30 bg-danger/10 p-2 text-danger",
     icon: "refresh",
   };
 };
@@ -96,7 +96,7 @@ export const PortfolioHeaderCard = ({
   const hasValidRoiPercent = Number.isFinite(numericRoiPercent);
   const effectiveIsPositive = hasValidRoiPercent ? numericRoiPercent >= 0 : isPositive;
   const Icon = effectiveIsPositive ? TrendingUp : TrendingDown;
-  const trendColor = effectiveIsPositive ? "text-emerald-400" : "text-red-400";
+  const trendColor = effectiveIsPositive ? "text-success" : "text-danger";
   const syncHealth = resolveSyncHealth(Number(oldestDataAgeSeconds), Number(liveItemsCount));
   const syncTitle = `Price Sync - Live Quotes: ${liveItemsCount} | Aeltestes Cache-Alter: ${formatAge(oldestDataAgeSeconds)}`;
 

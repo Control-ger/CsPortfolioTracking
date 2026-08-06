@@ -88,7 +88,7 @@ export function CurrencySettingsSection({
           ratesLoading ? (
             <Skeleton className="h-[26px] w-44 rounded-full" />
           ) : (
-            <StatusPill tone="neutral">
+            <StatusPill tone="muted">
               {usdRate
                 ? `Kurs 1 USD = ${formatExchangeRate(usdRate)} ${currency}`
                 : "Kein Wechselkurs verfügbar"}

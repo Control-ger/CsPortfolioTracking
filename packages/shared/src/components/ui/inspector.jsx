@@ -2,6 +2,7 @@ import * as React from "react";
 import { X } from "lucide-react";
 
 import { cn } from "../../lib/utils.js";
+import { toneText } from "./tone.js";
 
 /**
  * The right-hand detail column from the Inventar design.
@@ -63,12 +64,6 @@ function InspectorHeader({ thumb, title, meta, badge, onClose, className, ...pro
   );
 }
 
-const DELTA_TONE = {
-  success: "text-success",
-  danger: "text-danger",
-  muted: "text-muted-foreground",
-};
-
 /** Headline price with its signed delta on the baseline next to it. */
 function InspectorPrice({ value, delta, tone = "muted", className, ...props }) {
   return (
@@ -81,7 +76,7 @@ function InspectorPrice({ value, delta, tone = "muted", className, ...props }) {
     >
       <span className="text-[28px] font-extrabold tracking-[-0.03em] tabular-nums">{value}</span>
       {delta ? (
-        <span className={cn("text-[12.5px] font-bold", DELTA_TONE[tone] ?? DELTA_TONE.muted)}>
+        <span className={cn("text-[12.5px] font-bold", toneText(tone, "muted"))}>
           {delta}
         </span>
       ) : null}
@@ -122,7 +117,7 @@ function InspectorStat({ label, value, tone = "default", className, ...props }) 
       <span
         className={cn(
           "text-[12.5px] font-extrabold tabular-nums",
-          tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : "text-foreground",
+          toneText(tone),
         )}
       >
         {value}

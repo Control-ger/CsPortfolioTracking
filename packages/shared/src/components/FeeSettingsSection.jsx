@@ -77,7 +77,7 @@ export function FeeSettingsSection({ form, source, loading, saving, error, succe
         title="Gebühren"
         description="Fließen in Nettoerlös, Break-even und Rendite ein."
         action={
-          <StatusPill tone={source === "db" ? "success" : "neutral"} dot={source === "db"}>
+          <StatusPill tone={source === "db" ? "success" : "muted"} dot={source === "db"}>
             {source === "db" ? "Gespeichert" : "Standardwerte"}
           </StatusPill>
         }

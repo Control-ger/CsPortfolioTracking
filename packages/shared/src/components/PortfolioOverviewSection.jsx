@@ -138,12 +138,12 @@ export function PortfolioOverviewSection({
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-warn" />
                 <span className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   VAC Ban-Welle
                 </span>
               </div>
-              <Badge variant="outline" className="shrink-0 border-amber-500/35 bg-amber-500/12 text-amber-600 dark:text-amber-300">
+              <Badge variant="outline" className="shrink-0 border-warn/30 bg-warn/10 text-warn">
                 aktuell
               </Badge>
             </div>
@@ -314,7 +314,7 @@ export function PortfolioOverviewSection({
               <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
                 {watchlistTopMovers.gainers.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-success">
                       <TrendingUp className="h-4 w-4" />
                       Top Gewinner
                     </div>
@@ -338,7 +338,7 @@ export function PortfolioOverviewSection({
                               setWatchlistFocusTarget({ id: item.id });
                               handleTabSelect("watchlist");
                             }}
-                            className="flex w-full items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-transparent p-2 text-left transition-colors hover:bg-emerald-500/10"
+                            className="flex w-full items-center justify-between gap-2 rounded-md border border-success/30 bg-transparent p-2 text-left transition-colors hover:bg-success/15"
                           >
                             <div className="flex min-w-0 flex-1 items-center gap-2">
                               <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
@@ -359,7 +359,7 @@ export function PortfolioOverviewSection({
                                 {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
                               </div>
                             </div>
-                            <span className="text-xs font-semibold text-emerald-400">
+                            <span className="text-xs font-semibold text-success">
                               +{item.changePercentValue.toFixed(2)}%
                             </span>
                           </button>
@@ -373,7 +373,7 @@ export function PortfolioOverviewSection({
 
                 {watchlistTopMovers.losers.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-400">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-danger">
                       <TrendingDown className="h-4 w-4" />
                       Top Verlierer
                     </div>
@@ -397,7 +397,7 @@ export function PortfolioOverviewSection({
                               setWatchlistFocusTarget({ id: item.id });
                               handleTabSelect("watchlist");
                             }}
-                            className="flex w-full items-center justify-between gap-2 rounded-md border border-red-400/30 bg-transparent p-2 text-left transition-colors hover:bg-red-500/10"
+                            className="flex w-full items-center justify-between gap-2 rounded-md border border-danger/30 bg-transparent p-2 text-left transition-colors hover:bg-danger/10"
                           >
                             <div className="flex min-w-0 flex-1 items-center gap-2">
                               <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
@@ -418,7 +418,7 @@ export function PortfolioOverviewSection({
                                 {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
                               </div>
                             </div>
-                            <span className="text-xs font-semibold text-red-400">
+                            <span className="text-xs font-semibold text-danger">
                               {item.changePercentValue.toFixed(2)}%
                             </span>
                           </button>
@@ -456,8 +456,8 @@ export function PortfolioOverviewSection({
                             }}
                             className={`flex w-full items-center justify-between gap-2 rounded-md border bg-transparent p-2 text-left transition-colors ${
                               isPositive
-                                ? "border-emerald-400/25 hover:bg-emerald-500/8"
-                                : "border-red-400/25 hover:bg-red-500/8"
+                                ? "border-success/30 hover:bg-success/8"
+                                : "border-danger/30 hover:bg-danger/8"
                             }`}
                           >
                             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -479,7 +479,7 @@ export function PortfolioOverviewSection({
                                 {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
                               </div>
                             </div>
-                            <span className={`text-xs font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+                            <span className={`text-xs font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
                               {item.changePercentValue >= 0 ? "+" : ""}{item.changePercentValue.toFixed(2)}%
                             </span>
                           </button>

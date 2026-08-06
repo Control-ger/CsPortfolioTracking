@@ -618,7 +618,7 @@ export function PortfolioManagementSection({
               <StatusPill
                 dot
                 size="default"
-                tone={autoSyncEnabled ? "success" : "neutral"}
+                tone={autoSyncEnabled ? "success" : "muted"}
                 onClick={() => void handleToggleAutoSync()}
                 title="Auto-Sync umschalten"
               >
@@ -679,7 +679,7 @@ export function PortfolioManagementSection({
                   {matchingSuggestedCount} Matchings offen
                 </StatusPill>
               ) : null}
-              <StatusPill tone="neutral">
+              <StatusPill tone="muted">
                 {syncNotification.newItemsCount} neue Steam-Items
               </StatusPill>
             </div>

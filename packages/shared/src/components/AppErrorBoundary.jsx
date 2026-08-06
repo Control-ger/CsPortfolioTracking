@@ -45,7 +45,7 @@ export class AppErrorBoundary extends Component {
               Die Anwendung ist abgestuerzt. Bitte Seite neu laden.
             </p>
             {/* Debug info - shows actual error */}
-            <div className="text-left text-xs text-red-400 bg-red-950/50 rounded-md p-3 overflow-auto max-h-40">
+            <div className="text-left text-xs text-danger bg-danger/10 rounded-md p-3 overflow-auto max-h-40">
               <p className="font-semibold mb-1">Error:</p>
               <p className="break-all">{errorMessage}</p>
               {errorStack && (

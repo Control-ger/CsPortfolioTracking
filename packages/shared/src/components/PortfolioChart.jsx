@@ -5,6 +5,7 @@ import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis }
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { Skeleton } from "./ui/skeleton";
+import { toneForDelta, toneText } from "./ui/tone.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { parseHistoryTimestamp, resolveHistoryValueUsd } from "@shared/lib/portfolioHelpers";
 
@@ -641,8 +642,7 @@ export const PortfolioChart = ({
                     formatter={(value, name, item, index, dataPoint) => {
                       const wert = Number(dataPoint?.wert);
                       const growth = Number(dataPoint?.growthPercent);
-                      const growthClassName =
-                        Number.isFinite(growth) && growth < 0 ? "text-red-500" : "text-emerald-500";
+                      const growthClassName = toneText(toneForDelta(growth), "success");
                       return (
                         <div className="flex w-full flex-col gap-1">
                           <div className="flex w-full items-center justify-between gap-4">

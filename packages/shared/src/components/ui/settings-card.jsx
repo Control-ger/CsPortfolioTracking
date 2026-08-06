@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "../../lib/utils.js";
+import { toneText, toneTintSurface } from "./tone.js";
 
 /**
  * Building blocks for the Einstellungen panel.
@@ -128,13 +129,6 @@ function SettingsNote({ className, children, ...props }) {
   );
 }
 
-const KEY_STATE_TONE = {
-  success: "text-success",
-  warn: "text-warn",
-  danger: "text-danger",
-  muted: "text-muted-foreground",
-};
-
 /**
  * Credential row: fixed name column, elastic value column, actions.
  *
@@ -155,7 +149,7 @@ function SettingsKeyRow({ name, state, stateTone = "muted", children, divider = 
       <div className="min-w-0">
         <p className="text-[13px] font-bold text-foreground">{name}</p>
         {state ? (
-          <p className={cn("mt-[3px] text-[11px] font-semibold", KEY_STATE_TONE[stateTone] ?? KEY_STATE_TONE.muted)}>
+          <p className={cn("mt-[3px] text-[11px] font-semibold", toneText(stateTone, "muted"))}>
             {state}
           </p>
         ) : null}
@@ -178,20 +172,22 @@ function SettingsKeyInput({ className, ...props }) {
   );
 }
 
-/** Tinted inline banner (info hint, error, success) inside a settings card. */
-const BANNER_TONE = {
-  info: "border-info/25 bg-info/8 text-muted-foreground",
-  success: "border-success/30 bg-success/10 text-success",
-  warn: "border-warn/30 bg-warn/10 text-warn",
-  danger: "border-danger/30 bg-danger/10 text-danger",
-};
-
+/**
+ * Tinted inline banner (info hint, error, success) inside a settings card.
+ *
+ * Same tint idiom as `Callout`, but full-bleed with a bottom rule instead of a
+ * rounded box, because it sits between the card header and the card body.
+ *
+ * The body stays muted prose in every tone — a banner carries multiple lines of
+ * German explanation, which is unreadable set in its own status colour. The
+ * tone shows in the border, the wash and the caller's icon.
+ */
 function SettingsBanner({ tone = "info", icon, className, children, ...props }) {
   return (
     <div
       className={cn(
-        "flex items-start gap-2.5 border-b px-5 py-3 text-[11.5px] leading-[1.55] text-pretty",
-        BANNER_TONE[tone] ?? BANNER_TONE.info,
+        "flex items-start gap-2.5 border-b px-5 py-3 text-[11.5px] leading-[1.55] text-pretty text-muted-foreground",
+        toneTintSurface(tone),
         className,
       )}
       {...props}

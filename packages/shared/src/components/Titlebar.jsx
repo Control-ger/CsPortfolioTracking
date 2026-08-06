@@ -56,7 +56,7 @@ const WindowsButton = ({ action, onClick }) => (
     title={ACTION_LABELS[action].title}
     aria-label={ACTION_LABELS[action].aria}
     className={`flex h-full w-12 items-center justify-center text-muted-foreground transition-colors ${
-      action === 'close' ? 'hover:bg-red-500 hover:text-white' : 'hover:bg-accent/50'
+      action === 'close' ? 'hover:bg-danger hover:text-white' : 'hover:bg-accent/50'
     }`}
   >
     {GLYPHS[action]}

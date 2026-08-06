@@ -7,7 +7,7 @@ export const ApiWarnings = ({ warnings = [], className = "" }) => {
 
   return (
     <div
-      className={`rounded-xl border border-amber-400/35 bg-amber-500/12 p-3 text-amber-200 ${className}`.trim()}
+      className={`rounded-xl border border-warn/30 bg-warn/10 p-3 text-foreground ${className}`.trim()}
     >
       <div className="flex items-center gap-2 text-sm font-semibold">
         <AlertTriangle className="h-4 w-4" />
@@ -34,7 +34,7 @@ export const ApiWarnings = ({ warnings = [], className = "" }) => {
             <div key={key} className="text-sm">
               <p>{warning.message}</p>
               {metaParts.length > 0 && (
-                <p className="mt-1 text-xs text-amber-200/75">
+                <p className="mt-1 text-xs text-muted-foreground5">
                   {metaParts.join(" | ")}
                 </p>
               )}

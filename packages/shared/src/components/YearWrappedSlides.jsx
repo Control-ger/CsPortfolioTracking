@@ -18,6 +18,7 @@ import { useCurrency } from "../contexts/CurrencyContext.jsx";
 import { useCountUp } from "../hooks/useCountUp.js";
 import { formatDateSafe } from "../lib/portfolioHelpers.js";
 import { MONTH_LABELS } from "../lib/yearWrapped.js";
+import { toneText } from "./ui/tone.js";
 
 // Chart marks use the opaque siblings of the avatar palette (set by
 // YearWrappedPage via toOpaqueChartColor). The --steam-shell-color-* vars
@@ -80,16 +81,11 @@ export function WrappedSlideShell({ eyebrow, title, icon: Icon, children, footno
  * pass the raw number plus a `format` function, since the displayed string is
  * currency/percent formatted and cannot be interpolated directly.
  */
-function StatBlock({ label, value, countTo, format, hint, tone = "neutral", active = true, sound = false }) {
+function StatBlock({ label, value, countTo, format, hint, tone = "default", active = true, sound = false }) {
   const shouldCount = typeof countTo === "number" && typeof format === "function";
   const animatedValue = useCountUp(shouldCount ? countTo : 0, { active: active && shouldCount, sound });
 
-  const toneClass =
-    tone === "positive"
-      ? "text-emerald-500 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-rose-500 dark:text-rose-400"
-        : "text-foreground";
+  const toneClass = toneText(tone);
 
   return (
     <div className="flex flex-col gap-1">
@@ -401,7 +397,7 @@ export function WrappedCurveSlide({ year, curve }) {
           countTo={curve.deltaPercent}
           format={(v) => formatPercent(v)}
           hint={formatUsd(curve.deltaUsd)}
-          tone={isPositive ? "positive" : "negative"}
+          tone={isPositive ? "success" : "danger"}
         />
       </div>
       <div className="h-44 w-full">
@@ -432,13 +428,13 @@ export function WrappedExtremesSlide({ year, extremes }) {
           label={`Bester Tag · ${formatDateSafe(extremes.bestDay.date)}`}
           value={formatUsd(extremes.bestDay.deltaUsd)}
           hint={formatPercent(extremes.bestDay.deltaPercent)}
-          tone="positive"
+          tone="success"
         />
         <StatBlock
           label={`Schwaechster Tag · ${formatDateSafe(extremes.worstDay.date)}`}
           value={formatUsd(extremes.worstDay.deltaUsd)}
           hint={formatPercent(extremes.worstDay.deltaPercent)}
-          tone="negative"
+          tone="danger"
         />
       </div>
     </WrappedSlideShell>
@@ -468,8 +464,7 @@ function PerformerReveal({ headline, performer, tone, delayMs, formatUsd }) {
     duration: PERFORMER_COUNT_DURATION_MS,
     sound: true,
   });
-  const toneClass =
-    tone === "negative" ? "text-rose-500 dark:text-rose-400" : "text-emerald-500 dark:text-emerald-400";
+  const toneClass = toneText(tone, "success");
 
   return (
     <div className="flex flex-col gap-3">
@@ -512,14 +507,14 @@ export function WrappedPerformersSlide({ year, performers }) {
         <PerformerReveal
           headline="Hier hast du am meisten Profit gemacht"
           performer={performers.best}
-          tone="positive"
+          tone="success"
           delayMs={0}
           formatUsd={formatUsd}
         />
         <PerformerReveal
           headline="Und hier hat es am meisten wehgetan"
           performer={performers.worst}
-          tone="negative"
+          tone="danger"
           delayMs={900}
           formatUsd={formatUsd}
         />

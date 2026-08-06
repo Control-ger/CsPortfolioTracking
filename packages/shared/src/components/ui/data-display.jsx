@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "../../lib/utils.js";
+import { toneText } from "./tone.js";
 
 /**
  * Uppercase, letterspaced micro-heading used above every grouped block in the
@@ -20,14 +21,6 @@ function SectionLabel({ className, children, ...props }) {
   );
 }
 
-const META_TONE = {
-  default: "text-foreground",
-  success: "text-success",
-  warn: "text-warn",
-  danger: "text-danger",
-  muted: "text-muted-foreground",
-};
-
 /**
  * Label-left / value-right row for the inspector and preview panels. Values are
  * tabular so stacked numbers align on the decimal.
@@ -36,7 +29,7 @@ function MetaRow({ label, value, tone = "default", className, ...props }) {
   return (
     <div className={cn("flex justify-between gap-2", className)} {...props}>
       <span className="text-muted-foreground">{label}</span>
-      <span className={cn("font-bold tabular-nums", META_TONE[tone] ?? META_TONE.default)}>
+      <span className={cn("font-bold tabular-nums", toneText(tone))}>
         {value}
       </span>
     </div>

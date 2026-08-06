@@ -1360,7 +1360,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               <StatusPill tone={isUnlocked ? "success" : "warn"} dot>
                 {isUnlocked ? "Entsperrt" : "Gesperrt"}
               </StatusPill>
-              <StatusPill tone={isConfigured ? "neutral" : "danger"}>
+              <StatusPill tone={isConfigured ? "muted" : "danger"}>
                 {isConfigured ? "App-Passwort gesetzt" : "App-Passwort fehlt"}
               </StatusPill>
             </>

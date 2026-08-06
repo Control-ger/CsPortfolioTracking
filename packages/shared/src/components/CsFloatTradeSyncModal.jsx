@@ -23,9 +23,9 @@ function formatDate(value) {
 function Stat({ label, value, tone = "muted" }) {
   const toneClass =
     tone === "positive"
-      ? "text-emerald-400"
+      ? "text-success"
       : tone === "negative"
-        ? "text-red-400"
+        ? "text-danger"
         : "text-foreground";
 
   return (
@@ -182,16 +182,16 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         ) : null}
 
         {preview?.skipped > 0 ? (
-          <div className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-2 text-xs text-amber-200">
+          <div className="rounded-xl border border-warn/30 bg-warn/10 p-2 text-xs text-foreground">
             <div className="flex flex-wrap items-center gap-1">
               <span className="font-semibold">{preview.skipped} übersprungen:</span>
               {skipReasonEntries.slice(0, 2).map(([reason, count]) => (
-                <Badge key={reason} variant="outline" className="border-amber-400/35 bg-amber-500/10 text-[10px] text-amber-200">
+                <Badge key={reason} variant="outline" className="border-warn/30 bg-warn/10 text-[10px] text-foreground">
                   {reason}: {count}
                 </Badge>
               ))}
               {skipReasonEntries.length > 2 && (
-                <span className="text-[10px] text-amber-300">+{skipReasonEntries.length - 2} mehr</span>
+                <span className="text-[10px] text-warn">+{skipReasonEntries.length - 2} mehr</span>
               )}
             </div>
           </div>

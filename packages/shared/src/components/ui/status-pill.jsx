@@ -3,12 +3,13 @@ import * as React from "react";
 import { cva } from "class-variance-authority";
 
 import { cn } from "../../lib/utils.js";
+import { TONE_TINT, toneFill } from "./tone.js";
 
 /**
  * Rounded status pill with an optional leading dot.
  *
- * Carries a single semantic tone (success/warn/info/danger/neutral) drawn from
- * the design-system tokens. Renders as a <button> when `onClick` is supplied,
+ * Carries a single semantic tone from the shared vocabulary in `tone.js`
+ * (success/warn/info/danger/muted). Renders as a <button> when `onClick` is supplied,
  * otherwise as a non-interactive <span> — the design uses both forms in the
  * same row (clickable "80 ohne Einkaufspreis" next to static "0 neue Items").
  */
@@ -17,11 +18,13 @@ const statusPillVariants = cva(
   {
     variants: {
       tone: {
-        success: "border-success/30 bg-success/10 text-success",
-        warn: "border-warn/30 bg-warn/10 text-warn",
-        info: "border-info/30 bg-info/10 text-info",
-        danger: "border-danger/30 bg-danger/10 text-danger",
-        neutral: "border-border bg-transparent text-muted-foreground font-semibold",
+        success: TONE_TINT.success,
+        warn: TONE_TINT.warn,
+        info: TONE_TINT.info,
+        danger: TONE_TINT.danger,
+        // Not a tint: the muted pill is an outline, so it recedes next to a
+        // coloured one instead of competing with it as a grey wash.
+        muted: "border-border bg-transparent text-muted-foreground font-semibold",
       },
       size: {
         sm: "h-[26px] px-2.5 text-[11px]",
@@ -37,22 +40,14 @@ const statusPillVariants = cva(
       { tone: "warn", interactive: true, className: "hover:border-warn/60" },
       { tone: "info", interactive: true, className: "hover:border-info/60" },
       { tone: "danger", interactive: true, className: "hover:border-danger/60" },
-      { tone: "neutral", interactive: true, className: "hover:border-border-strong" },
+      { tone: "muted", interactive: true, className: "hover:border-border-strong" },
     ],
-    defaultVariants: { tone: "neutral", size: "sm", interactive: false },
+    defaultVariants: { tone: "muted", size: "sm", interactive: false },
   },
 );
 
-const DOT_TONE = {
-  success: "bg-success",
-  warn: "bg-warn",
-  info: "bg-info",
-  danger: "bg-danger",
-  neutral: "bg-muted-foreground",
-};
-
 const StatusPill = React.forwardRef(
-  ({ className, tone = "neutral", size, dot = false, onClick, children, ...props }, ref) => {
+  ({ className, tone = "muted", size, dot = false, onClick, children, ...props }, ref) => {
     const interactive = typeof onClick === "function";
     const Comp = interactive ? "button" : "span";
     return (
@@ -64,7 +59,7 @@ const StatusPill = React.forwardRef(
         {...props}
       >
         {dot ? (
-          <span className={cn("size-[6px] shrink-0 rounded-full", DOT_TONE[tone])} aria-hidden />
+          <span className={cn("size-[6px] shrink-0 rounded-full", toneFill(tone))} aria-hidden />
         ) : null}
         {children}
       </Comp>
