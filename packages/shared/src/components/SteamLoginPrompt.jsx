@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
+import { Callout } from "./ui/callout.jsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import {
   fetchCS2Inventory,
@@ -855,13 +856,9 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
           </div>
 
           {error ? (
-            <div className="rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-foreground">
-              Vorbereitung fehlgeschlagen: {error}
-            </div>
+            <Callout tone="danger">Vorbereitung fehlgeschlagen: {error}</Callout>
           ) : syncInfo ? (
-            <div className="rounded-md border border-success/30 bg-success/10 p-2 text-xs text-foreground">
-              {syncInfo}
-            </div>
+            <Callout tone="success">{syncInfo}</Callout>
           ) : null}
 
           <Button

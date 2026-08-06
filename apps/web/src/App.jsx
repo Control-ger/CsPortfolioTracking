@@ -5,6 +5,7 @@ import { Lock, UserRound } from "lucide-react";
 import { CurrencyProvider } from "@shared/contexts";
 import { BottomNavigation, DesktopSidebarRail, Titlebar } from "@shared/components";
 import { Button } from "@shared/components/ui/button";
+import { Callout } from "@shared/components/ui/callout";
 import { Input } from "@shared/components/ui/input";
 import { deriveSteamPaletteFromUser } from "@shared/components/SteamLoginPrompt.jsx";
 import { PortfolioPage } from "@shared/pages";
@@ -502,9 +503,9 @@ export default function App() {
               </div>
 
               {vaultError ? (
-                <div className="mt-3 rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-foreground">
+                <Callout tone="danger" className="mt-3">
                   {vaultError}
-                </div>
+                </Callout>
               ) : null}
             </div>
           </main>

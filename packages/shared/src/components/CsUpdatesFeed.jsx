@@ -4,6 +4,8 @@ import { AlertCircle, Bot, Clock3, ExternalLink, RefreshCw } from "lucide-react"
 import { useCsUpdatesFeed } from "@shared/hooks/useCsUpdatesFeed";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@shared/components/ui/accordion";
 import { Badge } from "@shared/components/ui/badge";
+import { Callout } from "@shared/components/ui/callout";
+import { EmptyState } from "@shared/components/ui/empty-state";
 import { Button } from "@shared/components/ui/button";
 import { ScrollArea } from "@shared/components/ui/scroll-area";
 import { Skeleton } from "@shared/components/ui/skeleton";
@@ -254,32 +256,23 @@ function LoadingState() {
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="p-2 text-center">
-      <p className="text-sm font-semibold text-foreground">Noch keine CS-Updates verfuegbar</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Neue Meldungen erscheinen automatisch, sobald sie erkannt werden.
-      </p>
-    </div>
-  );
-}
-
+/**
+ * A stale feed is a warning; an empty one is an error. Same block either way,
+ * so the tone is the only thing that varies.
+ */
 function ErrorState({ message, onRetry, hasItems }) {
   return (
-    <div className={cn("rounded-xl border p-4", hasItems ? "border-warn/30 bg-warn/10" : "border-danger/30 bg-danger/8")}>
-      <div className="flex items-start gap-2">
-        <AlertCircle className={cn("mt-0.5 h-4 w-4", hasItems ? "text-warn" : "text-danger")} />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">CS Updates konnten nicht geladen werden</p>
-          <p className="mt-1 text-xs text-muted-foreground">{message}</p>
-          <Button variant="outline" size="sm" onClick={onRetry} className="mt-3">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Erneut laden
-          </Button>
-        </div>
-      </div>
-    </div>
+    <Callout
+      tone={hasItems ? "warn" : "danger"}
+      icon={<AlertCircle className="size-4" />}
+      title="CS Updates konnten nicht geladen werden"
+    >
+      <p className="text-muted-foreground">{message}</p>
+      <Button variant="outline" size="sm" onClick={onRetry} className="mt-3">
+        <RefreshCw className="mr-2 h-4 w-4" />
+        Erneut laden
+      </Button>
+    </Callout>
   );
 }
 
@@ -545,7 +538,12 @@ export function CsUpdatesFeed({
 
         {isLoading ? <LoadingState /> : null}
         {!isLoading && error ? <ErrorState message={error} onRetry={refresh} hasItems={hasItems} /> : null}
-        {!isLoading && !hasItems && !error ? <EmptyState /> : null}
+        {!isLoading && !hasItems && !error ? (
+          <EmptyState
+            title="Noch keine CS-Updates verfuegbar"
+            description="Neue Meldungen erscheinen automatisch, sobald sie erkannt werden."
+          />
+        ) : null}
 
         {!isLoading && hasItems ? (
           compact ? (

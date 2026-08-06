@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Callout } from "./ui/callout.jsx";
 import { Card, CardContent } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { PortfolioChart } from "./PortfolioChart";
@@ -860,11 +861,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           ) : null}
         </div>
 
-        {error ? (
-          <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-[12.5px] text-danger">
-            {error}
-          </div>
-        ) : null}
+        {error ? <Callout tone="danger">{error}</Callout> : null}
 
         {loading ? (
           <WatchlistItemsLoadingSkeleton />

@@ -47,8 +47,13 @@ export { WatchlistOverview } from './WatchlistOverview.jsx';
 export * from './YearWrappedSlides.jsx';
 
 // UI Components
+// Partial by history — `ui/index.js` is the authoritative barrel for the
+// design system. Entries here exist so pages already importing from
+// `@shared/components` do not need a second import path.
 export * from './ui/badge.jsx';
 export * from './ui/button.jsx';
+export * from './ui/callout.jsx';
+export * from './ui/empty-state.jsx';
 export * from './ui/card.jsx';
 export * from './ui/dropdown-menu.jsx';
 export * from './ui/input.jsx';

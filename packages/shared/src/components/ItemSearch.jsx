@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@shared/components/ui/select";
+import { Callout } from "@shared/components/ui/callout";
 import { ItemThumb } from "@shared/components/ui/item-thumb";
 import { SegmentedControl } from "@shared/components/ui/segmented-control";
 import { Pagination } from "@shared/components/ui/data-display";
@@ -536,11 +537,7 @@ export const ItemSearch = ({
         ))}
       </div>
 
-      {error ? (
-        <div className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
-          {error}
-        </div>
-      ) : null}
+      {error ? <Callout tone="danger">{error}</Callout> : null}
 
       {renderResults()}
 

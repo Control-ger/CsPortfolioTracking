@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
+import { Callout } from './ui/callout.jsx';
 import { AlertCircle } from 'lucide-react';
 
 export function ExcludeInvestmentDialog({
@@ -39,25 +40,23 @@ export function ExcludeInvestmentDialog({
           </p>
 
           {!isCurrentlyExcluded && (
-            <div className="rounded-xl border border-warn/30 bg-warn/10 p-3 text-foreground">
-              <p className="font-semibold">Folgen:</p>
-              <ul className="mt-2 list-inside list-disc space-y-1">
+            <Callout tone="warn" title="Folgen:">
+              <ul className="mt-1 list-inside list-disc space-y-1">
                 <li>Item verschwindet aus dem Portfolio</li>
                 <li>Wird nicht in Gewinn/Verlust berechnet</li>
                 <li>Bleibt in der Datenbank gespeichert (nicht geloescht)</li>
                 <li>Kann spaeter wieder eingeschlossen werden</li>
               </ul>
-            </div>
+            </Callout>
           )}
 
           {isCurrentlyExcluded && (
-            <div className="rounded-xl border border-info/30 bg-info/10 p-3 text-info">
-              <p className="font-semibold">Das Item wird:</p>
-              <ul className="mt-2 list-inside list-disc space-y-1">
+            <Callout tone="info" title="Das Item wird:">
+              <ul className="mt-1 list-inside list-disc space-y-1">
                 <li>Wieder im Portfolio angezeigt</li>
                 <li>Wieder in Statistiken beruecksichtigt</li>
               </ul>
-            </div>
+            </Callout>
           )}
         </AlertDialogDescription>
 

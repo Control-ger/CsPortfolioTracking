@@ -1,6 +1,7 @@
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { StatusPill } from "@shared/components/ui/status-pill";
 import {
+  SettingsBanner,
   SettingsCard,
   SettingsCardBody,
   SettingsCardHeader,
@@ -83,14 +84,10 @@ export function FeeSettingsSection({ form, source, loading, saving, error, succe
         }
       />
       {error ? (
-        <div className="border-b border-danger/25 bg-danger/10 px-5 py-3 text-[12px] text-danger">
-          {error}
-        </div>
+        <SettingsBanner tone="danger">{error}</SettingsBanner>
       ) : null}
       {success ? (
-        <div className="border-b border-success/25 bg-success/10 px-5 py-3 text-[12px] text-success">
-          {success}
-        </div>
+        <SettingsBanner tone="success">{success}</SettingsBanner>
       ) : null}
       <SettingsCardBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {FEE_FIELDS.map((entry) => (

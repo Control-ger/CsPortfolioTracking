@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BaseModal } from "@shared/components/BaseModal";
 import { Badge } from "@shared/components/ui/badge";
+import { Callout } from "@shared/components/ui/callout";
 import { Button } from "@shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components/ui/card";
 import { Skeleton } from "@shared/components/ui/skeleton";
@@ -141,7 +142,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
     >
       <div className="flex h-full flex-col gap-3 overflow-y-auto">
         {error ? (
-          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+          <Callout tone="danger">{error}</Callout>
         ) : null}
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3">

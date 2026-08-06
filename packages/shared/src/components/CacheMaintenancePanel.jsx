@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
+import { Callout } from './ui/callout.jsx';
 import { Skeleton } from './ui/skeleton';
 import { AlertCircle, RefreshCw, Database } from 'lucide-react';
 import { fetchCacheMaintenanceStats } from '../lib/apiClient';
@@ -64,12 +65,9 @@ export function CacheMaintenancePanel() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-danger/30 bg-danger/10 p-4">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-danger" />
-          <p className="text-sm text-danger">{error}</p>
-        </div>
-      </div>
+      <Callout tone="danger" icon={<AlertCircle className="size-4" />}>
+        {error}
+      </Callout>
     );
   }
 

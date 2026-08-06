@@ -11,6 +11,7 @@ import { SteamLoginPrompt } from "@shared/components";
 import { ThemeToggle } from "@shared/components";
 import { UserMenu } from "@shared/components";
 import { Badge } from "@shared/components";
+import { Callout } from "@shared/components";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components";
 import { Button } from "@shared/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@shared/components";
@@ -3996,19 +3997,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         {warningNotifications.length > 0 ? (
-          <div className="rounded-xl border border-warn/30 bg-warn/10 p-2">
-            <p className="text-xs font-semibold">Systemhinweise</p>
+          <Callout tone="warn" title="Systemhinweise">
             <div className="mt-1.5 space-y-1.5">
               {warningNotifications.slice(0, 4).map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-warn/30 bg-warn/10 px-2 py-1.5">
                   <p className="text-sm">{entry.message}</p>
                   {entry.meta ? (
-                    <p className="text-[11px] text-muted-foreground0">{entry.meta}</p>
+                    <p className="text-[11px] text-muted-foreground">{entry.meta}</p>
                   ) : null}
                 </div>
               ))}
             </div>
-          </div>
+          </Callout>
         ) : null}
 
         <div className="rounded-md border p-2">
@@ -4515,9 +4515,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </CardHeader>
             <CardContent className="space-y-6 text-sm">
               {showStartupAutoSyncEmptyHint ? (
-                <div className="rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-xs text-foreground">
-                  Keine neuen Steam Items beim letzten Auto-Sync.
-                </div>
+                <Callout tone="info">Keine neuen Steam Items beim letzten Auto-Sync.</Callout>
               ) : null}
               <div className="space-y-3 rounded-xl border border-border bg-surface-1 p-4">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -4773,24 +4771,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         <li>Zum Reiter Developer gehen</li>
                         <li>Neuen Schluessel erstellen und kopieren</li>
                       </ol>
-                      <div className="rounded-md border border-warn/30 bg-warn/10 p-3 text-xs text-foreground">
+                      <Callout tone="warn">
                         Gib den Schluessel nicht weiter. Falls du einen Leak vermutest: alten Schluessel loeschen und neu
                         erstellen. Du kannst den Key spaeter jederzeit in der Verwaltung aendern.
-                      </div>
+                      </Callout>
                       {journeyApiKeyError ? (
-                        <div className="rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-foreground">
-                          {journeyApiKeyError}
-                        </div>
+                        <Callout tone="danger">{journeyApiKeyError}</Callout>
                       ) : null}
                       {journeyApiKeySuccess ? (
-                        <div className="rounded-md border border-success/30 bg-success/10 p-2 text-xs text-foreground">
-                          {journeyApiKeySuccess}
-                        </div>
+                        <Callout tone="success">{journeyApiKeySuccess}</Callout>
                       ) : null}
                       {journeyApiKeyHelper ? (
-                        <div className="rounded-md border border-info/30 bg-info/10 p-2 text-xs text-foreground">
-                          {journeyApiKeyHelper}
-                        </div>
+                        <Callout tone="info">{journeyApiKeyHelper}</Callout>
                       ) : null}
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-foreground">CSFloat API Key</label>
@@ -4874,9 +4866,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           Browser Push ist fuer Mobile gedacht. In Electron reicht der integrierte Feed, daher aktivierst du Push am besten im Mobile Companion.
                         </p>
                       </div>
-                      <div className="rounded-md border border-info/30 bg-info/10 p-3 text-xs text-foreground">
+                      <Callout tone="info">
                         Empfehlung: Server auf dem Handy oeffnen, einloggen und unter Einstellungen - Allgemein Browser Push aktivieren.
-                      </div>
+                      </Callout>
                       {mobileCompanionSetupUrl ? (
                         <div className="rounded-md border border-border bg-surface-1 p-3 text-xs text-foreground">
                           Server-Link fuer Mobile Setup:{" "}
@@ -5165,9 +5157,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </form>
             </div>
             {error && (
-              <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+              <Callout tone="danger" className="mb-4">
                 {error}
-              </div>
+              </Callout>
             )}
             {/* Tab Navigation - auf Desktop Runtime durch Sidebar ersetzt */}
             <div className={useDesktopSidebarShell ? "hidden sm:block lg:hidden" : "hidden sm:block"}>
@@ -5677,9 +5669,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           <Skeleton className="h-14 w-full" />
                         </div>
                       ) : globalSearchCatalogError ? (
-                        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                          {globalSearchCatalogError}
-                        </div>
+                        <Callout tone="danger">{globalSearchCatalogError}</Callout>
                       ) : globalSearchFilteredCatalogResults.length === 0 ? (
                         <div className="rounded-md border border-border/70 p-3 text-sm text-muted-foreground">
                           Keine Treffer im Katalog fuer "{globalSearchCommittedTerm}".

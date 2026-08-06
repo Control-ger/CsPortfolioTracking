@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BaseModal } from "@shared/components/BaseModal";
 import { Badge } from "@shared/components/ui/badge";
+import { Callout } from "@shared/components/ui/callout";
 import { Button } from "@shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components/ui/card";
 import { Skeleton } from "@shared/components/ui/skeleton";
@@ -145,12 +146,11 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
     >
       <div className="flex h-full flex-col gap-3 overflow-y-auto">
         {error ? (
-          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+          <Callout tone="danger">{error}</Callout>
         ) : null}
 
         {previewErrors.length > 0 ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            <div className="font-semibold">CSFloat hat den Abruf abgelehnt:</div>
+          <Callout tone="danger" title="CSFloat hat den Abruf abgelehnt:">
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               {previewErrors.map((err, index) => (
                 <li key={`${err?.code || "csfloat-error"}-${index}`}>
@@ -162,7 +162,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 </li>
               ))}
             </ul>
-          </div>
+          </Callout>
         ) : null}
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -182,7 +182,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         ) : null}
 
         {preview?.skipped > 0 ? (
-          <div className="rounded-xl border border-warn/30 bg-warn/10 p-2 text-xs text-foreground">
+          <Callout tone="warn">
             <div className="flex flex-wrap items-center gap-1">
               <span className="font-semibold">{preview.skipped} übersprungen:</span>
               {skipReasonEntries.slice(0, 2).map(([reason, count]) => (
@@ -194,7 +194,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 <span className="text-[10px] text-warn">+{skipReasonEntries.length - 2} mehr</span>
               )}
             </div>
-          </div>
+          </Callout>
         ) : null}
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">

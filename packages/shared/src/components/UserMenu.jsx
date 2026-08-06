@@ -3,6 +3,7 @@ import { UserRound, LogOut, Lock, AlertTriangle } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
 import { Button } from "@shared/components/ui/button"
+import { Callout } from "@shared/components/ui/callout";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -170,10 +171,13 @@ export function UserMenu({
       >
         {sessionUnhealthy && (
           <>
-            <div className="flex gap-2 rounded-xl bg-warn/10 px-2 py-2 text-foreground">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span className="text-[11px] leading-snug">{sessionBadgeLabel}</span>
-            </div>
+            <Callout
+              tone="warn"
+              icon={<AlertTriangle className="size-3.5" />}
+              className="px-2 py-2 text-[11px] leading-snug"
+            >
+              {sessionBadgeLabel}
+            </Callout>
             <DropdownMenuSeparator />
           </>
         )}

@@ -2,6 +2,7 @@ import { Suspense, lazy, useState } from "react";
 import { Check, Info, Link2, Search } from "lucide-react";
 import { Badge } from "./ui/badge.jsx";
 import { Button } from "./ui/button.jsx";
+import { Callout } from "./ui/callout.jsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { LayeredGroupIcon } from "./LayeredGroupIcon.jsx";
@@ -698,11 +699,7 @@ export function PortfolioManagementSection({
           ) : null}
 
           {/* Management error */}
-          {managementError ? (
-            <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
-              {managementError}
-            </div>
-          ) : null}
+          {managementError ? <Callout tone="danger">{managementError}</Callout> : null}
 
           {/* === PRICES SECTION === */}
           {managementSection === "prices" ? (
