@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import {
   AlertTriangle,
@@ -124,6 +124,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../components/ui/index.js";
+import { useTheme } from "../contexts/ThemeContext.jsx";
 
 /**
  * The design system's living catalogue.
@@ -170,18 +171,40 @@ function Section({ id, title, note, children }) {
 }
 
 /**
+ * Bumps whenever the root element's class list changes — i.e. whenever the
+ * theme actually lands in the DOM, no matter who changed it: this page's
+ * control, the sidebar toggle, or the OS following the `system` mode.
+ */
+function useRootClassVersion() {
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => setVersion((current) => current + 1));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return version;
+}
+
+/**
  * A token swatch reads the *computed* value out of the DOM rather than repeating
  * the hex from index.css. A hardcoded copy would keep looking correct after
  * someone changed the token, which is the one failure a swatch must not have.
  */
-function TokenSwatch({ token, label, theme }) {
-  // Keyed on `theme` as well as `token`: the same variable resolves to a
-  // different value per theme, so a cache keyed only on the name would keep
-  // showing the light value after the toggle flips the page to dark.
+function TokenSwatch({ token, label, classVersion }) {
+  // Keyed on `classVersion`, not on the theme state, because ThemeProvider
+  // writes the `dark` class in an effect — which runs *after* this component
+  // renders. Keying on the state would read the computed value before the
+  // class flipped and leave every readout one switch behind, permanently,
+  // since a class change on its own triggers no re-render.
   const resolved = useMemo(
     () => getComputedStyle(document.documentElement).getPropertyValue(token).trim(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- theme is the invalidation key, not a value used here
-    [token, theme],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- classVersion is the invalidation key, not a value used here
+    [token, classVersion],
   );
 
   return (
@@ -260,11 +283,14 @@ const SECTIONS = [
 ];
 
 export function DesignSystemPage() {
-  const [theme, setTheme] = useState(() =>
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-      ? "dark"
-      : "light",
-  );
+  // The app's own theme state, not a copy of it. An earlier version held local
+  // state and toggled the `dark` class directly, which broke in two ways:
+  // switching the theme from the sidebar left this control showing the old
+  // value, and the swatch readouts — memoised against that stale value — then
+  // printed the dark tokens next to a light page. A swatch that lies about the
+  // token is the one failure it must not have.
+  const { themeMode, setThemeMode } = useTheme();
+  const classVersion = useRootClassVersion();
   const [switchOn, setSwitchOn] = useState(true);
   const [segment, setSegment] = useState("alle");
   const [page, setPage] = useState(3);
@@ -281,15 +307,6 @@ export function DesignSystemPage() {
       current.includes(name) ? current.filter((entry) => entry !== name) : [...current, name],
     );
 
-  // The gallery drives the app's real theme class rather than a local preview
-  // wrapper: half the primitives style themselves with `dark:` variants, which
-  // only respond to the class on <html>. A scoped preview would show the light
-  // treatment in both positions and hide exactly the bugs this page exists for.
-  const applyTheme = (next) => {
-    document.documentElement.classList.toggle("dark", next === "dark");
-    setTheme(next);
-  };
-
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-8 px-5 py-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -305,13 +322,17 @@ export function DesignSystemPage() {
             keine <code className="text-foreground">emerald-500</code>.
           </p>
         </div>
+        {/* Same three modes as the Darstellung tile row in Einstellungen, and
+            the same store — switching here is a real app-wide theme change, so
+            the whole page (and every `dark:` variant in it) flips for real. */}
         <SegmentedControl
           items={[
+            { value: "system", label: "System" },
             { value: "light", label: "Light" },
             { value: "dark", label: "Dark" },
           ]}
-          value={theme}
-          onChange={applyTheme}
+          value={themeMode}
+          onChange={setThemeMode}
         />
       </header>
 
@@ -341,19 +362,19 @@ export function DesignSystemPage() {
       >
         <Specimen code="Flächen">
           {SURFACE_TOKENS.map(([token, label]) => (
-            <TokenSwatch key={token} token={token} label={label} theme={theme} />
+            <TokenSwatch key={token} token={token} label={label} classVersion={classVersion} />
           ))}
         </Specimen>
         <Separator />
         <Specimen code="Status — Bedeutung, nicht Farbe">
           {STATUS_TOKENS.map(([token, label]) => (
-            <TokenSwatch key={token} token={token} label={label} theme={theme} />
+            <TokenSwatch key={token} token={token} label={label} classVersion={classVersion} />
           ))}
         </Specimen>
         <Separator />
         <Specimen code="Linien — je nach Gewicht der Trennung">
           {LINE_TOKENS.map(([token, label]) => (
-            <TokenSwatch key={token} token={token} label={label} theme={theme} />
+            <TokenSwatch key={token} token={token} label={label} classVersion={classVersion} />
           ))}
         </Specimen>
       </Section>
