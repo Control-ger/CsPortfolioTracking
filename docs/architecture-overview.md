@@ -140,6 +140,7 @@ From `apps/web/src/App.jsx`:
 - `/cs-updates` -> `CsUpdatesPage`
 - `/settings` -> `SettingsPage`
 - `/wrapped` -> `YearWrappedPage` (Year Wrapped, lazy) — **deliberately not registered in `DesktopSidebarRail`, the page-local rail copies, or `BottomNavigation`.** Reached via the seasonal dashboard banner (15 Dec - 31 Jan, see §6.1) or directly by URL (`#/wrapped?year=YYYY`). Desktop-only: on web the page immediately redirects to `/`.
+- `/design` -> `DesignSystemPage` (design-system catalogue, lazy) — like `/wrapped`, **deliberately not registered in `DesktopSidebarRail`, the page-local rail copies, or `BottomNavigation`.** It is a builder's tool reached by URL (`#/design`) while writing a new view: every `ui/` primitive with all variants, sizes and tones, plus the token swatches, rendered against the real tokens in both themes. Its own light/dark toggle drives the `dark` class on the root element rather than a scoped preview wrapper — several primitives carry `dark:` variants that only respond to the root class, so a scoped preview would show the light treatment in both positions and hide exactly the regressions the page exists to catch. Lazy-loaded, so it stays out of the dashboard bundle. Reference: `docs/design-system.md`.
 - Electron/Desktop uses a shared app-level rail shell (`DesktopSidebarRail`) so cross-route navigation does not remount page-local sidebars.
 - The same shared app-level rail shell is used consistently across runtime paths so sidebar active-state/layout does not diverge between Dashboard, Settings, and Updates.
 
@@ -291,6 +292,7 @@ Health legend:
 |---|---|---|---|
 | `docs/architecture-overview.md` | FINAL | CURRENT | Central architecture source. |
 | `docs/devops.md` | FINAL | CURRENT | Build/packaging/CI/release (DevOps). |
+| `docs/design-system.md` | FINAL | CURRENT | UI token/primitive library + the tokens-only colour rule. |
 | `docs/local-db-schema.md` | FINAL | CURRENT | Updated to current local-store read path (no automatic server seeding). |
 | `docs/sync-api.md` | IN PROGRESS | CURRENT | Pull/push contract aligns with current routes and flow. |
 | `docs/archive/repo-restructure-plan.md` | HISTORICAL | HISTORICAL | Migration plan artifact. |

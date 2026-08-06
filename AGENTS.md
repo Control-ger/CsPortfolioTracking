@@ -61,6 +61,13 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 - CSS variables: `--steam-shell-color-a` through `--steam-shell-color-d`
 - Static fallback gradients only when avatar data is unavailable.
 
+### Frontend Design System
+Full reference: `docs/design-system.md`. Live catalogue: route `#/design`.
+- Build views from `packages/shared/src/components/ui/` — import via the barrel (`@shared/components/ui`), not deep paths.
+- **Colour is tokens only.** No `text-slate-300`, `bg-emerald-500/12`, `border-white/15`. Tokens flip with the `dark` class, so tokenised code needs almost no `dark:` variants. The only literals allowed are modal scrims (`bg-black/70`) and dark-only elevation (`dark:shadow-*`, `dark:backdrop-blur`).
+- Semantic status meaning comes from the tone vocabulary in `ui/tone.js` (`success`/`warn`/`info`/`danger`/`muted`), via `toneText`/`toneFill`/`toneTint`/`toneTintSurface`. Use `toneForDelta()` for signed numbers instead of an ad-hoc `>= 0` comparison.
+- `index.css` must stay free of `!important`. A rule that needs one is a component that is not tokenised.
+
 ### Backend Data Rules
 - **Currency**: USD persisted, EUR computed at runtime.
 - **Item references**: always `item_id`, never string-based names.
@@ -174,6 +181,7 @@ No new `.md` files without entry in the Active Docs table (see `docs/architectur
 |---|---|---|
 | `docs/architecture-overview.md` | FINAL | Central architecture + doc navigator |
 | `docs/devops.md` | FINAL | Build/packaging/CI/release (DevOps) |
+| `docs/design-system.md` | FINAL | UI token/primitive library + tokens-only colour rule |
 | `docs/local-db-schema.md` | FINAL | SQLite schema |
 | `docs/sync-api.md` | IN PROGRESS | Sync API contract |
 | `backend/MVC_API_CONTRACT.md` | FINAL | Backend API contract |
