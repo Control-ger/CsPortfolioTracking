@@ -54,7 +54,7 @@ export function isAbortLikeError(error) {
  * Enrich local desktop investment rows with upstream live pricing data.
  * Matches by item ID, group key, name, etc.
  */
-export function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []) {
+function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []) {
   if (!Array.isArray(localRows) || localRows.length === 0) {
     return [];
   }

@@ -142,7 +142,7 @@ export function portfolioGroupsStorageKey(userId) {
  * raw colour so both themes can resolve it against their own tokens.
  */
 export const PORTFOLIO_GROUP_COLORS = ["success", "info", "warn", "danger", "muted"];
-export const DEFAULT_PORTFOLIO_GROUP_COLOR = "success";
+const DEFAULT_PORTFOLIO_GROUP_COLOR = "success";
 
 export function normalizePortfolioGroupColor(value) {
   const candidate = String(value ?? "").trim().toLowerCase();

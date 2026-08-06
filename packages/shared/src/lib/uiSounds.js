@@ -363,4 +363,3 @@ export function primeUiSounds() {
   getAudioContext();
 }
 
-export const UI_SOUND_NAMES = Object.keys(SOUND_PRESETS);

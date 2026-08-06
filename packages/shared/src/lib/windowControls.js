@@ -15,7 +15,7 @@
 
 const STYLE_KEY = "ui:window-controls:style:v1";
 
-export const WINDOW_CONTROL_STYLES = ["auto", "windows", "macos"];
+const WINDOW_CONTROL_STYLES = ["auto", "windows", "macos"];
 const DEFAULT_STYLE = "auto";
 
 const listeners = new Set();

@@ -262,14 +262,14 @@ export function normalizeSearchText(value) {
 /**
  * Normalize a buy order name key: trim + lowercase.
  */
-export function normalizeBuyOrderNameKey(value) {
+function normalizeBuyOrderNameKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 
 /**
  * Fuzzy-normalize a buy order name key with NFKC normalization and stop-word removal.
  */
-export function normalizeBuyOrderNameKeyFuzzy(value) {
+function normalizeBuyOrderNameKeyFuzzy(value) {
   return String(value || "")
     .normalize("NFKC")
     .toLowerCase()
@@ -283,7 +283,7 @@ export function normalizeBuyOrderNameKeyFuzzy(value) {
 /**
  * Find a matching buy order summary entry for a given item.
  */
-export function resolveBuyOrderSummaryForItem(item, summaryRows = []) {
+function resolveBuyOrderSummaryForItem(item, summaryRows = []) {
   const rows = Array.isArray(summaryRows) ? summaryRows : [];
   if (!item || rows.length === 0) {
     return null;

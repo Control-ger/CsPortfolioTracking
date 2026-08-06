@@ -15,7 +15,7 @@
 
 export const SESSION_HEALTH_OK = "ok";
 /** Logged in, but the token is sidecar-signed → server sync cannot work. */
-export const SESSION_HEALTH_LOCAL_ONLY = "local-only";
+const SESSION_HEALTH_LOCAL_ONLY = "local-only";
 /** The server actively refused the stored token; it has been cleared. */
 export const SESSION_HEALTH_REJECTED = "rejected";
 

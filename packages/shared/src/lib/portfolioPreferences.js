@@ -132,7 +132,7 @@ export function resolveMetricsScopeFromPreferences(preferences = {}, selectedSco
   return normalizeMetricsScope(selectedScope ?? normalized.metricsScopeDefault, "investments");
 }
 
-export function isDesktopLocalStoreRuntime() {
+function isDesktopLocalStoreRuntime() {
   return typeof window !== "undefined" && Boolean(window.electronAPI?.localStore);
 }
 

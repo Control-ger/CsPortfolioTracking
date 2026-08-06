@@ -18,8 +18,8 @@
 import { isExcludedRow } from "./portfolioCalculations.js";
 import { getItemNameKey } from "./portfolioHelpers.js";
 
-export const WRAPPED_SEASON_START_MONTH = 11; // December
-export const WRAPPED_SEASON_START_DAY = 15;
+const WRAPPED_SEASON_START_MONTH = 11; // December
+const WRAPPED_SEASON_START_DAY = 15;
 
 export const MONTH_LABELS = [
   "Jan",

@@ -26,7 +26,7 @@ function parseHostFromUrlLikeInput(value) {
   }
 }
 
-export function ensureServerUrlScheme(value) {
+function ensureServerUrlScheme(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
     return "";

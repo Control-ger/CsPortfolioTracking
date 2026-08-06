@@ -57,15 +57,3 @@ export function useAbortableFetch() {
  * @param {Function} effect - Async effect function that receives abort signal
  * @param {Array} deps - Dependencies array
  */
-export function useAbortableEffect(effect, deps = []) {
-  useEffect(() => {
-    const abortController = new AbortController();
-    
-    effect(abortController.signal);
-
-    return () => {
-      abortController.abort();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-}

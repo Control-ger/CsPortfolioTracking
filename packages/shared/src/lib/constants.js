@@ -8,8 +8,6 @@ export const BREAKPOINTS = {
 };
 
 // Device detection helpers
-export const isMobile = () => window.innerWidth < BREAKPOINTS.MOBILE;
-export const isTablet = () => window.innerWidth >= BREAKPOINTS.MOBILE && window.innerWidth < BREAKPOINTS.TABLET;
 export const isDesktop = () => window.innerWidth >= BREAKPOINTS.DESKTOP;
 
 // UI Constants
@@ -33,12 +31,6 @@ export const KEYBOARD = {
 };
 
 // Tab indices for navigation
-export const TABS = {
-  OVERVIEW: 0,
-  INVENTORY: 1,
-  WATCHLIST: 2,
-};
-
 // Abbreviations with descriptions for tooltips
 export const ABBREVIATIONS = {
   ROI: {
@@ -79,11 +71,3 @@ export const ABBREVIATIONS = {
 };
 
 // Time ranges for charts
-export const TIME_RANGES = {
-  '7T': { label: '7T', days: 7 },
-  '30T': { label: '30T', days: 30 },
-  '90T': { label: '90T', days: 90 },
-  '180T': { label: '180T', days: 180 },
-  '1J': { label: '1J', days: 365 },
-  MAX: { label: 'MAX', days: null },
-};

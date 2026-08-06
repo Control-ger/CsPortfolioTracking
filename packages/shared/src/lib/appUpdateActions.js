@@ -7,10 +7,10 @@
 // download, updater error — the user has to end up on the GitHub releases
 // page instead of in a dead end.
 
-export const FALLBACK_RELEASES_URL =
+const FALLBACK_RELEASES_URL =
   "https://github.com/Control-ger/CsPortfolioTracking/releases/latest";
 
-export function formatUpdateVersionLabel(version) {
+function formatUpdateVersionLabel(version) {
   const normalized = String(version || "").trim();
   return normalized ? `v${normalized}` : "Das Update";
 }
