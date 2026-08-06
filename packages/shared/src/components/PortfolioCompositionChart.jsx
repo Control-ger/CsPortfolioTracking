@@ -116,7 +116,16 @@ export function PortfolioCompositionChart({
   const displayData = decorateCompositionRows(groupedRows);
   const chartData = displayData;
   const totalValueFromData = normalizedRows.reduce((sum, item) => sum + item.value, 0);
-  const totalValue = Number.isFinite(Number(totalValueOverride)) ? Number(totalValueOverride) : totalValueFromData;
+  // `totalValueOverride == null` has to be tested before the numeric check:
+  // Number(null) is 0 and Number.isFinite(0) is true, so the plain
+  // isFinite(Number(...)) form took the override branch even when no override
+  // was passed and rendered the centre total as 0,00 €. Both current callers
+  // happen to pass one, which is why it stayed invisible.
+  const hasTotalValueOverride =
+    totalValueOverride !== null &&
+    totalValueOverride !== undefined &&
+    Number.isFinite(Number(totalValueOverride));
+  const totalValue = hasTotalValueOverride ? Number(totalValueOverride) : totalValueFromData;
   const sourceAssetCount = normalizedRows.length;
   const hasRenderableChartData = chartData.length > 0;
 

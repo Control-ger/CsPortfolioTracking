@@ -276,7 +276,15 @@ function ErrorState({ message, onRetry, hasItems }) {
   );
 }
 
-function FeedItem({ item, isOpen, isFresh, compact }) {
+/**
+ * One entry in the CS-updates feed — a patch note or a detected ban wave.
+ *
+ * Exported so the design catalogue can show it: the tone it renders in is
+ * derived from the AI impact rating, and getting that mapping wrong is only
+ * visible side by side. Renders an `AccordionItem`, so it needs an `Accordion`
+ * parent.
+ */
+export function FeedItem({ item, isOpen, isFresh, compact }) {
   const impact = deriveMarketImpact(item);
   const hasAiText = Boolean(item?.aiRecommendedAction || item?.aiReasoning);
   const aiModelLabel = String(item?.aiModel || "").trim();

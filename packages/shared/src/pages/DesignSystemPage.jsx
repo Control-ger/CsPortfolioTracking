@@ -125,6 +125,23 @@ import {
   TooltipTrigger,
 } from "../components/ui/index.js";
 import { useTheme } from "../contexts/ThemeContext.jsx";
+import { Abbr, AbbreviationTooltip } from "../components/AbbreviationTooltip.jsx";
+import { FeedItem } from "../components/CsUpdatesFeed.jsx";
+import { ItemListRow } from "../components/ItemListRow.jsx";
+import { LayeredGroupIcon } from "../components/LayeredGroupIcon.jsx";
+import {
+  CardSkeleton,
+  ChartSkeleton,
+  PageHeaderSkeleton,
+  StatsCardsSkeleton,
+  TableSkeleton,
+} from "../components/LoadingSkeletons.jsx";
+import { MetricPairBlock, MetricPairInline } from "../components/MetricPair.jsx";
+import { PortfolioChart } from "../components/PortfolioChart.jsx";
+import { PortfolioCompositionChart } from "../components/PortfolioCompositionChart.jsx";
+import { PortfolioHeaderCard } from "../components/PortfolioHeaderCard.jsx";
+import { PriceSourceBadge } from "../components/PriceSourceBadge.jsx";
+import { StatCard } from "../components/StatsCards.jsx";
 
 /**
  * The design system's living catalogue.
@@ -280,7 +297,77 @@ const SECTIONS = [
   ["filter", "Filter-Rail"],
   ["inspector", "Inspector"],
   ["typography", "Typografie"],
+  ["patterns", "Muster"],
 ];
+
+// Fixtures for the composed components. Deliberately plain objects: a pattern
+// that needs a live hook to render is a screen, not a building block.
+// `count` feeds the Items tile; without it the chart correctly reports zero.
+const COMPOSITION_DATA = [
+  { name: "Fever Case", value: 412.5, count: 220 },
+  { name: "Dreams & Nightmares Case", value: 308.2, count: 168 },
+  { name: "Gallery Case", value: 236.9, count: 96 },
+  { name: "★ Huntsman Knife | Gamma Doppler", value: 160.4, count: 1 },
+  { name: "Kilowatt Case", value: 144.1, count: 74 },
+  { name: "AWP | Containment Breach", value: 105.6, count: 12 },
+];
+
+const CHART_HISTORY = Array.from({ length: 30 }, (_, index) => {
+  const day = new Date(Date.UTC(2026, 6, 1 + index));
+  const drift = Math.sin(index / 4) * 40 + index * 6;
+  return {
+    id: index,
+    date: day.toISOString(),
+    priceUsd: 1200 + drift,
+    growthPercent: (drift / 1200) * 100,
+  };
+});
+
+const LIST_ROW_ITEM = {
+  name: "AK-47 | Redline (Field-Tested)",
+  currentPriceUsd: 24.1,
+  roi: 18.4,
+  changeLabel: "30 Tage",
+  trend: "up",
+  buyOrderCount: 3,
+  buyOrderBestPriceUsd: 21.5,
+};
+
+const GROUP_VISUALS = [
+  { id: "a", name: "Fever Case" },
+  { id: "b", name: "Kilowatt Case" },
+];
+
+// Two ratings, because the tone a feed entry renders in is derived from the AI
+// impact level — the mapping is only checkable side by side.
+const FEED_UPDATE = {
+  id: "demo-update",
+  title: "Counter-Strike 2 Update (SteamDB Build 24537688)",
+  summary: "Kleinere Fehlerbehebungen und Karten-Anpassungen.",
+  source: "SteamDB RSS",
+  publishedAt: new Date(Date.UTC(2026, 7, 3, 21, 18)).toISOString(),
+  url: "https://example.invalid/update",
+  tags: ["build:24537688", "impact:none"],
+  aiRatingStatus: "rated",
+  aiImpactLevel: "none",
+  aiModel: "gemini-3.1-flash-lite",
+  aiRecommendedAction: "HOLD bestehende Bestände, keine neuen Käufe nötig.",
+  aiReasoning:
+    "Das Update enthält keine spielverändernden Inhalte oder wirtschaftsrelevanten Änderungen.",
+};
+
+const FEED_BAN_WAVE = {
+  id: "demo-banwave",
+  title: "Ban-Welle erkannt (250 % des Medians)",
+  summary: "Deutlich erhöhte VAC-Bans, durch die Zweitquelle bestätigt.",
+  source: "ban_wave_detected",
+  publishedAt: new Date(Date.UTC(2026, 7, 5, 6, 0)).toISOString(),
+  tags: ["ban-wave", "impact:high"],
+  aiRatingStatus: "rated",
+  aiImpactLevel: "high",
+  aiRecommendedAction: "Relevante Positionen kurzfristig prüfen.",
+  aiReasoning: "Ban-Wellen entziehen dem Markt kurzfristig Angebot und Nachfrage zugleich.",
+};
 
 export function DesignSystemPage() {
   // The app's own theme state, not a copy of it. An earlier version held local
@@ -1029,6 +1116,90 @@ export function DesignSystemPage() {
               <TrendingUp className="size-4" /> +8,2 %
             </span>
           </p>
+        </Specimen>
+      </Section>
+
+      <Section
+        id="patterns"
+        title="Muster"
+        note="Fachliche Bausteine, aus den Primitives zusammengesetzt. Sie stehen hier, weil sie sich aus einfachen Props darstellen lassen — mit erfundenen Daten, nicht mit deinem Portfolio. Ganze Bildschirmabschnitte, die ihre Daten selbst über Hooks holen (Verwaltung, Watchlist, Inventar, Suche), fehlen hier bewusst: sie sind keine Bausteine, du würdest sie in einer neuen Ansicht nie einsetzen."
+      >
+        <Specimen code="<StatCard /> — die KPI-Kacheln des Dashboards" className="flex-col items-stretch">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard title="Portfolio Wert (live)" value="1.738,97 €" />
+            <StatCard title="Gesamt Zuwachs" value="-404,59 €" subValue="-16.92 % | ROI gesamt" isPositive={false} />
+            <StatCard title="Items im Bestand" value="4013 Stueck" />
+            <StatCard title="Ladezustand" isLoading />
+          </div>
+        </Specimen>
+        <Separator />
+        <Specimen code="<PortfolioHeaderCard />" className="flex-col items-stretch">
+          <PortfolioHeaderCard
+            totalValue={1738.97}
+            totalRoiPercent={-16.92}
+            totalQuantity={4013}
+            liveItemsCount={67}
+            freshestDataAgeSeconds={120}
+            oldestDataAgeSeconds={1080}
+          />
+        </Specimen>
+        <Separator />
+        <Specimen code="<PortfolioCompositionChart /> — der Donut" className="flex-col items-stretch">
+          {/* valuesAreUsd={false}: these fixtures are already in the display
+              currency, so they must not run through the USD conversion. */}
+          <PortfolioCompositionChart data={COMPOSITION_DATA} valuesAreUsd={false} />
+        </Specimen>
+        <Separator />
+        <Specimen code="<PortfolioChart />" className="flex-col items-stretch">
+          <PortfolioChart history={CHART_HISTORY} title="Portfolio Entwicklung" />
+        </Specimen>
+        <Separator />
+        <Specimen code="<FeedItem /> — Eintrag im CS-Updates-Feed. Der Ton kommt aus der KI-Impact-Bewertung." className="flex-col items-stretch">
+          <Accordion type="single" collapsible className="space-y-2.5">
+            <FeedItem item={FEED_UPDATE} isOpen={false} isFresh={false} compact={false} />
+            <FeedItem item={FEED_BAN_WAVE} isOpen={false} isFresh compact={false} />
+          </Accordion>
+        </Specimen>
+        <Separator />
+        <Specimen code="<ItemListRow /> · <LayeredGroupIcon /> · <PriceSourceBadge />" className="flex-col items-stretch">
+          <ItemListRow item={LIST_ROW_ITEM} onClick={() => {}} />
+          <div className="flex items-center gap-5 pt-1">
+            <LayeredGroupIcon visuals={GROUP_VISUALS} fallbackLabel="Langfrist" size="md" />
+            <LayeredGroupIcon visuals={GROUP_VISUALS} fallbackLabel="Langfrist" size="sm" />
+            <LayeredGroupIcon visuals={[]} fallbackLabel="Leer" />
+            <PriceSourceBadge priceSource="csfloat" />
+            <PriceSourceBadge priceSource="steam" />
+          </div>
+        </Specimen>
+        <Separator />
+        <Specimen code="<MetricPairBlock /> · <MetricPairInline /> — Brutto/Netto nach Gebühren">
+          <MetricPairBlock
+            title="Verkaufserlös"
+            grossValue="24,10 €"
+            netValue="20,49 €"
+            note="nach CSFloat-Gebühren"
+            className="w-52"
+          />
+          <MetricPairInline grossValue="24,10 €" netValue="20,49 €" />
+        </Specimen>
+        <Separator />
+        <Specimen code="<Abbr /> · <AbbreviationTooltip /> — Fachbegriffe erklären sich beim Hovern">
+          <span className="text-[12.5px] text-muted-foreground">
+            Der <Abbr term="ROI" /> berücksichtigt die Gebühren aus den Einstellungen.
+          </span>
+          <AbbreviationTooltip term="ROI" showIcon>
+            <span className="text-[12.5px] font-semibold text-foreground">mit Icon</span>
+          </AbbreviationTooltip>
+        </Specimen>
+        <Separator />
+        <Specimen code="LoadingSkeletons — je Layout eines, damit ein Ladezustand nie eine falsche Null zeigt" className="flex-col items-stretch">
+          <PageHeaderSkeleton />
+          <StatsCardsSkeleton count={4} />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <CardSkeleton rows={3} />
+            <TableSkeleton rows={4} columns={4} />
+          </div>
+          <ChartSkeleton height={200} />
         </Specimen>
       </Section>
     </div>

@@ -21,6 +21,26 @@ primitives carry `dark:` variants that only respond to the root class. That
 makes the page the light/dark regression check as well: anything that breaks on
 a theme flip breaks visibly here first.
 
+### Three tiers, and why the third is not in the catalogue
+
+1. **Primitives** (`components/ui/`) — no domain knowledge. Button, Card,
+   GridTable, Callout. The bulk of the catalogue.
+2. **Patterns** (`components/`, section "Muster") — domain meaning, but they
+   render from plain props: the composition donut, `StatCard`,
+   `PortfolioHeaderCard`, `PortfolioChart`, `FeedItem`, `ItemListRow`,
+   `MetricPair*`, `LayeredGroupIcon`, `PriceSourceBadge`, the loading
+   skeletons, `AbbreviationTooltip`. Shown with fixtures.
+3. **Screens** — `PortfolioManagementSection` (2900+ lines), `Watchlist`,
+   `InventoryTable`, `ItemSearch`, `CsUpdatesFeed`. These fetch their own data
+   through hooks. They are **deliberately absent**: a catalogue exists to show
+   what you can reuse, and you will never drop a screen into a new view.
+   Rendering them would mean fixtures for a whole page and a refactor of
+   heavily-used data-bound code, for no reuse gained.
+
+   The value trapped in tier 3 is the reusable pieces *inside* them. Extract
+   those when you touch the file — `FeedItem` came out of `CsUpdatesFeed` that
+   way and is now in the catalogue. That is the path, not stuffing the screens in.
+
 Coverage is 109 of 117 exports. The eight absentees — `AlertDialogOverlay`,
 `AlertDialogPortal`, `ChartStyle`, `DropdownMenuPortal`, `ScrollBar`,
 `SelectScrollUpButton`, `SelectScrollDownButton`, `SoonBadge` — are internal
