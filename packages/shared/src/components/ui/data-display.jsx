@@ -22,6 +22,43 @@ function SectionLabel({ className, children, ...props }) {
 }
 
 /**
+ * Caption above a single value ("Einkauf", "Live", "Break-even").
+ *
+ * Distinct from `SectionLabel`, which heads a whole group and is a step larger
+ * and bolder. This one labels one number inside a tile, appeared at fourteen
+ * call sites written out longhand, and is the smaller, lighter of the two on
+ * purpose — a tile full of section-weight captions competes with the values.
+ */
+function FieldLabel({ className, children, ...props }) {
+  return (
+    <span
+      className={cn("block text-[10px] uppercase text-muted-foreground", className)}
+      {...props}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The small bordered panel a `FieldLabel` + value pair sits in — the stat boxes
+ * in the item detail modal, the watchlist modal and the composition legend.
+ *
+ * Padding steps up on `sm` because these are laid out three or four to a row on
+ * desktop and stack on mobile.
+ */
+function StatTile({ className, children, ...props }) {
+  return (
+    <div
+      className={cn("rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3", className)}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
  * Label-left / value-right row for the inspector and preview panels. Values are
  * tabular so stacked numbers align on the decimal.
  */
@@ -203,4 +240,4 @@ function Pagination({ page, pageCount, onPageChange, window: windowSize = 5, cla
   );
 }
 
-export { SectionLabel, MetaRow, Sparkline, RoiMeter, Pagination };
+export { SectionLabel, FieldLabel, StatTile, MetaRow, Sparkline, RoiMeter, Pagination };

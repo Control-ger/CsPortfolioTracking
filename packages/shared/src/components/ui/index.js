@@ -61,6 +61,7 @@ export * from "./grid-table.jsx";
 export * from "./table.jsx";
 // SectionLabel, MetaRow, Sparkline, RoiMeter, Pagination.
 export * from "./data-display.jsx";
+export * from "./icon-circle-button.jsx";
 export * from "./item-thumb.jsx";
 export * from "./chart.jsx";
 

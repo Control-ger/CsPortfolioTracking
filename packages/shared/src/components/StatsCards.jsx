@@ -5,6 +5,7 @@ import {
   CardTitle,
 } from "@shared/components/ui/card.jsx";
 import { Skeleton } from "@shared/components/ui/skeleton.jsx";
+import { FieldLabel } from "@shared/components/ui/data-display";
 
 export const StatCard = ({
   title,
@@ -40,7 +41,7 @@ export const StatCard = ({
         ) : hasDualMetricLayout ? (
           <div className="space-y-2">
             <div>
-              <div className="text-[10px] uppercase text-muted-foreground">{primaryLabel}</div>
+              <FieldLabel>{primaryLabel}</FieldLabel>
               <div className={`text-2xl font-bold ${hasStatus ? statusColor : ""}`}>
                 {mainValue}
               </div>
@@ -48,7 +49,7 @@ export const StatCard = ({
 
             {hasSideValue ? (
               <div className="border-t pt-2">
-                <div className="text-[10px] uppercase text-muted-foreground">{secondaryLabel}</div>
+                <FieldLabel>{secondaryLabel}</FieldLabel>
                 <div className="text-xs flex items-center mt-1">
                   {hasStatus && (
                     <span className={`font-bold mr-1 ${statusColor}`}>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { FieldLabel } from "@shared/components/ui/data-display";
 
 import { BaseModal } from "@shared/components/BaseModal";
 import { Badge } from "@shared/components/ui/badge";
@@ -250,7 +251,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                       <Badge variant={trade.status === "duplicate" ? "outline" : "default"}>
                         {trade.status}
                       </Badge>
-                      <span className="text-[10px] uppercase text-muted-foreground">{trade.typeLabel}</span>
+                      <FieldLabel>{trade.typeLabel}</FieldLabel>
                     </div>
                   </div>
                 ))}

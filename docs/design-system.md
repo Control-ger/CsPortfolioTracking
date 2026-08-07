@@ -132,16 +132,17 @@ import { Card, StatusPill, Callout, toneForDelta } from "@shared/components/ui";
 `CardFooter`, `SettingsCard` family, `Separator`, `ScrollArea`, `Accordion`.
 
 ### Actions & input
-`Button`, `Input`, `Switch`, `Select`, `NativeSelect`, `SegmentedControl`,
-`DropdownMenu`, `Tabs`.
+`Button`, `IconCircleButton`, `Input`, `Switch`, `Select`, `NativeSelect`,
+`SegmentedControl`, `DropdownMenu`, `Tabs`.
 
 ### Status & feedback
 `StatusPill`, `Badge`, `Callout`, `Alert`, `AlertDialog`, `Tooltip`, `Skeleton`,
 `EmptyState`.
 
 ### Data display
-`GridTable` family, `Table` family, `SectionLabel`, `MetaRow`, `Sparkline`,
-`RoiMeter`, `Pagination`, `ItemThumb`, `ChartContainer` family.
+`GridTable` family, `Table` family, `SectionLabel`, `FieldLabel`, `StatTile`,
+`MetaRow`, `Sparkline`, `RoiMeter`, `Pagination`, `ItemThumb`,
+`ChartContainer` family.
 
 ### Detail & filtering shells
 `Inspector` family, `FilterSidebar` family.
@@ -166,6 +167,9 @@ These pairs look interchangeable and are not:
   count or tag.
 - **`Alert` vs `Callout`** — `Alert` is the legacy shadcn block. Prefer
   `Callout` for new work.
+- **`SectionLabel` vs `FieldLabel`** — `SectionLabel` heads a whole group and
+  is a step larger and bolder; `FieldLabel` captions one value inside a
+  `StatTile`. A tile full of section-weight captions competes with its numbers.
 - **`EmptyState` vs `GridTableEmpty` / `InspectorEmpty`** — the latter two fill
   a known slot inside their own container and must stay flush with it.
   `EmptyState` is the standalone block, and takes an `action` so an empty state

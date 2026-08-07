@@ -13,6 +13,7 @@ import { Button } from "@shared/components/ui/button";
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
 import { getCurrentUser, resolveDesktopLocalUserId, runAppUpdateAction } from "@shared/lib";
+import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 
 const DESKTOP_SIDEBAR_ITEMS = [
   { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/" },
@@ -358,14 +359,9 @@ export function DesktopSidebarRail({ desktopRuntime = false }) {
           <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0">
+              <IconCircleButton count={desktopRuntime && unreadNotificationCount > 0 ? unreadNotificationCount : 0}>
                 <Bell className="h-5 w-5" />
-                {desktopRuntime && unreadNotificationCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-                  </span>
-                ) : null}
-              </Button>
+              </IconCircleButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="end" className="w-80">
               <div className="flex items-center justify-between gap-2 px-2 py-1.5">

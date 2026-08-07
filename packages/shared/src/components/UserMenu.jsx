@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 import { UserRound, LogOut, Lock, AlertTriangle } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
@@ -120,16 +121,13 @@ export function UserMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
+        <IconCircleButton
           aria-label={
             sessionUnhealthy
               ? `Benutzermenue oeffnen — ${sessionBadgeLabel}`
               : "Benutzermenue oeffnen"
           }
           title={sessionUnhealthy ? sessionBadgeLabel : undefined}
-          className="relative h-11 w-11 rounded-full border-border/80 bg-card/75 p-0"
         >
           {avatarUrl ? (
             avatarIsVideo ? (
@@ -161,7 +159,7 @@ export function UserMenu({
               <AlertTriangle className="h-2.5 w-2.5" strokeWidth={3} />
             </span>
           )}
-        </Button>
+        </IconCircleButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         side={menuSide}

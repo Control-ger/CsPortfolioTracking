@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FieldLabel, StatTile } from "@shared/components/ui/data-display";
 import { BaseModal } from "@shared/components/BaseModal";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
 import { ItemDetailPanel } from "@shared/components/ItemDetailPanel";
@@ -39,7 +40,7 @@ function freshnessBadgeClass(status) {
 function ChangeMetric({ label, percent, euro, formatPrice }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/65 px-2 py-1.5">
-      <span className="text-[10px] uppercase text-muted-foreground">{label}</span>
+      <FieldLabel>{label}</FieldLabel>
       <span className={`text-xs font-semibold ${deltaClassName(percent)}`}>
         {formatSignedPercent(percent)}
       </span>
@@ -208,14 +209,14 @@ export function ItemDetailsModal({
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Einkauf</p>
+          <StatTile>
+            <FieldLabel>Einkauf</FieldLabel>
             <p className="mt-2 text-sm font-bold">{purchaseUnitDisplay}</p>
             <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {purchaseUnitDisplay}</p>
-          </div>
+          </StatTile>
 
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Live</p>
+          <StatTile>
+            <FieldLabel>Live</FieldLabel>
             <p
               className={`mt-2 text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
             >
@@ -233,28 +234,28 @@ export function ItemDetailsModal({
                   : ""}
               </p>
             ) : null}
-          </div>
+          </StatTile>
 
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Break-even</p>
+          <StatTile>
+            <FieldLabel>Break-even</FieldLabel>
             <p className="mt-2 text-sm font-bold">
               {formatPrice(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">inkl. Seller + Withdrawal + FX Fees</p>
-          </div>
+          </StatTile>
 
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Positionswert</p>
+          <StatTile>
+            <FieldLabel>Positionswert</FieldLabel>
             <p className="mt-2 text-sm font-bold">
               {item.isLive ? formatPrice(item.currentValue) : "N/A"}
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">
               {item.isLive ? `${item.quantity}x ${formatPrice(item.displayPrice)}` : "Kein csfloat-Preis vorhanden"}
             </p>
-          </div>
+          </StatTile>
 
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Gewinn / Verlust</p>
+          <StatTile>
+            <FieldLabel>Gewinn / Verlust</FieldLabel>
             <p
               className={`mt-2 text-sm font-bold ${
                 item.isProfitPositive === null
@@ -271,10 +272,10 @@ export function ItemDetailsModal({
             <p className="mt-1 text-[10px] text-muted-foreground">
               {formatSignedPercent(item.roi)}
             </p>
-          </div>
+          </StatTile>
 
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Price Change</p>
+          <StatTile>
+            <FieldLabel>Price Change</FieldLabel>
             <div className="mt-2 space-y-1">
               <ChangeMetric
                 label="24h"
@@ -295,17 +296,17 @@ export function ItemDetailsModal({
                 formatPrice={formatPrice}
               />
             </div>
-          </div>
+          </StatTile>
 
-          <div className="rounded-xl border border-border/70 bg-card/65 p-2 sm:p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Cost Basis</p>
+          <StatTile>
+            <FieldLabel>Cost Basis</FieldLabel>
             <p className="mt-2 text-sm font-bold">
               {typeof item.costBasisTotal === "number" ? formatPrice(item.costBasisTotal) : "N/A"}
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">
               pro Unit: {typeof item.costBasisUnit === "number" ? formatPrice(item.costBasisUnit) : "N/A"}
             </p>
-          </div>
+          </StatTile>
         </div>
 
         {historyLoading || (history && history.length > 0) ? (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import {
   AlertTriangle,
+  Bell,
   Boxes,
   Info,
   Layers,
@@ -123,6 +124,9 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  FieldLabel,
+  IconCircleButton,
+  StatTile,
 } from "../components/ui/index.js";
 import { useTheme } from "../contexts/ThemeContext.jsx";
 import { Abbr, AbbreviationTooltip } from "../components/AbbreviationTooltip.jsx";
@@ -1101,6 +1105,40 @@ export function DesignSystemPage() {
         title="Typografie"
         note="Zahlen stehen immer tabular-nums, damit gestapelte Beträge auf der Dezimalstelle fluchten. SectionLabel ist die Mikro-Überschrift über jedem gruppierten Block."
       >
+        <Specimen code="<FieldLabel /> in <StatTile /> · <IconCircleButton count />" className="flex-col items-stretch">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StatTile>
+              <FieldLabel>Einkauf</FieldLabel>
+              <p className="mt-2 text-sm font-bold tabular-nums">19,80 €</p>
+            </StatTile>
+            <StatTile>
+              <FieldLabel>Live</FieldLabel>
+              <p className="mt-2 text-sm font-bold tabular-nums text-primary">24,10 €</p>
+            </StatTile>
+            <StatTile>
+              <FieldLabel>Gewinn</FieldLabel>
+              <p className="mt-2 text-sm font-bold tabular-nums text-success">+4,30 €</p>
+            </StatTile>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <IconCircleButton count={3} aria-label="Benachrichtigungen">
+              <Bell className="h-5 w-5" />
+            </IconCircleButton>
+            <IconCircleButton count={128} aria-label="Viele Benachrichtigungen">
+              <Bell className="h-5 w-5" />
+            </IconCircleButton>
+            <IconCircleButton count={0} aria-label="Keine Benachrichtigungen">
+              <Bell className="h-5 w-5" />
+            </IconCircleButton>
+            <IconCircleButton size="sm" aria-label="Klein">
+              <Search className="h-4 w-4" />
+            </IconCircleButton>
+            <span className="text-[11px] text-muted-foreground">
+              0 zeigt keinen Zähler — ein Badge mit „0" ist Rauschen.
+            </span>
+          </div>
+        </Specimen>
+        <Separator />
         <Specimen code="SectionLabel · Überschriften · Zahlen" className="flex-col items-start">
           <SectionLabel>Einkaufspreise je Position</SectionLabel>
           <p className="text-[22px] font-extrabold tracking-[-0.02em] text-foreground">
