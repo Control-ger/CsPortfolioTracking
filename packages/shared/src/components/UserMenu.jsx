@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 import { UserRound, LogOut, Lock, AlertTriangle } from "lucide-react"
-import { Link, useLocation } from "react-router-dom"
 
 import { Callout } from "@shared/components/ui/callout";
 import {
@@ -20,11 +19,6 @@ import {
   subscribeSessionHealth,
 } from "@shared/lib/sessionHealthBus"
 
-const NAV_ITEMS = [
-  { label: "Portfolio", to: "/" },
-  { label: "Einstellungen", to: "/settings" },
-]
-
 function isVideoAvatarUrl(url) {
   const lower = String(url || "").toLowerCase()
   return lower.endsWith(".webm") || lower.endsWith(".mp4") || lower.includes(".webm?") || lower.includes(".mp4?")
@@ -35,7 +29,6 @@ export function UserMenu({
   menuAlign = "end",
   menuSideOffset = 4,
 }) {
-  const location = useLocation()
   const [user, setUser] = useState(null)
   const [sessionHealth, setSessionHealth] = useState(getSessionHealth)
 
@@ -160,11 +153,16 @@ export function UserMenu({
           )}
         </IconCircleButton>
       </DropdownMenuTrigger>
+      {/* Width only. The surface, radius and shadow come from the primitive,
+          which is translucent *and* blurred in dark but stays opaque in light.
+          Overriding it with a flat `bg-card/92` applied that translucency to
+          light mode too, where there is no blur behind it — the chart below
+          showed straight through the menu. */}
       <DropdownMenuContent
         side={menuSide}
         align={menuAlign}
         sideOffset={menuSideOffset}
-        className="w-52 rounded-2xl border-border/70 bg-card/92 p-1.5 shadow-[0_18px_40px_rgba(0,0,0,0.36)]"
+        className="w-56"
       >
         {sessionUnhealthy && (
           <>
@@ -178,17 +176,18 @@ export function UserMenu({
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuLabel>Navigation</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {NAV_ITEMS.map((item) => (
-          <DropdownMenuItem
-            key={item.to}
-            asChild
-            className={location.pathname === item.to ? "bg-primary/15 text-foreground" : ""}
-          >
-            <Link to={item.to}>{item.label}</Link>
-          </DropdownMenuItem>
-        ))}
+        {/* Says whose account this is, which is the one thing the avatar button
+            cannot show on its own. The Portfolio/Einstellungen links that used
+            to sit here were redundant: the desktop rail carries all seven
+            destinations and the mobile bottom bar carries both of these. */}
+        <DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
+          <span className="truncate text-[13px] font-bold text-foreground">
+            {user?.name || "Steam-Konto"}
+          </span>
+          <span className="text-[11px] font-normal text-muted-foreground">
+            {sessionUnhealthy ? "Sync inaktiv" : "Steam verbunden"}
+          </span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
