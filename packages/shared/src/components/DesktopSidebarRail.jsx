@@ -9,7 +9,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@shared/components/ui/dropdown-menu";
-import { Button } from "@shared/components/ui/button";
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
 import { getCurrentUser, resolveDesktopLocalUserId, runAppUpdateAction } from "@shared/lib";

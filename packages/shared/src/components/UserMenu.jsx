@@ -3,7 +3,6 @@ import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 import { UserRound, LogOut, Lock, AlertTriangle } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
-import { Button } from "@shared/components/ui/button"
 import { Callout } from "@shared/components/ui/callout";
 import {
   DropdownMenu,
