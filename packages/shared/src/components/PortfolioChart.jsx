@@ -483,6 +483,11 @@ export const PortfolioChart = ({
       rangeDays: activeRange?.days ?? null,
       deltaValue: trendStats.deltaValue,
       deltaPercent: trendStats.deltaPercent,
+      // Emitted alongside deltaValue because the two are not interchangeable:
+      // deltaPercent is a growth-percent difference, and the euro figure that
+      // actually matches it is roiGainEuro (see trendStats). A consumer pairing
+      // deltaValue with deltaPercent shows two numbers that disagree.
+      roiGainEuro: trendStats.roiGainEuro,
       isPositive: trendStats.isPositive,
     });
   }, [
@@ -490,6 +495,7 @@ export const PortfolioChart = ({
     rangeKey,
     trendStats.deltaPercent,
     trendStats.deltaValue,
+    trendStats.roiGainEuro,
     trendStats.isPositive,
   ]);
 
@@ -511,7 +517,9 @@ export const PortfolioChart = ({
           <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {typeof onMetricsScopeChange === "function" ? (
-              <div className="inline-flex w-fit items-center rounded-xl border border-border/70 bg-card/55 p-1">
+              // Hidden below `sm`: the mobile dashboard puts the same switch at
+              // the top of the screen, above the value it changes.
+              <div className="hidden w-fit items-center rounded-xl border border-border/70 bg-card/55 p-1 sm:inline-flex">
                 {[
                   { key: "investments", label: "Investments" },
                   { key: "all", label: "Alles" },

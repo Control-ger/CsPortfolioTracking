@@ -36,7 +36,9 @@ import {
 } from "../lib/apiClient";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
+  buildPortfolioAllocationByType,
   buildPortfolioCompositionFromRows,
+  selectPortfolioMovers,
   fetchCS2Inventory,
   fetchCsFloatBuyOrdersData,
   fetchWatchlistData,
@@ -567,6 +569,17 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     [enrichedInvestments, metricsScope],
   );
   const compositionLoading = statsPending;
+  // Mobile dashboard only: the allocation bar groups by catalogue category
+  // (the donut's per-item grouping renders as slivers at 11px tall), and the
+  // movers come from the held positions rather than the watchlist panel.
+  const allocationByType = useMemo(
+    () => buildPortfolioAllocationByType(enrichedInvestments, { scope: metricsScope }),
+    [enrichedInvestments, metricsScope],
+  );
+  const portfolioMovers = useMemo(
+    () => selectPortfolioMovers(enrichedInvestments, { scope: metricsScope, limit: 3 }),
+    [enrichedInvestments, metricsScope],
+  );
   const { modals, openModal, closeModal } = useModal();
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemHistory, setSelectedItemHistory] = useState([]);
@@ -2651,7 +2664,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   }, [activeTab, portfolioLoading, scopedPortfolioHistory.length]);
 
   const liveItems = Number(stats.liveItemsCount || 0);
-  const staleItems = Number(stats.staleLiveItemsCount || 0);
   const watchlistMoverPanelHeight = Number.isFinite(Number(watchlistMoverCardHeight))
     ? Math.min(Math.max(Number(watchlistMoverCardHeight), 340), 560)
     : null;
@@ -4407,13 +4419,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       >
         {!showSetupJourney ? (
           <>
-            {/* Mobile Header - nur auf Mobile sichtbar */}
-            <header className="flex items-center justify-between pt-[max(0.35rem,env(safe-area-inset-top))] sm:hidden">
-              <div className="flex items-end gap-3">
-                <h1 className="text-[1.9rem] font-extrabold leading-none tracking-tight text-foreground">Portfolio</h1>
-              </div>
+            {/* Mobile: only the notification bell survives here. The title and
+                the theme toggle moved into the app shell (MobileTopbar and its
+                drawer); the bell has no other mobile home, since the design's
+                topbar carries none. */}
+            <header className="flex items-center justify-end sm:hidden">
               <div className="flex items-center gap-2">
-                <ThemeToggle />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <IconCircleButton count={unreadNotificationCount}>
@@ -5166,7 +5177,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             portfolioLoading={portfolioLoading}
             metricsScope={metricsScope}
             portfolioPreferences={portfolioPreferences}
-            headerPortfolioValue={headerPortfolioValue}
             headerPortfolioPercent={headerPortfolioPercent}
             headerPortfolioPositive={headerPortfolioPositive}
             headerPortfolioValueLabel={headerPortfolioValueLabel}
@@ -5175,7 +5185,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             headerProfitSubLabel={headerProfitSubLabel}
             headerProfitPositive={headerProfitPositive}
             liveItems={liveItems}
-            staleItems={staleItems}
             showCsUpdateBanner={showCsUpdateBanner}
             latestCsUpdate={latestCsUpdate}
             latestCsUpdateAgeHours={latestCsUpdateAgeHours}
@@ -5204,6 +5213,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             compositionLoading={compositionLoading}
             portfolioTotalValueForDisplay={portfolioTotalValueForDisplay}
             portfolioValueLabel={portfolioValueLabel}
+            allocationByType={allocationByType}
+            portfolioMovers={portfolioMovers}
+            chartTrendData={chartTrendData}
           />
           </TabsContent>
 

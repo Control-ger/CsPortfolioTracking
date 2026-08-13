@@ -368,6 +368,98 @@ export function buildPortfolioCompositionFromRows(rows = [], options = {}) {
   return buildPortfolioComposition(scopedRows.map(enforceCsfloatOnlyRow));
 }
 
+/**
+ * German label per catalogue category, for the mobile allocation bar.
+ *
+ * The design's legend names weapon classes (Messer, Rifles, Handschuhe). Rows
+ * carry no weapon class — `type` is the coarse catalogue kind — so the bar
+ * groups by what the data actually knows instead of inventing a finer split.
+ */
+const ALLOCATION_LABELS = {
+  skin: "Skins",
+  case: "Cases",
+  souvenir_package: "Cases",
+  container: "Cases",
+  sticker: "Sticker",
+  patch: "Sticker",
+  graffiti: "Sticker",
+  charm: "Sticker",
+  agent: "Agents",
+  sticker_capsule: "Kapseln",
+};
+
+/**
+ * Value share per category, largest first, for the stacked allocation bar.
+ *
+ * Deliberately not `buildPortfolioComposition`: that one groups by item, which
+ * is what the desktop donut wants but renders as thousands of hairline slivers
+ * in an 11px bar.
+ */
+export function buildPortfolioAllocationByType(rows = [], options = {}) {
+  const scopedRows = filterRowsByScope(Array.isArray(rows) ? rows : [], options.scope)
+    .filter((row) => !isExcludedRow(row))
+    .map(enforceCsfloatOnlyRow);
+
+  const groups = new Map();
+  let totalValue = 0;
+
+  scopedRows.forEach((row) => {
+    const quantity = Number(row.quantity || 0);
+    const displayPrice = Number(row.displayPrice ?? row.livePrice ?? 0);
+    const currentValue = Number(row.currentValue ?? displayPrice * quantity);
+    if (!Number.isFinite(currentValue) || currentValue <= 0) {
+      return;
+    }
+    totalValue += currentValue;
+    const label = ALLOCATION_LABELS[String(row.type || "").trim().toLowerCase()] || "Sonstige";
+    groups.set(label, (groups.get(label) || 0) + currentValue);
+  });
+
+  if (totalValue <= 0) {
+    return [];
+  }
+
+  return Array.from(groups.entries())
+    .map(([label, value]) => ({
+      label,
+      value,
+      percentage: Number(((value / totalValue) * 100).toFixed(1)),
+    }))
+    .sort((a, b) => b.value - a.value);
+}
+
+/**
+ * Biggest 7-day movers among the held positions.
+ *
+ * `change7dPercent` rides in on every row from `PortfolioService`, so this is a
+ * selection, not a calculation. Rows without one are dropped rather than
+ * treated as flat — a missing history and a 0 % week are not the same thing,
+ * and counting the former as the latter would bury real movers under ties.
+ */
+export function selectPortfolioMovers(rows = [], options = {}) {
+  const limit = Number.isFinite(options.limit) ? options.limit : 3;
+  const scopedRows = filterRowsByScope(Array.isArray(rows) ? rows : [], options.scope)
+    .filter((row) => !isExcludedRow(row));
+
+  const withChange = scopedRows
+    .map((row) => ({
+      id: row.id ?? row.itemId ?? row.marketHashName ?? row.name,
+      name: row.name || row.marketHashName || "Unbekannt",
+      changePercent: Number(row.change7dPercent),
+    }))
+    .filter((entry) => Number.isFinite(entry.changePercent) && entry.changePercent !== 0);
+
+  const sorted = withChange.slice().sort((a, b) => b.changePercent - a.changePercent);
+  return {
+    gainers: sorted.filter((entry) => entry.changePercent > 0).slice(0, limit),
+    losers: sorted
+      .filter((entry) => entry.changePercent < 0)
+      .slice(-limit)
+      .reverse(),
+    sourceCount: withChange.length,
+  };
+}
+
 export function buildPortfolioHistoryFromSnapshots(snapshots = []) {
   return (Array.isArray(snapshots) ? snapshots : []).map((snapshot) => {
     const investedValue = Number(snapshot.investedValue || 0);

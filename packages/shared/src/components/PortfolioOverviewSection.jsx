@@ -1,8 +1,8 @@
+import { useState } from "react";
 import { ArrowUpRight, Sparkles, TrendingUp, TrendingDown, X } from "lucide-react";
 
 import { PortfolioChart } from "./PortfolioChart.jsx";
 import { PortfolioCompositionChart } from "./PortfolioCompositionChart.jsx";
-import { PortfolioHeaderCard } from "./PortfolioHeaderCard.jsx";
 import { StatCard } from "./StatsCards.jsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
 import { Badge } from "./ui/badge.jsx";
@@ -23,7 +23,6 @@ export function PortfolioOverviewSection({
   statsPending,
   metricsScope,
   portfolioPreferences,
-  headerPortfolioValue,
   headerPortfolioPercent,
   headerPortfolioPositive,
   headerPortfolioValueLabel,
@@ -32,7 +31,6 @@ export function PortfolioOverviewSection({
   headerProfitSubLabel,
   headerProfitPositive,
   liveItems,
-  staleItems,
   showCsUpdateBanner,
   latestCsUpdate,
   latestCsUpdateAgeHours,
@@ -61,24 +59,89 @@ export function PortfolioOverviewSection({
   compositionLoading,
   portfolioTotalValueForDisplay,
   portfolioValueLabel,
+  allocationByType = [],
+  portfolioMovers = { gainers: [], losers: [], sourceCount: 0 },
+  chartTrendData,
 }) {
   const { formatPrice } = useCurrency();
+  const [moverTab, setMoverTab] = useState("gainers");
+
+  const scopeSwitchable = portfolioPreferences.metricsDisplayMode === "toggle_mode";
+  // roiGainEuro, not deltaValue: deltaPercent is a growth-percent difference,
+  // and roiGainEuro is the euro figure that matches it. Deposits during the
+  // period move value and invested in lockstep and cancel out there, so a
+  // deposit does not read as a gain. Same pairing the chart footer uses.
+  const rangeDeltaValue = Number(chartTrendData?.roiGainEuro);
+  const rangeDeltaPercent = Number(chartTrendData?.deltaPercent);
+  const hasRangeDelta = Number.isFinite(rangeDeltaValue) && Number.isFinite(rangeDeltaPercent);
+  const rangeDeltaPositive = hasRangeDelta && rangeDeltaValue >= 0;
+  const shownMovers = moverTab === "gainers" ? portfolioMovers.gainers : portfolioMovers.losers;
+  const bestItemName = portfolioMovers.gainers[0]?.name || null;
 
   return (
     <div forceMount={forceMount} className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
-      {/* Mobile: PortfolioHeaderCard oben */}
-      <div className="sm:hidden">
-        <PortfolioHeaderCard
-          isLoading={statsPending}
-          totalValue={headerPortfolioValue}
-          totalRoiPercent={headerPortfolioPercent}
-          isPositive={headerPortfolioPositive}
-          totalQuantity={stats.totalQuantity}
-          liveItemsCount={liveItems}
-          staleItemsCount={staleItems}
-          freshestDataAgeSeconds={stats.freshestDataAgeSeconds}
-          oldestDataAgeSeconds={stats.oldestDataAgeSeconds}
-        />
+      {/* Mobile hero: scope switch, portfolio value, delta over the chart range.
+          The design labels the delta "heute"; the app's figure follows the
+          chart's own range selector, so it is labelled with that range instead
+          of hard-coding a day the number does not describe. */}
+      <div className="space-y-3 sm:hidden">
+        {scopeSwitchable ? (
+          <div className="flex gap-1.5 rounded-[10px] border border-border-soft bg-surface-1 p-[3px]">
+            {[
+              { value: "all", label: "Alle Positionen" },
+              { value: "investments", label: "Investments" },
+            ].map((option) => {
+              const active = metricsScope === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => void handleMetricsScopeChange(option.value)}
+                  aria-pressed={active}
+                  className={`h-[30px] flex-1 rounded-lg text-[11.5px] transition-colors ${
+                    active
+                      ? "bg-primary font-extrabold text-primary-foreground"
+                      : "font-semibold text-muted-foreground"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div>
+          <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+            Portfolio-Wert
+          </span>
+          {statsPending ? (
+            <Skeleton className="mt-1.5 h-9 w-48" />
+          ) : (
+            <p className="mt-1.5 text-[34px] font-extrabold leading-none tracking-[-0.02em] tabular-nums">
+              {headerPortfolioValueLabel}
+            </p>
+          )}
+          {hasRangeDelta ? (
+            <span
+              className={`mt-1.5 block text-[13px] font-bold tabular-nums ${
+                rangeDeltaPositive ? "text-success" : "text-danger"
+              }`}
+            >
+              {rangeDeltaPositive ? "+" : "−"}
+              {formatPrice(Math.abs(rangeDeltaValue), {
+                // The trend delta rides in as USD, like every price on this
+                // page. Formatting it without `useUsd` skips the conversion
+                // and prints a USD figure under a euro sign.
+                useUsd: true,
+                buyPriceUsd: Math.abs(rangeDeltaValue),
+              })}{" "}
+              · {rangeDeltaPositive ? "+" : "−"}
+              {Math.abs(rangeDeltaPercent).toFixed(1).replace(".", ",")} %
+              {chartTrendData?.rangeLabel ? ` · ${chartTrendData.rangeLabel}` : ""}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {showYearWrappedBanner ? (
@@ -290,8 +353,10 @@ export function PortfolioOverviewSection({
             }
           />
         </div>
+        {/* The mobile dashboard shows portfolio movers instead (below), so this
+            watchlist panel would be a second, differently-sourced mover list. */}
         <Card
-          className="flex min-h-[340px] flex-col border-border/70 bg-card/70 lg:min-h-0 lg:overflow-hidden"
+          className="hidden min-h-[340px] flex-col border-border/70 bg-card/70 sm:flex lg:min-h-0 lg:overflow-hidden"
           style={watchlistMoverPanelHeight ? { height: `${watchlistMoverPanelHeight}px` } : undefined}
         >
           <CardHeader className="space-y-2 pb-3">
@@ -502,7 +567,125 @@ export function PortfolioOverviewSection({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-5">
+      {/* ── Mobile-only dashboard blocks ─────────────────────────────────── */}
+
+      <div className="grid grid-cols-3 gap-[9px] sm:hidden">
+        {[
+          {
+            label: "Gesamt-ROI",
+            value: `${headerPortfolioPercent >= 0 ? "+" : "−"}${Math.abs(headerPortfolioPercent).toFixed(1).replace(".", ",")} %`,
+            tone: headerPortfolioPositive ? "text-success" : "text-danger",
+          },
+          { label: "Positionen", value: String(stats.totalQuantity ?? 0), tone: "" },
+          // Real item names run far past the design's "Kilowatt", so this one
+          // wraps at a smaller size instead of ellipsing to "Souve…".
+          { label: "Bestes Item", value: bestItemName || "—", tone: "", small: true },
+        ].map((kpi) => (
+          <div key={kpi.label} className="min-w-0 rounded-2xl border border-border bg-card px-3 py-[11px]">
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+              {kpi.label}
+            </p>
+            <p
+              className={`mt-1 font-extrabold ${kpi.tone} ${
+                kpi.small ? "line-clamp-2 text-[12px] leading-tight" : "truncate text-[19px]"
+              }`}
+              title={kpi.small ? kpi.value : undefined}
+            >
+              {kpi.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {allocationByType.length > 0 ? (
+        <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5 sm:hidden">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Allokation
+          </p>
+          <div className="flex h-[11px] overflow-hidden rounded-full bg-surface-2">
+            {allocationByType.map((entry, index) => (
+              <span
+                key={entry.label}
+                className="bg-foreground"
+                style={{
+                  flex: `0 0 ${entry.percentage}%`,
+                  // One hue, stepped down in opacity: the categories are a
+                  // ranking, not unrelated series, so a colour scale would
+                  // imply a distinction the data does not carry.
+                  opacity: [1, 0.82, 0.64, 0.48, 0.34, 0.22][index] ?? 0.22,
+                }}
+              />
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {allocationByType.map((entry, index) => (
+              <span key={entry.label} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                <span
+                  className="size-2 rounded-full bg-foreground"
+                  style={{ opacity: [1, 0.82, 0.64, 0.48, 0.34, 0.22][index] ?? 0.22 }}
+                />
+                {/* One decimal below 10 %: a portfolio dominated by a few
+                    expensive skins rounds every other category to "0 %",
+                    which reads as an error rather than a small share. */}
+                {entry.label} ·{" "}
+                {entry.percentage
+                  .toFixed(entry.percentage < 10 ? 1 : 0)
+                  .replace(".", ",")}{" "}
+                %
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {portfolioMovers.sourceCount > 0 ? (
+        <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5 sm:hidden">
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <p className="text-[12.5px] font-bold">Top Bewegungen · 7 Tage</p>
+            <div className="inline-flex gap-0.5 rounded-lg bg-surface-1 p-0.5">
+              {[
+                { value: "gainers", label: "Gewinner" },
+                { value: "losers", label: "Verlierer" },
+              ].map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setMoverTab(tab.value)}
+                  aria-pressed={moverTab === tab.value}
+                  className={`h-[23px] rounded-[7px] px-2 text-[10.5px] font-bold transition-colors ${
+                    moverTab === tab.value
+                      ? "bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.08)]"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {shownMovers.length > 0 ? (
+            shownMovers.map((mover) => (
+              <div key={mover.id} className="flex items-center justify-between gap-2.5 py-1.5">
+                <span className="min-w-0 truncate text-[12.5px] font-semibold">{mover.name}</span>
+                <span
+                  className={`shrink-0 whitespace-nowrap text-[12.5px] font-extrabold tabular-nums ${
+                    mover.changePercent >= 0 ? "text-success" : "text-danger"
+                  }`}
+                >
+                  {mover.changePercent >= 0 ? "+" : "−"}
+                  {Math.abs(mover.changePercent).toFixed(1).replace(".", ",")} %
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="py-1.5 text-[11.5px] text-muted-foreground">
+              Keine {moverTab === "gainers" ? "Gewinner" : "Verlierer"} im 7-Tage-Vergleich.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      <div className="hidden grid-cols-1 gap-4 sm:grid sm:gap-5">
         <div className="sm:pt-1">
           <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
           {compositionLoading ? (
