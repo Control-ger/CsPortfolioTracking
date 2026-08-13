@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Cog, Eye, FolderCog, LayoutGrid, Menu, Newspaper, Package, Search } from "lucide-react";
 
+import { NotificationBell } from "@shared/components/NotificationBell";
 import { ThemeToggle } from "@shared/components/ThemeToggle";
 import { UserMenu } from "@shared/components/UserMenu";
 
@@ -137,9 +138,13 @@ export function MobileTopbar({ desktopRuntime = false }) {
                 </button>
               );
             })}
-            {/* The dock carried theme and profile; the drawer inherits them. */}
+            {/* The dock carried theme, notifications and profile; the drawer
+                inherits all three. The design's topbar has no room for the
+                bell, and it is the app's only channel for update availability
+                and sync actions — dropping it on mobile would hide them. */}
             <div className="mt-auto flex items-center gap-2 px-1 pt-4">
               <ThemeToggle />
+              <NotificationBell desktopRuntime={desktopRuntime} menuSide="top" menuAlign="start" />
               <UserMenu menuSide="top" menuAlign="start" menuSideOffset={8} />
             </div>
           </nav>

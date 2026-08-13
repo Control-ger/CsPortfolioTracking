@@ -18,6 +18,7 @@ export { ItemListRow } from './ItemListRow.jsx';
 export { ItemSearch } from './ItemSearch.jsx';
 export * from './LoadingSkeletons.jsx';
 export * from './MetricPair.jsx';
+export { NotificationBell } from './NotificationBell.jsx';
 export { MobileTopbar } from './MobileTopbar.jsx';
 export { PortfolioChart } from './PortfolioChart.jsx';
 export { PortfolioCompositionChart } from './PortfolioCompositionChart.jsx';

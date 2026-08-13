@@ -4419,24 +4419,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       >
         {!showSetupJourney ? (
           <>
-            {/* Mobile: only the notification bell survives here. The title and
-                the theme toggle moved into the app shell (MobileTopbar and its
-                drawer); the bell has no other mobile home, since the design's
-                topbar carries none. */}
-            <header className="flex items-center justify-end sm:hidden">
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <IconCircleButton count={unreadNotificationCount}>
-                      <Bell className="h-5 w-5" />
-                    </IconCircleButton>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-80">
-                    {renderNotificationsDropdownContent()}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </header>
+            {/* No mobile header: title, theme toggle, notification bell and
+                profile all live in the app shell now (MobileTopbar + drawer). */}
 
             {/* Header - nur auf Desktop sichtbar */}
             <header className={`hidden sm:flex flex-col items-start justify-between gap-4 md:flex-row md:items-center ${
