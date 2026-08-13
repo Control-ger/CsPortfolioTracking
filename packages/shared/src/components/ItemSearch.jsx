@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   Plus,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 import { searchWatchlistItems } from "@shared/lib/apiClient.js";
 import { createWatchlistItemData } from "@shared/lib/dataSource.js";
@@ -21,6 +22,9 @@ import { Callout } from "@shared/components/ui/callout";
 import { ItemThumb } from "@shared/components/ui/item-thumb";
 import { SegmentedControl } from "@shared/components/ui/segmented-control";
 import { Pagination } from "@shared/components/ui/data-display";
+import { Switch } from "@shared/components/ui/switch";
+import { SoonBadge } from "@shared/components/ui/filter-sidebar";
+import { BaseModal } from "@shared/components/BaseModal";
 
 /**
  * Item-type filter. The design shows these as a single chip row, so the former
@@ -146,6 +150,7 @@ export const ItemSearch = ({
   const [wear, setWear] = useState("all");
   const [sortBy, setSortBy] = useState("relevance");
   const [viewMode, setViewMode] = useState("grid");
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [results, setResults] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -169,6 +174,10 @@ export const ItemSearch = ({
   const effectiveItemType = keywordBrowseType || itemType;
   const effectiveTerm = keywordBrowseType ? "" : normalizedSubmittedTerm;
   const wearEnabled = effectiveItemType === "skin";
+  // Only the filters that can actually narrow a request are counted — the
+  // disabled price and ownership groups must not inflate the badge.
+  const activeFilterCount =
+    (itemType !== "all" ? 1 : 0) + (wear !== "all" && effectiveItemType === "skin" ? 1 : 0);
   const activeWear = wearEnabled ? wear : "all";
   const canBrowseWithoutQuery = BROWSABLE_ITEM_TYPES.has(effectiveItemType) && effectiveItemType !== "all";
   const isBrowseRequest = effectiveTerm.length === 0 && canBrowseWithoutQuery;
@@ -445,6 +454,149 @@ export const ItemSearch = ({
     </div>
   );
 
+  /**
+   * Mobile filter sheet.
+   *
+   * The design collects every filter here, so all four groups are present —
+   * but only Kategorie and Zustand can act: the search API takes `itemType`,
+   * `wear` and `sortBy`, and knows nothing about a price range or an
+   * ownership flag. Those two render disabled and `SoonBadge`-marked rather
+   * than being dropped, the same call the watchlist Zielpreis row and the
+   * inventory Wallet chips make — the planned filter set stays visible without
+   * any control pretending to work.
+   */
+  const renderFilterSheet = () => (
+    <BaseModal
+      isOpen={filterSheetOpen}
+      onClose={() => setFilterSheetOpen(false)}
+      title="Filter"
+      size="lg"
+    >
+      <div className="flex flex-col gap-5">
+        <div>
+          <p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+            Kategorie
+          </p>
+          <div className="flex flex-wrap gap-[7px]">
+            {CATEGORY_CHIPS.map((chip) => (
+              <button
+                key={chip.type}
+                type="button"
+                onClick={() => {
+                  setItemType(chip.type);
+                  if (chip.type !== "skin") setWear("all");
+                  setPage(1);
+                }}
+                className={`inline-flex h-7 items-center rounded-full px-3 text-xs transition-colors ${
+                  itemType === chip.type
+                    ? "bg-primary font-bold text-primary-foreground"
+                    : "border border-border-strong font-semibold text-foreground"
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+            Zustand
+          </p>
+          <div className="grid grid-cols-2 gap-[7px]">
+            {WEAR_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                disabled={!wearEnabled}
+                title={wearEnabled ? undefined : "Zustand gilt nur für Skins"}
+                onClick={() => {
+                  setWear(option.value);
+                  setPage(1);
+                }}
+                className={`h-8 rounded-lg px-3 text-xs transition-colors ${
+                  !wearEnabled
+                    ? "cursor-not-allowed border border-border-soft font-semibold text-muted-foreground opacity-45"
+                    : wear === option.value
+                      ? "bg-primary font-bold text-primary-foreground"
+                      : "border border-border-strong font-semibold text-foreground"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="opacity-45">
+          <p className="mb-2 flex items-center gap-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+            Preis in €
+            <SoonBadge />
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              disabled
+              placeholder="von"
+              aria-label="Preis von"
+              className="h-9 min-w-0 flex-1 cursor-not-allowed rounded-lg border border-border bg-card px-3 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">bis</span>
+            <input
+              disabled
+              placeholder="bis"
+              aria-label="Preis bis"
+              className="h-9 min-w-0 flex-1 cursor-not-allowed rounded-lg border border-border bg-card px-3 text-xs"
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-[7px]">
+            {["Alle", "< 10 €", "10–100 €", "100–1.000 €", "> 1.000 €"].map((label) => (
+              <span
+                key={label}
+                className="inline-flex h-7 items-center rounded-full border border-border-soft px-3 text-xs font-semibold text-muted-foreground"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 opacity-45">
+          <span className="min-w-0">
+            <span className="flex items-center gap-2 text-[13px] font-bold">
+              Nur Items im Bestand
+              <SoonBadge />
+            </span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              Blendet alles aus, was du nicht besitzt
+            </span>
+          </span>
+          <Switch checked={false} disabled aria-label="Nur Items im Bestand" />
+        </div>
+
+        <div className="flex items-center gap-2.5 border-t border-border-soft pt-4">
+          <button
+            type="button"
+            onClick={() => {
+              setItemType("all");
+              setWear("all");
+              setPage(1);
+            }}
+            className="h-[42px] shrink-0 rounded-[10px] border border-border-strong px-4 text-[12.5px] font-bold"
+          >
+            Zurücksetzen
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterSheetOpen(false)}
+            className="h-[42px] flex-1 rounded-[10px] bg-primary text-[12.5px] font-extrabold text-primary-foreground"
+          >
+            {totalItems} Treffer anzeigen
+          </button>
+        </div>
+      </div>
+    </BaseModal>
+  );
+
   const renderResults = () => {
     if (!shouldSearch) {
       return renderStatus(
@@ -489,6 +641,23 @@ export const ItemSearch = ({
             {totalItems} Treffer{browseMode ? " · Browse" : ""}
           </span>
 
+          {/* Mobile only: from `sm` the chip row and the Condition select are
+              visible inline, so a sheet holding the same two controls would be
+              a second route to them. */}
+          <button
+            type="button"
+            onClick={() => setFilterSheetOpen(true)}
+            className="inline-flex h-[38px] shrink-0 items-center gap-1.5 rounded-[10px] border border-border-strong bg-card px-3 text-xs font-semibold sm:hidden"
+          >
+            <SlidersHorizontal className="size-[15px]" />
+            Filter
+            {activeFilterCount > 0 ? (
+              <span className="inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-success px-1 text-[10px] font-extrabold text-background">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </button>
+
           <Select
             value={sortBy}
             onValueChange={(nextSort) => {
@@ -516,7 +685,7 @@ export const ItemSearch = ({
             }}
             disabled={!wearEnabled}
           >
-            <SelectTrigger className="h-[38px] w-auto shrink-0 gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold">
+            <SelectTrigger className="hidden h-[38px] w-auto shrink-0 gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold sm:flex">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -546,7 +715,7 @@ export const ItemSearch = ({
       {/* Category chips double as the item-type filter. Ten of them wrap to four
           rows at 380px, pushing every result below the fold, so on mobile the
           row scrolls sideways instead and wraps only from `sm`. */}
-      <div className="no-scrollbar -mx-3.5 flex gap-[7px] overflow-x-auto border-b border-border px-3.5 pb-3.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+      <div className="hidden gap-[7px] border-b border-border pb-3.5 sm:flex sm:flex-wrap">
         {CATEGORY_CHIPS.map((chip) => (
           <button
             key={chip.type}
@@ -570,6 +739,8 @@ export const ItemSearch = ({
       {error ? <Callout tone="danger">{error}</Callout> : null}
 
       {renderResults()}
+
+      {renderFilterSheet()}
 
       {shouldSearch && results.length > 0 ? (
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3.5">

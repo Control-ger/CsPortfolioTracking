@@ -182,7 +182,7 @@ The card list drops `ItemListRow` for the design's watch card: thumb, name, type
 - **The view switch stays outside that scroller, pinned right.** Scrolled out of sight it reads as missing, and it is the only route to the list view.
 - **List rows stack below `sm`.** The four fixed columns (`120px 140px 150px`) overflow a 380px screen: the name column collapsed to nothing and the action button was clipped off the right edge. The column header is hidden there, since it labels columns that no longer exist, and the condition moves into the sub-line — but `sm:hidden`, or it prints twice next to the Condition column on desktop.
 
-No filter bottom sheet: the design's sheet collects category, condition, price range and an owned flag, but the search API exposes only category, condition and sort. Two selects do not need a sheet.
+- **The filter bottom sheet (mobile only) carries all four of the design's groups**, reusing `BaseModal` — which already docks to the bottom with a grab handle below `sm`, so no second sheet implementation exists. Kategorie and Zustand act; **Preis in €** and **Nur Items im Bestand** render disabled and `SoonBadge`-marked, because `searchWatchlistItems` takes only `itemType`, `wear` and `sortBy` and knows nothing about a price range or ownership. The filter badge counts only the two filters that can narrow a request, so the disabled groups cannot inflate it. From `sm` the sheet is gone and the chip row plus Condition select are inline — one route to each control per breakpoint, never two.
 
 ## 6. Page Lifecycle and Cache Policy
 
