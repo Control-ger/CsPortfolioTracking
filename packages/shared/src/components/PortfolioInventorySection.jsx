@@ -81,7 +81,6 @@ function categoryLabel(item) {
  * is shared with other surfaces); category and sort are view-local.
  */
 export function PortfolioInventorySection({
-  forceMount,
   inventoryScope,
   onInventoryScopeChange,
   inventoryTabItems,
@@ -190,7 +189,7 @@ export function PortfolioInventorySection({
   );
 
   return (
-    <div forceMount={forceMount} className="lg:-mx-2 lg:flex lg:items-stretch">
+    <div className="lg:-mx-2 lg:flex lg:items-stretch">
       <FilterSidebar
         open={sidebarOpen}
         onToggle={() => setSidebarOpen((current) => !current)}

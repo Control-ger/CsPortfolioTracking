@@ -5155,7 +5155,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
           <TabsContent value="overview" forceMount={visitedTabs.has("overview") || undefined}>
           <PortfolioOverviewSection
-            forceMount={visitedTabs.has("overview")}
             stats={stats}
             statsPending={statsPending}
             portfolioLoading={portfolioLoading}
@@ -5205,7 +5204,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
           <TabsContent value="inventory" forceMount={visitedTabs.has("inventory") || undefined}>
           <PortfolioInventorySection
-            forceMount={visitedTabs.has("inventory")}
             inventoryScope={inventoryScope}
             onInventoryScopeChange={setInventoryScope}
             inventoryTabItems={inventoryTabItems}
@@ -5258,14 +5256,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
           <TabsContent value="watchlist" forceMount={visitedTabs.has("watchlist") || undefined}>
           <PortfolioWatchlistSection
-            forceMount={visitedTabs.has("watchlist")}
             watchlistFocusTarget={watchlistFocusTarget}
             onWarningsChange={handleWatchlistWarningsChange}
           />
           </TabsContent>
           <TabsContent value="search" forceMount={visitedTabs.has("search") || undefined}>
           <PortfolioSearchSection
-            forceMount={visitedTabs.has("search")}
             loadGlobalSearchWatchlistItems={loadGlobalSearchWatchlistItems}
             globalSearchWatchlistItems={globalSearchWatchlistItems}
             handleUiWarningsChange={handleUiWarningsChange}

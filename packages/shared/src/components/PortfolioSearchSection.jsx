@@ -11,17 +11,13 @@ const ItemSearch = lazy(() =>
  * Search tab content for the Portfolio page — thin wrapper around ItemSearch.
  */
 export function PortfolioSearchSection({
-  forceMount,
   searchPageInitialTerm,
   globalSearchWatchlistItems,
   onAddToWatchlist,
   onWarningsChange,
 }) {
   return (
-    <div
-      forceMount={forceMount}
-      className="space-y-4 sm:space-y-6"
-    >
+    <div className="space-y-4 sm:space-y-6">
       <Suspense
         fallback={
           <div className="space-y-3">

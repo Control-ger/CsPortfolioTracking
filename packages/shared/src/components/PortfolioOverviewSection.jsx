@@ -18,7 +18,6 @@ import {
 } from "../lib/portfolioHelpers.js";
 
 export function PortfolioOverviewSection({
-  forceMount,
   stats,
   portfolioLoading,
   statsPending,
@@ -80,7 +79,7 @@ export function PortfolioOverviewSection({
   const bestItemName = portfolioMovers.gainers[0]?.name || null;
 
   return (
-    <div forceMount={forceMount} className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
+    <div className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
       {/* Mobile hero: scope switch, portfolio value, delta over the chart range.
           The design labels the delta "heute"; the app's figure follows the
           chart's own range selector, so it is labelled with that range instead
