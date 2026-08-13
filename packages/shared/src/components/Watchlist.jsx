@@ -3,8 +3,7 @@ import { Callout } from "./ui/callout.jsx";
 import { Card, CardContent } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { PortfolioChart } from "./PortfolioChart";
-import { ItemListRow } from "./ItemListRow";
-import { AlignLeft, Bell, List, Trash2 } from "lucide-react";
+import { AlignLeft, Bell, ChevronDown, List, Trash2 } from "lucide-react";
 import { ItemThumb } from "./ui/item-thumb";
 import { Sparkline } from "./ui/data-display";
 import {
@@ -731,6 +730,18 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     setSortDirection(nextKey === "name" ? "asc" : "desc");
   };
 
+  // The mobile sort is one cycling button, not a chip strip — the four usable
+  // sorts filled a whole row on a 380px screen. `soon` options are skipped:
+  // cycling into a sort that cannot run would be a dead tap.
+  const mobileSortOptions = WATCHLIST_SORT_OPTIONS.filter((option) => !option.soon);
+  const activeMobileSortIndex = Math.max(
+    0,
+    mobileSortOptions.findIndex((option) => option.key === sortKey),
+  );
+  const activeMobileSort = mobileSortOptions[activeMobileSortIndex];
+  const nextMobileSort =
+    mobileSortOptions[(activeMobileSortIndex + 1) % mobileSortOptions.length];
+
   const watchedSince = formatWatchedSince(selectedItemWithBuyOrderRows);
   const selectedBestBuyOrder = selectedItemBuyOrderRows[0] || null;
   const selectedD1 = Number(selectedItemWithBuyOrderRows?.d1);
@@ -1007,51 +1018,138 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                 </GridTable>
               </div>
 
-              {/* Mobile: card list plus the sort strip the sidebar would carry. */}
-              <div className="space-y-2 md:hidden">
-                <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2.5">
-                  <span className="shrink-0 pl-1 text-[10px] uppercase text-muted-foreground">
-                    Sortierung
-                  </span>
-                  <div className="no-scrollbar flex flex-1 gap-1 overflow-x-auto">
-                    {WATCHLIST_SORT_OPTIONS.filter((option) => !option.soon).map((option) => {
-                      const isActive = sortKey === option.key;
-                      return (
-                        <button
-                          key={option.key}
-                          type="button"
-                          onClick={() => handleSortSelect(option.key)}
-                          aria-pressed={isActive}
-                          className={`shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
-                            isActive
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-surface-2 text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {option.label}
-                          {isActive ? (
-                            <span aria-hidden="true" className="ml-0.5 text-[10px]">
-                              {sortDirection === "asc" ? "↑" : "↓"}
-                            </span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
+              {/* Mobile: the design's watch card. The sidebar is desktop-only,
+                  so the range and sort controls it owns stay inline here.
+
+                  The design's lower half — target price, distance text and
+                  progress bar — is deliberately absent: `alert_price_usd` is
+                  written as a hard NULL on every sync (SyncEntityService) and
+                  the desktop store has no column for it at all, so there is
+                  nothing to render but a placeholder. */}
+              <div className="space-y-2.5 md:hidden">
+                {/* Category and range both live in the desktop-only sidebar,
+                    so without these rows neither is reachable on mobile. */}
+                {watchlistCategories.length > 1 ? (
+                  <div className="no-scrollbar -mx-3.5 flex gap-1.5 overflow-x-auto px-3.5">
+                    {[{ key: WATCHLIST_ALL_CATEGORIES, label: "Alle" }, ...watchlistCategories].map(
+                      (entry) => {
+                        const active = activeCategory === entry.key;
+                        return (
+                          <button
+                            key={entry.key}
+                            type="button"
+                            onClick={() => setCategory(entry.key)}
+                            aria-pressed={active}
+                            className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] transition-colors ${
+                              active
+                                ? "border border-border-strong bg-surface-2 font-extrabold text-foreground"
+                                : "border border-border-soft font-semibold text-muted-foreground"
+                            }`}
+                          >
+                            {entry.label}
+                          </button>
+                        );
+                      },
+                    )}
                   </div>
+                ) : null}
+
+                <div className="no-scrollbar -mx-3.5 flex gap-1.5 overflow-x-auto px-3.5">
+                  {WATCHLIST_RANGES.map((entry) => {
+                    const active = range === entry.key;
+                    return (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        onClick={() => setRange(entry.key)}
+                        aria-pressed={active}
+                        className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] transition-colors ${
+                          active
+                            ? "border border-border-strong bg-surface-2 font-extrabold text-foreground"
+                            : "border border-border-soft font-semibold text-muted-foreground"
+                        }`}
+                      >
+                        {entry.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {sortedWatchlistItems.map((item) => (
-                  <ItemListRow
-                    key={item.id}
-                    item={item}
-                    onClick={() => {
-                      setSelectedItem(item);
-                      if (window.innerWidth < BREAKPOINTS.MOBILE) {
-                        setIsModalOpen(true);
-                      }
-                    }}
-                  />
-                ))}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
+                    {sortedWatchlistItems.length === decoratedItems.length
+                      ? `${sortedWatchlistItems.length} Items`
+                      : `${sortedWatchlistItems.length} von ${decoratedItems.length} Items`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleSortSelect(nextMobileSort.key)}
+                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[11px] font-semibold"
+                    title={`Sortiert nach ${activeMobileSort.label} — tippen für ${nextMobileSort.label}`}
+                  >
+                    {activeMobileSort.label}
+                    <span aria-hidden="true" className="text-[10px] text-muted-foreground">
+                      {sortDirection === "asc" ? "↑" : "↓"}
+                    </span>
+                    <ChevronDown className="size-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+
+                {sortedWatchlistItems.map((item) => {
+                  const historyValues = sliceHistoryByDays(item.priceHistory, range).map((entry) =>
+                    Number(resolveHistoryValueUsd(entry)),
+                  );
+                  // Always the 7-day change, never the selected Zeitraum: that
+                  // control governs the sparkline window (as it does the
+                  // desktop Verlauf column), and there is no d90 field to show
+                  // at 90 Tage — a pill silently falling back to d7 under a
+                  // "90 Tage" chip claims a number it is not.
+                  const rangeChange = item.d7;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedItem(item);
+                        if (window.innerWidth < BREAKPOINTS.MOBILE) {
+                          setIsModalOpen(true);
+                        }
+                      }}
+                      className="flex w-full items-center gap-[11px] rounded-2xl border border-border bg-card px-3.5 py-[13px] text-left"
+                    >
+                      <ItemThumb
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="size-[38px] shrink-0 rounded-[9px]"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13.5px] font-bold">{item.name}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                          {item.type || "Item"}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="text-[15px] font-extrabold tabular-nums">
+                          {hasFiniteNumber(item.currentPrice) ? formatPrice(Number(item.currentPrice)) : "–"}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <Sparkline values={historyValues} width={44} height={16} />
+                          <span
+                            className={`inline-flex h-[21px] items-center rounded-full px-[7px] text-[10px] font-bold tabular-nums ${
+                              !hasFiniteNumber(rangeChange)
+                                ? "bg-surface-2 text-muted-foreground"
+                                : Number(rangeChange) >= 0
+                                  ? "bg-success/15 text-success"
+                                  : "bg-danger/15 text-danger"
+                            }`}
+                          >
+                            7T {formatSignedPercentOneDecimal(rangeChange)}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

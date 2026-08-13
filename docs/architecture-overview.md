@@ -166,6 +166,13 @@ The design's "Letzte Aktivität" timeline is **deliberately absent**: `operation
 
 The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseModal` already docks to the bottom with a grab handle below `BREAKPOINTS.MOBILE`.
 
+### 5.3 Mobile watchlist (below `md`)
+
+The card list drops `ItemListRow` for the design's watch card: thumb, name, type, and a right column of live price, sparkline and a 7-day delta pill. Category and Zeitraum chips are duplicated inline, since both live in the desktop-only `FilterSidebar`, and the sort becomes one cycling button (skipping `soon` options, so cycling cannot land on a sort that will not run).
+
+- **The delta pill is always `d7` and is labelled "7T".** The Zeitraum chips govern the sparkline window only — the same split the desktop Verlauf column uses — and there is no `d90` field, so a pill quietly falling back to `d7` under a "90 Tage" chip would claim a window it is not showing.
+- **The design's target-price half of the card is absent, and cannot be built yet.** `SyncEntityService::syncWatchlist` writes `alert_price_usd` as a literal `NULL` on insert *and* re-applies it via `ON DUPLICATE KEY UPDATE`, so a value written by any other path is wiped on the next sync; the desktop SQLite watchlist has no such column at all. Target price, distance text, progress bar and the alert bell all depend on it, as do the `soon`-marked "Mit Alarm" scope and "Abstand zum Ziel" sort. Reviving them means a desktop column, a sync payload field and that INSERT — not a UI change.
+
 ## 6. Page Lifecycle and Cache Policy
 
 ### 6.1 Verified current behavior
