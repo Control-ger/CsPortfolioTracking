@@ -1747,7 +1747,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     <div
       className={`${desktopRuntime ? "min-h-full" : "min-h-screen"} ${
         renderLocalDesktopSidebar ? "lg:h-full lg:min-h-0 lg:overflow-hidden" : ""
-      } bg-background px-3.5 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-[max(0.35rem,env(safe-area-inset-top))] font-sans text-foreground sm:p-8 md:pb-0 lg:p-0`}
+      } bg-background px-3.5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[max(0.35rem,env(safe-area-inset-top))] font-sans text-foreground sm:p-8 md:pb-0 lg:p-0`}
     >
       {renderLocalDesktopSidebar ? (
         <div className="w-full lg:grid lg:min-h-0 lg:h-full lg:grid-cols-[92px_minmax(0,1fr)]">

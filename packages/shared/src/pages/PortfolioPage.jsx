@@ -4387,7 +4387,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         renderLocalDesktopSidebar
           ? "lg:h-full lg:min-h-0 lg:overflow-hidden"
           : ""
-      } font-sans text-foreground pb-[calc(8.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
+      } font-sans text-foreground pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-0 touch-pan-y ${
         // Same fullscreen overlay treatment as the startup welcome: the journey
         // shell rendered inside the app grid's main column left dark frames (rail
         // column, grid gap, app background) around the gradient.
@@ -5111,7 +5111,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               </div>
             ) : null}
             <div
-              className={`${useDesktopSidebarShell ? "mb-3 lg:hidden" : "mb-3"} sticky top-0 z-20 -mx-1 bg-background/92 px-1 py-2 backdrop-blur-xl transition-transform duration-300 will-change-transform ${
+              className={`hidden md:block ${useDesktopSidebarShell ? "mb-3 lg:hidden" : "mb-3"} sticky top-0 z-20 -mx-1 bg-background/92 px-1 py-2 backdrop-blur-xl transition-transform duration-300 will-change-transform ${
                 searchBarHidden ? "-translate-y-[calc(100%+1px)]" : "translate-y-0"
               }`}
             >

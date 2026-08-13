@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Lock, UserRound } from "lucide-react";
 
 import { CurrencyProvider } from "@shared/contexts";
-import { BottomNavigation, DesktopSidebarRail, Titlebar } from "@shared/components";
+import { DesktopSidebarRail, MobileTopbar, Titlebar } from "@shared/components";
 import { Button } from "@shared/components/ui/button";
 import { Callout } from "@shared/components/ui/callout";
 import { Input } from "@shared/components/ui/input";
@@ -575,20 +575,24 @@ export default function App() {
         {/* Nur in Electron anzeigen! */}
         {isElectron && <Titlebar />}
 
-        <div
-          className={`flex flex-1 min-h-0 flex-col lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 ${
-            isElectron ? "" : "w-full"
-          }`}
-        >
-          <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-[calc(100dvh-2.5rem)] lg:justify-center lg:pt-2">
-            <DesktopSidebarRail desktopRuntime={desktopRuntime} />
-          </aside>
-          <main className="w-full flex-1 min-h-0 overflow-y-auto">
-            {routeViews}
-          </main>
-        </div>
+        {/* relative: the mobile drawer overlays this box, not the viewport, so
+            it stops at the Electron titlebar instead of covering it. */}
+        <div className="relative flex flex-1 min-h-0 flex-col">
+          <MobileTopbar desktopRuntime={desktopRuntime} />
 
-        <BottomNavigation />
+          <div
+            className={`flex flex-1 min-h-0 flex-col lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-6 ${
+              isElectron ? "" : "w-full"
+            }`}
+          >
+            <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-[calc(100dvh-2.5rem)] lg:justify-center lg:pt-2">
+              <DesktopSidebarRail desktopRuntime={desktopRuntime} />
+            </aside>
+            <main className="w-full flex-1 min-h-0 overflow-y-auto">
+              {routeViews}
+            </main>
+          </div>
+        </div>
       </div>
     </CurrencyProvider>
   );
