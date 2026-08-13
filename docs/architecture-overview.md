@@ -174,6 +174,16 @@ The card list drops `ItemListRow` for the design's watch card: thumb, name, type
 - **The delta pill is always `d7` and is labelled "7T".** The Zeitraum chips govern the sparkline window only — the same split the desktop Verlauf column uses — and there is no `d90` field, so a pill quietly falling back to `d7` under a "90 Tage" chip would claim a window it is not showing.
 - **The design's target-price half of the card is absent, and cannot be built yet.** `SyncEntityService::syncWatchlist` writes `alert_price_usd` as a literal `NULL` on insert *and* re-applies it via `ON DUPLICATE KEY UPDATE`, so a value written by any other path is wiped on the next sync; the desktop SQLite watchlist has no such column at all. Target price, distance text, progress bar and the alert bell all depend on it, as do the `soon`-marked "Mit Alarm" scope and "Abstand zum Ziel" sort. Reviving them means a desktop column, a sync payload field and that INSERT — not a UI change. The row is rendered inert and `SoonBadge`-marked rather than omitted, matching the desktop Zielpreis column.
 
+### 5.4 Mobile search (below `sm`)
+
+`ItemSearch` already had the design's grid/list switch, chip filters and pagination; the mobile work was overflow, not structure.
+
+- **The toolbar and the category chips scroll sideways instead of wrapping.** Ten chips wrapped to four rows at 380px and the toolbar to three, so the first result sat below the fold.
+- **The view switch stays outside that scroller, pinned right.** Scrolled out of sight it reads as missing, and it is the only route to the list view.
+- **List rows stack below `sm`.** The four fixed columns (`120px 140px 150px`) overflow a 380px screen: the name column collapsed to nothing and the action button was clipped off the right edge. The column header is hidden there, since it labels columns that no longer exist, and the condition moves into the sub-line — but `sm:hidden`, or it prints twice next to the Condition column on desktop.
+
+No filter bottom sheet: the design's sheet collects category, condition, price range and an owned flag, but the search API exposes only category, condition and sort. Two selects do not need a sheet.
+
 ## 6. Page Lifecycle and Cache Policy
 
 ### 6.1 Verified current behavior

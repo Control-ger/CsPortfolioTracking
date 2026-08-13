@@ -389,9 +389,19 @@ export const ItemSearch = ({
     </div>
   );
 
+  // Below `sm` the four fixed columns (120/140/150px) overflow a 380px screen:
+  // the name column collapses to nothing and the action button is clipped off
+  // the right edge. Mobile stacks each row instead — name and condition on top,
+  // price and action beneath — and the header, which only labels columns that
+  // no longer exist there, is hidden.
+  const LIST_COLUMNS =
+    "sm:grid sm:grid-cols-[minmax(0,1fr)_120px_140px_150px] sm:items-center sm:gap-3";
+
   const renderList = () => (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="grid grid-cols-[minmax(0,1fr)_120px_140px_150px] items-center gap-3 border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+      <div
+        className={`hidden border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground ${LIST_COLUMNS}`}
+      >
         <span>Item</span>
         <span className="text-right">Preis</span>
         <span>Condition</span>
@@ -400,7 +410,7 @@ export const ItemSearch = ({
       {results.map((candidate) => (
         <div
           key={candidate.marketHashName}
-          className="grid grid-cols-[minmax(0,1fr)_120px_140px_150px] items-center gap-3 border-b border-border-soft px-4 py-2.5 last:border-b-0"
+          className={`flex flex-col gap-2.5 border-b border-border-soft px-4 py-3 last:border-b-0 sm:py-2.5 ${LIST_COLUMNS}`}
         >
           <div className="flex min-w-0 items-center gap-2.5">
             <ItemThumb src={candidate.iconUrl} alt={candidate.displayName} size="lg" />
@@ -410,16 +420,26 @@ export const ItemSearch = ({
               </p>
               <p className="truncate text-[11px] text-muted-foreground">
                 {candidate.itemTypeLabel}
+                {/* Mobile only: from `sm` the Condition column carries this,
+                    and printing it twice on one row reads as a mistake. */}
+                {candidate.wearLabel ? (
+                  <span className="sm:hidden"> · {candidate.wearLabel}</span>
+                ) : null}
               </p>
             </div>
           </div>
-          <span className="text-right text-[13px] font-bold tabular-nums text-foreground">
+          <span className="hidden text-right text-[13px] font-bold tabular-nums text-foreground sm:block">
             {priceLabel(candidate)}
           </span>
-          <span className="truncate text-xs text-muted-foreground">
+          <span className="hidden truncate text-xs text-muted-foreground sm:block">
             {candidate.wearLabel || "—"}
           </span>
-          <div className="flex justify-end">{renderAddButton(candidate, { compact: true })}</div>
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className="text-[15px] font-extrabold tabular-nums text-foreground sm:hidden">
+              {priceLabel(candidate)}
+            </span>
+            {renderAddButton(candidate, { compact: true })}
+          </div>
         </div>
       ))}
     </div>
@@ -459,8 +479,13 @@ export const ItemSearch = ({
           <p className="text-xs text-muted-foreground">Suche erfolgt über die obere Suchleiste.</p>
         )}
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+        {/* Count and both selects wrapped onto three lines at 380px and pushed
+            the results down, so on mobile they scroll sideways. The view switch
+            stays OUTSIDE the scroller, pinned right: scrolled out of sight it
+            reads as missing, and it is how you get to the list view at all. */}
+        <div className="flex w-full min-w-0 items-center gap-2.5 sm:w-auto">
+        <div className="no-scrollbar -ml-3.5 flex min-w-0 flex-1 items-center gap-2.5 overflow-x-auto pl-3.5 sm:ml-0 sm:flex-none sm:flex-wrap sm:overflow-visible sm:pl-0">
+          <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {totalItems} Treffer{browseMode ? " · Browse" : ""}
           </span>
 
@@ -471,7 +496,7 @@ export const ItemSearch = ({
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold">
+            <SelectTrigger className="h-[38px] w-auto shrink-0 gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -491,7 +516,7 @@ export const ItemSearch = ({
             }}
             disabled={!wearEnabled}
           >
-            <SelectTrigger className="h-[38px] w-auto gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold">
+            <SelectTrigger className="h-[38px] w-auto shrink-0 gap-2 rounded-[5px] border-border bg-card px-3 text-xs font-semibold">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -503,7 +528,10 @@ export const ItemSearch = ({
             </SelectContent>
           </Select>
 
+          </div>
+
           <SegmentedControl
+            className="shrink-0"
             size="icon"
             value={viewMode}
             onChange={setViewMode}
@@ -515,8 +543,10 @@ export const ItemSearch = ({
         </div>
       </form>
 
-      {/* Category chips double as the item-type filter. */}
-      <div className="flex flex-wrap gap-[7px] border-b border-border pb-3.5">
+      {/* Category chips double as the item-type filter. Ten of them wrap to four
+          rows at 380px, pushing every result below the fold, so on mobile the
+          row scrolls sideways instead and wraps only from `sm`. */}
+      <div className="no-scrollbar -mx-3.5 flex gap-[7px] overflow-x-auto border-b border-border px-3.5 pb-3.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         {CATEGORY_CHIPS.map((chip) => (
           <button
             key={chip.type}
@@ -526,7 +556,7 @@ export const ItemSearch = ({
               if (chip.type !== "skin") setWear("all");
               setPage(1);
             }}
-            className={`inline-flex h-7 items-center rounded-full px-3 text-xs transition-colors ${
+            className={`inline-flex h-7 shrink-0 items-center rounded-full px-3 text-xs transition-colors ${
               itemType === chip.type
                 ? "bg-primary font-bold text-primary-foreground"
                 : "border border-border-strong font-semibold text-foreground hover:bg-surface-2"
