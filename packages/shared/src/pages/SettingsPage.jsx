@@ -290,6 +290,19 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     return "look";
   })();
 
+  // Below `lg` the page is two-staged (list -> detail), as the design has it:
+  // stacking the full category list above the active panel meant scrolling past
+  // six entries to reach the one just tapped. The stage is derived from the URL
+  // rather than component state, so the back control, a deep link and the
+  // browser's own Back button all agree on where you are.
+  const mobileDetailOpen = searchParams.has("cat");
+
+  const closeMobileDetail = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("cat");
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const selectCategory = (categoryId) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("cat", categoryId);
@@ -1651,7 +1664,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Wraps rather than overflowing: at 380px the pill plus both buttons
+            ran off the right edge and cut "Verwerfen" in half. */}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
           <StatusPill tone={dirty ? "warn" : "success"} size="default" dot>
             {dirty ? "Nicht gespeicherte Änderungen" : "Alles gespeichert"}
           </StatusPill>
@@ -1678,7 +1693,11 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       </div>
 
       <div className="mt-[18px] grid items-start gap-[18px] lg:grid-cols-[268px_minmax(0,1fr)]">
-        <aside className="flex flex-col gap-3 lg:sticky lg:top-[18px]">
+        <aside
+          className={`flex-col gap-3 lg:sticky lg:top-[18px] lg:flex ${
+            mobileDetailOpen ? "hidden" : "flex"
+          }`}
+        >
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -1736,7 +1755,17 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           ) : null}
         </aside>
 
-        <div className="flex min-w-0 flex-col gap-3.5">
+        <div
+          className={`min-w-0 flex-col gap-3.5 lg:flex ${mobileDetailOpen ? "flex" : "hidden"}`}
+        >
+          <button
+            type="button"
+            onClick={closeMobileDetail}
+            className="inline-flex items-center gap-1.5 self-start text-[13px] font-semibold text-muted-foreground lg:hidden"
+          >
+            <ArrowLeft className="size-4" />
+            Alle Einstellungen
+          </button>
           {(categoryPanels[activeCategory] || renderLookCategory)()}
         </div>
       </div>

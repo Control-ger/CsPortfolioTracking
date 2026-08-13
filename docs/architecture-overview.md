@@ -184,6 +184,14 @@ The card list drops `ItemListRow` for the design's watch card: thumb, name, type
 
 - **The filter bottom sheet (mobile only) carries all four of the design's groups**, reusing `BaseModal` — which already docks to the bottom with a grab handle below `sm`, so no second sheet implementation exists. Kategorie and Zustand act; **Preis in €** and **Nur Items im Bestand** render disabled and `SoonBadge`-marked, because `searchWatchlistItems` takes only `itemType`, `wear` and `sortBy` and knows nothing about a price range or ownership. The filter badge counts only the two filters that can narrow a request, so the disabled groups cannot inflate it. From `sm` the sheet is gone and the chip row plus Condition select are inline — one route to each control per breakpoint, never two.
 
+### 5.5 Mobile settings (below `lg`)
+
+`SettingsPage` is two-staged on mobile — category list, then detail — instead of stacking the full list above the active panel, which meant scrolling past six entries to reach the one just tapped.
+
+**The stage is derived from the URL, not from component state**: `searchParams.has("cat")` decides it. `selectCategory` already wrote `?cat=`, so the back control, a deep link (`#/settings?cat=conn`) and the browser's own Back button cannot disagree about which stage is showing — a separate `useState` would have desynced from all three.
+
+From `lg` both panes render as before; the back control is `lg:hidden`. The header's action row (`StatusPill` + save + discard) wraps below `sm`, where it used to run off the right edge and cut "Verwerfen" in half.
+
 ## 6. Page Lifecycle and Cache Policy
 
 ### 6.1 Verified current behavior
