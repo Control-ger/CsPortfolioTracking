@@ -154,7 +154,7 @@ From `apps/web/src/App.jsx`:
 - **Allocation uses `buildPortfolioAllocationByType`, not `buildPortfolioCompositionFromRows`.** The donut groups by item, which renders as thousands of hairline slivers in an 11px bar; the mobile bar groups by catalogue category (`ALLOCATION_LABELS`). The design's legend names weapon classes (Messer, Rifles, Handschuhe) — rows carry no weapon class, so the bar groups by what the data knows rather than inventing the finer split. Shares under 10 % print one decimal: a portfolio dominated by a few expensive skins otherwise rounds every other category to "0 %", which reads as a bug.
 - **Movers come from held positions (`selectPortfolioMovers` over `change7dPercent`), not the watchlist panel.** Rows without a `change7dPercent` are dropped rather than treated as flat — a missing history and a 0 % week are different, and conflating them buries real movers under ties.
 
-The design's "Letzte Aktivität" timeline is **deliberately absent**: `operations_log` exists in SQLite but has no read path (no `listOperations` in `localStore`/preload/`dataSource`), and the card is not worth faking. It lands when that read path does.
+The design's "Letzte Aktivität" timeline renders as an **inert, `SoonBadge`-marked placeholder**: `operations_log` exists in SQLite but has no read path (no `listOperations` in `localStore`/preload/`dataSource`), so there is no feed. It is shown rather than dropped so the planned shape of the screen stays legible — the same call the desktop Zielpreis column and the `soon` sidebar rows already make. Do not fill it with invented rows; it lands when the read path does.
 
 ### 5.2 Mobile inventory (below `md`)
 
@@ -162,6 +162,7 @@ The design's "Letzte Aktivität" timeline is **deliberately absent**: `operation
 
 - **The category filter is duplicated into `PortfolioInventorySection` below `lg`.** It lives in `FilterSidebar`, which is desktop-only — without the inline chip row it was simply unreachable on mobile.
 - **The mobile sort is one cycling button, not a chip strip.** Four sorts as chips ate a full row on a 380px screen.
+- **Wallet / Cash-In chips are rendered disabled and `SoonBadge`-marked.** Rows carry a `fundingMode`, but no surface filters on it yet.
 - **Positions and groups are counted separately** (`unfilteredItemCount` next to `unfilteredCount`): `sortedRows` holds both kinds, and one combined figure contradicted the section header's own "39 Positionen · 1 Gruppe".
 
 The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseModal` already docks to the bottom with a grab handle below `BREAKPOINTS.MOBILE`.
@@ -171,7 +172,7 @@ The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseM
 The card list drops `ItemListRow` for the design's watch card: thumb, name, type, and a right column of live price, sparkline and a 7-day delta pill. Category and Zeitraum chips are duplicated inline, since both live in the desktop-only `FilterSidebar`, and the sort becomes one cycling button (skipping `soon` options, so cycling cannot land on a sort that will not run).
 
 - **The delta pill is always `d7` and is labelled "7T".** The Zeitraum chips govern the sparkline window only — the same split the desktop Verlauf column uses — and there is no `d90` field, so a pill quietly falling back to `d7` under a "90 Tage" chip would claim a window it is not showing.
-- **The design's target-price half of the card is absent, and cannot be built yet.** `SyncEntityService::syncWatchlist` writes `alert_price_usd` as a literal `NULL` on insert *and* re-applies it via `ON DUPLICATE KEY UPDATE`, so a value written by any other path is wiped on the next sync; the desktop SQLite watchlist has no such column at all. Target price, distance text, progress bar and the alert bell all depend on it, as do the `soon`-marked "Mit Alarm" scope and "Abstand zum Ziel" sort. Reviving them means a desktop column, a sync payload field and that INSERT — not a UI change.
+- **The design's target-price half of the card is absent, and cannot be built yet.** `SyncEntityService::syncWatchlist` writes `alert_price_usd` as a literal `NULL` on insert *and* re-applies it via `ON DUPLICATE KEY UPDATE`, so a value written by any other path is wiped on the next sync; the desktop SQLite watchlist has no such column at all. Target price, distance text, progress bar and the alert bell all depend on it, as do the `soon`-marked "Mit Alarm" scope and "Abstand zum Ziel" sort. Reviving them means a desktop column, a sync payload field and that INSERT — not a UI change. The row is rendered inert and `SoonBadge`-marked rather than omitted, matching the desktop Zielpreis column.
 
 ## 6. Page Lifecycle and Cache Policy
 

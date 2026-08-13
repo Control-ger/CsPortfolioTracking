@@ -1115,8 +1115,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                           setIsModalOpen(true);
                         }
                       }}
-                      className="flex w-full items-center gap-[11px] rounded-2xl border border-border bg-card px-3.5 py-[13px] text-left"
+                      className="flex w-full flex-col gap-2.5 rounded-2xl border border-border bg-card px-3.5 py-[13px] text-left"
                     >
+                      <span className="flex w-full items-center gap-[11px]">
                       <ItemThumb
                         src={item.imageUrl}
                         alt={item.name}
@@ -1146,6 +1147,29 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                             7T {formatSignedPercentOneDecimal(rangeChange)}
                           </span>
                         </span>
+                      </span>
+                      </span>
+
+                      {/* Target-price row, rendered inert on purpose: the design
+                          places it here, but `alert_price_usd` is written as a
+                          hard NULL on every sync and the desktop store has no
+                          column for it, so there is no value to show. Kept
+                          visible (and marked) rather than dropped, so the
+                          planned shape stays legible — same call the desktop
+                          Zielpreis column and the `soon` sidebar rows make. */}
+                      <span
+                        aria-hidden="true"
+                        className="flex w-full flex-col gap-1.5 border-t border-border-soft pt-2.5 opacity-45"
+                      >
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                            <Bell className="size-[13px]" />
+                            Zielpreis
+                            <SoonBadge />
+                          </span>
+                          <span className="text-[10.5px] font-bold text-muted-foreground">–</span>
+                        </span>
+                        <span className="h-[5px] w-full rounded-full bg-surface-2" />
                       </span>
                     </button>
                   );

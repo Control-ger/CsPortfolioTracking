@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
 import { Badge } from "./ui/badge.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { Button } from "./ui/button.jsx";
+import { SoonBadge } from "./ui/filter-sidebar.jsx";
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
 import {
   formatAge,
@@ -684,6 +685,30 @@ export function PortfolioOverviewSection({
           )}
         </div>
       ) : null}
+
+      {/* Activity timeline, rendered inert on purpose: the design places it
+          here, but `operations_log` has no read path (no listOperations in
+          localStore/preload/dataSource), so there is no feed to render. Kept
+          visible and marked rather than dropped, so the planned shape of the
+          screen stays legible — the same call the watchlist's Zielpreis row
+          and the `soon` sidebar rows make. */}
+      <div
+        aria-hidden="true"
+        className="rounded-2xl border border-border bg-card px-[15px] py-3.5 opacity-45 sm:hidden"
+      >
+        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
+          Letzte Aktivität
+          <SoonBadge />
+        </p>
+        <div className="mt-3 space-y-3">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="flex gap-3">
+              <span className="mt-1 size-2 shrink-0 rounded-full bg-muted-foreground" />
+              <span className="h-2.5 flex-1 rounded-full bg-surface-2" style={{ maxWidth: `${75 - row * 12}%` }} />
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="hidden grid-cols-1 gap-4 sm:grid sm:gap-5">
         <div className="sm:pt-1">

@@ -9,6 +9,7 @@ import {
   FilterScopeIcon,
   FilterSidebar,
   FilterSortButton,
+  SoonBadge,
 } from "./ui/filter-sidebar.jsx";
 import {
   normalizeBucket,
@@ -317,6 +318,22 @@ export function PortfolioInventorySection({
                 </button>
               );
             })}
+            {/* Wallet / Cash-In from the design, rendered inert: rows carry a
+                `fundingMode`, but nothing filters on it yet on any surface.
+                Marked rather than dropped, so the planned filter set stays
+                visible — same call as the `soon` rows in the watchlist. */}
+            {["Wallet", "Cash-In"].map((label) => (
+              <button
+                key={label}
+                type="button"
+                disabled
+                title="Filter nach Finanzierung ist noch nicht verfügbar"
+                className="inline-flex h-7 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-full border border-border-soft px-2.5 text-[11px] font-semibold text-muted-foreground opacity-45"
+              >
+                {label}
+                <SoonBadge />
+              </button>
+            ))}
           </div>
         ) : null}
 
