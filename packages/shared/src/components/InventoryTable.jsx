@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { ItemListRow } from "@shared/components/ItemListRow";
+import { PositionCard } from "@shared/components/ui/position-card";
 import { LayeredGroupIcon } from "@shared/components/LayeredGroupIcon";
 import { ItemThumb } from "@shared/components/ui/item-thumb";
 import { RoiMeter } from "@shared/components/ui/data-display";
@@ -117,6 +117,9 @@ export function InventoryTable({
   sortDirection = "desc",
   onSortChange,
   unfilteredCount = null,
+  // Positions only, without the group rows unfilteredCount folds in — the
+  // mobile line names positions and groups separately.
+  unfilteredItemCount = null,
 }) {
   const { formatPrice } = useCurrency();
   const [expandedGroupIds, setExpandedGroupIds] = useState({});
@@ -270,6 +273,19 @@ export function InventoryTable({
 
     onSortChange(nextKey, nextKey === "item" ? "asc" : "desc");
   };
+
+  const visibleGroupCount = sortedRows.filter((row) => row.kind === "group").length;
+  const visibleItemCount = sortedRows.length - visibleGroupCount;
+
+  // The mobile sort button cycles rather than opening a menu, so it has to name
+  // both where it is and where the next tap goes.
+  const activeSortIndex = Math.max(
+    0,
+    SORT_OPTIONS.findIndex((entry) => entry.key === sortKey),
+  );
+  const activeSortLabel = SORT_OPTIONS[activeSortIndex].label;
+  const nextSortKey = SORT_OPTIONS[(activeSortIndex + 1) % SORT_OPTIONS.length].key;
+  const nextSortLabel = SORT_OPTIONS[(activeSortIndex + 1) % SORT_OPTIONS.length].label;
 
   const selectionKey = String(selectedId ?? "").trim();
   const isSelected = (entity) =>
@@ -563,55 +579,56 @@ export function InventoryTable({
         </GridTable>
       </div>
 
-      {/* Mobile: the sidebar is desktop-only, so the sort strip stays inline here. */}
-      <div className="space-y-3 px-2 md:hidden">
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2.5">
-          <span className="shrink-0 pl-1 text-[10px] uppercase text-muted-foreground">
-            Sortierung
+      {/* Mobile: the sidebar is desktop-only, so the count and sort stay inline.
+          One cycling button rather than a chip strip — four sorts as chips ate a
+          full row, and the sort is a secondary control on a screen this narrow. */}
+      <div className="space-y-2.5 px-2 md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          {/* Positions and groups counted apart: sortedRows holds both, and one
+              combined figure reads as a contradiction next to the header's
+              "39 Positionen · 1 Gruppe". */}
+          <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
+            {visibleItemCount} von {unfilteredItemCount ?? visibleItemCount} Positionen
+            {visibleGroupCount > 0
+              ? ` · ${visibleGroupCount} ${visibleGroupCount === 1 ? "Gruppe" : "Gruppen"}`
+              : ""}
           </span>
-          <div className="no-scrollbar flex flex-1 gap-1 overflow-x-auto">
-            {SORT_OPTIONS.map(({ key, label }) => {
-              const isActive = sortKey === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleSort(key)}
-                  className={`shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-surface-2 text-muted-foreground hover:text-foreground"
-                  }`}
-                  title={`${label} ${sortDirection === "asc" ? "↑" : "↓"}`}
-                >
-                  {label}
-                  {isActive ? (
-                    <span className="ml-0.5 text-[10px]">
-                      {sortDirection === "asc" ? "↑" : "↓"}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+          <button
+            type="button"
+            onClick={() => toggleSort(nextSortKey)}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[11px] font-semibold"
+            title={`Sortiert nach ${activeSortLabel} — tippen für ${nextSortLabel}`}
+          >
+            {activeSortLabel}
+            <span aria-hidden="true" className="text-[10px] text-muted-foreground">
+              {sortDirection === "asc" ? "↑" : "↓"}
+            </span>
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </button>
         </div>
 
         {sortedRows.map((row) => {
           if (row.kind !== "group") {
             const item = row.item;
             const roiValue = isFiniteNumber(item.roi) ? item.roi : null;
+            const unitBuyPrice = resolveUnitBuyPrice(item);
 
             return (
-              <ItemListRow
+              <PositionCard
                 key={item.id}
-                item={{
-                  ...item,
-                  currentPrice: item.isLive ? item.livePrice : null,
-                  currentPriceUsd: null,
-                  roi: roiValue,
-                  trend: item.isLive && roiValue !== null ? (roiValue >= 0 ? "up" : "down") : null,
-                  changeLabel: item.isLive ? formatSignedPercentOneDecimal(roiValue) : "-",
-                }}
+                name={item.name}
+                imageUrl={item.imageUrl}
+                selected={isSelected(item)}
+                metaChips={[
+                  item.type,
+                  `${item.quantity}x`,
+                  unitBuyPrice === null ? null : `Ø ${formatPrice(unitBuyPrice)}`,
+                ].filter(Boolean)}
+                valueLabel={item.isLive ? formatPrice(item.currentValue) : "kein Preis"}
+                deltaLabel={
+                  item.isLive && roiValue !== null ? formatSignedPercentOneDecimal(roiValue) : null
+                }
+                deltaTone={roiValue === null ? "muted" : roiValue >= 0 ? "success" : "danger"}
                 onClick={() => onSelectItem(item)}
               />
             );

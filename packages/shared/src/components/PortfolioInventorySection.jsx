@@ -293,6 +293,33 @@ export function PortfolioInventorySection({
           />
         </div>
 
+        {/* The category filter lives in the desktop sidebar, which is hidden
+            below lg — without this row it was simply unreachable there. Scrolls
+            horizontally rather than wrapping, so a catalogue that gains types
+            cannot push the list off the first screen. */}
+        {categories.length > 1 ? (
+          <div className="no-scrollbar -mx-3.5 flex gap-1.5 overflow-x-auto px-3.5 lg:hidden">
+            {[{ key: ALL_CATEGORIES, label: "Alle" }, ...categories].map((entry) => {
+              const active = activeCategory === entry.key;
+              return (
+                <button
+                  key={entry.key}
+                  type="button"
+                  onClick={() => setCategory(entry.key)}
+                  aria-pressed={active}
+                  className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] transition-colors ${
+                    active
+                      ? "border border-border-strong bg-surface-2 font-extrabold text-foreground"
+                      : "border border-border-soft font-semibold text-muted-foreground"
+                  }`}
+                >
+                  {entry.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_356px]">
           <div className="min-w-0">
             <Suspense
@@ -317,6 +344,9 @@ export function PortfolioInventorySection({
                 unfilteredCount={
                   (Array.isArray(inventoryTabItems) ? inventoryTabItems.length : 0) +
                   scopedGroups.length
+                }
+                unfilteredItemCount={
+                  Array.isArray(inventoryTabItems) ? inventoryTabItems.length : 0
                 }
               />
             </Suspense>

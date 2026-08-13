@@ -156,6 +156,16 @@ From `apps/web/src/App.jsx`:
 
 The design's "Letzte Aktivität" timeline is **deliberately absent**: `operations_log` exists in SQLite but has no read path (no `listOperations` in `localStore`/preload/`dataSource`), and the card is not worth faking. It lands when that read path does.
 
+### 5.2 Mobile inventory (below `md`)
+
+`InventoryTable` already carried a card list below `md`; it now renders the design's position card (`ui/position-card.jsx`) instead of `ItemListRow` — thumb, name with optional GRUPPE badge, meta chips (type, quantity, average buy) and a right column of live value plus ROI pill. `ItemListRow` stays as-is: it is the watchlist/search shape and is shared by three surfaces, so folding both into one component would mean a prop per screen.
+
+- **The category filter is duplicated into `PortfolioInventorySection` below `lg`.** It lives in `FilterSidebar`, which is desktop-only — without the inline chip row it was simply unreachable on mobile.
+- **The mobile sort is one cycling button, not a chip strip.** Four sorts as chips ate a full row on a 380px screen.
+- **Positions and groups are counted separately** (`unfilteredItemCount` next to `unfilteredCount`): `sortedRows` holds both kinds, and one combined figure contradicted the section header's own "39 Positionen · 1 Gruppe".
+
+The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseModal` already docks to the bottom with a grab handle below `BREAKPOINTS.MOBILE`.
+
 ## 6. Page Lifecycle and Cache Policy
 
 ### 6.1 Verified current behavior

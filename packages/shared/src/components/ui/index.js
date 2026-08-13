@@ -63,6 +63,7 @@ export * from "./table.jsx";
 export * from "./data-display.jsx";
 export * from "./icon-circle-button.jsx";
 export * from "./item-thumb.jsx";
+export * from "./position-card.jsx";
 export * from "./chart.jsx";
 
 /* ── Detail & filtering shells ────────────────────────────────────────────── */
