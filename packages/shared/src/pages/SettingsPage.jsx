@@ -308,7 +308,16 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     nextParams.set("cat", categoryId);
     nextParams.delete("settingsTab");
     nextParams.delete("section");
-    setSearchParams(nextParams, { replace: true });
+    // Opening a category is a navigation on mobile (list -> detail) but only a
+    // selection on desktop, where both panes stay on screen. Pushing on mobile
+    // is what makes the platform Back gesture return to the list instead of
+    // leaving Settings entirely; replacing on desktop keeps clicking through
+    // six categories from stacking six history entries.
+    const desktopLayout =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(min-width: 1024px)").matches;
+    setSearchParams(nextParams, { replace: desktopLayout });
   };
 
   const notificationChannels = [
