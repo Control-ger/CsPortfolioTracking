@@ -48,3 +48,6 @@ packages/*/node_modules/
 .ds-sync/
 ds-bundle/
 packages/shared/ds-styles.css
+
+# Local CDP screenshot helper (see docs: Electron UI verification)
+.shot.mjs
