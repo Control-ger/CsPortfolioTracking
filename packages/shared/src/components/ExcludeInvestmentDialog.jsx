@@ -20,7 +20,7 @@ export function ExcludeInvestmentDialog({
 }) {
   const itemName = investment?.name || 'Item';
   const isCurrentlyExcluded = investment?.excluded || false;
-  const action = isCurrentlyExcluded ? 'wieder einschliessen' : 'ausschliessen';
+  const action = isCurrentlyExcluded ? 'wieder eingeschlossen' : 'ausgeschlossen';
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>

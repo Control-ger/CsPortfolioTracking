@@ -159,6 +159,11 @@ final class PortfolioService
                 'type' => (string) $investment['type'],
                 'bucket' => $bucket,
                 'imageUrl' => $this->resolveInvestmentImageUrl($investmentPayload, $presentation['iconUrl'] ?? null),
+                // Catalogue classification (MarketItemClassifier key: skin, case,
+                // sticker_capsule, souvenir_package, agent, …). `type` above is
+                // importer-supplied and defaults to 'skin', so it cannot be used
+                // to categorise a portfolio; this is the authoritative kind.
+                'catalogItemType' => $presentation['itemType'] ?? null,
                 'marketTypeLabel' => $presentation['marketTypeLabel'] ?? null,
                 'wearName' => $presentation['wearLabel'] ?? null,
                 'buyPrice' => $buyPrice,

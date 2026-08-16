@@ -19,6 +19,7 @@ final class WatchlistRepository
             user_id         INT            NOT NULL,
             item_id         INT            NOT NULL,
             alert_price_usd DECIMAL(10,2)  NULL,
+            alert_meta_json JSON           NULL,
             added_at        TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
@@ -27,6 +28,15 @@ final class WatchlistRepository
 
         try {
             $this->pdo->exec($sql);
+            // Additive: CREATE TABLE IF NOT EXISTS does nothing on installs that
+            // predate the target-price meta column, and findAll() selects it.
+            $columnStmt = $this->pdo->prepare('SHOW COLUMNS FROM watchlist WHERE Field = ?');
+            $columnStmt->execute(['alert_meta_json']);
+            if (!$columnStmt->fetch(PDO::FETCH_ASSOC)) {
+                $this->pdo->exec(
+                    'ALTER TABLE watchlist ADD COLUMN alert_meta_json JSON NULL AFTER alert_price_usd'
+                );
+            }
             RepositoryObservability::schemaEnsured(self::class, 'watchlist');
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
@@ -42,8 +52,9 @@ final class WatchlistRepository
 
     public function findAll(int $userId): array
     {
-        $sql = 'SELECT w.id, w.item_id, w.alert_price_usd, w.added_at,
-                       it.name, it.market_hash_name, it.type, it.image_url
+        $sql = 'SELECT w.id, w.item_id, w.alert_price_usd, w.alert_meta_json, w.added_at,
+                       it.name, it.market_hash_name, it.type, it.image_url,
+                       it.item_type, it.market_type_label
                 FROM watchlist w
                 JOIN items it ON it.id = w.item_id
                 WHERE w.user_id = ?
@@ -100,6 +111,61 @@ final class WatchlistRepository
                 $sql,
                 $exception,
                 ['userId' => $userId, 'itemId' => $itemId]
+            );
+            throw $exception;
+        }
+    }
+
+    /**
+     * Scoped by `user_id` on purpose: the id comes from the request path, and a
+     * WHERE on the id alone would let any session retarget another account's row.
+     */
+    public function updateTarget(
+        int $id,
+        int $userId,
+        ?float $alertPriceUsd,
+        ?string $alertMetaJson
+    ): bool {
+        $sql = 'UPDATE watchlist SET alert_price_usd = ?, alert_meta_json = ?
+                WHERE id = ? AND user_id = ?';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$alertPriceUsd, $alertMetaJson, $id, $userId]);
+            return $stmt->rowCount() > 0;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['id' => $id, 'userId' => $userId]
+            );
+            throw $exception;
+        }
+    }
+
+    public function findById(int $id, int $userId): ?array
+    {
+        $sql = 'SELECT w.id, w.item_id, w.alert_price_usd, w.alert_meta_json,
+                       it.name, it.market_hash_name
+                FROM watchlist w
+                JOIN items it ON it.id = w.item_id
+                WHERE w.id = ? AND w.user_id = ?
+                LIMIT 1';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$id, $userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $row !== false ? $row : null;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['id' => $id, 'userId' => $userId]
             );
             throw $exception;
         }

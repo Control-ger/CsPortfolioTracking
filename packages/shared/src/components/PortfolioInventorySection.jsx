@@ -17,6 +17,7 @@ import {
   withBuyOrderFields,
 } from "../lib/portfolioHelpers.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { resolveItemCategory } from "../lib/portfolioCalculations.js";
 
 const InventoryTable = lazy(() =>
   import("./InventoryTable.jsx").then((module) => ({
@@ -61,15 +62,15 @@ function resolveRowBucket(item) {
   );
 }
 
+// Both derive from the catalogue category, never from `item.type`: that field is
+// importer-supplied and defaults to "skin", so the chip row offered a single
+// "Skin" entry that also swallowed every case, sticker and patch.
 function categoryKey(item) {
-  return String(item?.type || "").trim().toLowerCase();
+  return resolveItemCategory(item).toLowerCase();
 }
 
 function categoryLabel(item) {
-  // Catalog types arrive lowercase ("skin", "sticker"); the chip row is a label,
-  // not a raw value dump.
-  const raw = String(item?.type || "").trim();
-  return raw === "" ? "Ohne Typ" : raw.charAt(0).toUpperCase() + raw.slice(1);
+  return resolveItemCategory(item);
 }
 
 /**

@@ -1,4 +1,5 @@
 import { ItemThumb } from "./item-thumb.jsx";
+import { ItemName } from "./item-name.jsx";
 import { cn } from "../../lib/utils.js";
 
 /**
@@ -60,7 +61,9 @@ export function PositionCard({
               Gruppe
             </span>
           ) : null}
-          <span className="truncate text-[13.5px] font-bold">{name}</span>
+          {/* The first meta chip is the category, so a "Sticker | " prefix on
+              the name would state the same thing twice on one card. */}
+          <ItemName name={name} nameClassName="text-[13.5px] font-bold" dropKindPrefix />
         </span>
         <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {metaChips.map((chip, index) => (

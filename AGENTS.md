@@ -76,6 +76,7 @@ Full reference: `docs/design-system.md`. Live catalogue: route `#/design`.
 - **Exchange rates**: reference `exchange_rate_id`, never redundant `price_eur` columns.
 - **Items catalog**: `items` table is server-owned, read-only for all except CLI cron `backend/sync-prices.php` (requires `ITEMS_CATALOG_WRITE_SCOPE=cron`).
 - **No PHP→JS migration**: PHP business logic stays in `backend/src`; `packages/shared/src/lib/dataSource.js` only selects runtime/URL, never implements logic.
+- **Item category**: never categorise on `investments.type`. That column is written by whichever importer created the row and defaults to `'skin'`, so it holds `'skin'` for one case and `'case'` for the next. The authoritative kind is the `MarketItemClassifier` key, stored as `items.item_type` and exposed on enriched rows as `catalogItemType` (`PortfolioService::getEnrichedInvestments`); `marketTypeLabel` is the coarser fallback. Frontend consumers go through `resolveItemCategory` (`portfolioCalculations.js`) — see `docs/architecture-overview.md` §5.1.
 
 ### Desktop Local-First
 - Desktop is the primary write client for investments and watchlist.

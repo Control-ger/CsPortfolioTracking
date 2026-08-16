@@ -16,6 +16,33 @@ import {
   syncHealthLabel,
   formatRelativeHours,
 } from "../lib/portfolioHelpers.js";
+import { ItemName } from "./ui/item-name.jsx";
+import { parseItemName } from "../lib/itemName.js";
+
+/**
+ * Share label for the allocation legend.
+ *
+ * Two rules, both there to stop the legend contradicting itself:
+ * - a non-zero share never prints as "0,0 %" — it prints "<0,1 %", because a
+ *   category that is listed at all is by definition not empty;
+ * - a share only reads "100 %" when it really is the only category. Rounding
+ *   99,6 % up while five more entries follow is what made the bar claim
+ *   "Skins · 100 %" next to "Cases · 0,5 %".
+ */
+function formatAllocationShare(percentage, categoryCount) {
+  const value = Number(percentage) || 0;
+  if (value > 0 && value < 0.1) {
+    return "<0,1 %";
+  }
+  if (value < 10) {
+    return `${value.toFixed(1).replace(".", ",")} %`;
+  }
+  const rounded = Math.round(value);
+  if (rounded >= 100 && categoryCount > 1) {
+    return ">99 %";
+  }
+  return `${rounded} %`;
+}
 
 export function PortfolioOverviewSection({
   stats,
@@ -577,9 +604,18 @@ export function PortfolioOverviewSection({
             tone: headerPortfolioPositive ? "text-success" : "text-danger",
           },
           { label: "Positionen", value: String(stats.totalQuantity ?? 0), tone: "" },
-          // Real item names run far past the design's "Kilowatt", so this one
-          // wraps at a smaller size instead of ellipsing to "Souve…".
-          { label: "Bestes Item", value: bestItemName || "—", tone: "", small: true },
+          // Real item names run far past the design's "Kilowatt" and this tile
+          // is a third of a phone wide, so it shows the parsed short name —
+          // the variant prefix and the wear are what push "Sawed-Off | Parched"
+          // out of view, and neither is what the tile is answering. The full
+          // canonical name stays on the title attribute.
+          {
+            label: "Bestes Item",
+            value: bestItemName ? parseItemName(bestItemName).short : "—",
+            title: bestItemName || undefined,
+            tone: "",
+            small: true,
+          },
         ].map((kpi) => (
           <div key={kpi.label} className="min-w-0 rounded-2xl border border-border bg-card px-3 py-[11px]">
             <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
@@ -589,7 +625,7 @@ export function PortfolioOverviewSection({
               className={`mt-1 font-extrabold ${kpi.tone} ${
                 kpi.small ? "line-clamp-2 text-[12px] leading-tight" : "truncate text-[19px]"
               }`}
-              title={kpi.small ? kpi.value : undefined}
+              title={kpi.title}
             >
               {kpi.value}
             </p>
@@ -608,11 +644,14 @@ export function PortfolioOverviewSection({
                 key={entry.label}
                 className="bg-foreground"
                 style={{
-                  flex: `0 0 ${entry.percentage}%`,
+                  // Proportional grow rather than a percentage basis: the
+                  // rounded shares can sum past 100, and a fixed basis with no
+                  // shrink then overflows and clips the last slice off the bar.
+                  flex: `${entry.value} 1 0`,
                   // One hue, stepped down in opacity: the categories are a
                   // ranking, not unrelated series, so a colour scale would
                   // imply a distinction the data does not carry.
-                  opacity: [1, 0.82, 0.64, 0.48, 0.34, 0.22][index] ?? 0.22,
+                  opacity: [1, 0.82, 0.64, 0.48, 0.34, 0.22][index] ?? 0.16,
                 }}
               />
             ))}
@@ -624,14 +663,7 @@ export function PortfolioOverviewSection({
                   className="size-2 rounded-full bg-foreground"
                   style={{ opacity: [1, 0.82, 0.64, 0.48, 0.34, 0.22][index] ?? 0.22 }}
                 />
-                {/* One decimal below 10 %: a portfolio dominated by a few
-                    expensive skins rounds every other category to "0 %",
-                    which reads as an error rather than a small share. */}
-                {entry.label} ·{" "}
-                {entry.percentage
-                  .toFixed(entry.percentage < 10 ? 1 : 0)
-                  .replace(".", ",")}{" "}
-                %
+                {entry.label} · {formatAllocationShare(entry.percentage, allocationByType.length)}
               </span>
             ))}
           </div>
@@ -666,7 +698,7 @@ export function PortfolioOverviewSection({
           {shownMovers.length > 0 ? (
             shownMovers.map((mover) => (
               <div key={mover.id} className="flex items-center justify-between gap-2.5 py-1.5">
-                <span className="min-w-0 truncate text-[12.5px] font-semibold">{mover.name}</span>
+                <ItemName name={mover.name} nameClassName="text-[12.5px] font-semibold" />
                 <span
                   className={`shrink-0 whitespace-nowrap text-[12.5px] font-extrabold tabular-nums ${
                     mover.changePercent >= 0 ? "text-success" : "text-danger"

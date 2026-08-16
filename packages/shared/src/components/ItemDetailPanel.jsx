@@ -17,6 +17,7 @@ import { ExcludeInvestmentDialog } from "./ExcludeInvestmentDialog";
 import { toggleExcludeInvestment } from "../lib/apiClient";
 import { PortfolioChart } from "./PortfolioChart";
 import { PortfolioCompositionChart } from "./PortfolioCompositionChart";
+import { GroupWeightingList } from "./GroupWeightingList";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 /**
@@ -315,7 +316,12 @@ export const ItemDetailPanel = ({
 
         {isGroupSelection && clusterCompositionData.length > 0 ? (
           <InspectorBlock label="Cluster-Gewichtung">
-            <div className="mt-2">
+            {/* Two renderings of the same clusters, one per breakpoint. The donut
+                is unreadable at phone width (a group of 20 becomes hairline
+                slivers), and the bar list wastes the horizontal room the desktop
+                panel has. */}
+            <GroupWeightingList clusters={item.clusters} className="mt-2 sm:hidden" />
+            <div className="mt-2 hidden sm:block">
               <PortfolioCompositionChart
                 data={clusterCompositionData}
                 valuesAreUsd={false}

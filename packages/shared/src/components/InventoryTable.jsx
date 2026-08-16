@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { resolveItemCategorySingular } from "../lib/portfolioCalculations.js";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { PositionCard } from "@shared/components/ui/position-card";
 import { LayeredGroupIcon } from "@shared/components/LayeredGroupIcon";
@@ -364,7 +365,8 @@ export function InventoryTable({
                       <span className="block truncate text-[13px] font-bold">{item.name}</span>
                       <span className="mt-[3px] flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
                         <span className="truncate">
-                          {item.type} · {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
+                          {resolveItemCategorySingular(item)} ·{" "}
+                          {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
                         </span>
                         {item.hasBuyOrder && Number(item.buyOrderBestPriceUsd) > 0 ? (
                           <span
@@ -620,7 +622,7 @@ export function InventoryTable({
                 imageUrl={item.imageUrl}
                 selected={isSelected(item)}
                 metaChips={[
-                  item.type,
+                  resolveItemCategorySingular(item),
                   `${item.quantity}x`,
                   unitBuyPrice === null ? null : `Ø ${formatPrice(unitBuyPrice)}`,
                 ].filter(Boolean)}

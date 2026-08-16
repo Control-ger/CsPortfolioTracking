@@ -342,19 +342,36 @@ final class SyncEntityService
             ?? $existingPayload['image_url']
             ?? ($resolvedItem['image_url'] ?? '')
         ));
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO watchlist (user_id, item_id, alert_price_usd)
-             VALUES (?, ?, NULL)
-             ON DUPLICATE KEY UPDATE
-                alert_price_usd = VALUES(alert_price_usd)'
+
+        // Read the row *before* the upsert: it carries the target price a
+        // previous client (or the web PUT route) set, and a payload that simply
+        // omits the field must not wipe it.
+        $existingWatchlistRow = $this->findWatchlistByUserAndItem($userId, $itemId);
+        $mergedPayload = $this->mergeTargetFieldsForWatchlistSync(
+            $payload,
+            $existingPayload,
+            $existingWatchlistRow
         );
-        $stmt->execute([$userId, $itemId]);
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO watchlist (user_id, item_id, alert_price_usd, alert_meta_json)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                alert_price_usd = VALUES(alert_price_usd),
+                alert_meta_json = VALUES(alert_meta_json)'
+        );
+        $stmt->execute([
+            $userId,
+            $itemId,
+            $mergedPayload['alertPriceUsd'] ?? null,
+            $this->encodeWatchlistAlertMeta($mergedPayload),
+        ]);
 
         $watchlistRow = $this->findWatchlistByUserAndItem($userId, $itemId);
         $serverId = $watchlistRow ? (int) ($watchlistRow['id'] ?? 0) : null;
 
         return [
-            ...$payload,
+            ...$mergedPayload,
             'id' => $entityId,
             'userId' => (string) $userId,
             'itemId' => (string) $itemId,
@@ -365,6 +382,81 @@ final class SyncEntityService
             'serverId' => $serverId,
             'updatedAt' => gmdate('c'),
         ];
+    }
+
+    /**
+     * Carry the four target-price fields forward when the incoming payload does
+     * not mention them.
+     *
+     * Same contract as `mergeExcludedFlagsForInvestmentSync`: a client that
+     * knows nothing about target prices pushes a payload without them, and
+     * without this merge every such push would silently clear a target the user
+     * set on another device. Precedence is payload → last synced payload → the
+     * `watchlist` row itself (which the web PUT route writes directly).
+     */
+    private function mergeTargetFieldsForWatchlistSync(
+        array $payload,
+        array $existingPayload,
+        ?array $existingWatchlistRow
+    ): array {
+        $merged = $payload;
+        $rowMeta = $this->decodePayload((string) ($existingWatchlistRow['alert_meta_json'] ?? '{}'));
+        $rowPrice = $existingWatchlistRow['alert_price_usd'] ?? null;
+
+        if (!array_key_exists('alertPriceUsd', $merged)) {
+            if (array_key_exists('alertPriceUsd', $existingPayload)) {
+                $merged['alertPriceUsd'] = $existingPayload['alertPriceUsd'];
+            } elseif ($rowPrice !== null) {
+                $merged['alertPriceUsd'] = $rowPrice;
+            }
+        }
+        $merged['alertPriceUsd'] = is_numeric($merged['alertPriceUsd'] ?? null)
+            && (float) $merged['alertPriceUsd'] > 0
+            ? round((float) $merged['alertPriceUsd'], 2)
+            : null;
+
+        foreach (['alertDirection', 'alertAnchorPriceUsd', 'alertTriggeredAt'] as $field) {
+            if (array_key_exists($field, $merged)) {
+                continue;
+            }
+            if (array_key_exists($field, $existingPayload)) {
+                $merged[$field] = $existingPayload[$field];
+            } elseif (array_key_exists($field, $rowMeta)) {
+                $merged[$field] = $rowMeta[$field];
+            }
+        }
+
+        $merged['alertDirection'] = strtolower(trim((string) ($merged['alertDirection'] ?? ''))) === 'above'
+            ? 'above'
+            : 'below';
+        $merged['alertAnchorPriceUsd'] = is_numeric($merged['alertAnchorPriceUsd'] ?? null)
+            && (float) $merged['alertAnchorPriceUsd'] > 0
+            ? round((float) $merged['alertAnchorPriceUsd'], 2)
+            : null;
+        $triggeredAt = trim((string) ($merged['alertTriggeredAt'] ?? ''));
+        $merged['alertTriggeredAt'] = $triggeredAt !== '' ? $triggeredAt : null;
+
+        // No target means no meta — an orphan anchor/trigger would otherwise
+        // survive a clear and re-arm the alert on the next price move.
+        if ($merged['alertPriceUsd'] === null) {
+            $merged['alertAnchorPriceUsd'] = null;
+            $merged['alertTriggeredAt'] = null;
+        }
+
+        return $merged;
+    }
+
+    private function encodeWatchlistAlertMeta(array $payload): ?string
+    {
+        if (($payload['alertPriceUsd'] ?? null) === null) {
+            return null;
+        }
+
+        return json_encode([
+            'alertDirection' => $payload['alertDirection'] ?? 'below',
+            'alertAnchorPriceUsd' => $payload['alertAnchorPriceUsd'] ?? null,
+            'alertTriggeredAt' => $payload['alertTriggeredAt'] ?? null,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -492,11 +584,29 @@ final class SyncEntityService
                 user_id INT NOT NULL,
                 item_id INT NOT NULL,
                 alert_price_usd DECIMAL(10,2) NULL,
+                alert_meta_json JSON NULL,
                 added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
                 UNIQUE idx_user_item (user_id, item_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
+        // CREATE TABLE IF NOT EXISTS is a no-op on installs that predate the
+        // target-price meta column, so it has to be added separately.
+        $this->ensureWatchlistAlertMetaColumn();
+    }
+
+    private function ensureWatchlistAlertMetaColumn(): void
+    {
+        $stmt = $this->pdo->prepare('SHOW COLUMNS FROM watchlist WHERE Field = ?');
+        $stmt->execute(['alert_meta_json']);
+        if ($stmt->fetch(PDO::FETCH_ASSOC)) {
+            return;
+        }
+
+        $this->pdo->exec(
+            'ALTER TABLE watchlist ADD COLUMN alert_meta_json JSON NULL AFTER alert_price_usd'
         );
     }
 
@@ -768,7 +878,10 @@ final class SyncEntityService
 
     private function findWatchlistByUserAndItem(int $userId, int $itemId): ?array
     {
-        $stmt = $this->pdo->prepare('SELECT id FROM watchlist WHERE user_id = ? AND item_id = ? LIMIT 1');
+        $stmt = $this->pdo->prepare(
+            'SELECT id, alert_price_usd, alert_meta_json
+             FROM watchlist WHERE user_id = ? AND item_id = ? LIMIT 1'
+        );
         $stmt->execute([$userId, $itemId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row !== false ? $row : null;

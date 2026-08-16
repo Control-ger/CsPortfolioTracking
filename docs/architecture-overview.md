@@ -151,10 +151,31 @@ From `apps/web/src/App.jsx`:
 `PortfolioOverviewSection` renders a second, mobile-only arrangement of the same data — scope switch, hero value, chart, KPI row, allocation bar, movers — while the desktop stat cards, watchlist-mover panel and composition donut become `hidden sm:…`. Three points are load-bearing:
 
 - **The hero delta pairs `roiGainEuro` with `deltaPercent`, never `deltaValue`.** `PortfolioChart`'s `trendStats` computes `deltaValue` as the raw value change and `roiGainEuro` as the profit change; only the latter matches `deltaPercent`, because a deposit moves value and invested in lockstep and cancels out of the profit figure but not the value delta. `onTrendChange` therefore emits `roiGainEuro` too. Both are **USD**, like every price on this page — format via `formatPrice(x, { useUsd: true, buyPriceUsd: x })` or the number silently prints unconverted under a euro sign.
-- **Allocation uses `buildPortfolioAllocationByType`, not `buildPortfolioCompositionFromRows`.** The donut groups by item, which renders as thousands of hairline slivers in an 11px bar; the mobile bar groups by catalogue category (`ALLOCATION_LABELS`). The design's legend names weapon classes (Messer, Rifles, Handschuhe) — rows carry no weapon class, so the bar groups by what the data knows rather than inventing the finer split. Shares under 10 % print one decimal: a portfolio dominated by a few expensive skins otherwise rounds every other category to "0 %", which reads as a bug.
+- **Allocation uses `buildPortfolioAllocationByType`, not `buildPortfolioCompositionFromRows`.** The donut groups by item, which renders as thousands of hairline slivers in an 11px bar; the mobile bar groups by category.
+- **Categories come from the catalogue, never from the row's own `type`** — `resolveItemCategory` / `resolveItemCategorySingular` (`portfolioCalculations.js`), shared by the allocation bar, the inventory type chip and the inventory category filter so the three cannot disagree about what an item is. `investments.type` is written by whichever importer created the row and defaults to `"skin"` (`localStore/investments.js`, `PortfolioService::mapInvestment`); one real portfolio held `"skin"` for Fever Case and `"case"` for Kilowatt Case, rendered 94 % containers as **"Skins · 100 %"**, badged every sticker "skin", and offered a category filter whose single "Skin" entry swallowed everything.
+  - Preference order is authority order: **`catalogItemType`** (the `MarketItemClassifier` key — `skin`, `case`, `sticker_capsule`, `souvenir_package`, `agent`, …, newly exposed on the enriched row by `PortfolioService::getEnrichedInvestments` and carried through `desktopDataMerge`), then **`marketTypeLabel`** (the Steam market type already on every row), then the importer's `type` as a last resort.
+  - The `marketTypeLabel` fallback is deliberately coarser: Steam types cases, capsules and souvenir packages all as "Container", so that path cannot separate them and calls all three "Cases". Until a server carrying `catalogItemType` is deployed, that is what the app shows.
+  - **Categories are item kinds, not weapon classes.** Every weapon skin is one "Skins" bucket. Splitting it into Rifles / SMGs / Pistolen / Snipers answers no question the dashboard asks and fragments the bar; the earlier note that the design's legend (Messer, Rifles, Handschuhe) was unbuildable because "rows carry no weapon class" was wrong — `marketTypeLabel` does carry it — but the granularity was rejected on its own merits.
+  - The tail beyond `ALLOCATION_MAX_CATEGORIES` (6) folds into one "Sonstige" slice. A real portfolio produces a dozen sub-percent kinds, each an invisible sliver with its own legend row.
+  - Segments size by `flex: <value> 1 0`, not by a `flex-basis` percentage: rounded shares can sum past 100, and a fixed basis with no shrink overflows the `overflow-hidden` track and clips the last slice.
+  - `formatAllocationShare` prints `<0,1 %` for a non-zero sliver rather than "0,0 %", and refuses to print "100 %" while other categories are listed.
 - **Movers come from held positions (`selectPortfolioMovers` over `change7dPercent`), not the watchlist panel.** Rows without a `change7dPercent` are dropped rather than treated as flat — a missing history and a 0 % week are different, and conflating them buries real movers under ties.
 
 The design's "Letzte Aktivität" timeline renders as an **inert, `SoonBadge`-marked placeholder**: `operations_log` exists in SQLite but has no read path (no `listOperations` in `localStore`/preload/`dataSource`), so there is no feed. It is shown rather than dropped so the planned shape of the screen stays legible — the same call the desktop Zielpreis column and the `soon` sidebar rows already make. Do not fill it with invented rows; it lands when the read path does.
+
+### 5.1.1 Item names on mobile lists
+
+Canonical names pack three things into one string (`★ StatTrak™ Karambit | Doppler (Factory New)`) and truncated to a phone row they lose the end, which is where the wear lives. `parseItemName` (`lib/itemName.js`) splits off the variant prefix and the wear; `ItemName` (`ui/item-name.jsx`) renders them as chips around a truncating name. Used by the dashboard movers, the inventory `PositionCard`, the watchlist card and `GroupWeightingList` — mobile surfaces only; desktop tables have the width for the full name.
+
+The chips are `shrink-0` and the name truncates, deliberately: a portfolio routinely holds one skin in several conditions, so the wear distinguishes more per pixel than the tail of the skin name. The full canonical name stays available as the element's `title`.
+
+Three guards in the parser, all because the name is not a reliable grammar:
+
+- `Souvenir` is only a prefix at the **start** of the string — "Budapest 2025 Train Souvenir Package" is a container that merely contains the word.
+- A trailing parenthesis is only a wear when it is one of the five real wears. Stickers and graffiti carry `(Glitter)`, `(Holo)`, `(Foil)` in the same position, and those are identity, not condition.
+- The leading segment before `|` is dropped only when it names the item's **kind** (`KIND_PREFIXES`: Sticker, Patch, Music Kit, Sealed Graffiti, …), never when it names a weapon. "Sticker | Boom Blast" beside a "Sticker" chip says it twice; "USP-S | Alpine Camo" without the weapon is unidentifiable.
+
+`parseItemName` therefore returns both `base` (kind kept) and `short` (kind dropped), and `ItemName` picks between them via `dropKindPrefix` — enabled on `PositionCard`, whose first meta chip is already the category, and off everywhere the category is not shown. The mobile "Bestes Item" KPI tile uses `short` directly: it is a third of a phone wide, and the variant prefix plus wear are exactly what pushed the name out of view.
 
 ### 5.2 Mobile inventory (below `md`)
 
@@ -165,9 +186,24 @@ The design's "Letzte Aktivität" timeline renders as an **inert, `SoonBadge`-mar
 - **Wallet / Cash-In chips are rendered disabled and `SoonBadge`-marked.** Rows carry a `fundingMode`, but no surface filters on it yet.
 - **Positions and groups are counted separately** (`unfilteredItemCount` next to `unfilteredCount`): `sortedRows` holds both kinds, and one combined figure contradicted the section header's own "39 Positionen · 1 Gruppe".
 
-The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseModal` already docks to the bottom with a grab handle below `BREAKPOINTS.MOBILE`.
+The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseModal` already docks to the bottom with a grab handle below `BREAKPOINTS.MOBILE`. Two things inside it did:
+
+- **A group's `Cluster-Gewichtung` renders as a ranked bar list below `sm`, as a donut from `sm`** (`GroupWeightingList`, mounted next to `PortfolioCompositionChart` in `ItemDetailPanel`). Both read the same `item.clusters`; neither derives anything the other does not. The donut is the same failure mode as the dashboard allocation bar — a 21-cluster group at 380px is hairline slivers — and the bar row additionally carries the euro value and the per-cluster ROI, which a donut cannot show at once. The list shows the top 5 by value, collapses the tail into one "Rest" row and expands to a scroll box on demand: a 40-cluster group otherwise buries the toggle under a full screen of 6px bars. Shares come from the precomputed `sharePercent` (`portfolioGroups.js`), not from re-summing `totalValue`, so unpriced clusters cannot make the rows add up to more than the group. The rows are **clusters, not positions** — the noun matters, because the same card header prints a much larger position count ("21 CLUSTER · 90 POSITIONEN").
+- **Exclusion is confirmed on mobile too**, through the existing `ExcludeInvestmentDialog` the desktop inspector already uses, rather than firing on the button press. Exclusion silently removes the position from portfolio value, ROI and every evaluation, and on a phone that button sits under a thumb that is already scrolling. Reusing the desktop dialog rather than building the design's bespoke sheet keeps one wording for one decision.
+
+### 5.2.1 Mobile screens still blocked on data
+
+`Mobile Final.dc.html` contains three elements that are deliberately rendered inert and `SoonBadge`-marked rather than built, because no read path exists for them. They are not oversights and must not be filled with invented rows:
+
+- the watchlist card's target price, distance bar and alert bell (needs `alert_price_usd` end to end — see §5.3),
+- the dashboard's "Letzte Aktivität" timeline (`operations_log` has no read path — see §5.1),
+- the search filter sheet's price range and "Nur Items im Bestand" (`searchWatchlistItems` takes only `itemType`/`wear`/`sortBy` — see §5.4).
 
 ### 5.3 Mobile watchlist (below `md`)
+
+Category text and the category filter chips go through `resolveItemCategory` like the inventory's, but the watchlist reaches it by a different route and lands in a weaker fallback. `WatchlistRepository::findAll` joins `items` and selected only the legacy `it.type` column, which carries the same defect as `investments.type` (it holds `'skin'` for most containers, `'other'` for plenty of skins). It now also selects `it.item_type` / `it.market_type_label`, which `WatchlistService` passes into `WatchlistItemDto` as `catalogItemType` / `marketTypeLabel` (both nullable with defaults, so existing positional construction is unaffected).
+
+**Until a server carrying those fields is deployed the watchlist still miscategorises**, because — unlike the enriched investment rows — a watchlist row has no `marketTypeLabel` to fall back to and drops all the way to `type`. The desktop merge needs no change: it spreads the upstream row over the local one, so the fields appear on their own once the server sends them.
 
 The card list drops `ItemListRow` for the design's watch card: thumb, name, type, and a right column of live price, sparkline and a 7-day delta pill. Category and Zeitraum chips are duplicated inline, since both live in the desktop-only `FilterSidebar`, and the sort becomes one cycling button (skipping `soon` options, so cycling cannot land on a sort that will not run).
 

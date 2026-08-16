@@ -5,6 +5,8 @@ import { Skeleton } from "./ui/skeleton";
 import { PortfolioChart } from "./PortfolioChart";
 import { AlignLeft, Bell, ChevronDown, List, Trash2 } from "lucide-react";
 import { ItemThumb } from "./ui/item-thumb";
+import { ItemName } from "./ui/item-name.jsx";
+import { resolveItemCategory, resolveItemCategorySingular } from "../lib/portfolioCalculations.js";
 import { Sparkline } from "./ui/data-display";
 import {
   GridTable,
@@ -346,9 +348,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const watchlistCategories = useMemo(() => {
     const seen = new Map();
     watchlistItems.forEach((item) => {
-      const key = String(item?.type || "").trim().toLowerCase();
+      const key = resolveItemCategory(item).toLowerCase();
       if (!seen.has(key)) {
-        seen.set(key, { key, label: String(item?.type || "").trim() || "Ohne Typ", count: 0 });
+        seen.set(key, { key, label: resolveItemCategory(item), count: 0 });
       }
       seen.get(key).count += 1;
     });
@@ -373,7 +375,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     }
     if (activeCategory !== WATCHLIST_ALL_CATEGORIES) {
       scoped = scoped.filter(
-        (item) => String(item?.type || "").trim().toLowerCase() === activeCategory,
+        (item) => resolveItemCategory(item).toLowerCase() === activeCategory,
       );
     }
     return sortWatchlistItems(scoped, sortKey, sortDirection);
@@ -950,7 +952,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                               {item.name}
                             </span>
                             <span className="mt-[3px] flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                              <span className="truncate">{item.type || "Item"}</span>
+                              <span className="truncate">{resolveItemCategorySingular(item)}</span>
                               {hasItemBuyOrder ? (
                                 <span
                                   title="Offene CSFloat-Buyorder"
@@ -1124,9 +1126,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                         className="size-[38px] shrink-0 rounded-[9px]"
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13.5px] font-bold">{item.name}</span>
+                        <ItemName name={item.name} nameClassName="text-[13.5px] font-bold" />
                         <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                          {item.type || "Item"}
+                          {resolveItemCategorySingular(item)}
                         </span>
                       </span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
@@ -1192,7 +1194,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     title={selectedItemWithBuyOrderRows.name}
                     // "Beobachtet seit" lives in the stat rows below; repeating
                     // it here only truncated the line.
-                    meta={selectedItemWithBuyOrderRows.type || "Item"}
+                    meta={resolveItemCategorySingular(selectedItemWithBuyOrderRows)}
                     onClose={() => setSelectedItem(null)}
                   />
 

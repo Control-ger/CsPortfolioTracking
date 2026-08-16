@@ -14,7 +14,12 @@ final class WatchlistItemDto
         public readonly ?string $priceSource,
         public readonly ?float $priceChange,
         public readonly ?float $priceChangePercent,
-        public readonly array $priceHistory
+        public readonly array $priceHistory,
+        // Catalogue classification. `type` above is the legacy `items.type`
+        // column and is unreliable (it holds 'skin' for most containers), so
+        // consumers categorise on these instead.
+        public readonly ?string $catalogItemType = null,
+        public readonly ?string $marketTypeLabel = null
     ) {
     }
 
@@ -33,6 +38,8 @@ final class WatchlistItemDto
             'id' => $this->id,
             'name' => $this->name,
             'type' => $this->type,
+            'catalogItemType' => $this->catalogItemType,
+            'marketTypeLabel' => $this->marketTypeLabel,
             'imageUrl' => $this->imageUrl,
             'currentPrice' => $this->currentPrice,
             'priceSource' => $this->priceSource,

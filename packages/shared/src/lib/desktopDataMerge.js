@@ -187,6 +187,7 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
       freshnessStatus: upstream.freshnessStatus ?? row.freshnessStatus,
       freshnessLabel: upstream.freshnessLabel ?? row.freshnessLabel,
       marketTypeLabel: upstream.marketTypeLabel ?? row.marketTypeLabel,
+      catalogItemType: upstream.catalogItemType ?? row.catalogItemType,
       wearName: upstream.wearName ?? row.wearName,
       priceScope: upstream.priceScope ?? row.priceScope ?? "item",
       priceStrategy: upstream.priceStrategy ?? row.priceStrategy ?? null,

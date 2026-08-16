@@ -4,6 +4,7 @@ import { BaseModal } from "@shared/components/BaseModal";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
 import { ItemDetailPanel } from "@shared/components/ItemDetailPanel";
 import { Badge } from "@shared/components/ui/badge";
+import { ExcludeInvestmentDialog } from "@shared/components/ExcludeInvestmentDialog";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 const formatSignedPrice = (value, formatPrice) =>
@@ -114,6 +115,8 @@ export function ItemDetailsModal({
 }) {
   const { currency, formatPrice } = useCurrency();
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
+  const [isExcludeLoading, setIsExcludeLoading] = useState(false);
   const excludeEnabled = canToggleExclude && typeof onToggleExclude === "function";
   const bucketToggleEnabled = canToggleExclude && typeof onBucketChange === "function";
 
@@ -141,13 +144,23 @@ export function ItemDetailsModal({
     );
   }
 
-  const handleToggleExclude = async () => {
+  // Exclusion is confirmed here exactly as it is in the desktop inspector: it
+  // silently removes the position from portfolio value, ROI and every
+  // evaluation, and on a phone the button sits under a thumb that is already
+  // scrolling. Same dialog component, so the wording cannot drift apart.
+  const handleExcludeConfirm = async (nextExcluded) => {
     if (!excludeEnabled) {
       return;
     }
-
-    const currentExcluded = Boolean(item.excluded ?? item.isExcluded);
-    await onToggleExclude(item.id, !currentExcluded, item.sourceInvestmentIds || []);
+    setIsExcludeLoading(true);
+    try {
+      await onToggleExclude(item.id, nextExcluded, item.sourceInvestmentIds || []);
+      setExcludeDialogOpen(false);
+    } catch (error) {
+      console.error("Failed to toggle exclude:", error);
+    } finally {
+      setIsExcludeLoading(false);
+    }
   };
 
   const handleToggleBucket = async () => {
@@ -353,7 +366,7 @@ export function ItemDetailsModal({
         {excludeEnabled && (
           <div className="sticky bottom-0 z-10 -mx-3 border-t border-border/70 bg-background/92 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-4 sm:backdrop-blur-0">
             <button
-              onClick={handleToggleExclude}
+              onClick={() => setExcludeDialogOpen(true)}
               className={`flex h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
                 (item.excluded ?? item.isExcluded)
                   ? "border-success/30 bg-success/10 text-success hover:bg-success/15"
@@ -389,6 +402,17 @@ export function ItemDetailsModal({
           </div>
         )}
       </div>
+
+      <ExcludeInvestmentDialog
+        isOpen={excludeDialogOpen}
+        onOpenChange={setExcludeDialogOpen}
+        investment={{
+          name: item.name,
+          excluded: Boolean(item.excluded ?? item.isExcluded),
+        }}
+        onConfirm={handleExcludeConfirm}
+        isLoading={isExcludeLoading}
+      />
     </BaseModal>
   );
 }

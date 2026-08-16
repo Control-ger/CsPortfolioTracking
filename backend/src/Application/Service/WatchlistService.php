@@ -77,7 +77,9 @@ final class WatchlistService
                 priceSource: is_string($priceSource) ? $priceSource : null,
                 priceChange: $priceChange,
                 priceChangePercent: $priceChangePercent,
-                priceHistory: $priceHistoryWithGrowth
+                priceHistory: $priceHistoryWithGrowth,
+                catalogItemType: isset($item['item_type']) ? (string) $item['item_type'] : null,
+                marketTypeLabel: isset($item['market_type_label']) ? (string) $item['market_type_label'] : null
             );
 
             $result[] = $dto->toArray();

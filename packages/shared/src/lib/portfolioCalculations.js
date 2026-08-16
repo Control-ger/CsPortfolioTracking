@@ -371,9 +371,9 @@ export function buildPortfolioCompositionFromRows(rows = [], options = {}) {
 /**
  * German label per catalogue category, for the mobile allocation bar.
  *
- * The design's legend names weapon classes (Messer, Rifles, Handschuhe). Rows
- * carry no weapon class — `type` is the coarse catalogue kind — so the bar
- * groups by what the data actually knows instead of inventing a finer split.
+ * Fallback only — see `resolveAllocationLabel`. `investments.type` is supplied
+ * by whichever importer created the row and defaults to `"skin"`, so it says
+ * "skin" for Fever Case and "case" for Kilowatt Case in the same portfolio.
  */
 const ALLOCATION_LABELS = {
   skin: "Skins",
@@ -387,6 +387,82 @@ const ALLOCATION_LABELS = {
   agent: "Agents",
   sticker_capsule: "Kapseln",
 };
+
+/**
+ * Label per `MarketItemClassifier` key (`catalogItemType`), the catalogue's own
+ * authoritative kind. These are item kinds, not weapon classes: every weapon
+ * skin is one category, because "Rifles / SMGs / Pistolen" splits the same kind
+ * of asset into slices that answer no question the dashboard is asking.
+ */
+const CATALOG_TYPE_ALLOCATION_LABELS = {
+  skin: "Skins",
+  case: "Cases",
+  container: "Cases",
+  sticker_capsule: "Kapseln",
+  souvenir_package: "Souvenir-Pakete",
+  sticker: "Sticker",
+  patch: "Patches",
+  graffiti: "Graffiti",
+  agent: "Agents",
+  charm: "Charms",
+  music_kit: "Musik-Kits",
+  key: "Keys",
+  tool: "Tools",
+};
+
+/**
+ * Fallback kind, matched against the tail noun of `marketTypeLabel`
+ * ("Base Grade Container", "Classified Sniper Rifle", "Exotic Sticker").
+ *
+ * Coarser than the catalogue key by necessity: Steam types cases, capsules and
+ * souvenir packages all as "Container", so this path cannot tell them apart and
+ * calls all three "Cases". Every weapon class collapses into "Skins".
+ */
+const MARKET_TYPE_ALLOCATION_RULES = [
+  [/\b(container|case|capsule|package)\b/i, "Cases"],
+  [/\bsticker\b/i, "Sticker"],
+  [/\bpatch\b/i, "Patches"],
+  [/\bgraffiti\b/i, "Graffiti"],
+  [/\bagent\b/i, "Agents"],
+  [/\bcharm\b/i, "Charms"],
+  [/\bmusic kit\b/i, "Musik-Kits"],
+  [/\b(rifle|smg|pistol|shotgun|machinegun|knife|knives|bayonet|karambit|gloves|hand wraps|equipment)\b/i, "Skins"],
+];
+
+/**
+ * Catalogue category for a portfolio row — the allocation bar's grouping, the
+ * inventory card's type chip and the inventory category filter all use this, so
+ * the three cannot disagree about what an item is.
+ *
+ * Never `row.type`: that is importer-supplied and defaults to `"skin"`, so one
+ * real portfolio carried `"skin"` for Fever Case and `"case"` for Kilowatt Case
+ * and the bar rendered 94 % containers as "Skins · 100 %".
+ *
+ * Preference order is authority order — the catalogue's own classifier key
+ * first, the Steam market type second, the importer's guess only as a last
+ * resort. `catalogItemType` needs a server that returns it; until that ships,
+ * the `marketTypeLabel` path produces the same labels except that cases,
+ * capsules and souvenir packages all land in "Cases".
+ */
+export function resolveItemCategory(row) {
+  const catalogType = String(row?.catalogItemType || "").trim().toLowerCase();
+  if (catalogType && CATALOG_TYPE_ALLOCATION_LABELS[catalogType]) {
+    return CATALOG_TYPE_ALLOCATION_LABELS[catalogType];
+  }
+
+  const marketType = String(row?.marketTypeLabel || "").trim();
+  if (marketType) {
+    const rule = MARKET_TYPE_ALLOCATION_RULES.find(([pattern]) => pattern.test(marketType));
+    if (rule) {
+      return rule[1];
+    }
+  }
+
+  return ALLOCATION_LABELS[String(row?.type || "").trim().toLowerCase()] || "Sonstige";
+}
+
+/** Categories shown before the tail is folded into one "Sonstige" slice. */
+const ALLOCATION_MAX_CATEGORIES = 6;
 
 /**
  * Value share per category, largest first, for the stacked allocation bar.
@@ -411,7 +487,7 @@ export function buildPortfolioAllocationByType(rows = [], options = {}) {
       return;
     }
     totalValue += currentValue;
-    const label = ALLOCATION_LABELS[String(row.type || "").trim().toLowerCase()] || "Sonstige";
+    const label = resolveItemCategory(row);
     groups.set(label, (groups.get(label) || 0) + currentValue);
   });
 
@@ -419,13 +495,27 @@ export function buildPortfolioAllocationByType(rows = [], options = {}) {
     return [];
   }
 
-  return Array.from(groups.entries())
-    .map(([label, value]) => ({
-      label,
-      value,
-      percentage: Number(((value / totalValue) * 100).toFixed(1)),
-    }))
+  const ranked = Array.from(groups.entries())
+    .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
+
+  // A real portfolio produces a long tail of sub-percent classes. Left alone
+  // they render as invisible slivers with a legend entry each, which is the
+  // clutter the "Sticker · 0,0 %" row came from. One "Sonstige" slice keeps the
+  // shares honest without a legend that outgrows the bar.
+  const head = ranked.slice(0, ALLOCATION_MAX_CATEGORIES);
+  const tail = ranked.slice(ALLOCATION_MAX_CATEGORIES);
+  if (tail.length > 0) {
+    head.push({
+      label: "Sonstige",
+      value: tail.reduce((sum, entry) => sum + entry.value, 0),
+    });
+  }
+
+  return head.map((entry) => ({
+    ...entry,
+    percentage: Number(((entry.value / totalValue) * 100).toFixed(1)),
+  }));
 }
 
 /**
@@ -471,4 +561,23 @@ export function buildPortfolioHistoryFromSnapshots(snapshots = []) {
       growthPercent: investedValue > 0 ? ((totalValue - investedValue) / investedValue) * 100 : 0,
     };
   });
+}
+
+/** Singular form, for a chip that labels one row rather than a bucket. */
+const CATEGORY_SINGULAR = {
+  Skins: "Skin",
+  Cases: "Case",
+  Kapseln: "Kapsel",
+  "Souvenir-Pakete": "Souvenir-Paket",
+  Patches: "Patch",
+  Agents: "Agent",
+  Charms: "Charm",
+  "Musik-Kits": "Musik-Kit",
+  Keys: "Key",
+  Tools: "Tool",
+};
+
+export function resolveItemCategorySingular(row) {
+  const label = resolveItemCategory(row);
+  return CATEGORY_SINGULAR[label] ?? label;
 }
