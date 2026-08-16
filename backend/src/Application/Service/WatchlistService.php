@@ -67,6 +67,7 @@ final class WatchlistService
 
             $priceHistory = $itemId > 0 ? ($historyMap[$itemId] ?? []) : [];
             $priceHistoryWithGrowth = $this->enrichHistoryWithGrowthPercent($priceHistory);
+            $alertFields = $this->decodeAlertFields($item);
 
             $dto = new WatchlistItemDto(
                 id: (int) $item['id'],
@@ -79,13 +80,122 @@ final class WatchlistService
                 priceChangePercent: $priceChangePercent,
                 priceHistory: $priceHistoryWithGrowth,
                 catalogItemType: isset($item['item_type']) ? (string) $item['item_type'] : null,
-                marketTypeLabel: isset($item['market_type_label']) ? (string) $item['market_type_label'] : null
+                marketTypeLabel: isset($item['market_type_label']) ? (string) $item['market_type_label'] : null,
+                alertPriceUsd: $alertFields['alertPriceUsd'],
+                alertDirection: $alertFields['alertDirection'],
+                alertAnchorPriceUsd: $alertFields['alertAnchorPriceUsd'],
+                alertTriggeredAt: $alertFields['alertTriggeredAt']
             );
 
             $result[] = $dto->toArray();
         }
 
         return $result;
+    }
+
+    /**
+     * Split the stored target into the DTO's four named arguments.
+     *
+     * The price lives in its own column (it is the one field the schema had all
+     * along); direction, anchor and trigger timestamp ride in `alert_meta_json`,
+     * because they are meaningless on their own and never queried.
+     */
+    private function decodeAlertFields(array $row): array
+    {
+        $rawPrice = $row['alert_price_usd'] ?? null;
+        $alertPriceUsd = is_numeric($rawPrice) && (float) $rawPrice > 0
+            ? round((float) $rawPrice, 2)
+            : null;
+
+        if ($alertPriceUsd === null) {
+            return [
+                'alertPriceUsd' => null,
+                'alertDirection' => 'below',
+                'alertAnchorPriceUsd' => null,
+                'alertTriggeredAt' => null,
+            ];
+        }
+
+        $meta = [];
+        if (is_string($row['alert_meta_json'] ?? null) && trim($row['alert_meta_json']) !== '') {
+            $decoded = json_decode($row['alert_meta_json'], true);
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        }
+
+        $anchor = $meta['alertAnchorPriceUsd'] ?? null;
+        $triggeredAt = trim((string) ($meta['alertTriggeredAt'] ?? ''));
+
+        return [
+            'alertPriceUsd' => $alertPriceUsd,
+            'alertDirection' => strtolower(trim((string) ($meta['alertDirection'] ?? ''))) === 'above'
+                ? 'above'
+                : 'below',
+            'alertAnchorPriceUsd' => is_numeric($anchor) && (float) $anchor > 0
+                ? round((float) $anchor, 2)
+                : null,
+            'alertTriggeredAt' => $triggeredAt !== '' ? $triggeredAt : null,
+        ];
+    }
+
+    /**
+     * Set or clear a watchlist item's target price.
+     *
+     * A null price clears the whole alert — anchor and trigger timestamp go with
+     * it, otherwise a stale anchor would re-arm the alert the next time a target
+     * is set. Returns the payload the sync layer should publish.
+     */
+    public function updateTarget(
+        int $userId,
+        int $watchlistId,
+        ?float $alertPriceUsd,
+        ?string $alertDirection,
+        ?float $alertAnchorPriceUsd
+    ): array {
+        $this->watchlistRepository->ensureTable();
+
+        $row = $this->watchlistRepository->findById($watchlistId, $userId);
+        if ($row === null) {
+            throw new \RuntimeException('Watchlist item not found.');
+        }
+
+        $normalizedPrice = $alertPriceUsd !== null && $alertPriceUsd > 0
+            ? round($alertPriceUsd, 2)
+            : null;
+        $normalizedDirection = strtolower(trim((string) $alertDirection)) === 'above' ? 'above' : 'below';
+        $normalizedAnchor = $normalizedPrice !== null
+            && $alertAnchorPriceUsd !== null
+            && $alertAnchorPriceUsd > 0
+                ? round($alertAnchorPriceUsd, 2)
+                : null;
+
+        $metaJson = $normalizedPrice === null
+            ? null
+            : json_encode([
+                'alertDirection' => $normalizedDirection,
+                'alertAnchorPriceUsd' => $normalizedAnchor,
+                // Setting a target always re-arms it: the user is stating a new
+                // intent, and a carried-over timestamp would swallow the first
+                // crossing of the new target.
+                'alertTriggeredAt' => null,
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        $this->watchlistRepository->updateTarget($watchlistId, $userId, $normalizedPrice, $metaJson);
+
+        return [
+            'id' => (string) $watchlistId,
+            'userId' => (string) $userId,
+            'itemId' => (string) ($row['item_id'] ?? ''),
+            'name' => (string) ($row['market_hash_name'] ?? $row['name'] ?? ''),
+            'marketHashName' => (string) ($row['market_hash_name'] ?? $row['name'] ?? ''),
+            'serverId' => $watchlistId,
+            'alertPriceUsd' => $normalizedPrice,
+            'alertDirection' => $normalizedDirection,
+            'alertAnchorPriceUsd' => $normalizedAnchor,
+            'alertTriggeredAt' => null,
+            'updatedAt' => gmdate('c'),
+        ];
     }
 
     public function searchAvailableItems(

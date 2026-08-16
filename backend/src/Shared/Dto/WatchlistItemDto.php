@@ -19,7 +19,14 @@ final class WatchlistItemDto
         // column and is unreliable (it holds 'skin' for most containers), so
         // consumers categorise on these instead.
         public readonly ?string $catalogItemType = null,
-        public readonly ?string $marketTypeLabel = null
+        public readonly ?string $marketTypeLabel = null,
+        // Zielpreis. USD, unlike `currentPrice` above — that one is already
+        // converted to EUR by PriceHistoryRepository. The client compares the
+        // target against the USD price history, never against `currentPrice`.
+        public readonly ?float $alertPriceUsd = null,
+        public readonly string $alertDirection = 'below',
+        public readonly ?float $alertAnchorPriceUsd = null,
+        public readonly ?string $alertTriggeredAt = null
     ) {
     }
 
@@ -48,6 +55,10 @@ final class WatchlistItemDto
             'priceHistory' => $this->priceHistory,
             'trend' => $trend,
             'changeLabel' => $changeLabel,
+            'alertPriceUsd' => $this->alertPriceUsd,
+            'alertDirection' => $this->alertDirection,
+            'alertAnchorPriceUsd' => $this->alertAnchorPriceUsd,
+            'alertTriggeredAt' => $this->alertTriggeredAt,
         ];
     }
 }

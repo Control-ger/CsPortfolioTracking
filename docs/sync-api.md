@@ -72,6 +72,13 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
 - Konflikte werden markiert und nicht still ueberschrieben.
 - Business-Logik bleibt in PHP bzw. `packages/shared`.
 - `investments.payload.bucket` (`investment`|`inventory`) wird als fachliche Zuordnung mitgesynct.
+- Watchlist-Zielpreise (`alertPriceUsd`, `alertDirection`, `alertAnchorPriceUsd`,
+  `alertTriggeredAt`) werden mitgesynct. Serverseitig landet der Preis in
+  `watchlist.alert_price_usd`, die drei Metafelder in `watchlist.alert_meta_json`.
+  `SyncEntityService::mergeTargetFieldsForWatchlistSync` traegt bestehende Werte
+  vor, wenn der eingehende Payload die Felder nicht nennt — ohne diesen Merge
+  wuerde jeder Push eines aelteren Clients einen auf einem anderen Geraet
+  gesetzten Zielpreis loeschen.
 
 ## Implementierungsstand (2026-05-05)
 

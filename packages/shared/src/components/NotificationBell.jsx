@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Bell, Download, Trash2, X } from "lucide-react";
+import { AlertTriangle, Bell, Download, Target, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -109,6 +109,10 @@ function buildDownloadProgressEntry(progress) {
     message: describeDownloadProgress(progress),
     payload: { state: "downloading", version: progress.version || null },
   };
+}
+
+function isTargetNotification(entry) {
+  return String(entry?.category || "").trim().toLowerCase() === "price_target";
 }
 
 function isErrorNotification(entry) {
@@ -300,6 +304,11 @@ export function NotificationBell({
       return;
     }
 
+    if (category === "price_target") {
+      navigate("/watchlist", { replace: true });
+      return;
+    }
+
     if (category === "cs_update" || category === "cs_updates") {
       navigate("/cs-updates", { replace: true });
     }
@@ -387,6 +396,10 @@ export function NotificationBell({
                     <span className="mt-0.5 shrink-0">
                       {isError ? (
                         <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                      ) : isTargetNotification(entry) ? (
+                        // A reached target is the one entry the user acts on by
+                        // price, not by status — the dot says nothing about it.
+                        <Target className="h-3.5 w-3.5 text-primary" />
                       ) : (
                         <span className="inline-block h-2 w-2 rounded-full bg-primary" />
                       )}

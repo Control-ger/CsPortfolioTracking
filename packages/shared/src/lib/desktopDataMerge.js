@@ -21,6 +21,7 @@ import {
 } from "./portfolioCalculations.js";
 
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
+import { normalizeWatchlistTargetFields } from "./watchlistTargets.js";
 
 /** Desktop LocalStore accessor */
 export function getDesktopLocalStore() {
@@ -320,6 +321,16 @@ export function enrichDesktopWatchlistWithUpstreamMetrics(localItems = [], upstr
       matchedByNameCount += 1;
     }
 
+    // The upstream spread wins by default, which is right for prices and wrong
+    // for the target price: desktop is the write owner, and an upstream row from
+    // a server that does not know the field yet carries `alertPriceUsd: null` —
+    // that would clear the user's target on every watchlist load. Local value
+    // first, upstream only as a fallback (a target set from the web before this
+    // client has pulled it). Same guard as `preservePortfolioGroupColors`.
+    const localTarget = normalizeWatchlistTargetFields(localItem);
+    const upstreamTarget = normalizeWatchlistTargetFields(upstreamItem);
+    const alertPriceUsd = localTarget.alertPriceUsd ?? upstreamTarget.alertPriceUsd;
+
     return {
       ...localItem,
       ...upstreamItem,
@@ -328,6 +339,16 @@ export function enrichDesktopWatchlistWithUpstreamMetrics(localItems = [], upstr
       userId: localItem.userId,
       itemId: localItem.itemId ?? upstreamItem.itemId ?? null,
       imageUrl: localItem.imageUrl || upstreamItem.imageUrl || null,
+      alertPriceUsd,
+      alertDirection: localTarget.alertPriceUsd !== null
+        ? localTarget.alertDirection
+        : upstreamTarget.alertDirection,
+      alertAnchorPriceUsd: alertPriceUsd === null
+        ? null
+        : localTarget.alertAnchorPriceUsd ?? upstreamTarget.alertAnchorPriceUsd,
+      alertTriggeredAt: alertPriceUsd === null
+        ? null
+        : localTarget.alertTriggeredAt ?? upstreamTarget.alertTriggeredAt,
     };
   });
 

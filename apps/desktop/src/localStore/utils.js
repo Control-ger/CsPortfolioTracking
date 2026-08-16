@@ -236,6 +236,44 @@ export function normalizeOverpayFloor(value) {
   return Number(numeric.toFixed(2));
 }
 
+/**
+ * The four target-price fields of a watchlist item, normalized.
+ *
+ * Deliberately duplicated from `packages/shared/src/lib/watchlistTargets.js`:
+ * the Electron main process has no `@shared` alias (that is a Vite resolution),
+ * so the local store cannot import the renderer helper. Same arrangement as the
+ * preference normalization, which exists in three places for the same reason —
+ * if one side changes, the other must follow.
+ */
+export function normalizeWatchlistTargetFields(source = {}) {
+  const price = normalizeOverpayFloor(source?.alertPriceUsd ?? source?.alert_price_usd);
+  if (price === null) {
+    // No target means no meta: a surviving anchor would silently re-arm the
+    // alert the next time a target is set.
+    return {
+      alertPriceUsd: null,
+      alertDirection: "below",
+      alertAnchorPriceUsd: null,
+      alertTriggeredAt: null,
+    };
+  }
+
+  const triggeredAt = String(source?.alertTriggeredAt ?? source?.alert_triggered_at ?? "").trim();
+
+  return {
+    alertPriceUsd: price,
+    alertDirection:
+      String(source?.alertDirection ?? source?.alert_direction ?? "").trim().toLowerCase() === "above"
+        ? "above"
+        : "below",
+    alertAnchorPriceUsd: normalizeOverpayFloor(
+      source?.alertAnchorPriceUsd ?? source?.alert_anchor_price_usd,
+    ),
+    alertTriggeredAt:
+      triggeredAt && Number.isFinite(Date.parse(triggeredAt)) ? triggeredAt : null,
+  };
+}
+
 export function normalizeNameForMatching(value) {
   const normalized = normalizeMarketName(value)
     .replace(/\bstattrak\u2122?\b/g, " ")

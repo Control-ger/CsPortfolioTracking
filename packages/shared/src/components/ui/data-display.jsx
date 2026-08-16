@@ -186,6 +186,44 @@ function RoiMeter({ value, full = 60, className, ...props }) {
 }
 
 /**
+ * Left-anchored progress bar towards a target price.
+ *
+ * Sibling of `RoiMeter`, but anchored left rather than centred: ROI has a sign
+ * and needs a midpoint, progress towards a target only ever runs 0 → 100.
+ *
+ * `value` of null means "not computable" (no anchor price, or no live price) and
+ * renders the empty track. That is deliberately distinct from `0`, which is a
+ * claim that the price has not moved towards the target at all.
+ */
+function TargetMeter({ value, reached = false, className, ...props }) {
+  const percent = Number(value);
+  const known = Number.isFinite(percent);
+  const width = known ? Math.min(100, Math.max(0, percent)) : 0;
+
+  return (
+    <span
+      className={cn(
+        "relative block h-[5px] w-full shrink-0 overflow-hidden rounded-full bg-surface-2",
+        className,
+      )}
+      role="progressbar"
+      aria-valuenow={known ? Math.round(width) : undefined}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      {...props}
+    >
+      <span
+        className={cn(
+          "absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ease-out",
+          reached ? "bg-success" : "bg-primary",
+        )}
+        style={{ width: `${width.toFixed(1)}%` }}
+      />
+    </span>
+  );
+}
+
+/**
  * Numbered pager. Renders nothing for a single page. The number strip is capped
  * at `window` entries and slides with the current page, so a 40-page result set
  * does not blow out the row.
@@ -240,4 +278,4 @@ function Pagination({ page, pageCount, onPageChange, window: windowSize = 5, cla
   );
 }
 
-export { SectionLabel, FieldLabel, StatTile, MetaRow, Sparkline, RoiMeter, Pagination };
+export { SectionLabel, FieldLabel, StatTile, MetaRow, Sparkline, RoiMeter, TargetMeter, Pagination };

@@ -226,6 +226,12 @@ Query:
 
 Returns rows with price/trend fields and optional `meta.warnings[]`.
 
+Target-price fields on every row:
+- `alertPriceUsd`: float|null — the target. **USD**, unlike `currentPrice`, which is already converted to EUR.
+- `alertDirection`: `"below"` (buy target) | `"above"` (sell target)
+- `alertAnchorPriceUsd`: float|null — live price when the target was set; the progress bar's denominator
+- `alertTriggeredAt`: ISO string|null — set when the target was crossed, cleared when the price fell back
+
 ### `GET /watchlist/search`
 
 Query:
@@ -248,6 +254,23 @@ Body:
 
 Body:
 - `items: array`
+
+### `PUT /watchlist/{id}/target`
+
+Sets or clears a watchlist item's target price.
+
+Body:
+- `alertPriceUsd`: float|null — positive USD amount, or `null` to clear the target
+- `alertDirection?`: `"below"` (default) | `"above"`
+- `alertAnchorPriceUsd?`: float|null — live price at the time of setting
+
+Returns the sync payload (`alertPriceUsd`, `alertDirection`, `alertAnchorPriceUsd`,
+`alertTriggeredAt`, `serverId`, `updatedAt`). Clearing the price also clears anchor and
+trigger timestamp; saving a target always re-arms it (`alertTriggeredAt: null`).
+
+Errors:
+- `INVALID_TARGET_PRICE` (400) — `alertPriceUsd` present but not a positive number, or `alertAnchorPriceUsd` not numeric
+- `WATCHLIST_NOT_FOUND` (404) — no such watchlist row for this user
 
 ### `DELETE /watchlist/{id}`
 

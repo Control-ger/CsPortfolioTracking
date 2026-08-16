@@ -4,6 +4,7 @@ import {
   serialize,
   deserialize,
   normalizeLocalUserId,
+  normalizeWatchlistTargetFields,
 } from "./utils.js";
 
 export function mapWatchlistItem(row) {
@@ -14,6 +15,9 @@ export function mapWatchlistItem(row) {
 
   return {
     ...payload,
+    // After the payload spread, so a half-written or legacy target in the blob
+    // reaches every consumer in one shape instead of raw.
+    ...normalizeWatchlistTargetFields(payload),
     id: row.id,
     serverId: row.server_id,
     itemId: row.item_id,
@@ -255,7 +259,12 @@ export function createWatchlistStore(db) {
         itemId: input.itemId ? String(input.itemId) : null,
         userId: normalizedUserId,
         name,
-        type: String(input.type || "skin"),
+        // Falls back to the stored type, not straight to "skin": this upsert is
+        // also the partial-update path (target price, alert re-arm), and those
+        // callers pass no type. Defaulting to "skin" there would silently
+        // reclassify every case, capsule and sticker on the next write — the
+        // exact categorisation defect described in architecture-overview §5.1.
+        type: String(input.type || existing?.type || "skin"),
         payload: serialize({
           ...payload,
           imageUrl: imageUrl || undefined,

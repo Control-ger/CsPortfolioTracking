@@ -193,9 +193,8 @@ The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseM
 
 ### 5.2.1 Mobile screens still blocked on data
 
-`Mobile Final.dc.html` contains three elements that are deliberately rendered inert and `SoonBadge`-marked rather than built, because no read path exists for them. They are not oversights and must not be filled with invented rows:
+`Mobile Final.dc.html` contains two remaining elements that are deliberately rendered inert and `SoonBadge`-marked rather than built, because no read path exists for them. They are not oversights and must not be filled with invented rows:
 
-- the watchlist card's target price, distance bar and alert bell (needs `alert_price_usd` end to end — see §5.3),
 - the dashboard's "Letzte Aktivität" timeline (`operations_log` has no read path — see §5.1),
 - the search filter sheet's price range and "Nur Items im Bestand" (`searchWatchlistItems` takes only `itemType`/`wear`/`sortBy` — see §5.4).
 
@@ -208,7 +207,19 @@ Category text and the category filter chips go through `resolveItemCategory` lik
 The card list drops `ItemListRow` for the design's watch card: thumb, name, type, and a right column of live price, sparkline and a 7-day delta pill. Category and Zeitraum chips are duplicated inline, since both live in the desktop-only `FilterSidebar`, and the sort becomes one cycling button (skipping `soon` options, so cycling cannot land on a sort that will not run).
 
 - **The delta pill is always `d7` and is labelled "7T".** The Zeitraum chips govern the sparkline window only — the same split the desktop Verlauf column uses — and there is no `d90` field, so a pill quietly falling back to `d7` under a "90 Tage" chip would claim a window it is not showing.
-- **The design's target-price half of the card is absent, and cannot be built yet.** `SyncEntityService::syncWatchlist` writes `alert_price_usd` as a literal `NULL` on insert *and* re-applies it via `ON DUPLICATE KEY UPDATE`, so a value written by any other path is wiped on the next sync; the desktop SQLite watchlist has no such column at all. Target price, distance text, progress bar and the alert bell all depend on it, as do the `soon`-marked "Mit Alarm" scope and "Abstand zum Ziel" sort. Reviving them means a desktop column, a sync payload field and that INSERT — not a UI change. The row is rendered inert and `SoonBadge`-marked rather than omitted, matching the desktop Zielpreis column.
+- **The card's target-price half is live** — target, remaining distance and progress bar — as are the "Mit Alarm" scope and the "Abstand zum Ziel" sort. See §5.3.1.
+
+#### 5.3.1 Zielpreis (target price)
+
+A watchlist target is four fields that are only meaningful together: `alertPriceUsd`, `alertDirection` (`below` = buy target, `above` = sell target), `alertAnchorPriceUsd` and `alertTriggeredAt`. They live in the desktop `watchlist_items.payload` blob (no DDL, like the investment overpay fields) and, server-side, in `watchlist.alert_price_usd` plus a new `alert_meta_json` column. Five points are load-bearing:
+
+- **`alert_price_usd` used to be written as a literal `NULL`** on insert *and* re-applied through `ON DUPLICATE KEY UPDATE`, so any value from another path was wiped on the next sync. `SyncEntityService::applyWatchlistChange` now reads the payload, and `mergeTargetFieldsForWatchlistSync` carries existing values forward when the incoming payload omits them — the same contract as `mergeExcludedFlagsForInvestmentSync`. Without that merge, one push from a client that predates the feature clears a target set on another device.
+- **The direction is stored, not derived.** It is *defaulted* from the price relation at save time (`suggestTargetDirection`), but deriving it at evaluation time would silently flip a sell target into a buy target as soon as the price crossed it.
+- **The anchor is the progress bar's denominator.** "How far has the price travelled" is only answerable against where it started, so the live price is captured once at save time. Without an anchor the bar renders empty (`progressPercent: null`) rather than at 0 % — zero is a claim about the price, null is the absence of one.
+- **Comparisons are USD, and never against `currentPrice`.** That field is already EUR (`PriceHistoryRepository` multiplies `price_usd` by `usd_to_eur`), so `resolveWatchlistLivePriceUsd` takes the live price from the USD price history instead. Mixing the two would fire every alert roughly 8 % early. Input is in display currency and converted with `convertToUsd` at the boundary, like the manual buy-price field.
+- **`enrichDesktopWatchlistWithUpstreamMetrics` needs an explicit local-wins line.** It spreads upstream over local, and a server that predates the field sends `alertPriceUsd: null` — that would clear the user's target on every watchlist load. Same guard as `preservePortfolioGroupColors` (§4.1).
+
+Alerts are evaluated in the desktop branch of `fetchWatchlistData` after the upstream merge (the decision lives in `lib/watchlistTargets.js`; the gateway only persists the outcome) and file a `price_target` notification into `sync_notifications`. **Only transitions are written**: `upsertWatchlistItem` flips `dirty=1` and appends to `operations_log`, so writing on every load would generate sync traffic for an unchanged portfolio — and `createNotification`'s dedupe cannot absorb the repeats, because it keys on title+message and the message carries the ever-changing price.
 
 ### 5.4 Mobile search (below `sm`)
 

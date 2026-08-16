@@ -56,6 +56,27 @@ export async function deleteWatchlistItem(id) {
   return request(buildPath(`/api/v1/watchlist/${id}`, userQuery), { method: "DELETE" });
 }
 
+/**
+ * Set or clear a watchlist item's target price (server path).
+ *
+ * `alertPriceUsd: null` clears it. The desktop path does not go through here —
+ * it writes the local store and lets sync push the change; see
+ * `updateWatchlistItemTargetData` in `dataSource.js`.
+ */
+export async function updateWatchlistItemTarget(id, patch = {}) {
+  const userQuery = await resolveCurrentUserQuery();
+  return request(`/api/v1/watchlist/${id}/target`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...userQuery,
+      alertPriceUsd: patch.alertPriceUsd ?? null,
+      alertDirection: patch.alertDirection ?? "below",
+      alertAnchorPriceUsd: patch.alertAnchorPriceUsd ?? null,
+    }),
+  });
+}
+
 export async function searchWatchlistItems(
   query,
   filters = {},

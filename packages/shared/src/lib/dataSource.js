@@ -16,6 +16,7 @@ import {
   fetchPortfolioInvestments as fetchApiPortfolioInvestments,
   fetchWatchlist as fetchApiWatchlist,
   searchWatchlistItems as searchApiWatchlistItems,
+  updateWatchlistItemTarget as updateApiWatchlistItemTarget,
 } from "./apiClient.js";
 
 import { getCurrentUser, isAuthenticated } from "./auth.js";
@@ -24,6 +25,11 @@ import { notifyWatchlistMutated } from "./watchlistMutationBus.js";
 import * as localCache from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
 import { resolveDesktopLocalUserId as resolveDesktopUserId } from "./userIdentity.js";
+import {
+  evaluateWatchlistTargetAlerts,
+  normalizeTargetDirection,
+  normalizeTargetPriceUsd,
+} from "./watchlistTargets.js";
 
 import {
   calculatePortfolioSummary,
@@ -113,6 +119,86 @@ export async function fetchPortfolioData(options = {}) {
   }
 
   return fetchApiPortfolioData({ ...options });
+}
+
+/**
+ * File a notification for every target the price just crossed, and disarm the
+ * ones that fell back.
+ *
+ * Runs after the upstream merge, because only then do the rows carry prices.
+ * The decision of *what* crossed lives in `watchlistTargets.js` — this function
+ * only persists the outcome, so the gateway keeps holding no business logic.
+ *
+ * Writes are strictly per transition: `upsertWatchlistItem` flips `dirty=1` and
+ * appends to `operations_log`, so writing on every load would generate sync
+ * traffic for a portfolio that has not changed.
+ */
+async function applyWatchlistTargetAlerts(items, { localStore, userId }) {
+  const { triggered, cleared } = evaluateWatchlistTargetAlerts(items);
+  if (triggered.length === 0 && cleared.length === 0) {
+    return items;
+  }
+
+  const triggeredAt = new Date().toISOString();
+  const patchedById = new Map();
+
+  for (const { item, target } of triggered) {
+    try {
+      await localStore.upsertWatchlistItem({
+        id: item.id,
+        userId,
+        alertTriggeredAt: triggeredAt,
+      });
+      patchedById.set(item.id, triggeredAt);
+
+      if (typeof localStore.createNotification === "function") {
+        await localStore.createNotification({
+          userId,
+          category: "price_target",
+          title: "Zielpreis erreicht",
+          message:
+            target.direction === "above"
+              ? `${item.name} liegt bei oder über deinem Zielpreis.`
+              : `${item.name} liegt bei oder unter deinem Zielpreis.`,
+          payload: {
+            watchlistItemId: item.id,
+            itemName: item.name || null,
+            targetPriceUsd: target.targetPriceUsd,
+            livePriceUsd: target.livePriceUsd,
+            direction: target.direction,
+          },
+        });
+      }
+    } catch (error) {
+      console.warn("[watchlist-target] could not persist reached target", error);
+    }
+  }
+
+  for (const { item } of cleared) {
+    try {
+      await localStore.upsertWatchlistItem({
+        id: item.id,
+        userId,
+        alertTriggeredAt: null,
+      });
+      patchedById.set(item.id, null);
+    } catch (error) {
+      console.warn("[watchlist-target] could not disarm target", error);
+    }
+  }
+
+  if (patchedById.size === 0) {
+    return items;
+  }
+
+  // Reflect the new arm state in the returned rows rather than re-reading the
+  // store: the caller renders from this array, and a stale `alertTriggeredAt`
+  // would make the very next load fire the same notification again.
+  return items.map((item) =>
+    patchedById.has(item.id)
+      ? { ...item, alertTriggeredAt: patchedById.get(item.id) }
+      : item,
+  );
 }
 
 export async function fetchWatchlistData(options = {}) {
@@ -215,6 +301,8 @@ export async function fetchWatchlistData(options = {}) {
       console.warn("[desktop-watchlist] upstream watchlist metrics unavailable", error);
     }
   }
+
+  items = await applyWatchlistTargetAlerts(items, { localStore, userId });
 
   // No server seeding - user must be logged in to have data
   // If empty, just return empty list (user can add items manually)
@@ -622,6 +710,58 @@ export async function createWatchlistItemData(name, type = "skin") {
 
   notifyWatchlistMutated();
   return created;
+}
+
+/**
+ * Set or clear a watchlist item's target price.
+ *
+ * `alertPriceUsd: null` clears it. The anchor is the live price at the moment of
+ * saving and is supplied by the caller (the UI knows it); it is the denominator
+ * of the progress bar, so it is captured once here rather than re-derived later.
+ */
+export async function updateWatchlistItemTargetData(id, patch = {}) {
+  const alertPriceUsd = normalizeTargetPriceUsd(patch.alertPriceUsd);
+  const alertAnchorPriceUsd = alertPriceUsd === null
+    ? null
+    : normalizeTargetPriceUsd(patch.alertAnchorPriceUsd);
+  const alertDirection = normalizeTargetDirection(patch.alertDirection);
+  const localStore = getDesktopLocalStore();
+
+  if (!localStore) {
+    const updated = await updateApiWatchlistItemTarget(id, {
+      alertPriceUsd,
+      alertDirection,
+      alertAnchorPriceUsd,
+    });
+    notifyWatchlistMutated();
+    return updated;
+  }
+
+  const currentUser = await getCurrentUser();
+  const userId = resolveDesktopUserId(currentUser, 1);
+
+  const updated = unwrapLocalStoreResult(
+    await localStore.upsertWatchlistItem({
+      id,
+      userId,
+      alertPriceUsd,
+      alertDirection,
+      alertAnchorPriceUsd,
+      // Saving a target always re-arms it: the user is stating a new intent, and
+      // a carried-over timestamp would swallow the first crossing of it.
+      alertTriggeredAt: null,
+    }),
+    "local-store-upsert-watchlist-item",
+  );
+
+  try {
+    await runDesktopSyncNowIfDue({ force: true });
+  } catch (error) {
+    console.warn("[desktop-sync] watchlist target sync failed", error);
+  }
+
+  notifyWatchlistMutated();
+  return updated;
 }
 
 export async function createWatchlistItemsBatchData(items = []) {

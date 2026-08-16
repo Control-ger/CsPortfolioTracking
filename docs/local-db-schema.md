@@ -55,6 +55,16 @@ Read-state behavior:
 - Entity links use stable local ids; server ids stay optional.
 - Deletes are soft where needed for sync reconciliation.
 - `investments.payload.bucket` is mandatory domain classification (`investment` or `inventory`).
+- `watchlist_items.payload` carries the target price as four fields that are only
+  meaningful together: `alertPriceUsd` (USD), `alertDirection` (`below`|`above`),
+  `alertAnchorPriceUsd` (live price when the target was set — the progress bar's
+  denominator) and `alertTriggeredAt` (crossing timestamp, cleared when the price
+  falls back). No DDL: they ride in the existing JSON blob, like the investment
+  overpay fields. Normalization lives in
+  `apps/desktop/src/localStore/utils.js` (`normalizeWatchlistTargetFields`), a
+  deliberate duplicate of `packages/shared/src/lib/watchlistTargets.js` — the
+  Electron main process has no `@shared` alias. Clearing the price clears the
+  other three, so a stale anchor cannot re-arm the alert.
 
 ## 5. Current Read Path (cross-checked)
 

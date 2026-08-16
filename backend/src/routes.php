@@ -96,6 +96,7 @@ function registerServerApiRoutes(Router $router, array $c): void
     $router->register('GET',    '/api/v1/watchlist/search',                    [$c['watchlist'], 'search']);
     $router->register('POST',   '/api/v1/watchlist',                           [$c['watchlist'], 'create']);
     $router->register('POST',   '/api/v1/watchlist/batch',                     [$c['watchlist'], 'createBatch']);
+    $router->register('PUT',    '/api/v1/watchlist/{id}/target',               [$c['watchlist'], 'updateTarget']);
     $router->register('DELETE', '/api/v1/watchlist/{id}',                      [$c['watchlist'], 'delete']);
     $router->register('POST',   '/api/v1/watchlist/prices/refresh',            [$c['watchlist'], 'refresh']);
 

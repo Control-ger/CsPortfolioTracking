@@ -190,6 +190,74 @@ final class WatchlistController
         }
     }
 
+    /**
+     * Set or clear a watchlist item's target price.
+     *
+     * `alertPriceUsd: null` is a valid body — it clears the target. That is why
+     * the field is only rejected when it is present *and* not a usable number,
+     * rather than being required.
+     */
+    public function updateTarget(Request $request, int $id): void
+    {
+        try {
+            $userId = $this->resolveUserId($request);
+
+            $rawPrice = $request->body['alertPriceUsd'] ?? null;
+            if ($rawPrice !== null && (!is_numeric($rawPrice) || (float) $rawPrice <= 0)) {
+                JsonResponseFactory::error(
+                    'INVALID_TARGET_PRICE',
+                    'alertPriceUsd muss eine positive Zahl oder null sein.',
+                    [],
+                    400
+                );
+                return;
+            }
+
+            $rawAnchor = $request->body['alertAnchorPriceUsd'] ?? null;
+            if ($rawAnchor !== null && !is_numeric($rawAnchor)) {
+                JsonResponseFactory::error(
+                    'INVALID_TARGET_PRICE',
+                    'alertAnchorPriceUsd muss eine Zahl oder null sein.',
+                    [],
+                    400
+                );
+                return;
+            }
+
+            $syncPayload = $this->watchlistService->updateTarget(
+                $userId,
+                $id,
+                $rawPrice !== null ? (float) $rawPrice : null,
+                isset($request->body['alertDirection']) ? (string) $request->body['alertDirection'] : null,
+                $rawAnchor !== null ? (float) $rawAnchor : null
+            );
+
+            // Publish to sync so desktop clients pick the target up on their next
+            // pull instead of only seeing it on the web.
+            $this->syncService->upsertServerEntity(
+                $userId,
+                'watchlist_items',
+                (string) $id,
+                $syncPayload
+            );
+
+            JsonResponseFactory::success($syncPayload, [], 200);
+        } catch (UserScopeAuthorizationException $exception) {
+            JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
+        } catch (RuntimeException $exception) {
+            JsonResponseFactory::error('WATCHLIST_NOT_FOUND', 'Item nicht gefunden.', [], 404);
+        } catch (Throwable $exception) {
+            Logger::event(
+                'error',
+                'error',
+                'error.http_5xx',
+                'Watchlist target update failed',
+                ['statusCode' => 500, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('WATCHLIST_TARGET_UPDATE_FAILED', $exception->getMessage(), [], 500);
+        }
+    }
+
     private function resolveUserId(Request $request): int
     {
         return $this->userScopeResolver->resolve($request);

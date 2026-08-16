@@ -7,7 +7,7 @@ import { AlignLeft, Bell, ChevronDown, List, Trash2 } from "lucide-react";
 import { ItemThumb } from "./ui/item-thumb";
 import { ItemName } from "./ui/item-name.jsx";
 import { resolveItemCategory, resolveItemCategorySingular } from "../lib/portfolioCalculations.js";
-import { Sparkline } from "./ui/data-display";
+import { Sparkline, TargetMeter } from "./ui/data-display";
 import {
   GridTable,
   GridTableEmpty,
@@ -45,7 +45,13 @@ import {
   fetchWatchlistData,
   importCsFloatWatchlistData,
   importCsFloatBuyOrdersAsWatchlistData,
+  updateWatchlistItemTargetData,
 } from "@shared/lib/dataSource.js";
+import {
+  resolveWatchlistLivePriceUsd,
+  resolveWatchlistTarget,
+  suggestTargetDirection,
+} from "@shared/lib/watchlistTargets.js";
 import {
   getWatchlistMutationVersion,
   subscribeWatchlistMutation,
@@ -148,17 +154,10 @@ const WATCHLIST_COLUMNS = "minmax(0,1fr) 84px 66px 66px 66px 84px 96px";
 
 const WATCHLIST_ALL_CATEGORIES = "__all__";
 
-/**
- * Sidebar "Ansicht" filters.
- *
- * `soon` marks the alert scope: the schema has an `alert_price_usd` column, but
- * the sync path writes it as NULL unconditionally and it never reaches the
- * client, so there is nothing to filter on yet. It is rendered disabled rather
- * than omitted, to keep the planned shape of the view visible.
- */
+/** Sidebar "Ansicht" filters. */
 const WATCHLIST_SCOPES = [
   { key: "all", label: "Alle", Icon: List },
-  { key: "alerts", label: "Mit Alarm", Icon: Bell, soon: true },
+  { key: "alerts", label: "Mit Alarm", Icon: Bell },
   { key: "orders", label: "Buyorders", Icon: AlignLeft },
 ];
 
@@ -174,7 +173,7 @@ const WATCHLIST_SORT_OPTIONS = [
   { key: "d1", label: "24h-Veränderung" },
   { key: "d30", label: "30T-Veränderung" },
   { key: "price", label: "Preis" },
-  { key: "target", label: "Abstand zum Ziel", soon: true },
+  { key: "target", label: "Abstand zum Ziel" },
   { key: "name", label: "Name A–Z" },
 ];
 
@@ -196,6 +195,14 @@ function getWatchlistSortValue(item, key) {
   if (key === "d1" || key === "d7" || key === "d30") {
     const change = Number(item?.[key]);
     return Number.isFinite(change) ? change : Number.NEGATIVE_INFINITY;
+  }
+  // Closest to its target first, so descending (the default for numeric sorts)
+  // puts the nearly-reached rows on top. Rows without a target have no distance
+  // at all and sort last rather than tying at zero, which would rank them as if
+  // they were exactly on target.
+  if (key === "target") {
+    const distance = Number(item?.target?.distancePercent);
+    return Number.isFinite(distance) ? -Math.abs(distance) : Number.NEGATIVE_INFINITY;
   }
   const change = resolveWatchlistChangePercent(item);
   return Number.isFinite(change) ? change : Number.NEGATIVE_INFINITY;
@@ -245,7 +252,22 @@ function decorateWatchlistRow(item) {
     d1: resolveHistoryChangePercent(history, 1),
     d7: derived7d ?? resolveWatchlistChangePercent(item),
     d30: resolveHistoryChangePercent(history, 30),
+    // Resolved once per row so the table cell, the mobile card and the inspector
+    // cannot disagree about distance or whether the target is reached.
+    target: resolveWatchlistTarget(item),
   };
+}
+
+/** "noch −12,3 %" / "+4,0 % über Ziel" — the distance the price still has to go. */
+function formatTargetDistance(distancePercent) {
+  if (!Number.isFinite(distancePercent)) {
+    return "–";
+  }
+  const rounded = Math.abs(distancePercent);
+  if (rounded < 0.05) {
+    return "am Ziel";
+  }
+  return `${distancePercent >= 0 ? "+" : "−"}${rounded.toFixed(1)} %`;
 }
 
 function formatSignedPercentOneDecimal(value) {
@@ -305,7 +327,7 @@ function WatchlistItemsLoadingSkeleton() {
 }
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
-  const { currency, formatPrice } = useCurrency();
+  const { currency, formatPrice, convertToUsd, convertFromUsd } = useCurrency();
   const validSnapshot = getLoadedWatchlistSnapshot();
   const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
   const [_buyOrderSummary, setBuyOrderSummary] = useState(() => validSnapshot?.buyOrderSummary || []);
@@ -318,6 +340,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const [warnings, setWarnings] = useState(() => validSnapshot?.warnings || []);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [targetInput, setTargetInput] = useState("");
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
+  const [targetError, setTargetError] = useState("");
   const [showAbsolute, setShowAbsolute] = useState(false);
   const [sortKey, setSortKey] = useState("d7");
   const [sortDirection, setSortDirection] = useState("desc");
@@ -372,6 +397,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     let scoped = decoratedItems;
     if (scope === "orders") {
       scoped = scoped.filter((item) => item?.hasBuyOrder);
+    }
+    if (scope === "alerts") {
+      scoped = scoped.filter((item) => item?.target?.hasTarget);
     }
     if (activeCategory !== WATCHLIST_ALL_CATEGORIES) {
       scoped = scoped.filter(
@@ -643,6 +671,17 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     void loadWatchlistData({ showLoading: false });
   }, [watchlistMutationVersion, loadWatchlistData]);
 
+  // Seed the target field from the selected row, in display currency. Keyed on
+  // the id and the stored target, never on the row object: that object is
+  // rebuilt on every price refresh and would wipe what the user is typing.
+  useEffect(() => {
+    const targetUsd = selectedItem?.alertPriceUsd ?? null;
+    setTargetInput(
+      targetUsd === null ? "" : String(convertFromUsd(Number(targetUsd)).toFixed(2)),
+    );
+    setTargetError("");
+  }, [selectedItem?.id, selectedItem?.alertPriceUsd, convertFromUsd]);
+
   useEffect(() => {
     onWarningsChange?.(combinedWarnings);
   }, [combinedWarnings, onWarningsChange]);
@@ -719,6 +758,49 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       await handleRemoveItem(selectedItem.id);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  /**
+   * Save or clear the selected item's target.
+   *
+   * The input is in display currency and converted at this boundary — the same
+   * split the manual buy-price field uses, and the reason USD stays the only
+   * persisted form. The anchor is the live price *now*, captured here because
+   * this is the only moment the "where it started" of the progress bar is known.
+   */
+  const handleSaveTarget = async (clear = false) => {
+    if (!selectedItem?.id) {
+      return;
+    }
+
+    let alertPriceUsd = null;
+    if (!clear) {
+      const parsed = Number(String(targetInput).replace(",", "."));
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setTargetError("Bitte einen Zielpreis groesser 0 angeben.");
+        return;
+      }
+      alertPriceUsd = Number(convertToUsd(parsed).toFixed(2));
+    }
+
+    const livePriceUsd = resolveWatchlistLivePriceUsd(selectedItem);
+    setIsSavingTarget(true);
+    setTargetError("");
+    try {
+      await updateWatchlistItemTargetData(selectedItem.id, {
+        alertPriceUsd,
+        alertDirection: suggestTargetDirection(alertPriceUsd, livePriceUsd),
+        alertAnchorPriceUsd: livePriceUsd,
+      });
+      await loadWatchlistData({ showLoading: false });
+      if (clear) {
+        setTargetInput("");
+      }
+    } catch (saveError) {
+      setTargetError(saveError?.message || "Zielpreis konnte nicht gespeichert werden.");
+    } finally {
+      setIsSavingTarget(false);
     }
   };
 
@@ -905,15 +987,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       30T
                     </span>
                     <span className="text-right">Verlauf</span>
-                    {/* No "Bald" badge here — at 96px it pushed the label into
-                        the Verlauf column. The sidebar and the inspector row
-                        already carry the marker. */}
-                    <span
-                      className="text-right opacity-45"
-                      title="Zielpreise und Alarme sind noch nicht verfügbar"
-                    >
-                      Zielpreis
-                    </span>
+                    <span className="text-right">Zielpreis</span>
                   </GridTableHead>
 
                   {sortedWatchlistItems.length === 0 ? (
@@ -996,12 +1070,36 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                           <Sparkline values={historyValues} width={80} height={26} />
                         </span>
 
-                        {/* Target prices are not implemented yet — the column is
-                            rendered so the planned layout is visible, but it
-                            deliberately carries no value. */}
-                        <span className="flex items-center justify-end gap-1.5 text-right opacity-40">
-                          <Bell className="size-[13px]" aria-hidden="true" />
-                          <span className="text-xs tabular-nums text-muted-foreground">–</span>
+                        {/* Target: the price on top, the remaining distance
+                            below. At 96px there is no room for the bar as well —
+                            the mobile card and the inspector carry that. */}
+                        <span className="flex flex-col items-end justify-center leading-tight">
+                          {item.target?.hasTarget ? (
+                            <>
+                              <span
+                                className={`flex items-center gap-1 text-xs font-bold tabular-nums ${
+                                  item.target.reached ? "text-success" : "text-foreground"
+                                }`}
+                              >
+                                <Bell className="size-[11px]" aria-hidden="true" />
+                                {formatPrice(item.target.targetPriceUsd, {
+                                  useUsd: true,
+                                  buyPriceUsd: item.target.targetPriceUsd,
+                                })}
+                              </span>
+                              <span
+                                className={`text-[10.5px] font-semibold tabular-nums ${
+                                  item.target.reached ? "text-success" : "text-muted-foreground"
+                                }`}
+                              >
+                                {item.target.reached
+                                  ? "erreicht"
+                                  : formatTargetDistance(item.target.distancePercent)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs tabular-nums text-muted-foreground">–</span>
+                          )}
                         </span>
                       </GridTableRow>
                     );
@@ -1021,13 +1119,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
               </div>
 
               {/* Mobile: the design's watch card. The sidebar is desktop-only,
-                  so the range and sort controls it owns stay inline here.
-
-                  The design's lower half — target price, distance text and
-                  progress bar — is deliberately absent: `alert_price_usd` is
-                  written as a hard NULL on every sync (SyncEntityService) and
-                  the desktop store has no column for it at all, so there is
-                  nothing to render but a placeholder. */}
+                  so the range and sort controls it owns stay inline here. The
+                  card's lower half carries the target price, the remaining
+                  distance and the progress bar. */}
               <div className="space-y-2.5 md:hidden">
                 {/* Category and range both live in the desktop-only sidebar,
                     so without these rows neither is reachable on mobile. */}
@@ -1152,27 +1246,39 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       </span>
                       </span>
 
-                      {/* Target-price row, rendered inert on purpose: the design
-                          places it here, but `alert_price_usd` is written as a
-                          hard NULL on every sync and the desktop store has no
-                          column for it, so there is no value to show. Kept
-                          visible (and marked) rather than dropped, so the
-                          planned shape stays legible — same call the desktop
-                          Zielpreis column and the `soon` sidebar rows make. */}
-                      <span
-                        aria-hidden="true"
-                        className="flex w-full flex-col gap-1.5 border-t border-border-soft pt-2.5 opacity-45"
-                      >
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
-                            <Bell className="size-[13px]" />
-                            Zielpreis
-                            <SoonBadge />
+                      {/* Target price, remaining distance and the progress bar.
+                          Only rendered for rows that carry a target — an empty
+                          track on every card would be noise on a phone. */}
+                      {item.target?.hasTarget ? (
+                        <span className="flex w-full flex-col gap-1.5 border-t border-border-soft pt-2.5">
+                          <span className="flex items-center justify-between gap-2">
+                            <span
+                              className={`flex items-center gap-1.5 text-[11px] font-bold ${
+                                item.target.reached ? "text-success" : "text-muted-foreground"
+                              }`}
+                            >
+                              <Bell className="size-[13px]" />
+                              {formatPrice(item.target.targetPriceUsd, {
+                                useUsd: true,
+                                buyPriceUsd: item.target.targetPriceUsd,
+                              })}
+                            </span>
+                            <span
+                              className={`text-[10.5px] font-bold tabular-nums ${
+                                item.target.reached ? "text-success" : "text-muted-foreground"
+                              }`}
+                            >
+                              {item.target.reached
+                                ? "Ziel erreicht"
+                                : formatTargetDistance(item.target.distancePercent)}
+                            </span>
                           </span>
-                          <span className="text-[10.5px] font-bold text-muted-foreground">–</span>
+                          <TargetMeter
+                            value={item.target.progressPercent}
+                            reached={item.target.reached}
+                          />
                         </span>
-                        <span className="h-[5px] w-full rounded-full bg-surface-2" />
-                      </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -1271,14 +1377,26 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     </div>
                   ))}
 
-                  {/* Not implemented — shown disabled so the planned row is visible. */}
-                  <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-[9px] opacity-45">
-                    <span className="flex items-center gap-2 text-[11.5px] font-semibold text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-[9px]">
+                    <span className="text-[11.5px] font-semibold text-muted-foreground">
                       Abstand zum Zielpreis
-                      <SoonBadge />
                     </span>
-                    <span className="text-[12.5px] font-extrabold tabular-nums text-muted-foreground">
-                      –
+                    <span
+                      className={`text-[12.5px] font-extrabold tabular-nums ${
+                        !selectedItemWithBuyOrderRows.target?.hasTarget
+                          ? "text-muted-foreground"
+                          : selectedItemWithBuyOrderRows.target.reached
+                            ? "text-success"
+                            : "text-foreground"
+                      }`}
+                    >
+                      {!selectedItemWithBuyOrderRows.target?.hasTarget
+                        ? "–"
+                        : selectedItemWithBuyOrderRows.target.reached
+                          ? "Ziel erreicht"
+                          : formatTargetDistance(
+                              selectedItemWithBuyOrderRows.target.distancePercent,
+                            )}
                     </span>
                   </div>
 
@@ -1364,6 +1482,70 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                         {Number(buyOrderDebug.buyOrdersErrorStatus || 0) || "-"})
                       </p>
                     ) : null}
+                  </InspectorBlock>
+
+                  <InspectorBlock label="Zielpreis">
+                    <div className="mt-2 space-y-2">
+                      {selectedItemWithBuyOrderRows.target?.hasTarget ? (
+                        <TargetMeter
+                          value={selectedItemWithBuyOrderRows.target.progressPercent}
+                          reached={selectedItemWithBuyOrderRows.target.reached}
+                        />
+                      ) : null}
+
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.01"
+                            value={targetInput}
+                            onChange={(event) => setTargetInput(event.target.value)}
+                            placeholder="0,00"
+                            aria-label={`Zielpreis in ${currency}`}
+                            className="h-8 w-full rounded-md border border-border bg-background px-2 pr-10 text-[12.5px] tabular-nums outline-none focus:border-primary"
+                          />
+                          <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[11px] font-semibold text-muted-foreground">
+                            {currency}
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          disabled={isSavingTarget}
+                          onClick={() => void handleSaveTarget(false)}
+                        >
+                          Speichern
+                        </Button>
+                        {selectedItemWithBuyOrderRows.target?.hasTarget ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            disabled={isSavingTarget}
+                            onClick={() => void handleSaveTarget(true)}
+                          >
+                            Löschen
+                          </Button>
+                        ) : null}
+                      </div>
+
+                      {targetError ? (
+                        <p className="text-[11px] font-semibold text-danger">{targetError}</p>
+                      ) : (
+                        <p className="text-[10.5px] text-muted-foreground">
+                          {/* Says which way the alert points, so a sell target
+                              entered above the price is not mistaken for a buy
+                              target that will never fire. */}
+                          {selectedItemWithBuyOrderRows.target?.hasTarget
+                            ? selectedItemWithBuyOrderRows.target.direction === "above"
+                              ? "Meldung, sobald der Preis das Ziel erreicht oder übersteigt."
+                              : "Meldung, sobald der Preis auf das Ziel oder darunter fällt."
+                            : "Noch kein Zielpreis gesetzt."}
+                        </p>
+                      )}
+                    </div>
                   </InspectorBlock>
 
                   <InspectorFooter>
