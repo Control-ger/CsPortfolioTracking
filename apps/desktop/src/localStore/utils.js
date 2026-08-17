@@ -453,18 +453,26 @@ export function calculateSteamCsfloatMatch(steamItem, csfloatItem) {
   };
 }
 
-export function appendOperation(db, opType, entityType, entityId, payload) {
+/**
+ * Appends one row to the sync push queue.
+ *
+ * `userId` is stored in its own column rather than read back out of the
+ * payload: delete ops carry no scope in their payload, and the activity feed
+ * needs to filter by user on an index.
+ */
+export function appendOperation(db, opType, entityType, entityId, payload, userId = null) {
   const createdAt = nowIso();
   const idempotencyKey = `${entityType}:${entityId}:${opType}:${createdAt}`;
   db.prepare(
     `INSERT INTO operations_log
-      (id, op_type, entity_type, entity_id, payload, idempotency_key, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (id, op_type, entity_type, entity_id, user_id, payload, idempotency_key, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     randomUUID(),
     opType,
     entityType,
     entityId,
+    userId ?? null,
     serialize(payload),
     idempotencyKey,
     createdAt,

@@ -7,6 +7,7 @@ import {
   normalizeBucket,
   toBooleanFlag,
   normalizeOverpayFloor,
+  appendOperation as appendOperationToLog,
 } from "./utils.js";
 
 export function mapInvestment(row) {
@@ -136,22 +137,16 @@ export function createImportInvestmentRowsTransaction(db) {
 export function createInvestmentStore(db) {
   const importInvestmentRows = createImportInvestmentRowsTransaction(db);
 
-  function appendOperation(opType, entityType, entityId, payload) {
-    const createdAt = nowIso();
-    const idempotencyKey = `${entityType}:${entityId}:${opType}:${createdAt}`;
-    db.prepare(
-      `INSERT INTO operations_log
-        (id, op_type, entity_type, entity_id, payload, idempotency_key, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      randomUUID(),
-      opType,
-      entityType,
-      entityId,
-      serialize(payload),
-      idempotencyKey,
-      createdAt,
-    );
+  function appendOperation(opType, entityType, entityId, payload, userId = null) {
+    appendOperationToLog(db, opType, entityType, entityId, payload, userId);
+  }
+
+  /** Deletes carry no scope in their payload, so it is read off the row. */
+  function resolveInvestmentUserId(id) {
+    const row = db
+      .prepare("SELECT user_id FROM investments WHERE id = ? LIMIT 1")
+      .get(String(id));
+    return row?.user_id ? String(row.user_id) : null;
   }
 
   return {
@@ -258,12 +253,13 @@ export function createInvestmentStore(db) {
         updatedAt: now,
       });
 
-      appendOperation("upsert", "investment", id, {
-        ...input,
+      appendOperation(
+        "upsert",
+        "investment",
         id,
-        userId: normalizedUserId,
-        name,
-      });
+        { ...input, id, userId: normalizedUserId, name },
+        normalizedUserId,
+      );
 
       const updatedRow = db
         .prepare("SELECT * FROM investments WHERE id = ? LIMIT 1")
@@ -284,15 +280,19 @@ export function createInvestmentStore(db) {
 
     deleteInvestment(id) {
       const now = nowIso();
+      const ownerUserId = resolveInvestmentUserId(id);
       db.prepare(
         `UPDATE investments
          SET deleted = 1, dirty = 1, updated_at = ?
          WHERE id = ? AND deleted = 0`,
       ).run(now, String(id));
-      appendOperation("delete", "investment", String(id), {
-        id: String(id),
-        deletedAt: now,
-      });
+      appendOperation(
+        "delete",
+        "investment",
+        String(id),
+        { id: String(id), deletedAt: now },
+        ownerUserId,
+      );
       return true;
     },
 

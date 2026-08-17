@@ -63,12 +63,39 @@ final class WatchlistController
             $itemType = (string) ($request->query['itemType'] ?? '');
             $wear = (string) ($request->query['wear'] ?? '');
             $sortBy = (string) ($request->query['sortBy'] ?? '');
+            $minPriceEur = $this->parsePriceBound($request->query['minPriceEur'] ?? null, 'minPriceEur');
+            $maxPriceEur = $this->parsePriceBound($request->query['maxPriceEur'] ?? null, 'maxPriceEur');
 
-            $results = $this->watchlistService->searchAvailableItems($userId, $query, $limit, $itemType, $wear, $page, $sortBy);
+            // A search filter reacts to live typing, so a reversed range is
+            // swapped instead of rejected — the user is mid-input, not wrong.
+            if ($minPriceEur !== null && $maxPriceEur !== null && $minPriceEur > $maxPriceEur) {
+                [$minPriceEur, $maxPriceEur] = [$maxPriceEur, $minPriceEur];
+            }
+
+            $results = $this->watchlistService->searchAvailableItems(
+                $userId,
+                $query,
+                $limit,
+                $itemType,
+                $wear,
+                $page,
+                $sortBy,
+                $minPriceEur,
+                $maxPriceEur
+            );
             JsonResponseFactory::success(
                 $results,
                 ['warnings' => $this->watchlistService->consumePricingWarnings()]
             );
+        } catch (InvalidArgumentException $exception) {
+            Logger::event(
+                'warning',
+                'error',
+                'error.validation',
+                'Watchlist search validation failed',
+                ['statusCode' => 400, 'exception' => $exception]
+            );
+            JsonResponseFactory::error('WATCHLIST_SEARCH_INVALID', $exception->getMessage(), [], 400);
         } catch (UserScopeAuthorizationException $exception) {
             JsonResponseFactory::error($exception->getErrorCode(), $exception->getMessage(), $exception->getDetails(), $exception->getStatusCode());
         } catch (Throwable $exception) {
@@ -81,6 +108,29 @@ final class WatchlistController
             );
             JsonResponseFactory::error('WATCHLIST_SEARCH_FAILED', $exception->getMessage(), [], 500);
         }
+    }
+
+    /**
+     * Reads an optional EUR price bound from the query string.
+     * An empty value means "no bound"; anything non-numeric or negative is a
+     * client error rather than something to silently ignore.
+     */
+    private function parsePriceBound(mixed $raw, string $paramName): ?float
+    {
+        if ($raw === null || trim((string) $raw) === '') {
+            return null;
+        }
+
+        if (!is_numeric($raw)) {
+            throw new InvalidArgumentException(sprintf('%s must be a number.', $paramName));
+        }
+
+        $value = (float) $raw;
+        if ($value < 0) {
+            throw new InvalidArgumentException(sprintf('%s must not be negative.', $paramName));
+        }
+
+        return $value;
     }
 
     public function create(Request $request): void

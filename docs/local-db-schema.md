@@ -78,3 +78,28 @@ Read-state behavior:
 - `operations_log` stores pending local mutations for `/api/v1/sync/push`.
 - Pull results from `/api/v1/sync/pull` are merged back into local SQLite.
 - Imports and sync apply paths avoid recursive re-logging of the same records.
+
+## 7. Operations Log as Activity Feed
+
+`operations_log` is also read back, by `listOperations` in
+`apps/desktop/src/localStore/sync.js`, to feed the "Letzte Aktivität" block on
+the portfolio overview. Consequences of that second role:
+
+- The table carries a `user_id` column. It was added additively (`ensureColumn`
+  in `apps/desktop/src/localStore/index.js`) and backfilled from
+  `payload.userId`. Scope must not be read out of the payload: `delete` ops
+  never carried a `userId` there, and JSON extraction cannot use an index.
+  `appendOperation` (`apps/desktop/src/localStore/utils.js`) writes the column;
+  delete call sites read the owner off the row being deleted.
+- Index `idx_operations_user_created(user_id, created_at DESC)` serves the feed.
+  The older `idx_operations_pending(applied_at, created_at)` serves the push
+  queue and does not fit this query.
+- Rows are never deleted, only marked via `applied_at`, so the log is durable
+  history — but it grows without bound and every read must pass a `LIMIT`.
+- The feed shows the newest row per entity. Alert passes and edits each append
+  another `upsert`, so the raw log repeats one item many times over.
+- `upsert` does not distinguish create from update, and imports/sync-apply write
+  no operations at all. The feed therefore covers manual edits only, and its
+  wording must not claim more than that.
+- Web has no equivalent: the server keeps no per-user operation log, so the
+  block is desktop-only rather than rendered empty.

@@ -91,6 +91,8 @@ export async function searchWatchlistItems(
       itemType: filters.itemType,
       wear: filters.wear,
       sortBy: filters.sortBy,
+      minPriceEur: filters.minPriceEur,
+      maxPriceEur: filters.maxPriceEur,
       limit,
       page,
     }),

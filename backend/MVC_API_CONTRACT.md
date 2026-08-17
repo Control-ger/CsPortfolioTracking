@@ -241,8 +241,22 @@ Query:
 - `sortBy?: string`
 - `limit?: int`
 - `page?: int`
+- `minPriceEur?: float` (>= 0)
+- `maxPriceEur?: float` (>= 0)
 
 Returns paged catalog/search result with `items[]`.
+
+Price range notes:
+- Bounds are given in EUR and converted to USD once per request, so the SQL
+  compares against the indexed `item_live_cache.price_usd`. Without a usable
+  exchange rate the bounds are dropped rather than guessed.
+- A bounded search excludes items with no cached price, and does not fall back
+  to the Steam market path — Steam results carry no price to filter on.
+- Filtering uses the `csfloat` price source, matching the existing
+  `price_asc`/`price_desc` sorting. The price shown on a card follows the user's
+  source preference, so the two can differ slightly.
+- Non-numeric or negative values return `400 WATCHLIST_SEARCH_INVALID`. A
+  reversed range (`min > max`) is swapped, not rejected.
 
 ### `POST /watchlist`
 

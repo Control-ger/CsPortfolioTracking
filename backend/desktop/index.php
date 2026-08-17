@@ -1064,7 +1064,7 @@ $router->register('GET', '/api/v1/watchlist/search', static function (Request $r
         'limit' => $request->query['limit'] ?? 6,
         'page' => $request->query['page'] ?? 1,
     ]);
-    foreach (['itemType', 'wear', 'sortBy'] as $optional) {
+    foreach (['itemType', 'wear', 'sortBy', 'minPriceEur', 'maxPriceEur'] as $optional) {
         $value = trim((string) ($request->query[$optional] ?? ''));
         if ($value !== '') {
             $query[$optional] = $value;

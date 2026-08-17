@@ -237,10 +237,13 @@ final class ItemRepository
         ?string $wearKey = null,
         ?string $sortBy = null,
         int $limit = 20,
-        int $offset = 0
+        int $offset = 0,
+        ?float $minPriceUsd = null,
+        ?float $maxPriceUsd = null
     ): array {
         $resolvedLimit = max(1, min($limit, 100));
         $resolvedOffset = max(0, $offset);
+        $supportsPriceJoin = $this->supportsPriceJoin();
 
         $conditions = [];
         $params = [];
@@ -274,6 +277,22 @@ final class ItemRepository
         if ($normalizedWear !== '' && strtolower($normalizedWear) !== 'all') {
             $conditions[] = 'i.wear_key = ?';
             $params[] = $normalizedWear;
+        }
+
+        // Price bounds compare against the indexed USD column instead of the
+        // computed `price_eur` alias: MySQL does not allow select aliases in
+        // WHERE, and multiplying per row would defeat the index. Without the
+        // live-cache join there is no price to filter on, so the bound is
+        // dropped rather than producing an error on a missing table.
+        if ($supportsPriceJoin) {
+            if ($minPriceUsd !== null) {
+                $conditions[] = 'ipl.price_usd IS NOT NULL AND ipl.price_usd >= ?';
+                $params[] = $minPriceUsd;
+            }
+            if ($maxPriceUsd !== null) {
+                $conditions[] = 'ipl.price_usd IS NOT NULL AND ipl.price_usd <= ?';
+                $params[] = $maxPriceUsd;
+            }
         }
 
         $whereSql = $conditions === [] ? '' : ('WHERE ' . implode(' AND ', $conditions));
@@ -349,7 +368,7 @@ final class ItemRepository
             $orderSql = 'ORDER BY relevance_score DESC, CHAR_LENGTH(i.market_hash_name) ASC, i.market_hash_name ASC';
         }
         $joinSql = '';
-        if ($this->supportsPriceJoin()) {
+        if ($supportsPriceJoin) {
             $selectSql .= ',
                     ipl.price_usd,
                     ipl.price_source,
@@ -398,14 +417,16 @@ final class ItemRepository
     public function countCatalog(
         string $query,
         ?string $itemType = null,
-        ?string $wearKey = null
+        ?string $wearKey = null,
+        ?float $minPriceUsd = null,
+        ?float $maxPriceUsd = null
     ): int {
         $conditions = [];
         $params = [];
 
         $normalizedQuery = trim($query);
         if ($normalizedQuery !== '') {
-            $conditions[] = '(market_hash_name LIKE ? OR name LIKE ?)';
+            $conditions[] = '(i.market_hash_name LIKE ? OR i.name LIKE ?)';
             $needle = '%' . $normalizedQuery . '%';
             $params[] = $needle;
             $params[] = $needle;
@@ -415,14 +436,14 @@ final class ItemRepository
         if ($normalizedItemType !== '' && strtolower($normalizedItemType) !== 'all') {
             if (strtolower($normalizedItemType) === 'other') {
                 $conditions[] = '(
-                    item_type = ? OR type = ?
-                    OR item_type IS NULL OR TRIM(item_type) = \'\'
-                    OR type IS NULL OR TRIM(type) = \'\'
+                    i.item_type = ? OR i.type = ?
+                    OR i.item_type IS NULL OR TRIM(i.item_type) = \'\'
+                    OR i.type IS NULL OR TRIM(i.type) = \'\'
                 )';
                 $params[] = $normalizedItemType;
                 $params[] = $normalizedItemType;
             } else {
-                $conditions[] = '(item_type = ? OR type = ?)';
+                $conditions[] = '(i.item_type = ? OR i.type = ?)';
                 $params[] = $normalizedItemType;
                 $params[] = $normalizedItemType;
             }
@@ -430,12 +451,30 @@ final class ItemRepository
 
         $normalizedWear = trim((string) $wearKey);
         if ($normalizedWear !== '' && strtolower($normalizedWear) !== 'all') {
-            $conditions[] = 'wear_key = ?';
+            $conditions[] = 'i.wear_key = ?';
             $params[] = $normalizedWear;
         }
 
+        // The price join is pulled in only when a bound is actually set. It has
+        // to mirror `searchCatalog` exactly: a price predicate is the first
+        // filter here that can drop rows, so without it `totalItems` and the
+        // page count would no longer match the filtered result set.
+        $joinSql = '';
+        if (($minPriceUsd !== null || $maxPriceUsd !== null) && $this->supportsPriceJoin()) {
+            $joinSql = "
+                LEFT JOIN item_live_cache ipl ON ipl.item_id = i.id AND ipl.price_source = 'csfloat'";
+            if ($minPriceUsd !== null) {
+                $conditions[] = 'ipl.price_usd IS NOT NULL AND ipl.price_usd >= ?';
+                $params[] = $minPriceUsd;
+            }
+            if ($maxPriceUsd !== null) {
+                $conditions[] = 'ipl.price_usd IS NOT NULL AND ipl.price_usd <= ?';
+                $params[] = $maxPriceUsd;
+            }
+        }
+
         $whereSql = $conditions === [] ? '' : ('WHERE ' . implode(' AND ', $conditions));
-        $sql = "SELECT COUNT(*) AS total FROM items {$whereSql}";
+        $sql = "SELECT COUNT(*) AS total FROM items i {$joinSql} {$whereSql}";
 
         try {
             $stmt = $this->pdo->prepare($sql);

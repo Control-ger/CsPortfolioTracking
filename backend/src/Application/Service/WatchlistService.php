@@ -205,7 +205,9 @@ final class WatchlistService
         ?string $itemTypeFilter = null,
         ?string $wearFilter = null,
         int $page = 1,
-        ?string $sortBy = null
+        ?string $sortBy = null,
+        ?float $minPriceEur = null,
+        ?float $maxPriceEur = null
     ): array
     {
         $normalizedQuery = trim($query);
@@ -213,6 +215,10 @@ final class WatchlistService
         $normalizedWear = trim((string) $wearFilter);
         $resolvedLimit = max(1, min($limit, 20));
         $resolvedPage = max(1, $page);
+        // Negative bounds carry no meaning for a price range and are dropped
+        // rather than rejected, matching how limit/page are clamped here.
+        $resolvedMinPriceEur = $minPriceEur !== null && $minPriceEur >= 0 ? $minPriceEur : null;
+        $resolvedMaxPriceEur = $maxPriceEur !== null && $maxPriceEur >= 0 ? $maxPriceEur : null;
         $browseMode = $normalizedQuery === '' && $this->canBrowseByFilter($normalizedItemType);
         $normalizedSortBy = trim((string) $sortBy) !== '' ? trim((string) $sortBy) : 'relevance';
 
@@ -252,7 +258,9 @@ final class WatchlistService
             $resolvedPage,
             $normalizedSortBy,
             $userId,
-            'steam'
+            'steam',
+            $resolvedMinPriceEur,
+            $resolvedMaxPriceEur
         );
     }
 

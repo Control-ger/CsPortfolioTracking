@@ -640,6 +640,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     lastSyncedAt: null,
   });
   const [syncNotifications, setSyncNotifications] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [recentActivityLoading, setRecentActivityLoading] = useState(false);
   // Bumped after each Steam sync so the actionable notifications get re-derived
   // once the portfolio counts (needs price / needs match) have refreshed. A
   // token (not a ref) is used because it must trigger the refresh effect; the
@@ -1209,6 +1211,34 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
 
     void loadNotifications();
+  }, [compositionRefreshToken]);
+
+  // The activity feed reads the local sync queue, which only the desktop
+  // runtime has — the server keeps no per-user operation log.
+  useEffect(() => {
+    const loadRecentActivity = async () => {
+      const isDesktopLocal =
+        typeof window !== "undefined" && Boolean(window.electronAPI?.localStore?.listOperations);
+      if (!isDesktopLocal) {
+        setRecentActivity([]);
+        return;
+      }
+
+      setRecentActivityLoading(true);
+      try {
+        const user = await getCurrentUser();
+        const userId = resolveDesktopRuntimeUserId(user, 1);
+        const operations = await window.electronAPI.localStore.listOperations(userId, 12);
+        setRecentActivity(Array.isArray(operations) ? operations : []);
+      } catch (activityError) {
+        console.warn("Failed to load recent activity", activityError);
+        setRecentActivity([]);
+      } finally {
+        setRecentActivityLoading(false);
+      }
+    };
+
+    void loadRecentActivity();
   }, [compositionRefreshToken]);
 
   useEffect(() => {
@@ -5183,6 +5213,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             yearWrappedYear={wrappedSeason.year}
             handleOpenYearWrapped={handleOpenYearWrapped}
             handleDismissYearWrapped={handleDismissYearWrapped}
+            recentActivity={recentActivity}
+            recentActivityLoading={recentActivityLoading}
             scopedPortfolioHistory={scopedPortfolioHistory}
             portfolioChartCardRef={portfolioChartCardRef}
             onChartHoverChange={setHoveredChartData}

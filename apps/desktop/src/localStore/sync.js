@@ -83,7 +83,9 @@ function rewritePendingOperationsUserId(db, fromUserId, toUserId) {
        WHERE applied_at IS NULL`,
     )
     .all();
-  const update = db.prepare("UPDATE operations_log SET payload = ? WHERE id = ?");
+  const update = db.prepare(
+    "UPDATE operations_log SET payload = ?, user_id = ? WHERE id = ?",
+  );
 
   rows.forEach((row) => {
     const payload = deserialize(row.payload, {});
@@ -100,7 +102,7 @@ function rewritePendingOperationsUserId(db, fromUserId, toUserId) {
       nextPayload.user_id = toUserId;
     }
 
-    update.run(serialize(nextPayload), row.id);
+    update.run(serialize(nextPayload), toUserId, row.id);
   });
 }
 
@@ -798,6 +800,50 @@ export function createSyncStore(db, { upsertInvestment, getPortfolioPreferences 
           createdAt: row.created_at,
           appliedAt: row.applied_at,
         }));
+    },
+
+    /**
+     * Recent operations for one user, newest first — the activity feed.
+     *
+     * Unlike `listPendingOperations` this ignores `applied_at`: pushed rows are
+     * never deleted, so they stay readable as history. The table grows without
+     * bound, hence the mandatory limit.
+     *
+     * Only the newest row per entity is returned. Every price-alert pass and
+     * every edit appends another `upsert`, so the raw log repeats the same item
+     * a dozen times in a row and buries everything else.
+     */
+    listOperations(userId = CANONICAL_LOCAL_USER_ID, options = {}) {
+      const normalizedUserId = normalizeLocalUserId(userId);
+      maybeMigrateLegacyUserRows(normalizedUserId);
+      const limit = Math.max(1, Math.min(Number(options?.limit) || 20, 200));
+
+      return db
+        .prepare(
+          // A single MAX() in the select list makes SQLite take the remaining
+          // bare columns from that same row — the documented behaviour this
+          // "newest row per entity" query relies on.
+          `SELECT id, op_type, entity_type, entity_id, payload, applied_at,
+                  MAX(created_at) AS created_at
+             FROM operations_log
+            WHERE user_id = ?
+            GROUP BY entity_type, entity_id
+            ORDER BY created_at DESC
+            LIMIT ?`,
+        )
+        .all(normalizedUserId, limit)
+        .map((row) => {
+          const payload = deserialize(row.payload);
+          return {
+            id: row.id,
+            opType: row.op_type,
+            entityType: row.entity_type,
+            entityId: row.entity_id,
+            name: payload?.name ? String(payload.name) : null,
+            createdAt: row.created_at,
+            appliedAt: row.applied_at,
+          };
+        });
     },
 
     markOperationApplied(id) {

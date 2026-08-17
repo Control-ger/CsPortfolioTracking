@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
 import { Badge } from "./ui/badge.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { Button } from "./ui/button.jsx";
-import { SoonBadge } from "./ui/filter-sidebar.jsx";
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
 import {
   formatAge,
@@ -44,6 +43,39 @@ function formatAllocationShare(percentage, categoryCount) {
   return `${rounded} %`;
 }
 
+const ACTIVITY_ENTITY_LABELS = {
+  investment: "Investment",
+  watchlist_item: "Watchlist-Item",
+};
+
+function describeActivityEntity(entityType) {
+  return ACTIVITY_ENTITY_LABELS[entityType] || "Eintrag";
+}
+
+/**
+ * Wording for one operations_log row.
+ *
+ * `upsert` covers both creating and editing — the log keeps no before/after
+ * state — so the label stays deliberately vague instead of claiming which of
+ * the two happened.
+ */
+function describeActivityAction(entry) {
+  const entity = describeActivityEntity(entry?.entityType);
+  if (entry?.opType === "delete") {
+    return `${entity} entfernt`;
+  }
+  return `${entity} hinzugefügt oder bearbeitet`;
+}
+
+/** `formatAge` counts in seconds; the log stores ISO timestamps. */
+function activityAgeSeconds(createdAt) {
+  const parsed = Date.parse(String(createdAt || ""));
+  if (Number.isNaN(parsed)) {
+    return Number.NaN;
+  }
+  return Math.max(0, Math.floor((Date.now() - parsed) / 1000));
+}
+
 export function PortfolioOverviewSection({
   stats,
   portfolioLoading,
@@ -73,6 +105,8 @@ export function PortfolioOverviewSection({
   yearWrappedYear,
   handleOpenYearWrapped,
   handleDismissYearWrapped,
+  recentActivity = [],
+  recentActivityLoading = false,
   scopedPortfolioHistory,
   portfolioChartCardRef,
   onChartHoverChange,
@@ -717,29 +751,45 @@ export function PortfolioOverviewSection({
         </div>
       ) : null}
 
-      {/* Activity timeline, rendered inert on purpose: the design places it
-          here, but `operations_log` has no read path (no listOperations in
-          localStore/preload/dataSource), so there is no feed to render. Kept
-          visible and marked rather than dropped, so the planned shape of the
-          screen stays legible — the same call the watchlist's Zielpreis row
-          and the `soon` sidebar rows make. */}
-      <div
-        aria-hidden="true"
-        className="rounded-2xl border border-border bg-card px-[15px] py-3.5 opacity-45 sm:hidden"
-      >
-        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
-          Letzte Aktivität
-          <SoonBadge />
-        </p>
-        <div className="mt-3 space-y-3">
-          {[0, 1, 2].map((row) => (
-            <div key={row} className="flex gap-3">
-              <span className="mt-1 size-2 shrink-0 rounded-full bg-muted-foreground" />
-              <span className="h-2.5 flex-1 rounded-full bg-surface-2" style={{ maxWidth: `${75 - row * 12}%` }} />
+      {/* Activity timeline. Fed by the desktop-local `operations_log`; the web
+          runtime has no equivalent, so the block is absent there rather than
+          rendered empty. Bulk imports and sync-apply deliberately write no
+          operations, so this shows manual edits only. */}
+      {recentActivityLoading || recentActivity.length > 0 ? (
+        <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Letzte Aktivität
+          </p>
+          {recentActivityLoading ? (
+            <div className="mt-3 space-y-3">
+              {[0, 1, 2].map((row) => (
+                <Skeleton key={row} className="h-4 w-full" />
+              ))}
             </div>
-          ))}
+          ) : (
+            <div className="mt-3 space-y-2.5">
+              {recentActivity.map((entry) => (
+                <div key={entry.id} className="flex items-start gap-3">
+                  <span
+                    className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                      entry.appliedAt ? "bg-muted-foreground" : "bg-primary"
+                    }`}
+                    title={entry.appliedAt ? undefined : "Noch nicht synchronisiert"}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-semibold text-foreground">
+                      {entry.name || describeActivityEntity(entry.entityType)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {describeActivityAction(entry)} · vor {formatAge(activityAgeSeconds(entry.createdAt))}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      ) : null}
 
       <div className="hidden grid-cols-1 gap-4 sm:grid sm:gap-5">
         <div className="sm:pt-1">

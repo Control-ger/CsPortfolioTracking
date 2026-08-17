@@ -109,6 +109,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-list-price-history", itemId, limitDays),
     listPendingOperations: (limit) =>
       ipcRenderer.invoke("local-store-list-pending-operations", limit),
+    listOperations: (userId, limit) =>
+      ipcRenderer.invoke("local-store-list-operations", userId, limit),
     listSteamCsfloatMatches: (userId, status, limit) =>
       ipcRenderer.invoke("local-store-list-steam-csfloat-matches", userId, status, limit),
     updateSteamCsfloatMatchStatus: (matchId, status) =>

@@ -39,13 +39,33 @@ final class WatchlistSearchService
         int $page = 1,
         ?string $sortBy = null,
         int $userId = 1,
-        ?string $priceSourceOverride = null
+        ?string $priceSourceOverride = null,
+        ?float $minPriceEur = null,
+        ?float $maxPriceEur = null
     ): array {
         $this->ensureCacheTables();
 
         $searchStartedAt = microtime(true);
         $normalizedQuery = trim($query);
         $resolvedLimit = max(1, min($limit, 20));
+        // The UI collects the range in EUR; prices persist in USD. Converting the
+        // two bounds once here keeps the SQL comparing against the indexed
+        // `price_usd` column. Without a usable rate the bounds are dropped —
+        // guessing a rate would silently return the wrong items.
+        //
+        // The rate is only resolved when a bound was actually given:
+        // `getUsdToEurRate()` can reach out to the exchange-rate provider, and
+        // search fires on every keystroke.
+        $minPriceUsd = null;
+        $maxPriceUsd = null;
+        if ($minPriceEur !== null || $maxPriceEur !== null) {
+            $usdToEurRate = $this->pricingService->getUsdToEurRate();
+            if ($usdToEurRate > 0) {
+                $minPriceUsd = $minPriceEur !== null ? $minPriceEur / $usdToEurRate : null;
+                $maxPriceUsd = $maxPriceEur !== null ? $maxPriceEur / $usdToEurRate : null;
+            }
+        }
+        $hasPriceRange = $minPriceUsd !== null || $maxPriceUsd !== null;
         $normalizedSortBy = $this->normalizeSortBy($sortBy);
         $browseMode = $normalizedQuery === '' && $this->canBrowseByFilter($itemTypeFilter);
         $resolvedQuery = $normalizedQuery !== ''
@@ -64,6 +84,8 @@ final class WatchlistSearchService
             'limit' => $resolvedLimit,
             'browseMode' => $browseMode,
             'userId' => $userId,
+            'minPriceEur' => $minPriceEur,
+            'maxPriceEur' => $maxPriceEur,
         ];
 
         if ($normalizedQuery === '' && !$browseMode) {
@@ -100,7 +122,9 @@ final class WatchlistSearchService
                 $userId,
                 $priceSourceOverride,
                 $browseMode,
-                $catalogMetrics
+                $catalogMetrics,
+                $minPriceUsd,
+                $maxPriceUsd
             );
             $this->logWatchlistSearchMetrics(
                 $searchStartedAt,
@@ -148,7 +172,9 @@ final class WatchlistSearchService
             $userId,
             $priceSourceOverride,
             $browseMode,
-            $catalogMetrics
+            $catalogMetrics,
+            $minPriceUsd,
+            $maxPriceUsd
         );
         if ((int) ($catalogResult['totalItems'] ?? 0) > 0) {
             $this->logWatchlistSearchMetrics(
@@ -157,6 +183,22 @@ final class WatchlistSearchService
                     'source' => 'catalog_primary',
                     'resultItems' => count($catalogResult['items'] ?? []),
                     'resultTotalItems' => (int) ($catalogResult['totalItems'] ?? 0),
+                    'catalogMetrics' => $catalogMetrics,
+                ])
+            );
+            return $catalogResult;
+        }
+
+        // Steam market results carry no cached price, so they cannot honour a
+        // price range. Falling through would answer a bounded search with
+        // unfiltered items — an empty catalog result is the honest answer.
+        if ($hasPriceRange) {
+            $this->logWatchlistSearchMetrics(
+                $searchStartedAt,
+                array_merge($searchContextBase, [
+                    'source' => 'catalog_price_range_no_fallback',
+                    'resultItems' => 0,
+                    'resultTotalItems' => 0,
                     'catalogMetrics' => $catalogMetrics,
                 ])
             );
@@ -302,11 +344,19 @@ final class WatchlistSearchService
         int $userId,
         ?string $priceSourceOverride,
         bool $browseMode,
-        ?array &$metrics = null
+        ?array &$metrics = null,
+        ?float $minPriceUsd = null,
+        ?float $maxPriceUsd = null
     ): array {
         $catalogStartedAt = microtime(true);
         $catalogSortBy = $sortBy;
-        $totalItems = $this->itemRepository->countCatalog($query, $itemTypeFilter, $wearFilter);
+        $totalItems = $this->itemRepository->countCatalog(
+            $query,
+            $itemTypeFilter,
+            $wearFilter,
+            $minPriceUsd,
+            $maxPriceUsd
+        );
         $totalPages = $totalItems > 0 ? (int) ceil($totalItems / $limit) : 0;
         $resolvedPage = $totalPages > 0 ? min(max(1, $page), $totalPages) : 1;
         $offset = $totalPages > 0 ? ($resolvedPage - 1) * $limit : 0;
@@ -317,7 +367,9 @@ final class WatchlistSearchService
             $wearFilter,
             $catalogSortBy,
             $limit,
-            $offset
+            $offset,
+            $minPriceUsd,
+            $maxPriceUsd
         );
 
         $matchedItems = [];

@@ -456,6 +456,7 @@ export function registerAllIpcHandlers() {
   safeLocalStoreInvoke("local-store-upsert-price", (store, payload) => store.upsertPrice(payload));
   safeLocalStoreInvoke("local-store-list-price-history", (store, itemId, limitDays) => store.listPriceHistory(itemId, limitDays));
   safeLocalStoreInvoke("local-store-list-pending-operations", (store, limit) => store.listPendingOperations(limit));
+  safeLocalStoreInvoke("local-store-list-operations", (store, userId, limit) => store.listOperations(userId, { limit }));
   safeLocalStoreInvoke("local-store-list-steam-csfloat-matches", (store, userId, status, limit) => store.listSteamCsfloatMatches(userId, status, limit));
   safeLocalStoreInvoke("local-store-create-manual-steam-csfloat-match", (store, payload) => store.createManualSteamCsfloatMatch(payload));
   safeLocalStoreInvoke("local-store-update-steam-csfloat-match-status", (store, matchId, status) => store.updateSteamCsfloatMatchStatus(matchId, status));

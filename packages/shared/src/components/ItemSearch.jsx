@@ -115,6 +115,31 @@ const BROWSABLE_ITEM_TYPES = new Set([
   "other",
 ]);
 
+/** Quick-select ranges for the price filter, in EUR. */
+const PRICE_RANGE_CHIPS = [
+  { label: "Alle", min: "", max: "" },
+  { label: "< 10 €", min: "", max: "10" },
+  { label: "10–100 €", min: "10", max: "100" },
+  { label: "100–1.000 €", min: "100", max: "1000" },
+  { label: "> 1.000 €", min: "1000", max: "" },
+];
+
+/**
+ * Reads a price bound from the free-text inputs. Accepts a decimal comma
+ * because the fields are labelled in EUR and typed on a German keyboard.
+ * Returns `undefined` for empty or unusable input so `buildPath` drops the
+ * param instead of sending a bound the backend would reject.
+ */
+function parsePriceInput(value) {
+  const normalized = String(value ?? "").trim().replace(",", ".");
+  if (normalized === "") {
+    return undefined;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
 function normalizeSearchTerm(term) {
   const trimmed = String(term || "").trim().replace(/\s+/g, " ");
   if (trimmed === "") {
@@ -149,6 +174,11 @@ export const ItemSearch = ({
   const [itemType, setItemType] = useState("all");
   const [wear, setWear] = useState("all");
   const [sortBy, setSortBy] = useState("relevance");
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  // The price fields are free text, so the value that actually drives requests
+  // trails the input — otherwise every keystroke would fire a search.
+  const [committedPriceRange, setCommittedPriceRange] = useState({ min: "", max: "" });
   const [viewMode, setViewMode] = useState("grid");
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -174,10 +204,15 @@ export const ItemSearch = ({
   const effectiveItemType = keywordBrowseType || itemType;
   const effectiveTerm = keywordBrowseType ? "" : normalizedSubmittedTerm;
   const wearEnabled = effectiveItemType === "skin";
+  const minPriceEur = parsePriceInput(committedPriceRange.min);
+  const maxPriceEur = parsePriceInput(committedPriceRange.max);
+  const priceRangeActive = minPriceEur !== undefined || maxPriceEur !== undefined;
   // Only the filters that can actually narrow a request are counted — the
-  // disabled price and ownership groups must not inflate the badge.
+  // still-disabled ownership group must not inflate the badge.
   const activeFilterCount =
-    (itemType !== "all" ? 1 : 0) + (wear !== "all" && effectiveItemType === "skin" ? 1 : 0);
+    (itemType !== "all" ? 1 : 0)
+    + (wear !== "all" && effectiveItemType === "skin" ? 1 : 0)
+    + (priceRangeActive ? 1 : 0);
   const activeWear = wearEnabled ? wear : "all";
   const canBrowseWithoutQuery = BROWSABLE_ITEM_TYPES.has(effectiveItemType) && effectiveItemType !== "all";
   const isBrowseRequest = effectiveTerm.length === 0 && canBrowseWithoutQuery;
@@ -189,6 +224,18 @@ export const ItemSearch = ({
     setSubmittedSearchTerm(normalizeSearchTerm(nextTerm));
     setPage(1);
   }, [initialSearchTerm]);
+
+  useEffect(() => {
+    if (priceMin === committedPriceRange.min && priceMax === committedPriceRange.max) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCommittedPriceRange({ min: priceMin, max: priceMax });
+      setPage(1);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [committedPriceRange.max, committedPriceRange.min, priceMax, priceMin]);
 
   useEffect(() => {
     if (!autoFocus) {
@@ -222,6 +269,8 @@ export const ItemSearch = ({
             itemType: effectiveItemType,
             wear: activeWear,
             sortBy,
+            minPriceEur,
+            maxPriceEur,
           },
           PAGE_SIZE,
           page,
@@ -258,7 +307,16 @@ export const ItemSearch = ({
     return () => {
       cancelled = true;
     };
-  }, [activeWear, effectiveItemType, effectiveTerm, page, shouldSearch, sortBy]);
+  }, [
+    activeWear,
+    effectiveItemType,
+    effectiveTerm,
+    maxPriceEur,
+    minPriceEur,
+    page,
+    shouldSearch,
+    sortBy,
+  ]);
 
   useEffect(() => {
     onWarningsChange?.(warnings);
@@ -457,13 +515,11 @@ export const ItemSearch = ({
   /**
    * Mobile filter sheet.
    *
-   * The design collects every filter here, so all four groups are present —
-   * but only Kategorie and Zustand can act: the search API takes `itemType`,
-   * `wear` and `sortBy`, and knows nothing about a price range or an
-   * ownership flag. Those two render disabled and `SoonBadge`-marked rather
-   * than being dropped, the same call the watchlist Zielpreis row and the
-   * inventory Wallet chips make — the planned filter set stays visible without
-   * any control pretending to work.
+   * The design collects every filter here. Kategorie, Zustand and Preis reach
+   * the search API; the ownership toggle has no backing query yet and stays
+   * disabled behind a `SoonBadge` rather than being dropped — the same call
+   * the inventory Wallet chips make, so the planned filter set remains visible
+   * without any control pretending to work.
    */
   const renderFilterSheet = () => (
     <BaseModal
@@ -528,36 +584,58 @@ export const ItemSearch = ({
           </div>
         </div>
 
-        <div className="opacity-45">
-          <p className="mb-2 flex items-center gap-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+        <div>
+          <p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
             Preis in €
-            <SoonBadge />
           </p>
           <div className="flex items-center gap-2">
             <input
-              disabled
+              value={priceMin}
+              onChange={(event) => setPriceMin(event.target.value)}
+              inputMode="decimal"
               placeholder="von"
               aria-label="Preis von"
-              className="h-9 min-w-0 flex-1 cursor-not-allowed rounded-lg border border-border bg-card px-3 text-xs"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-xs"
             />
             <span className="text-xs text-muted-foreground">bis</span>
             <input
-              disabled
+              value={priceMax}
+              onChange={(event) => setPriceMax(event.target.value)}
+              inputMode="decimal"
               placeholder="bis"
               aria-label="Preis bis"
-              className="h-9 min-w-0 flex-1 cursor-not-allowed rounded-lg border border-border bg-card px-3 text-xs"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-xs"
             />
           </div>
           <div className="mt-2 flex flex-wrap gap-[7px]">
-            {["Alle", "< 10 €", "10–100 €", "100–1.000 €", "> 1.000 €"].map((label) => (
-              <span
-                key={label}
-                className="inline-flex h-7 items-center rounded-full border border-border-soft px-3 text-xs font-semibold text-muted-foreground"
-              >
-                {label}
-              </span>
-            ))}
+            {PRICE_RANGE_CHIPS.map((chip) => {
+              const chipActive = priceMin === chip.min && priceMax === chip.max;
+              return (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => {
+                    setPriceMin(chip.min);
+                    setPriceMax(chip.max);
+                  }}
+                  className={`inline-flex h-7 items-center rounded-full px-3 text-xs transition-colors ${
+                    chipActive
+                      ? "bg-primary font-bold text-primary-foreground"
+                      : "border border-border-strong font-semibold text-foreground"
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
           </div>
+          {/* Items whose price has not been cached yet drop out of a bounded
+              search, so the range is stricter than it looks. */}
+          {priceRangeActive ? (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Zeigt nur Items mit bekanntem Preis.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex items-center justify-between gap-3 opacity-45">
@@ -579,6 +657,8 @@ export const ItemSearch = ({
             onClick={() => {
               setItemType("all");
               setWear("all");
+              setPriceMin("");
+              setPriceMax("");
               setPage(1);
             }}
             className="h-[42px] shrink-0 rounded-[10px] border border-border-strong px-4 text-[12.5px] font-bold"

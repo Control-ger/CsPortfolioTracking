@@ -113,6 +113,7 @@ function runMigrations(db) {
       op_type TEXT NOT NULL,
       entity_type TEXT NOT NULL,
       entity_id TEXT NOT NULL,
+      user_id TEXT,
       payload TEXT NOT NULL DEFAULT '{}',
       idempotency_key TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -193,6 +194,23 @@ function runMigrations(db) {
     }
   };
   ensureColumn("steam_csfloat_matches", "score_breakdown", "TEXT");
+  // `operations_log` was write-only (sync push) and carried its scope inside the
+  // JSON payload. The activity feed reads it per user, so the scope moves into a
+  // real column: payload-only scoping cannot see delete ops, which never carried
+  // a userId, and cannot be indexed.
+  ensureColumn("operations_log", "user_id", "TEXT");
+  // `json_valid` guards the backfill: json_extract raises on malformed JSON, and
+  // this runs on every startup — one bad payload would leave the app unable to
+  // open its database at all.
+  db.exec(`
+    UPDATE operations_log
+       SET user_id = json_extract(payload, '$.userId')
+     WHERE user_id IS NULL
+       AND json_valid(payload)
+       AND json_extract(payload, '$.userId') IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_operations_user_created
+      ON operations_log(user_id, created_at DESC);
+  `);
 
   const legacyUserWhere =
     "user_id IS NULL OR TRIM(user_id) = '' OR lower(user_id) = 'local'";

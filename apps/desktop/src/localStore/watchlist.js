@@ -5,6 +5,7 @@ import {
   deserialize,
   normalizeLocalUserId,
   normalizeWatchlistTargetFields,
+  appendOperation as appendOperationToLog,
 } from "./utils.js";
 
 export function mapWatchlistItem(row) {
@@ -132,22 +133,16 @@ export function createImportWatchlistRowsTransaction(db) {
 export function createWatchlistStore(db) {
   const importWatchlistRows = createImportWatchlistRowsTransaction(db);
 
-  function appendOperation(opType, entityType, entityId, payload) {
-    const createdAt = nowIso();
-    const idempotencyKey = `${entityType}:${entityId}:${opType}:${createdAt}`;
-    db.prepare(
-      `INSERT INTO operations_log
-        (id, op_type, entity_type, entity_id, payload, idempotency_key, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      randomUUID(),
-      opType,
-      entityType,
-      entityId,
-      serialize(payload),
-      idempotencyKey,
-      createdAt,
-    );
+  function appendOperation(opType, entityType, entityId, payload, userId = null) {
+    appendOperationToLog(db, opType, entityType, entityId, payload, userId);
+  }
+
+  /** Deletes carry no scope in their payload, so it is read off the row. */
+  function resolveWatchlistUserId(id) {
+    const row = db
+      .prepare("SELECT user_id FROM watchlist_items WHERE id = ? LIMIT 1")
+      .get(String(id));
+    return row?.user_id ? String(row.user_id) : null;
   }
 
   function resolveImageFromWatchlistPayload(row) {
@@ -274,12 +269,13 @@ export function createWatchlistStore(db) {
         updatedAt: now,
       });
 
-      appendOperation("upsert", "watchlist_item", id, {
-        ...input,
+      appendOperation(
+        "upsert",
+        "watchlist_item",
         id,
-        userId: normalizedUserId,
-        name,
-      });
+        { ...input, id, userId: normalizedUserId, name },
+        normalizedUserId,
+      );
 
       const updatedRow = db
         .prepare("SELECT * FROM watchlist_items WHERE id = ? LIMIT 1")
@@ -300,15 +296,19 @@ export function createWatchlistStore(db) {
 
     deleteWatchlistItem(id) {
       const now = nowIso();
+      const ownerUserId = resolveWatchlistUserId(id);
       db.prepare(
         `UPDATE watchlist_items
          SET deleted = 1, dirty = 1, updated_at = ?
          WHERE id = ? AND deleted = 0`,
       ).run(now, String(id));
-      appendOperation("delete", "watchlist_item", String(id), {
-        id: String(id),
-        deletedAt: now,
-      });
+      appendOperation(
+        "delete",
+        "watchlist_item",
+        String(id),
+        { id: String(id), deletedAt: now },
+        ownerUserId,
+      );
       return true;
     },
 

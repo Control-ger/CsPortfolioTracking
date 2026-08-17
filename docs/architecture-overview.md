@@ -161,7 +161,11 @@ From `apps/web/src/App.jsx`:
   - `formatAllocationShare` prints `<0,1 %` for a non-zero sliver rather than "0,0 %", and refuses to print "100 %" while other categories are listed.
 - **Movers come from held positions (`selectPortfolioMovers` over `change7dPercent`), not the watchlist panel.** Rows without a `change7dPercent` are dropped rather than treated as flat — a missing history and a 0 % week are different, and conflating them buries real movers under ties.
 
-The design's "Letzte Aktivität" timeline renders as an **inert, `SoonBadge`-marked placeholder**: `operations_log` exists in SQLite but has no read path (no `listOperations` in `localStore`/preload/`dataSource`), so there is no feed. It is shown rather than dropped so the planned shape of the screen stays legible — the same call the desktop Zielpreis column and the `soon` sidebar rows already make. Do not fill it with invented rows; it lands when the read path does.
+The "Letzte Aktivität" timeline reads `operations_log` through `listOperations` (`localStore/sync.js` → IPC `local-store-list-operations` → preload → `PortfolioPage`). Three constraints shape what it may claim (details in `docs/local-db-schema.md` §7):
+
+- **Desktop-only.** The server keeps no per-user operation log, so on web the block is absent, not rendered empty.
+- **Newest row per entity.** Alert passes and edits each append another `upsert`; the raw log repeats one item a dozen times and buries everything else.
+- **Manual edits only.** Imports and sync-apply deliberately write no operations, and `upsert` does not distinguish create from update — hence "hinzugefügt oder bearbeitet" rather than a claim the log cannot support.
 
 ### 5.1.1 Item names on mobile lists
 
@@ -193,10 +197,11 @@ The design's detail bottom sheet needed no work — `ItemDetailsModal` on `BaseM
 
 ### 5.2.1 Mobile screens still blocked on data
 
-`Mobile Final.dc.html` contains two remaining elements that are deliberately rendered inert and `SoonBadge`-marked rather than built, because no read path exists for them. They are not oversights and must not be filled with invented rows:
+One element from `Mobile Final.dc.html` is still deliberately rendered inert and `SoonBadge`-marked rather than built, because no read path exists for it. It is not an oversight and must not be filled with invented rows:
 
-- the dashboard's "Letzte Aktivität" timeline (`operations_log` has no read path — see §5.1),
-- the search filter sheet's price range and "Nur Items im Bestand" (`searchWatchlistItems` takes only `itemType`/`wear`/`sortBy` — see §5.4).
+- the search filter sheet's "Nur Items im Bestand" toggle, which needs an ownership join the search endpoint does not offer (see §5.4).
+
+The dashboard's "Letzte Aktivität" timeline (§5.1) and the filter sheet's price range (§5.4) were built out and are no longer placeholders.
 
 ### 5.3 Mobile watchlist (below `md`)
 
@@ -229,7 +234,8 @@ Alerts are evaluated in the desktop branch of `fetchWatchlistData` after the ups
 - **The view switch stays outside that scroller, pinned right.** Scrolled out of sight it reads as missing, and it is the only route to the list view.
 - **List rows stack below `sm`.** The four fixed columns (`120px 140px 150px`) overflow a 380px screen: the name column collapsed to nothing and the action button was clipped off the right edge. The column header is hidden there, since it labels columns that no longer exist, and the condition moves into the sub-line — but `sm:hidden`, or it prints twice next to the Condition column on desktop.
 
-- **The filter bottom sheet (mobile only) carries all four of the design's groups**, reusing `BaseModal` — which already docks to the bottom with a grab handle below `sm`, so no second sheet implementation exists. Kategorie and Zustand act; **Preis in €** and **Nur Items im Bestand** render disabled and `SoonBadge`-marked, because `searchWatchlistItems` takes only `itemType`, `wear` and `sortBy` and knows nothing about a price range or ownership. The filter badge counts only the two filters that can narrow a request, so the disabled groups cannot inflate it. From `sm` the sheet is gone and the chip row plus Condition select are inline — one route to each control per breakpoint, never two.
+- **The filter bottom sheet (mobile only) carries all four of the design's groups**, reusing `BaseModal` — which already docks to the bottom with a grab handle below `sm`, so no second sheet implementation exists. Kategorie, Zustand and **Preis in €** act; only **Nur Items im Bestand** stays disabled and `SoonBadge`-marked, since it needs an ownership join the endpoint does not offer. The filter badge counts only the filters that can narrow a request, so the disabled group cannot inflate it. From `sm` the sheet is gone and the chip row plus Condition select are inline — one route to each control per breakpoint, never two.
+- **The price range is debounced before it reaches the request**, since the two bounds are free-text inputs; without it every keystroke fires a search. Bounds are entered in EUR and converted to USD server-side (contract details in `backend/MVC_API_CONTRACT.md`); a bounded search drops items with no cached price, which the sheet states rather than leaving the narrower result unexplained. `backend/desktop/index.php` proxies search upstream through a **param whitelist** — a new query param must be added there too or the desktop app silently discards it.
 
 ### 5.5 Mobile settings (below `lg`)
 
