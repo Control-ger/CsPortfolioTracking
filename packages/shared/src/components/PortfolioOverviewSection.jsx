@@ -134,6 +134,17 @@ export function PortfolioOverviewSection({
   const [moverTab, setMoverTab] = useState("gainers");
   const [activityExpanded, setActivityExpanded] = useState(false);
 
+  /**
+   * Every money figure on this page is USD internally — `stats.totalValue`,
+   * `stats.totalInvested`, `stats.totalProfitEuro` (the name lies) and the
+   * allocation's summed `currentValue` all come from the same rows the hero's
+   * value comes from. Formatting any of them without `useUsd` skips the
+   * conversion and prints the USD number under a euro sign: the allocation
+   * legend summed to 1.538 € beside a 1.329 € hero, on the same screen.
+   */
+  const formatUsd = (value) =>
+    formatPrice(Number(value) || 0, { useUsd: true, buyPriceUsd: Number(value) || 0 });
+
   const scopeSwitchable = portfolioPreferences.metricsDisplayMode === "toggle_mode";
   // roiGainEuro, not deltaValue: deltaPercent is a growth-percent difference,
   // and roiGainEuro is the euro figure that matches it. Deposits during the
@@ -150,13 +161,7 @@ export function PortfolioOverviewSection({
   // The mobile hero and the desktop hero print the same figure; one formatter so
   // a fix to the currency handling cannot land on only one of them.
   const rangeDeltaLabel = hasRangeDelta
-    ? `${rangeDeltaPositive ? "+" : "−"}${formatPrice(Math.abs(rangeDeltaValue), {
-        // The trend delta rides in as USD, like every price on this page.
-        // Formatting it without `useUsd` skips the conversion and prints a USD
-        // figure under a euro sign.
-        useUsd: true,
-        buyPriceUsd: Math.abs(rangeDeltaValue),
-      })} · ${formatSignedPercent(rangeDeltaPercent)}${
+    ? `${rangeDeltaPositive ? "+" : "−"}${formatUsd(Math.abs(rangeDeltaValue))} · ${formatSignedPercent(rangeDeltaPercent)}${
         chartTrendData?.rangeLabel ? ` · ${chartTrendData.rangeLabel}` : ""
       }`
     : null;
@@ -214,17 +219,20 @@ export function PortfolioOverviewSection({
     },
     {
       label: "Gesamt Zuwachs",
-      value: `${headerProfitEuro >= 0 ? "+" : "−"}${formatPrice(Math.abs(headerProfitEuro))}`,
+      value: `${headerProfitEuro >= 0 ? "+" : "−"}${formatUsd(Math.abs(headerProfitEuro))}`,
       // Not the ROI percent again — the tile beside it already is that number.
       sub: Number.isFinite(Number(stats.totalInvested))
-        ? `auf ${formatPrice(stats.totalInvested)} investiert`
+        ? `auf ${formatUsd(stats.totalInvested)} investiert`
         : headerProfitSubLabel,
       positive: headerProfitPositive,
     },
     {
-      label: "Positionen",
+      // `totalQuantity` counts pieces, not positions — a stack of 400 cases is
+      // one position. The design's "Positionen 42" has no equivalent field, so
+      // the tile is labelled for what it actually shows.
+      label: "Items im Bestand",
       value: String(stats.totalQuantity ?? 0),
-      sub: "Stueck im Bestand",
+      sub: "Stueck insgesamt",
     },
     {
       label: "Bestes Item",
@@ -712,10 +720,7 @@ export function PortfolioOverviewSection({
                     />
                     <span className="flex-1 truncate text-[13px] font-bold">{entry.label}</span>
                     <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {/* `value` sums the rows' `currentValue`, which is already
-                          in display currency — the same field every inventory
-                          surface formats without `useUsd`. */}
-                      {formatPrice(entry.value)} ·{" "}
+                      {formatUsd(entry.value)} ·{" "}
                       {formatAllocationShare(entry.percentage, allocationByType.length)}
                     </span>
                   </div>
@@ -844,9 +849,9 @@ export function PortfolioOverviewSection({
                 </button>
               </div>
               <div className="mt-3.5">
-                {alertRows.map((alert) => (
+                {alertRows.map((alert, index) => (
                   <div
-                    key={alert.id}
+                    key={`${alert.id}-${index}`}
                     className="flex items-center justify-between gap-4 border-b border-border-soft py-[11px]"
                   >
                     <span className="truncate text-[13px] font-bold">{alert.name}</span>
