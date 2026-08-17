@@ -513,7 +513,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     ),
     [isDesktopRuntime],
   );
-  const { formatPrice, convertToUsd, convertFromUsd } = useCurrency();
+  const { formatPrice, convertPrice, convertToUsd, convertFromUsd } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -2695,13 +2695,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const historyGrowthPercent = Number(latestHistorySnapshot?.growthPercent);
   const hasHistoryProfitEuro = Number.isFinite(historyProfitEuro);
   const hasHistoryGrowthPercent = Number.isFinite(historyGrowthPercent);
+  // Two currencies meet in the hero, and which one wins depends on the branch:
+  //
+  //   - row-derived figures (`stats.*`) are EUR — they sum `displayPrice`/`buyPrice`,
+  //     both of which descend from `PricingService::priceEur` (`priceUsd * usdToEur`);
+  //   - chart-derived figures (`portfolioHistory.wert`, `chartTrendData`, the hover
+  //     payload) are USD, as `PortfolioService::getHistory` states at the source.
+  //
+  // So every hero figure carries a flag naming its source and the formatter follows
+  // that flag. Formatting the whole page as one currency is what made the hero print
+  // 1.329 € beside an allocation legend summing to 1.538 € — the same portfolio,
+  // divided by the USD rate once too often.
   const portfolioTotalValueForDisplay =
     hasStatsTotalValue
       ? statsTotalValue
       : hasHistoryValue
         ? historyValue
         : 0;
+  const portfolioTotalValueIsUsd = !hasStatsTotalValue && hasHistoryValue;
   const headerPortfolioValue = hoveredChartData?.wert ?? portfolioTotalValueForDisplay;
+  const headerPortfolioValueIsUsd =
+    hoveredChartData?.wert != null ? true : portfolioTotalValueIsUsd;
   const statsProfitEuro = Number(stats.totalProfitEuro);
   const statsRoiPercent = Number(stats.totalRoiPercent);
   const hasStatsProfitEuro = Number.isFinite(statsProfitEuro);
@@ -2717,6 +2731,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         : hasStatsProfitEuro
           ? statsProfitEuro
           : 0;
+  // Mirrors the chain above branch for branch: the history summary and the chart's
+  // range delta are USD, `stats.totalProfitEuro` is EUR despite its name.
+  const defaultProfitIsUsd = shouldPreferHistorySummary && hasHistoryProfitEuro
+    ? true
+    : hasStatsTotalValue && hasStatsProfitEuro
+      ? false
+      : hasRangeDeltaValue;
   const defaultProfitPercent = shouldPreferHistorySummary && hasHistoryGrowthPercent
     ? historyGrowthPercent
     : hasStatsTotalValue && hasStatsRoiPercent
@@ -2728,11 +2749,21 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           : 0;
   const headerPortfolioPercent = hoveredChartData?.growthPercent ?? defaultProfitPercent;
   const hoveredProfitEuro = Number(hoveredChartData?.profitEuro);
+  // The subtraction fallback mixes the two sources: `headerPortfolioValue` is USD
+  // while hovering, `stats.totalInvested` is EUR always. Lift the invested side into
+  // the value's currency first — a difference between two currencies is wrong in
+  // both, no matter which one it is later formatted as.
+  const headerInvestedForHover = headerPortfolioValueIsUsd
+    ? convertToUsd(convertPrice(Number(stats.totalInvested || 0)))
+    : Number(stats.totalInvested || 0);
   const headerProfitEuro = hoveredChartData
     ? Number.isFinite(hoveredProfitEuro)
       ? hoveredProfitEuro
-      : (headerPortfolioValue || 0) - Number(stats.totalInvested || 0)
+      : (headerPortfolioValue || 0) - headerInvestedForHover
     : defaultProfitEuro;
+  const headerProfitIsUsd = hoveredChartData
+    ? Number.isFinite(hoveredProfitEuro) || headerPortfolioValueIsUsd
+    : defaultProfitIsUsd;
   const headerProfitPositive = headerProfitEuro >= 0;
   const headerPortfolioPositive = hoveredChartData
     ? headerProfitPositive
@@ -2945,10 +2976,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       }),
     [formatPrice],
   );
-  const headerPortfolioValueLabel = formatPrice(headerPortfolioValue || 0, {
-    useUsd: true,
-    buyPriceUsd: headerPortfolioValue || 0,
-  });
+  // Follows the source flag, not the page: `useUsd` on the EUR branch divides the
+  // total by the USD rate a second time (see the note at `headerPortfolioValue`).
+  const headerPortfolioValueLabel = headerPortfolioValueIsUsd
+    ? formatUsdPrice(headerPortfolioValue || 0)
+    : formatPrice(headerPortfolioValue || 0);
   const headerProfitSubLabel = hoveredChartData?.date
     ? formatDateSafe(hoveredChartData.date)
     : shouldPreferHistorySummary || (hasStatsTotalValue && hasStatsRoiPercent)
@@ -5143,6 +5175,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             headerPortfolioPositive={headerPortfolioPositive}
             headerPortfolioValueLabel={headerPortfolioValueLabel}
             headerProfitEuro={headerProfitEuro}
+            headerProfitIsUsd={headerProfitIsUsd}
             headerProfitSubLabel={headerProfitSubLabel}
             headerProfitPositive={headerProfitPositive}
             showCsUpdateBanner={showCsUpdateBanner}
@@ -5538,7 +5571,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                     ? t("groups.summary", {
                                         clusters: summary.clusterCount,
                                         members: summary.memberCount,
-                                        value: formatUsdPrice(summary.totalValue),
+                                        // `summary.totalValue` sums the rows'
+                                        // `currentValue` (EUR) — a row aggregate,
+                                        // not a chart figure.
+                                        value: formatPrice(summary.totalValue),
                                       })
                                     : t("groups.emptyHint")}
                                 </p>

@@ -271,6 +271,10 @@ export const ItemDetailPanel = ({
           }
         />
 
+        {/* Plain formatPrice, no `useUsd`: `livePrice`/`displayPrice`/`currentValue`
+            on an enriched row all descend from `PricingService`'s `priceEur`
+            (`priceUsd * usdToEurRate`), and the group/cluster aliases sum those same
+            EUR fields. `buyPriceUsd` is the one genuinely-USD field here. */}
         <InspectorPrice
           value={
             !item.isLive
@@ -343,7 +347,9 @@ export const ItemDetailPanel = ({
           value={formatPrice(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}
         />
         {/* For aggregates the headline already *is* the position value, so this
-            slot carries the weighted unit price instead of repeating it. */}
+            slot carries the weighted unit price instead of repeating it. Both
+            fields are EUR like the Break-even and Cost-Basis tiles around them —
+            see the headline note above. */}
         <InspectorStat
           label={isAggregateSelection ? "Ø Live-Preis" : "Positionswert"}
           value={

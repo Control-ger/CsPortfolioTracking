@@ -627,6 +627,10 @@ export function InventoryTable({
                   `${item.quantity}x`,
                   unitBuyPrice === null ? null : `Ø ${formatPrice(unitBuyPrice)}`,
                 ].filter(Boolean)}
+                // No `useUsd`: `currentValue` is `displayPrice * quantity` and
+                // `displayPrice` descends from `PricingService`'s `priceEur`, so the
+                // row is already display currency — same convention as the Ø buy
+                // price chip above and the desktop table below.
                 valueLabel={item.isLive ? formatPrice(item.currentValue) : "kein Preis"}
                 deltaLabel={
                   item.isLive && roiValue !== null ? formatSignedPercentOneDecimal(roiValue) : null

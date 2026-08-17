@@ -158,7 +158,7 @@ From `apps/web/src/App.jsx`:
   - The design's "Tages-P&L" has **no source** — the app keeps no intraday baseline — so it is not built. The hero's delta is the chart's range delta and carries the range label, exactly as on mobile (§5.1).
 - **The "Watchlist Mover" panel is gone**, replaced by the design's right column. It was a second, differently-sourced mover list beside the portfolio movers; watchlist movers stay on the Watchlist tab.
 - **The allocation ramp bottoms out at 0.42 opacity, not the design's 0.22.** The mock steps down over six evenly sized categories; a real portfolio is top-heavy, so the tail entries are already hairline slivers — at 0.22 the sliver and its legend dot both vanished, on exactly the rows that need a marker to be findable.
-- **Allocation values format without `useUsd`.** `buildPortfolioAllocationByType` sums the rows' `currentValue`, which is already display currency — the same field every inventory surface formats plainly. The hero delta is the opposite case (USD, see §5.1).
+- **Allocation values format without `useUsd`.** `buildPortfolioAllocationByType` sums the rows' `currentValue`, which is already display currency — the same field every inventory surface formats plainly. The hero delta is the opposite case (USD, see §5.1.2).
 - **Watchlist alarms count only rows that carry a target price** (`resolveWatchlistTarget`, §5.3.1), reached ones first, then by distance. The widget claims "N aktiv"; counting targetless rows would make that number the watchlist's size. No targets → no widget.
 - The activity timeline (desktop-local `operations_log`, §5.1) expands 4 → 8 entries; the toggle only renders when there is a fifth entry to reveal.
 
@@ -166,7 +166,7 @@ From `apps/web/src/App.jsx`:
 
 `PortfolioOverviewSection` renders a second, mobile-only arrangement of the same data — scope switch, hero value, chart, KPI row, allocation bar, movers — while the desktop stat cards, watchlist-mover panel and composition donut become `hidden sm:…`. Three points are load-bearing:
 
-- **The hero delta pairs `roiGainEuro` with `deltaPercent`, never `deltaValue`.** `PortfolioChart`'s `trendStats` computes `deltaValue` as the raw value change and `roiGainEuro` as the profit change; only the latter matches `deltaPercent`, because a deposit moves value and invested in lockstep and cancels out of the profit figure but not the value delta. `onTrendChange` therefore emits `roiGainEuro` too. Both are **USD**, like every price on this page — format via `formatPrice(x, { useUsd: true, buyPriceUsd: x })` or the number silently prints unconverted under a euro sign.
+- **The hero delta pairs `roiGainEuro` with `deltaPercent`, never `deltaValue`.** `PortfolioChart`'s `trendStats` computes `deltaValue` as the raw value change and `roiGainEuro` as the profit change; only the latter matches `deltaPercent`, because a deposit moves value and invested in lockstep and cancels out of the profit figure but not the value delta. `onTrendChange` therefore emits `roiGainEuro` too. Both are **USD** — see §5.1.2 for which figures on this page are and which are not.
 - **Allocation uses `buildPortfolioAllocationByType`, not `buildPortfolioCompositionFromRows`.** The donut groups by item, which renders as thousands of hairline slivers in an 11px bar; the mobile bar groups by category.
 - **Categories come from the catalogue, never from the row's own `type`** — `resolveItemCategory` / `resolveItemCategorySingular` (`portfolioCalculations.js`), shared by the allocation bar, the inventory type chip and the inventory category filter so the three cannot disagree about what an item is. `investments.type` is written by whichever importer created the row and defaults to `"skin"` (`localStore/investments.js`, `PortfolioService::mapInvestment`); one real portfolio held `"skin"` for Fever Case and `"case"` for Kilowatt Case, rendered 94 % containers as **"Skins · 100 %"**, badged every sticker "skin", and offered a category filter whose single "Skin" entry swallowed everything.
   - Preference order is authority order: **`catalogItemType`** (the `MarketItemClassifier` key — `skin`, `case`, `sticker_capsule`, `souvenir_package`, `agent`, …, newly exposed on the enriched row by `PortfolioService::getEnrichedInvestments` and carried through `desktopDataMerge`), then **`marketTypeLabel`** (the Steam market type already on every row), then the importer's `type` as a last resort.
@@ -196,6 +196,35 @@ Three guards in the parser, all because the name is not a reliable grammar:
 - The leading segment before `|` is dropped only when it names the item's **kind** (`KIND_PREFIXES`: Sticker, Patch, Music Kit, Sealed Graffiti, …), never when it names a weapon. "Sticker | Boom Blast" beside a "Sticker" chip says it twice; "USP-S | Alpine Camo" without the weapon is unidentifiable.
 
 `parseItemName` therefore returns both `base` (kind kept) and `short` (kind dropped), and `ItemName` picks between them via `dropKindPrefix` — enabled on `PositionCard`, whose first meta chip is already the category, and off everywhere the category is not shown. The mobile "Bestes Item" KPI tile uses `short` directly: it is a third of a phone wide, and the variant prefix plus wear are exactly what pushed the name out of view.
+
+### 5.1.2 Currency: rows are EUR, the chart is USD
+
+The dashboard prints figures from two sources that are **not in the same currency**, and no field name reliably says which. Format by provenance:
+
+| Source | Currency | Formatter | Fields |
+|---|---|---|---|
+| Enriched investment rows | **EUR** | `formatPrice(x)` | `livePrice`, `baseLivePrice`, `displayPrice`, `currentValue`, `buyPrice`, `totalInvested`, `profitEuro`, `breakEvenPrice(Net)`, `breakEvenDeltaEuro`, `costBasisTotal/Unit`, `netPositionValue`, `netProfitEuro`, `change24h\|7d\|30dEuro` — and everything summed from them: all of `calculatePortfolioSummary`'s `stats.*`, `allocationByType[].value`, the `portfolioGroups.js` group/cluster aggregates and their `ItemDetailPanel` aliases |
+| Portfolio history / chart | **USD** | `formatPrice(x, { useUsd: true, buyPriceUsd: x })` | `portfolioHistory.wert`/`invested`, `chartTrendData.deltaValue`/`roiGainEuro`, the `onHoverChange` payload's `wert`/`profitEuro` |
+| Direct USD columns | **USD** | same as above | `buyPriceUsd`, `buyOrderBestPriceUsd`, `alertPriceUsd`, `alertAnchorPriceUsd` |
+
+The row side is EUR because every price descends from `PricingService`'s `priceEur` (`priceUsd * usdToEurRate`), including the change baselines (`PriceHistoryRepository::findLatestPriceMapByItemIds` multiplies before returning) and `buyPrice` (`buy_price_usd * usdToEurRate`). The chart side is USD because `PortfolioService::getHistory` reads `portfolio_history.total_value_usd` and says so at the source.
+
+**Both naming conventions lie, in opposite directions**: `stats.totalProfitEuro` and the row `profitEuro` really are EUR; `chartTrendData.roiGainEuro` is USD. Never infer the currency from the suffix.
+
+Consequences that are easy to get wrong:
+
+- **The hero is the one place both meet.** `headerPortfolioValue` is the hover payload's `wert` (USD) or `stats.totalValue` (EUR); `headerProfitEuro` walks a four-branch chain that lands on history (USD), `stats.totalProfitEuro` (EUR) or the chart's range delta (USD). `PortfolioPage` therefore carries `headerPortfolioValueIsUsd` / `headerProfitIsUsd` alongside the values, and the formatter follows the flag. Formatting the page as one currency is what printed a 1.329 € hero beside an allocation legend summing to 1.538 € — the same portfolio, one side divided by the USD rate a second time.
+- **Never subtract across the boundary.** The hero's hover fallback (`value − stats.totalInvested`) lifts the invested side into the value's currency first; a difference between two currencies is wrong in both.
+- **`PortfolioOverviewSection` exposes exactly two helpers**, `formatChartUsd` and `formatRowEur`, so each call site has to state which source it is printing.
+
+Two places used to mix the currencies **arithmetically**, where no formatter flag can help. Both are closed, and the shape of the fixes is the rule to follow:
+
+- `scopedPortfolioHistory`'s `"all"`-scope factor is now an EUR/EUR ratio of live rows (`liveScopeScaleFactors`), so it is **dimensionless** and can be applied to the USD series without mixing anything. The earlier `stats.totalValue / lastSnapshotValue` divided EUR by USD — the currency gap alone cleared the 3 % guard, so the curve was rescaled in that scope every time.
+- `buildDesktopPortfolioLocalSnapshot`'s history seed only fires when the rows carry a price, which local rows do not — so the EUR `summary.totalValue` no longer reaches the USD `wert` field.
+
+The rule both follow: **cross the boundary with a ratio or not at all.** Where a USD and an EUR figure genuinely have to meet (the hero's hover fallback), convert one side explicitly first.
+
+The structural fix that would remove the boundary altogether is to convert `portfolioHistory` to display currency **once** at load and drop `useUsd` from the chart path; that touches `PortfolioChart`, Year Wrapped and the `portfolio-view-snapshot:*` cache keys, so it stays a separate change.
 
 ### 5.2 Mobile inventory (below `md`)
 

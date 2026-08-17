@@ -96,6 +96,7 @@ export function PortfolioOverviewSection({
   headerPortfolioPositive,
   headerPortfolioValueLabel,
   headerProfitEuro,
+  headerProfitIsUsd = false,
   headerProfitSubLabel,
   headerProfitPositive,
   showCsUpdateBanner,
@@ -131,15 +132,23 @@ export function PortfolioOverviewSection({
   const [activityExpanded, setActivityExpanded] = useState(false);
 
   /**
-   * Every money figure on this page is USD internally — `stats.totalValue`,
-   * `stats.totalInvested`, `stats.totalProfitEuro` (the name lies) and the
-   * allocation's summed `currentValue` all come from the same rows the hero's
-   * value comes from. Formatting any of them without `useUsd` skips the
-   * conversion and prints the USD number under a euro sign: the allocation
-   * legend summed to 1.538 € beside a 1.329 € hero, on the same screen.
+   * This page prints figures from two sources and they are not in the same
+   * currency. Format by provenance, never by field name:
+   *
+   *   - **rows → EUR, plain `formatPrice`.** `stats.*` (`calculatePortfolioSummary`)
+   *     and `allocationByType[].value` sum `currentValue`/`totalInvested`, which
+   *     descend from `PricingService::priceEur`. `totalProfitEuro` means what it says.
+   *   - **chart → USD, `formatChartUsd`.** `chartTrendData` and the hover payload come
+   *     from `portfolioHistory.wert`, which `PortfolioService::getHistory` reads out of
+   *     `total_value_usd`. Here the name lies the other way: `roiGainEuro` is USD.
+   *
+   * Using one formatter for both is what put a 1.329 € hero next to an allocation
+   * legend summing to 1.538 € — the same portfolio, one side divided by the USD
+   * rate once too often. The hero's own flags are resolved in `PortfolioPage`.
    */
-  const formatUsd = (value) =>
+  const formatChartUsd = (value) =>
     formatPrice(Number(value) || 0, { useUsd: true, buyPriceUsd: Number(value) || 0 });
+  const formatRowEur = (value) => formatPrice(Number(value) || 0);
 
   const scopeSwitchable = portfolioPreferences.metricsDisplayMode === "toggle_mode";
   // roiGainEuro, not deltaValue: deltaPercent is a growth-percent difference,
@@ -157,7 +166,7 @@ export function PortfolioOverviewSection({
   // The mobile hero and the desktop hero print the same figure; one formatter so
   // a fix to the currency handling cannot land on only one of them.
   const rangeDeltaLabel = hasRangeDelta
-    ? `${rangeDeltaPositive ? "+" : "−"}${formatUsd(Math.abs(rangeDeltaValue))} · ${formatSignedPercent(rangeDeltaPercent)}${
+    ? `${rangeDeltaPositive ? "+" : "−"}${formatChartUsd(Math.abs(rangeDeltaValue))} · ${formatSignedPercent(rangeDeltaPercent)}${
         chartTrendData?.rangeLabel ? ` · ${chartTrendData.rangeLabel}` : ""
       }`
     : null;
@@ -215,10 +224,14 @@ export function PortfolioOverviewSection({
     },
     {
       label: t("kpi.totalGain"),
-      value: `${headerProfitEuro >= 0 ? "+" : "−"}${formatUsd(Math.abs(headerProfitEuro))}`,
+      // The profit follows the hero's source (hover/history → USD, stats → EUR);
+      // `stats.totalInvested` is a row sum and therefore always EUR.
+      value: `${headerProfitEuro >= 0 ? "+" : "−"}${
+        (headerProfitIsUsd ? formatChartUsd : formatRowEur)(Math.abs(headerProfitEuro))
+      }`,
       // Not the ROI percent again — the tile beside it already is that number.
       sub: Number.isFinite(Number(stats.totalInvested))
-        ? t("kpi.investedSub", { amount: formatUsd(stats.totalInvested) })
+        ? t("kpi.investedSub", { amount: formatRowEur(stats.totalInvested) })
         : headerProfitSubLabel,
       positive: headerProfitPositive,
     },
@@ -715,7 +728,7 @@ export function PortfolioOverviewSection({
                     />
                     <span className="flex-1 truncate text-[13px] font-bold">{entry.label}</span>
                     <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {formatUsd(entry.value)} ·{" "}
+                      {formatRowEur(entry.value)} ·{" "}
                       {formatAllocationShare(entry.percentage, allocationByType.length, t)}
                     </span>
                   </div>

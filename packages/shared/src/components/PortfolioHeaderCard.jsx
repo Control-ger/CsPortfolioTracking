@@ -119,10 +119,9 @@ export const PortfolioHeaderCard = ({
             <>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold tracking-tight">
-                  {formatPrice(totalValue || 0, {
-                    useUsd: true,
-                    buyPriceUsd: totalValue || 0,
-                  }).replace(/^[^\d-]+/, "")}
+                  {/* No `useUsd`: the props mirror `calculatePortfolioSummary`, whose
+                      totals sum the rows' EUR `currentValue`. */}
+                  {formatPrice(totalValue || 0).replace(/^[^\d-]+/, "")}
                 </span>
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{currency}</span>
               </div>
