@@ -37,7 +37,6 @@ import {
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
   buildPortfolioAllocationByType,
-  buildPortfolioCompositionFromRows,
   selectPortfolioMovers,
   fetchCS2Inventory,
   fetchCsFloatBuyOrdersData,
@@ -80,7 +79,6 @@ import {
 } from "@shared/lib/portfolioGroups.js";
 import {
   formatDateSafe,
-  resolveWatchlistChangePercent,
   normalizeSearchText,
   withBuyOrderFields,
   deriveCsUpdateImpact,
@@ -100,6 +98,7 @@ import {
   PortfolioManagementSection,
 } from "@shared/components";
 import { resolveWrappedSeason } from "../lib/yearWrapped.js";
+import { resolveWatchlistTarget, TARGET_DIRECTION_ABOVE } from "../lib/watchlistTargets.js";
 
 /**
  * Blank manual-investment draft. `purchaseDate` is the form's own field and is
@@ -559,16 +558,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   // Kept as a general "portfolio data changed" signal for the side-loads below;
   // the composition itself no longer needs it — it derives from the rows.
   const [compositionRefreshToken, setCompositionRefreshToken] = useState(0);
-  // Derived, not fetched: the donut is a pure aggregation of the very rows the
-  // KPI cards already use, so a second identical investments request (and a
-  // second cache policy) bought nothing. Passing metricsScope explicitly also
-  // fixes the donut ignoring the "Alles" scope — the old path let
-  // buildPortfolioCompositionFromRows fall back to its "investments" default.
-  const compositionData = useMemo(
-    () => buildPortfolioCompositionFromRows(enrichedInvestments, { scope: metricsScope }),
-    [enrichedInvestments, metricsScope],
-  );
-  const compositionLoading = statsPending;
   // Mobile dashboard only: the allocation bar groups by catalogue category
   // (the donut's per-item grouping renders as slivers at 11px tall), and the
   // movers come from the held positions rather than the watchlist panel.
@@ -703,8 +692,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const [globalSearchAddingItem, setGlobalSearchAddingItem] = useState("");
   const [globalSearchRecentTerms, setGlobalSearchRecentTerms] = useState([]);
   const [globalSearchActiveIndex, setGlobalSearchActiveIndex] = useState(-1);
-  const portfolioChartCardRef = useRef(null);
-  const [watchlistMoverCardHeight, setWatchlistMoverCardHeight] = useState(null);
   const shouldPrepareInventoryData = activeTab === "inventory";
   const shouldPrepareManagementData =
     isDesktopRuntime && activeTab === "management";
@@ -2638,66 +2625,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
   }, [globalSearchOpen]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return undefined;
-    }
-
-    const target = portfolioChartCardRef.current;
-    if (!target) {
-      return undefined;
-    }
-
-    const desktopMediaQuery = window.matchMedia("(min-width: 1024px)");
-    const updateMeasuredHeight = () => {
-      if (!desktopMediaQuery.matches) {
-        setWatchlistMoverCardHeight(null);
-        return;
-      }
-
-      const nextHeight = Math.round(target.getBoundingClientRect().height);
-      if (!Number.isFinite(nextHeight) || nextHeight <= 0) {
-        return;
-      }
-
-      setWatchlistMoverCardHeight((current) => (current === nextHeight ? current : nextHeight));
-    };
-
-    updateMeasuredHeight();
-
-    let resizeObserver;
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => {
-        updateMeasuredHeight();
-      });
-      resizeObserver.observe(target);
-    }
-
-    if (desktopMediaQuery.addEventListener) {
-      desktopMediaQuery.addEventListener("change", updateMeasuredHeight);
-    } else {
-      desktopMediaQuery.addListener(updateMeasuredHeight);
-    }
-    window.addEventListener("resize", updateMeasuredHeight);
-
-    return () => {
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-      if (desktopMediaQuery.removeEventListener) {
-        desktopMediaQuery.removeEventListener("change", updateMeasuredHeight);
-      } else {
-        desktopMediaQuery.removeListener(updateMeasuredHeight);
-      }
-      window.removeEventListener("resize", updateMeasuredHeight);
-    };
-  }, [activeTab, portfolioLoading, scopedPortfolioHistory.length]);
-
-  const liveItems = Number(stats.liveItemsCount || 0);
-  const watchlistMoverPanelHeight = Number.isFinite(Number(watchlistMoverCardHeight))
-    ? Math.min(Math.max(Number(watchlistMoverCardHeight), 340), 560)
-    : null;
-
   // Price freshness is cron-owned: the web never live-fetches prices. This page
   // previously auto-called refresh-stale (a synchronous CSFloat lookup) whenever it
   // detected stale prices; that was removed so passive web reads make zero external
@@ -2997,10 +2924,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     void trigger();
   }, [freshCsUpdateItem, isDesktopRuntime, portfolioPreferences.notifyCsUpdatesDesktop, portfolioPreferences.notifyCsUpdatesDesktopMinLevel]);
 
-  const portfolioValueLabel = formatPrice(portfolioTotalValueForDisplay, {
-    useUsd: true,
-    buyPriceUsd: portfolioTotalValueForDisplay,
-  });
   const formatUsdPrice = useCallback(
     (value, decimals = 2) =>
       formatPrice(Number(value || 0), {
@@ -3014,9 +2937,6 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     useUsd: true,
     buyPriceUsd: headerPortfolioValue || 0,
   });
-  const headerProfitPercent = hoveredChartData
-    ? Number(headerPortfolioPercent || 0)
-    : defaultProfitPercent;
   const headerProfitSubLabel = hoveredChartData?.date
     ? formatDateSafe(hoveredChartData.date)
     : shouldPreferHistorySummary || (hasStatsTotalValue && hasStatsRoiPercent)
@@ -3246,40 +3166,57 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     }
     return bucket === inventoryScope;
   });
-  const watchlistTopMovers = useMemo(() => {
-    const rows = (Array.isArray(dashboardWatchlistItems) ? dashboardWatchlistItems : [])
-      .map((item) => ({
-        ...item,
-        moverId: String(item?.id || "").trim(),
-        changePercentValue: resolveWatchlistChangePercent(item),
-      }))
-      .filter((item) => item.moverId !== "" && Number.isFinite(item.changePercentValue));
+  /**
+   * The dashboard's Watchlist-Alarme widget.
+   *
+   * Only rows that actually carry a target price qualify — the widget claims
+   * "N aktiv", and counting targetless rows would make that number the
+   * watchlist's size. Reached targets sort first (they are the ones asking for
+   * a decision), the rest by how close they are.
+   */
+  const watchlistAlerts = useMemo(() => {
+    const withTargets = (Array.isArray(dashboardWatchlistItems) ? dashboardWatchlistItems : [])
+      .map((item) => ({ item, target: resolveWatchlistTarget(item) }))
+      .filter((entry) => entry.target.hasTarget);
 
-    const allGainers = rows
-      .filter((item) => item.changePercentValue > 0)
-      .sort((left, right) => right.changePercentValue - left.changePercentValue)
-      ;
-    const allLosers = rows
-      .filter((item) => item.changePercentValue < 0)
-      .sort((left, right) => left.changePercentValue - right.changePercentValue)
-      ;
-    const gainers = allGainers.slice(0, 2);
-    const losers = allLosers.slice(0, 2);
-    const usedIds = new Set([...gainers, ...losers].map((item) => item.moverId));
-    const remainingSlots = Math.max(0, 8 - (gainers.length + losers.length));
-    const extras = rows
-      .filter((item) => !usedIds.has(item.moverId))
-      .sort((left, right) => Math.abs(right.changePercentValue) - Math.abs(left.changePercentValue))
-      .slice(0, remainingSlots);
+    const sorted = [...withTargets].sort((left, right) => {
+      if (left.target.reached !== right.target.reached) {
+        return left.target.reached ? -1 : 1;
+      }
+      const leftDistance = Number.isFinite(left.target.distancePercent)
+        ? Math.abs(left.target.distancePercent)
+        : Number.POSITIVE_INFINITY;
+      const rightDistance = Number.isFinite(right.target.distancePercent)
+        ? Math.abs(right.target.distancePercent)
+        : Number.POSITIVE_INFINITY;
+      return leftDistance - rightDistance;
+    });
 
-    return {
-      gainers,
-      losers,
-      extras,
-      sourceCount: rows.length,
-      hasAny: rows.length > 0,
-    };
-  }, [dashboardWatchlistItems]);
+    const rows = sorted.slice(0, 4).map(({ item, target }) => {
+      const targetLabel = formatPrice(target.targetPriceUsd, {
+        useUsd: true,
+        buyPriceUsd: target.targetPriceUsd,
+      });
+      // "Kauf"/"Verkauf", not "Kaufziel"/"Verkaufsziel": the note shares one row
+      // with the item name, and the direction is the part that cannot be
+      // inferred from the number beside it.
+      const kind = target.direction === TARGET_DIRECTION_ABOVE ? "Verkauf" : "Kauf";
+      const suffix = target.reached
+        ? "erreicht"
+        : Number.isFinite(target.distancePercent)
+          ? `${Math.abs(target.distancePercent).toFixed(1).replace(".", ",")} %`
+          : null;
+
+      return {
+        id: String(item?.id || item?.name),
+        name: item?.name || "Watchlist-Item",
+        note: suffix ? `${kind} ${targetLabel} · ${suffix}` : `${kind} ${targetLabel}`,
+        reached: target.reached,
+      };
+    });
+
+    return { rows, activeCount: withTargets.length };
+  }, [dashboardWatchlistItems, formatPrice]);
   const steamInventoryItemsAll = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     return platform === "steam_inventory" || Boolean(item.steamAssetId);
@@ -5105,9 +5042,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   searchBarHidden ? "lg:-translate-y-[calc(100%+1px)]" : "lg:translate-y-0"
                 }`}
               >
-                <div className={`flex min-w-0 items-center ${activeTab === "search" ? "w-full justify-center" : "gap-3"}`}>
+                <div className="flex w-full min-w-0 items-center justify-center">
                   <form
-                    className={`relative ${activeTab === "search" ? "w-[min(920px,72vw)]" : "w-[340px] max-w-[46vw]"}`}
+                    className={`relative ${activeTab === "search" ? "w-[min(920px,72vw)]" : "w-[min(560px,60vw)]"}`}
                     onSubmit={(event) => {
                       void handleGlobalSearchSubmit(event);
                     }}
@@ -5128,8 +5065,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         }
                       }}
                       onKeyDown={handleGlobalSearchInputKeyDown}
-                      placeholder="Suche nach Item, Typ oder Kategorie... (Strg+K)"
-                      className="flex h-11 w-full items-center rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground shadow-none outline-none transition-colors focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
+                      placeholder="Suche nach Item, Typ oder Kategorie (Strg+K)"
+                      className="flex h-11 w-full items-center rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground placeholder:text-foreground/60 shadow-none outline-none transition-colors focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
                     />
                   </form>
                 </div>
@@ -5194,10 +5131,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             headerPortfolioPositive={headerPortfolioPositive}
             headerPortfolioValueLabel={headerPortfolioValueLabel}
             headerProfitEuro={headerProfitEuro}
-            headerProfitPercent={headerProfitPercent}
             headerProfitSubLabel={headerProfitSubLabel}
             headerProfitPositive={headerProfitPositive}
-            liveItems={liveItems}
             showCsUpdateBanner={showCsUpdateBanner}
             latestCsUpdate={latestCsUpdate}
             latestCsUpdateAgeHours={latestCsUpdateAgeHours}
@@ -5216,18 +5151,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             recentActivity={recentActivity}
             recentActivityLoading={recentActivityLoading}
             scopedPortfolioHistory={scopedPortfolioHistory}
-            portfolioChartCardRef={portfolioChartCardRef}
             onChartHoverChange={setHoveredChartData}
             onChartTrendChange={setChartTrendData}
             handleMetricsScopeChange={handleMetricsScopeChange}
-            watchlistTopMovers={watchlistTopMovers}
-            watchlistMoverPanelHeight={watchlistMoverPanelHeight}
-            setWatchlistFocusTarget={setWatchlistFocusTarget}
+            watchlistAlerts={watchlistAlerts}
             handleTabSelect={handleTabSelect}
-            compositionData={compositionData}
-            compositionLoading={compositionLoading}
-            portfolioTotalValueForDisplay={portfolioTotalValueForDisplay}
-            portfolioValueLabel={portfolioValueLabel}
             allocationByType={allocationByType}
             portfolioMovers={portfolioMovers}
             chartTrendData={chartTrendData}

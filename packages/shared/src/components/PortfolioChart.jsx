@@ -244,6 +244,16 @@ export const PortfolioChart = ({
   onMetricsScopeChange = null,
   flat = false,
   cardRef = null,
+  // Replaces the card title on the left of the header row. The desktop
+  // dashboard puts its hero (label, portfolio value, range delta) there so the
+  // range pills sit on the hero's own label line, as the design has them —
+  // rendering the hero above the card instead would push the pills a row down
+  // and detach them from the value they re-scale.
+  headerSlot = null,
+  // The dashboard's chart is one block among several on a scrolling page, so it
+  // runs shorter than the design-system default — the handoff draws it at 220px
+  // and everything below it has to stay reachable without a long scroll.
+  chartHeightClassName = "h-[300px] sm:h-[340px]",
 }) => {
   const { formatPrice, currency } = useCurrency();
   // Several PortfolioCharts can be mounted at once; a shared SVG gradient id would
@@ -513,8 +523,14 @@ export const PortfolioChart = ({
   return (
     <Card ref={cardRef} className={cardClassName}>
       <CardHeader className={headerClassName}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>
+        <div
+          className={`flex flex-col gap-3 sm:flex-row sm:justify-between ${
+            headerSlot ? "sm:items-start" : "sm:items-center"
+          }`}
+        >
+          {headerSlot ?? (
+            <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>
+          )}
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {typeof onMetricsScopeChange === "function" ? (
               // Hidden below `sm`: the mobile dashboard puts the same switch at
@@ -571,7 +587,7 @@ export const PortfolioChart = ({
       <CardContent className={contentClassName}>
         {isLoading ? (
           <div className="space-y-3">
-            <Skeleton className="h-[300px] w-full sm:h-[340px]" />
+            <Skeleton className={`w-full ${chartHeightClassName}`} />
             <div className="grid grid-cols-3 gap-2">
               <Skeleton className="h-3 w-full" />
               <Skeleton className="h-3 w-full" />
@@ -579,11 +595,11 @@ export const PortfolioChart = ({
             </div>
           </div>
         ) : chartData.length === 0 ? (
-          <div className="flex h-[300px] items-center justify-center text-muted-foreground sm:h-[340px]">
+          <div className={`flex items-center justify-center text-muted-foreground ${chartHeightClassName}`}>
             <p className="text-sm">{emptyLabel}</p>
           </div>
         ) : (
-          <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full sm:h-[340px]">
+          <ChartContainer config={chartConfig} className={`aspect-auto w-full ${chartHeightClassName}`}>
             <ComposedChart
               key={rangeKey}
               accessibilityLayer
@@ -687,6 +703,13 @@ export const PortfolioChart = ({
                 dataKey="displayValue"
                 type="linear"
                 stroke="none"
+                // Fill downwards from the axis floor, not towards zero. In
+                // percent mode a portfolio that spent the whole range below its
+                // start has only negative values, and the default zero baseline
+                // sits above the visible domain — the band then rendered *over*
+                // the line, filling the top of the plot instead of the area
+                // beneath it.
+                baseValue="dataMin"
                 fill={`url(#${fillGradientId})`}
                 isAnimationActive
                 animationDuration={900}
@@ -718,7 +741,10 @@ export const PortfolioChart = ({
         )}
       </CardContent>
 
-      <CardFooter className={footerClassName}>
+      {/* A hero in the header already prints the range delta and the range it
+          covers, so the footer would say the same thing twice. Other mounts
+          (item/group detail) pass no hero and keep it. */}
+      <CardFooter className={`${footerClassName}${headerSlot ? " hidden" : ""}`}>
         {isLoading ? (
           <>
             <Skeleton className="h-4 w-64" />

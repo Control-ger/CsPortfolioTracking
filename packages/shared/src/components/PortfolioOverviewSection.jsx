@@ -1,22 +1,37 @@
 import { useState } from "react";
-import { ArrowUpRight, Sparkles, TrendingUp, TrendingDown, X } from "lucide-react";
+import { ArrowUpRight, Sparkles, X } from "lucide-react";
 
 import { PortfolioChart } from "./PortfolioChart.jsx";
-import { PortfolioCompositionChart } from "./PortfolioCompositionChart.jsx";
-import { StatCard } from "./StatsCards.jsx";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.jsx";
 import { Badge } from "./ui/badge.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
-import { Button } from "./ui/button.jsx";
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
-import {
-  formatAge,
-  syncHealthBadgeClass,
-  syncHealthLabel,
-  formatRelativeHours,
-} from "../lib/portfolioHelpers.js";
+import { formatAge, formatRelativeHours } from "../lib/portfolioHelpers.js";
 import { ItemName } from "./ui/item-name.jsx";
 import { parseItemName } from "../lib/itemName.js";
+
+/**
+ * One hue, stepped down in opacity: the allocation categories are a ranking,
+ * not unrelated series, so a colour scale would imply a distinction the data
+ * does not carry. Shared by the mobile bar and the desktop legend so the two
+ * cannot drift apart.
+ *
+ * The floor is 0.42, not the design's 0.22. The mock steps down over six evenly
+ * sized categories; a real portfolio is top-heavy, so the tail categories are
+ * already hairline slivers — at 0.22 both the sliver and its legend dot
+ * disappeared into the background, which is exactly the rows that need a marker
+ * to be findable at all.
+ */
+const ALLOCATION_OPACITIES = [1, 0.86, 0.72, 0.6, 0.5, 0.42];
+
+function allocationOpacity(index) {
+  return ALLOCATION_OPACITIES[index] ?? 0.42;
+}
+
+/** German signed percent, minus as U+2212 like every other figure on the page. */
+function formatSignedPercent(value, decimals = 1) {
+  const number = Number(value) || 0;
+  return `${number >= 0 ? "+" : "−"}${Math.abs(number).toFixed(decimals).replace(".", ",")} %`;
+}
 
 /**
  * Share label for the allocation legend.
@@ -86,10 +101,8 @@ export function PortfolioOverviewSection({
   headerPortfolioPositive,
   headerPortfolioValueLabel,
   headerProfitEuro,
-  headerProfitPercent,
   headerProfitSubLabel,
   headerProfitPositive,
-  liveItems,
   showCsUpdateBanner,
   latestCsUpdate,
   latestCsUpdateAgeHours,
@@ -108,24 +121,18 @@ export function PortfolioOverviewSection({
   recentActivity = [],
   recentActivityLoading = false,
   scopedPortfolioHistory,
-  portfolioChartCardRef,
   onChartHoverChange,
   onChartTrendChange,
   handleMetricsScopeChange,
-  watchlistTopMovers,
-  watchlistMoverPanelHeight,
-  setWatchlistFocusTarget,
+  watchlistAlerts = { rows: [], activeCount: 0 },
   handleTabSelect,
-  compositionData,
-  compositionLoading,
-  portfolioTotalValueForDisplay,
-  portfolioValueLabel,
   allocationByType = [],
   portfolioMovers = { gainers: [], losers: [], sourceCount: 0 },
   chartTrendData,
 }) {
   const { formatPrice } = useCurrency();
   const [moverTab, setMoverTab] = useState("gainers");
+  const [activityExpanded, setActivityExpanded] = useState(false);
 
   const scopeSwitchable = portfolioPreferences.metricsDisplayMode === "toggle_mode";
   // roiGainEuro, not deltaValue: deltaPercent is a growth-percent difference,
@@ -138,6 +145,104 @@ export function PortfolioOverviewSection({
   const rangeDeltaPositive = hasRangeDelta && rangeDeltaValue >= 0;
   const shownMovers = moverTab === "gainers" ? portfolioMovers.gainers : portfolioMovers.losers;
   const bestItemName = portfolioMovers.gainers[0]?.name || null;
+  const bestItemChange = portfolioMovers.gainers[0]?.changePercent;
+
+  // The mobile hero and the desktop hero print the same figure; one formatter so
+  // a fix to the currency handling cannot land on only one of them.
+  const rangeDeltaLabel = hasRangeDelta
+    ? `${rangeDeltaPositive ? "+" : "−"}${formatPrice(Math.abs(rangeDeltaValue), {
+        // The trend delta rides in as USD, like every price on this page.
+        // Formatting it without `useUsd` skips the conversion and prints a USD
+        // figure under a euro sign.
+        useUsd: true,
+        buyPriceUsd: Math.abs(rangeDeltaValue),
+      })} · ${formatSignedPercent(rangeDeltaPercent)}${
+        chartTrendData?.rangeLabel ? ` · ${chartTrendData.rangeLabel}` : ""
+      }`
+    : null;
+
+  const priceAgeSeconds = Number(stats.freshestDataAgeSeconds);
+  const priceAgeLabel = Number.isFinite(priceAgeSeconds)
+    ? `Preise vor ${formatAge(priceAgeSeconds)} aktualisiert`
+    : "Preisalter unbekannt";
+
+  const scopeOptions = [
+    { value: "all", label: "Alle Positionen" },
+    { value: "investments", label: "Investments" },
+  ];
+
+  // The design's hero sits in the chart card's header row so the range pills
+  // stay on the label line, next to the value they re-scale.
+  const desktopHero = (
+    <div className="hidden min-w-0 flex-col sm:flex">
+      <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+        Portfolio-Wert
+      </span>
+      {statsPending ? (
+        <Skeleton className="mt-2 h-12 w-72" />
+      ) : (
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+          {/* The design's 58px only fits the mock's 1520px frame; the app runs
+              from ~1180px up, so the hero scales with the viewport instead of
+              pushing the range pills onto their own row. */}
+          <span className="text-[clamp(32px,3.2vw,58px)] font-extrabold leading-none tracking-[-0.03em] tabular-nums">
+            {headerPortfolioValueLabel}
+          </span>
+          {rangeDeltaLabel ? (
+            <span
+              className={`text-[15px] font-bold tabular-nums ${
+                rangeDeltaPositive ? "text-success" : "text-danger"
+              }`}
+            >
+              {rangeDeltaLabel}
+            </span>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+
+  // The design's "Tages-P&L" has no source: the app tracks no intraday
+  // baseline. The chart's range delta is the honest stand-in and carries its
+  // own range label, so the tile never claims a window it is not showing.
+  const desktopKpis = [
+    {
+      label: "Gesamt-ROI",
+      value: formatSignedPercent(headerPortfolioPercent),
+      sub: headerProfitSubLabel,
+      positive: headerPortfolioPositive,
+    },
+    {
+      label: "Gesamt Zuwachs",
+      value: `${headerProfitEuro >= 0 ? "+" : "−"}${formatPrice(Math.abs(headerProfitEuro))}`,
+      // Not the ROI percent again — the tile beside it already is that number.
+      sub: Number.isFinite(Number(stats.totalInvested))
+        ? `auf ${formatPrice(stats.totalInvested)} investiert`
+        : headerProfitSubLabel,
+      positive: headerProfitPositive,
+    },
+    {
+      label: "Positionen",
+      value: String(stats.totalQuantity ?? 0),
+      sub: "Stueck im Bestand",
+    },
+    {
+      label: "Bestes Item",
+      value: bestItemName ? parseItemName(bestItemName).short : "—",
+      title: bestItemName || undefined,
+      sub: Number.isFinite(Number(bestItemChange))
+        ? `${formatSignedPercent(bestItemChange)} · 7 Tage`
+        : "Keine 7-Tage-Bewegung",
+      truncate: true,
+    },
+  ];
+
+  const alertRows = Array.isArray(watchlistAlerts?.rows) ? watchlistAlerts.rows : [];
+  const alertActiveCount = Number(watchlistAlerts?.activeCount) || 0;
+
+  // 4 → 8, as the design has it. The loader fetches 12; showing all of them
+  // would let one busy afternoon's edits run past the composition chart below.
+  const visibleActivity = recentActivity.slice(0, activityExpanded ? 8 : 4);
 
   return (
     <div className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
@@ -148,10 +253,7 @@ export function PortfolioOverviewSection({
       <div className="space-y-3 sm:hidden">
         {scopeSwitchable ? (
           <div className="flex gap-1.5 rounded-[10px] border border-border-soft bg-surface-1 p-[3px]">
-            {[
-              { value: "all", label: "Alle Positionen" },
-              { value: "investments", label: "Investments" },
-            ].map((option) => {
+            {scopeOptions.map((option) => {
               const active = metricsScope === option.value;
               return (
                 <button
@@ -183,26 +285,47 @@ export function PortfolioOverviewSection({
               {headerPortfolioValueLabel}
             </p>
           )}
-          {hasRangeDelta ? (
+          {rangeDeltaLabel ? (
             <span
               className={`mt-1.5 block text-[13px] font-bold tabular-nums ${
                 rangeDeltaPositive ? "text-success" : "text-danger"
               }`}
             >
-              {rangeDeltaPositive ? "+" : "−"}
-              {formatPrice(Math.abs(rangeDeltaValue), {
-                // The trend delta rides in as USD, like every price on this
-                // page. Formatting it without `useUsd` skips the conversion
-                // and prints a USD figure under a euro sign.
-                useUsd: true,
-                buyPriceUsd: Math.abs(rangeDeltaValue),
-              })}{" "}
-              · {rangeDeltaPositive ? "+" : "−"}
-              {Math.abs(rangeDeltaPercent).toFixed(1).replace(".", ",")} %
-              {chartTrendData?.rangeLabel ? ` · ${chartTrendData.rangeLabel}` : ""}
+              {rangeDeltaLabel}
             </span>
           ) : null}
         </div>
+      </div>
+
+      {/* Desktop head row: scope segment left, price freshness right. The chart
+          card no longer carries its own scope switch — one control per
+          breakpoint, or the two disagree about which is authoritative. */}
+      <div className="hidden items-center justify-between gap-5 sm:flex">
+        {scopeSwitchable ? (
+          <div className="flex gap-1 rounded-[10px] border border-border-soft bg-surface-1 p-[3px]">
+            {scopeOptions.map((option) => {
+              const active = metricsScope === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => void handleMetricsScopeChange(option.value)}
+                  aria-pressed={active}
+                  className={`h-[30px] rounded-lg px-4 text-xs transition-colors ${
+                    active
+                      ? "bg-primary font-extrabold text-primary-foreground"
+                      : "font-bold text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <span />
+        )}
+        <span className="text-xs text-muted-foreground">{priceAgeLabel}</span>
       </div>
 
       {showYearWrappedBanner ? (
@@ -347,285 +470,54 @@ export function PortfolioOverviewSection({
         </div>
       ) : null}
 
-      {/* Desktop: Stats-Cards */}
-      <div className="hidden sm:grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
-        <StatCard
-          title="Portfolio Wert (Live)"
-          value={headerPortfolioValueLabel}
-          isPositive={headerPortfolioPositive}
-          isLoading={statsPending}
+      {/* Hero + chart. The hero rides in the chart card's header slot so the
+          range pills sit on the label line beside the value they re-scale. */}
+      <div className="min-w-0">
+        <PortfolioChart
+          // The design has no card around the hero and chart — they sit
+          // directly on the page background.
+          flat
+          // Shorter than the 340px default: at that height the KPI band pushed
+          // the whole lower half (allocation, movers, activity, alarms) below
+          // the fold, so the dashboard opened on a chart and nothing else.
+          chartHeightClassName="h-[260px] sm:h-[240px] xl:h-[270px]"
+          history={scopedPortfolioHistory}
+          isLoading={portfolioLoading && scopedPortfolioHistory.length === 0}
+          onHoverChange={onChartHoverChange}
+          onTrendChange={onChartTrendChange}
+          metricsScope={metricsScope}
+          headerSlot={desktopHero}
         />
-        <StatCard
-          title="Gesamt Zuwachs"
-          value={`${headerProfitEuro >= 0 ? "+" : "-"}${formatPrice(Math.abs(headerProfitEuro))}`}
-          subValue={`${headerProfitPercent >= 0 ? "+" : ""}${headerProfitPercent.toFixed(2)}% | ${headerProfitSubLabel}`}
-          isPositive={headerProfitPositive}
-          isLoading={statsPending}
-        />
-        <StatCard
-          title="Items im Bestand"
-          value={`${stats.totalQuantity} Stueck`}
-          isLoading={statsPending}
-        />
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Price Sync
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {statsPending ? (
-              <>
-                <Skeleton className="h-8 w-28" />
-                <Skeleton className="h-3 w-40" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">
-                  {formatAge(stats.freshestDataAgeSeconds)} zuletzt
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>
-                    Live Quotes: {liveItems} | Aeltestes Cache-Alter: {formatAge(stats.oldestDataAgeSeconds)}
-                  </span>
-                  <Badge variant="outline" className={syncHealthBadgeClass(Number(stats.oldestDataAgeSeconds), liveItems)}>
-                    {syncHealthLabel(Number(stats.oldestDataAgeSeconds), liveItems)}
-                  </Badge>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-stretch xl:grid-cols-[minmax(0,1fr)_460px]">
-        <div className="min-w-0">
-          <PortfolioChart
-            cardRef={portfolioChartCardRef}
-            history={scopedPortfolioHistory}
-            isLoading={portfolioLoading && scopedPortfolioHistory.length === 0}
-            onHoverChange={onChartHoverChange}
-            onTrendChange={onChartTrendChange}
-            metricsScope={metricsScope}
-            onMetricsScopeChange={
-              portfolioPreferences.metricsDisplayMode === "toggle_mode"
-                ? (nextScope) => void handleMetricsScopeChange(nextScope)
-                : null
-            }
-          />
-        </div>
-        {/* The mobile dashboard shows portfolio movers instead (below), so this
-            watchlist panel would be a second, differently-sourced mover list. */}
-        <Card
-          className="hidden min-h-[340px] flex-col border-border/70 bg-card/70 sm:flex lg:min-h-0 lg:overflow-hidden"
-          style={watchlistMoverPanelHeight ? { height: `${watchlistMoverPanelHeight}px` } : undefined}
-        >
-          <CardHeader className="space-y-2 pb-3">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">Watchlist Mover</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleTabSelect("watchlist")}
-              >
-                Zur Watchlist
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Basis: Watchlist 7-Tage-Verlauf. Bei wenigen Gewinnern/Verlierern werden weitere Mover gezeigt.
+      {/* Desktop KPI bar. Replaces the former stat-card row: the same four
+          figures, but as one band under the chart instead of four boxes that
+          repeated the hero's portfolio value. Price freshness moved to the head
+          row above, which is why the Price-Sync card is gone. */}
+      <div className="hidden grid-cols-4 border-t border-border-soft sm:grid">
+        {desktopKpis.map((kpi, index) => (
+          <div
+            key={kpi.label}
+            className={`min-w-0 px-5 pt-[18px] ${index === 0 ? "pl-0" : "border-l border-border-soft"}`}
+          >
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+              {kpi.label}
             </p>
-          </CardHeader>
-          <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {watchlistTopMovers.hasAny ? (
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
-                {watchlistTopMovers.gainers.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-success">
-                      <TrendingUp className="h-4 w-4" />
-                      Top Gewinner
-                    </div>
-                    <div className="space-y-2">
-                      {watchlistTopMovers.gainers.map((item) => {
-                        const currentPrice = Number(item?.currentPrice);
-                        const currentPriceUsd = Number(item?.currentPriceUsd);
-                        const hasUsdPrice = Number.isFinite(currentPriceUsd);
-                        const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
-                        const priceLabel = hasUsdPrice
-                          ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
-                          : hasCurrentPrice
-                            ? formatPrice(currentPrice)
-                            : null;
-                        const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
-                        return (
-                          <button
-                            key={`gainer-${item.moverId}`}
-                            type="button"
-                            onClick={() => {
-                              setWatchlistFocusTarget({ id: item.id });
-                              handleTabSelect("watchlist");
-                            }}
-                            className="flex w-full items-center justify-between gap-2 rounded-md border border-success/30 bg-transparent p-2 text-left transition-colors hover:bg-success/15"
-                          >
-                            <div className="flex min-w-0 flex-1 items-center gap-2">
-                              <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
-                                {imageUrl ? (
-                                  <img
-                                    src={imageUrl}
-                                    alt={item.name}
-                                    className="h-full w-full object-contain"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold">{item.name}</p>
-                                {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
-                              </div>
-                            </div>
-                            <span className="text-xs font-semibold text-success">
-                              +{item.changePercentValue.toFixed(2)}%
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Keine Gewinner im 7-Tage-Vergleich gefunden.</p>
-                )}
-
-                {watchlistTopMovers.losers.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-danger">
-                      <TrendingDown className="h-4 w-4" />
-                      Top Verlierer
-                    </div>
-                    <div className="space-y-2">
-                      {watchlistTopMovers.losers.map((item) => {
-                        const currentPrice = Number(item?.currentPrice);
-                        const currentPriceUsd = Number(item?.currentPriceUsd);
-                        const hasUsdPrice = Number.isFinite(currentPriceUsd);
-                        const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
-                        const priceLabel = hasUsdPrice
-                          ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
-                          : hasCurrentPrice
-                            ? formatPrice(currentPrice)
-                            : null;
-                        const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
-                        return (
-                          <button
-                            key={`loser-${item.moverId}`}
-                            type="button"
-                            onClick={() => {
-                              setWatchlistFocusTarget({ id: item.id });
-                              handleTabSelect("watchlist");
-                            }}
-                            className="flex w-full items-center justify-between gap-2 rounded-md border border-danger/30 bg-transparent p-2 text-left transition-colors hover:bg-danger/10"
-                          >
-                            <div className="flex min-w-0 flex-1 items-center gap-2">
-                              <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
-                                {imageUrl ? (
-                                  <img
-                                    src={imageUrl}
-                                    alt={item.name}
-                                    className="h-full w-full object-contain"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold">{item.name}</p>
-                                {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
-                              </div>
-                            </div>
-                            <span className="text-xs font-semibold text-danger">
-                              {item.changePercentValue.toFixed(2)}%
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-
-                {watchlistTopMovers.extras.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Weitere Mover
-                    </div>
-                    <div className="space-y-2">
-                      {watchlistTopMovers.extras.map((item) => {
-                        const currentPrice = Number(item?.currentPrice);
-                        const currentPriceUsd = Number(item?.currentPriceUsd);
-                        const hasUsdPrice = Number.isFinite(currentPriceUsd);
-                        const hasCurrentPrice = hasUsdPrice || Number.isFinite(currentPrice);
-                        const priceLabel = hasUsdPrice
-                          ? formatPrice(currentPriceUsd, { useUsd: true, buyPriceUsd: currentPriceUsd })
-                          : hasCurrentPrice
-                            ? formatPrice(currentPrice)
-                            : null;
-                        const imageUrl = String(item?.imageUrl || item?.iconUrl || "").trim() || null;
-                        const isPositive = item.changePercentValue >= 0;
-                        return (
-                          <button
-                            key={`extra-${item.moverId}`}
-                            type="button"
-                            onClick={() => {
-                              setWatchlistFocusTarget({ id: item.id });
-                              handleTabSelect("watchlist");
-                            }}
-                            className={`flex w-full items-center justify-between gap-2 rounded-md border bg-transparent p-2 text-left transition-colors ${
-                              isPositive
-                                ? "border-success/30 hover:bg-success/8"
-                                : "border-danger/30 hover:bg-danger/8"
-                            }`}
-                          >
-                            <div className="flex min-w-0 flex-1 items-center gap-2">
-                              <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/25 p-1">
-                                {imageUrl ? (
-                                  <img
-                                    src={imageUrl}
-                                    alt={item.name}
-                                    className="h-full w-full object-cover"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">N/A</div>
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold">{item.name}</p>
-                                {priceLabel ? <p className="truncate text-[11px] text-muted-foreground">{priceLabel}</p> : null}
-                              </div>
-                            </div>
-                            <span className={`text-xs font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
-                              {item.changePercentValue >= 0 ? "+" : ""}{item.changePercentValue.toFixed(2)}%
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-
-                <p className="pt-1 text-[11px] text-muted-foreground">
-                  Datensaetze mit 7-Tage-Move: {watchlistTopMovers.sourceCount}
-                </p>
-              </div>
+            {statsPending ? (
+              <Skeleton className="mt-1.5 h-6 w-24" />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Keine eindeutigen Gewinner/Verlierer verfuegbar.
+              <p
+                className={`mt-1.5 truncate text-[22px] font-extrabold tracking-[-0.01em] tabular-nums ${
+                  kpi.positive === undefined ? "" : kpi.positive ? "text-success" : "text-danger"
+                } ${kpi.truncate ? "text-[17px]" : ""}`}
+                title={kpi.title}
+              >
+                {kpi.value}
               </p>
             )}
-          </CardContent>
-        </Card>
+            <p className="mt-1 truncate text-[11.5px] text-muted-foreground">{kpi.sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* ── Mobile-only dashboard blocks ─────────────────────────────────── */}
@@ -682,10 +574,7 @@ export function PortfolioOverviewSection({
                   // rounded shares can sum past 100, and a fixed basis with no
                   // shrink then overflows and clips the last slice off the bar.
                   flex: `${entry.value} 1 0`,
-                  // One hue, stepped down in opacity: the categories are a
-                  // ranking, not unrelated series, so a colour scale would
-                  // imply a distinction the data does not carry.
-                  opacity: [1, 0.82, 0.64, 0.48, 0.34, 0.22][index] ?? 0.16,
+                  opacity: allocationOpacity(index),
                 }}
               />
             ))}
@@ -695,7 +584,7 @@ export function PortfolioOverviewSection({
               <span key={entry.label} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
                 <span
                   className="size-2 rounded-full bg-foreground"
-                  style={{ opacity: [1, 0.82, 0.64, 0.48, 0.34, 0.22][index] ?? 0.22 }}
+                  style={{ opacity: allocationOpacity(index) }}
                 />
                 {entry.label} · {formatAllocationShare(entry.percentage, allocationByType.length)}
               </span>
@@ -756,7 +645,7 @@ export function PortfolioOverviewSection({
           rendered empty. Bulk imports and sync-apply deliberately write no
           operations, so this shows manual edits only. */}
       {recentActivityLoading || recentActivity.length > 0 ? (
-        <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5">
+        <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5 sm:hidden">
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
             Letzte Aktivität
           </p>
@@ -791,28 +680,188 @@ export function PortfolioOverviewSection({
         </div>
       ) : null}
 
-      <div className="hidden grid-cols-1 gap-4 sm:grid sm:gap-5">
-        <div className="sm:pt-1">
-          <h3 className="mb-4 text-lg font-semibold">Portfolio Zusammensetzung</h3>
-          {compositionLoading ? (
-            <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
-              <div className="flex flex-col items-center gap-3">
-                <Skeleton className="h-55 w-full max-w-sm sm:h-80" />
-                <Skeleton className="h-16 w-full max-w-sm" />
+      {/* ── Desktop two-column band ──────────────────────────────────────── */}
+      <div className="hidden gap-8 pt-2 sm:grid lg:grid-cols-[1.3fr_1fr] lg:gap-12">
+        <div className="min-w-0">
+          {allocationByType.length > 0 ? (
+            <>
+              <p className="text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                Allokation nach Kategorie
+              </p>
+              <div className="mt-[18px] flex h-3 overflow-hidden rounded-full bg-surface-2">
+                {allocationByType.map((entry, index) => (
+                  <span
+                    key={entry.label}
+                    className="bg-foreground"
+                    style={{
+                      // Proportional grow rather than a percentage basis: the
+                      // rounded shares can sum past 100, and a fixed basis with
+                      // no shrink then overflows and clips the last slice.
+                      flex: `${entry.value} 1 0`,
+                      opacity: allocationOpacity(index),
+                    }}
+                  />
+                ))}
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {[1, 2, 3, 4, 5, 6].map((entry) => (
-                  <Skeleton key={entry} className="h-14 w-full" />
+              <div className="mt-5 flex flex-col gap-3.5">
+                {allocationByType.map((entry, index) => (
+                  <div key={entry.label} className="flex items-center gap-3">
+                    <span
+                      className="size-[9px] shrink-0 rounded-full bg-foreground"
+                      style={{ opacity: allocationOpacity(index) }}
+                    />
+                    <span className="flex-1 truncate text-[13px] font-bold">{entry.label}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {/* `value` sums the rows' `currentValue`, which is already
+                          in display currency — the same field every inventory
+                          surface formats without `useUsd`. */}
+                      {formatPrice(entry.value)} ·{" "}
+                      {formatAllocationShare(entry.percentage, allocationByType.length)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {portfolioMovers.sourceCount > 0 ? (
+            <>
+              <p className="mt-8 text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                Top Bewegungen · 7 Tage
+              </p>
+              {/* Desktop shows both sides at once — the mobile tab switch only
+                  exists because two columns do not fit a phone. */}
+              <div className="mt-3.5 grid gap-8 md:grid-cols-2">
+                {[
+                  { key: "gainers", label: "Gewinner", rows: portfolioMovers.gainers },
+                  { key: "losers", label: "Verlierer", rows: portfolioMovers.losers },
+                ].map((column) => (
+                  <div key={column.key} className="flex min-w-0 flex-col">
+                    <span className="pb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+                      {column.label}
+                    </span>
+                    {column.rows.length > 0 ? (
+                      column.rows.slice(0, 3).map((mover) => (
+                        <div
+                          key={mover.id}
+                          className="flex items-center justify-between gap-4 border-b border-border-soft py-[11px]"
+                        >
+                          <ItemName name={mover.name} nameClassName="text-[13px] font-bold" />
+                          <span
+                            className={`shrink-0 whitespace-nowrap text-[13px] font-extrabold tabular-nums ${
+                              mover.changePercent >= 0 ? "text-success" : "text-danger"
+                            }`}
+                          >
+                            {formatSignedPercent(mover.changePercent)}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="py-[11px] text-[11.5px] text-muted-foreground">
+                        Keine {column.label.toLowerCase()} im 7-Tage-Vergleich.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        <div className="min-w-0">
+          {recentActivityLoading || recentActivity.length > 0 ? (
+            <>
+              <p className="mb-[18px] text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                Letzte Aktivität
+              </p>
+              {recentActivityLoading ? (
+                <div className="space-y-3">
+                  {[0, 1, 2, 3].map((row) => (
+                    <Skeleton key={row} className="h-4 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  {visibleActivity.map((entry, index) => (
+                    <div key={entry.id} className="flex gap-3.5 pb-[18px]">
+                      <span className="flex flex-none flex-col items-center">
+                        <span
+                          className={`size-2 rounded-full ${
+                            entry.appliedAt ? "bg-foreground" : "bg-primary"
+                          }`}
+                          title={entry.appliedAt ? undefined : "Noch nicht synchronisiert"}
+                        />
+                        {index < visibleActivity.length - 1 ? (
+                          <span className="mt-1 w-px flex-1 bg-border-soft" />
+                        ) : null}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-bold">
+                          {entry.name || describeActivityEntity(entry.entityType)}
+                        </span>
+                        <span className="block pt-[3px] text-[11.5px] text-muted-foreground">
+                          {describeActivityAction(entry)}
+                        </span>
+                        <span className="block pt-0.5 text-[11px] text-muted-foreground">
+                          vor {formatAge(activityAgeSeconds(entry.createdAt))}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {recentActivity.length > 4 ? (
+                <button
+                  type="button"
+                  onClick={() => setActivityExpanded((current) => !current)}
+                  className="h-[34px] w-full rounded-[10px] border border-border text-xs font-bold text-foreground transition-colors hover:bg-surface-1"
+                >
+                  {activityExpanded ? "Weniger anzeigen" : "Alle Aktivitäten anzeigen"}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+
+          {/* Watchlist alarms. Only rows that actually carry a target price are
+              listed; a watchlist without targets renders no widget rather than
+              an empty box promising alerts nobody set. */}
+          {/* Section, not a card. The design draws this as a filled box, but in
+              the mock it is the only block in a short column; here it would be
+              the third framed panel under a borderless timeline and read as
+              pasted on. Same head + bordered rows as the movers list. */}
+          {alertRows.length > 0 ? (
+            <div className="mt-8">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                  Watchlist-Alarme
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleTabSelect("watchlist")}
+                  className="shrink-0 rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10.5px] font-bold text-warn transition-colors hover:bg-warn/20"
+                >
+                  {alertActiveCount} aktiv
+                </button>
+              </div>
+              <div className="mt-3.5">
+                {alertRows.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="flex items-center justify-between gap-4 border-b border-border-soft py-[11px]"
+                  >
+                    <span className="truncate text-[13px] font-bold">{alert.name}</span>
+                    <span
+                      className={`shrink-0 whitespace-nowrap text-[11.5px] tabular-nums ${
+                        alert.reached ? "font-bold text-warn" : "text-muted-foreground"
+                      }`}
+                    >
+                      {alert.note}
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>
-          ) : (
-            <PortfolioCompositionChart
-              data={compositionData}
-              totalValueOverride={portfolioTotalValueForDisplay}
-              totalValueLabel={portfolioValueLabel}
-            />
-          )}
+          ) : null}
         </div>
       </div>
     </div>

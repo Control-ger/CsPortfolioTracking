@@ -10,9 +10,9 @@ const DESKTOP_SIDEBAR_ITEMS = [
   { key: "inventory", label: "Inventar", icon: Package, to: "/inventory" },
   { key: "watchlist", label: "Watchlist", icon: Eye, to: "/watchlist" },
   { key: "search", label: "Suche", icon: Search, to: "/search" },
+  { key: "updates", label: "Updates", icon: Newspaper, to: "/cs-updates" },
   { key: "management", label: "Verwaltung", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
   { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
-  { key: "updates", label: "Updates", icon: Newspaper, to: "/cs-updates" },
 ];
 
 export function DesktopSidebarRail({ desktopRuntime = false }) {
