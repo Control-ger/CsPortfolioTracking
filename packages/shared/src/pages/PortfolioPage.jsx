@@ -37,6 +37,8 @@ import {
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
   buildPortfolioAllocationByType,
+  calculatePortfolioSummary,
+  filterRowsByScope,
   selectPortfolioMovers,
   fetchCS2Inventory,
   fetchCsFloatBuyOrdersData,
@@ -700,6 +702,44 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     shouldPrepareInventoryData || shouldPrepareManagementData || globalSearchOpen;
   const shouldLoadGlobalSearchWatchlist =
     globalSearchOpen || activeTab === "search";
+  // The snapshots behind portfolioHistory are captured investments-scope only
+  // (PortfolioService::saveDailyValue runs getEnrichedInvestments with the
+  // default scope), so an "all"-scope chart has to lift that curve by the
+  // inventory share. The factor has to come from the *live* rows on both sides:
+  // deriving it from stats.totalValue / lastSnapshotValue mixed two unrelated
+  // quantities — the scope gap and every price move since the snapshot was
+  // taken — so a stale snapshot silently rescaled the entire curve and moved
+  // points that had been recorded correctly. Rows are fetched with rowScope
+  // "all", so both summaries describe the same instant.
+  const liveScopeScaleFactors = useMemo(() => {
+    const investmentRows = filterRowsByScope(enrichedInvestments, "investments");
+    const investmentsSummary = calculatePortfolioSummary(investmentRows);
+    const allSummary = calculatePortfolioSummary(enrichedInvestments);
+
+    const investmentsValue = Number(investmentsSummary.totalValue || 0);
+    const allValue = Number(allSummary.totalValue || 0);
+    if (!Number.isFinite(investmentsValue) || investmentsValue <= 0) {
+      return null;
+    }
+    if (!Number.isFinite(allValue) || allValue <= 0) {
+      return null;
+    }
+
+    const investmentsInvested = Number(investmentsSummary.totalInvested || 0);
+    const allInvested = Number(allSummary.totalInvested || 0);
+    const value = allValue / investmentsValue;
+
+    return {
+      value,
+      invested:
+        Number.isFinite(investmentsInvested) &&
+        investmentsInvested > 0 &&
+        Number.isFinite(allInvested) &&
+        allInvested > 0
+          ? allInvested / investmentsInvested
+          : value,
+    };
+  }, [enrichedInvestments]);
   const scopedPortfolioHistory = useMemo(() => {
     if (!Array.isArray(portfolioHistory) || portfolioHistory.length === 0) {
       return [];
@@ -710,55 +750,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       return portfolioHistory;
     }
 
-    const totalValueAll = Number(stats.totalValue || 0);
-    if (!Number.isFinite(totalValueAll) || totalValueAll <= 0) {
+    if (!liveScopeScaleFactors) {
       return portfolioHistory;
     }
 
-    let latestHistoryValue = null;
-    let latestHistoryInvested = null;
-    for (let index = portfolioHistory.length - 1; index >= 0; index -= 1) {
-      const entry = portfolioHistory[index];
-      const value = Number(
-        entry?.wert ?? entry?.value ?? entry?.priceEur ?? entry?.price_eur ?? entry?.price ?? 0,
-      );
-      if (!Number.isFinite(value) || value <= 0) {
-        continue;
-      }
-
-      latestHistoryValue = value;
-      const invested = Number(
-        entry?.invested ??
-          entry?.investedValue ??
-          entry?.invested_value ??
-          entry?.totalInvested ??
-          entry?.total_invested ??
-          0,
-      );
-      latestHistoryInvested = Number.isFinite(invested) && invested > 0 ? invested : null;
-      break;
-    }
-
-    if (!Number.isFinite(latestHistoryValue) || latestHistoryValue <= 0) {
-      return portfolioHistory;
-    }
-
-    const valueDeltaRatio = Math.abs(totalValueAll - latestHistoryValue) / latestHistoryValue;
-    if (valueDeltaRatio <= 0.03) {
-      return portfolioHistory;
-    }
-
-    const totalInvestedAll = Number(stats.totalInvested || 0);
-    const valueScaleFactor = totalValueAll / latestHistoryValue;
-    const investedScaleFactor =
-      Number.isFinite(totalInvestedAll) &&
-      totalInvestedAll > 0 &&
-      Number.isFinite(latestHistoryInvested) &&
-      latestHistoryInvested > 0
-        ? totalInvestedAll / latestHistoryInvested
-        : valueScaleFactor;
-
+    const valueScaleFactor = Number(liveScopeScaleFactors.value);
+    const investedScaleFactor = Number(liveScopeScaleFactors.invested);
     if (!Number.isFinite(valueScaleFactor) || valueScaleFactor <= 0) {
+      return portfolioHistory;
+    }
+
+    // Nothing outside the investments bucket — the curve already is the
+    // all-scope curve, so leave the recorded numbers untouched.
+    if (Math.abs(valueScaleFactor - 1) <= 0.0001) {
       return portfolioHistory;
     }
 
@@ -790,7 +794,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         growthPercent: scaledGrowthPercent,
       };
     });
-  }, [metricsScope, portfolioHistory, stats.totalInvested, stats.totalValue]);
+  }, [liveScopeScaleFactors, metricsScope, portfolioHistory]);
 
   const focusGlobalSearchInput = useCallback(() => {
     const candidates = [globalSearchInputRef.current, mobileSearchInputRef.current];

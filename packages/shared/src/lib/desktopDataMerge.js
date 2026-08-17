@@ -401,14 +401,24 @@ export async function buildDesktopPortfolioLocalSnapshot(options = {}) {
 
   if (history.length === 0 && rows.length > 0) {
     const summary = calculatePortfolioSummary(rows);
-    history = [
-      {
-        date: new Date().toISOString(),
-        wert: Number(summary.totalValue || 0),
-        invested: Number(summary.totalInvested || 0),
-        growthPercent: Number(summary.totalRoiPercent || 0),
-      },
-    ];
+    const seedValue = Number(summary.totalValue || 0);
+    // Only seed the chart when the rows actually carry a price. Local rows do
+    // not (see meta.livePricing above), so this branch used to write a point of
+    // wert: 0 / invested: >0 / growthPercent: -100 — a fabricated total loss —
+    // every time the desktop had no snapshots yet. Worse, that point has
+    // length 1, so it outranked a single-entry upstream history in the
+    // `upstreamHistory.length > history.length` merge further down. An empty
+    // history is the honest answer here; upstream fills it in when it responds.
+    if (Number.isFinite(seedValue) && seedValue > 0) {
+      history = [
+        {
+          date: new Date().toISOString(),
+          wert: seedValue,
+          invested: Number(summary.totalInvested || 0),
+          growthPercent: Number(summary.totalRoiPercent || 0),
+        },
+      ];
+    }
   }
 
   const nextMeta = rows.length === 0
