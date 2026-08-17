@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Sparkles, X } from "lucide-react";
 
 import { PortfolioChart } from "./PortfolioChart.jsx";
 import { Badge } from "./ui/badge.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
-import { formatAge, formatRelativeHours } from "../lib/portfolioHelpers.js";
+import { formatAge, formatPercent, formatRelativeHours, formatSignedPercent } from "../lib/portfolioHelpers.js";
 import { ItemName } from "./ui/item-name.jsx";
 import { parseItemName } from "../lib/itemName.js";
 
@@ -27,12 +28,6 @@ function allocationOpacity(index) {
   return ALLOCATION_OPACITIES[index] ?? 0.42;
 }
 
-/** German signed percent, minus as U+2212 like every other figure on the page. */
-function formatSignedPercent(value, decimals = 1) {
-  const number = Number(value) || 0;
-  return `${number >= 0 ? "+" : "−"}${Math.abs(number).toFixed(decimals).replace(".", ",")} %`;
-}
-
 /**
  * Share label for the allocation legend.
  *
@@ -43,28 +38,28 @@ function formatSignedPercent(value, decimals = 1) {
  *   99,6 % up while five more entries follow is what made the bar claim
  *   "Skins · 100 %" next to "Cases · 0,5 %".
  */
-function formatAllocationShare(percentage, categoryCount) {
+function formatAllocationShare(percentage, categoryCount, t) {
   const value = Number(percentage) || 0;
   if (value > 0 && value < 0.1) {
-    return "<0,1 %";
+    return t("allocation.belowTenth");
   }
   if (value < 10) {
-    return `${value.toFixed(1).replace(".", ",")} %`;
+    return formatPercent(value, 1);
   }
   const rounded = Math.round(value);
   if (rounded >= 100 && categoryCount > 1) {
-    return ">99 %";
+    return t("allocation.aboveNinetyNine");
   }
-  return `${rounded} %`;
+  return formatPercent(rounded, 0);
 }
 
-const ACTIVITY_ENTITY_LABELS = {
-  investment: "Investment",
-  watchlist_item: "Watchlist-Item",
+const ACTIVITY_ENTITY_KEYS = {
+  investment: "activity.entityInvestment",
+  watchlist_item: "activity.entityWatchlistItem",
 };
 
-function describeActivityEntity(entityType) {
-  return ACTIVITY_ENTITY_LABELS[entityType] || "Eintrag";
+function describeActivityEntity(entityType, t) {
+  return t(ACTIVITY_ENTITY_KEYS[entityType] || "activity.entityFallback");
 }
 
 /**
@@ -74,12 +69,12 @@ function describeActivityEntity(entityType) {
  * state — so the label stays deliberately vague instead of claiming which of
  * the two happened.
  */
-function describeActivityAction(entry) {
-  const entity = describeActivityEntity(entry?.entityType);
+function describeActivityAction(entry, t) {
+  const entity = describeActivityEntity(entry?.entityType, t);
   if (entry?.opType === "delete") {
-    return `${entity} entfernt`;
+    return t("activity.actionRemoved", { entity });
   }
-  return `${entity} hinzugefügt oder bearbeitet`;
+  return t("activity.actionUpserted", { entity });
 }
 
 /** `formatAge` counts in seconds; the log stores ISO timestamps. */
@@ -130,6 +125,7 @@ export function PortfolioOverviewSection({
   portfolioMovers = { gainers: [], losers: [], sourceCount: 0 },
   chartTrendData,
 }) {
+  const { t } = useTranslation("dashboard");
   const { formatPrice } = useCurrency();
   const [moverTab, setMoverTab] = useState("gainers");
   const [activityExpanded, setActivityExpanded] = useState(false);
@@ -168,12 +164,12 @@ export function PortfolioOverviewSection({
 
   const priceAgeSeconds = Number(stats.freshestDataAgeSeconds);
   const priceAgeLabel = Number.isFinite(priceAgeSeconds)
-    ? `Preise vor ${formatAge(priceAgeSeconds)} aktualisiert`
-    : "Preisalter unbekannt";
+    ? t("hero.priceAge", { age: formatAge(priceAgeSeconds) })
+    : t("hero.priceAgeUnknown");
 
   const scopeOptions = [
-    { value: "all", label: "Alle Positionen" },
-    { value: "investments", label: "Investments" },
+    { value: "all", label: t("scope.all") },
+    { value: "investments", label: t("scope.investments") },
   ];
 
   // The design's hero sits in the chart card's header row so the range pills
@@ -181,7 +177,7 @@ export function PortfolioOverviewSection({
   const desktopHero = (
     <div className="hidden min-w-0 flex-col sm:flex">
       <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-        Portfolio-Wert
+        {t("hero.portfolioValue")}
       </span>
       {statsPending ? (
         <Skeleton className="mt-2 h-12 w-72" />
@@ -212,17 +208,17 @@ export function PortfolioOverviewSection({
   // own range label, so the tile never claims a window it is not showing.
   const desktopKpis = [
     {
-      label: "Gesamt-ROI",
+      label: t("kpi.totalRoi"),
       value: formatSignedPercent(headerPortfolioPercent),
       sub: headerProfitSubLabel,
       positive: headerPortfolioPositive,
     },
     {
-      label: "Gesamt Zuwachs",
+      label: t("kpi.totalGain"),
       value: `${headerProfitEuro >= 0 ? "+" : "−"}${formatUsd(Math.abs(headerProfitEuro))}`,
       // Not the ROI percent again — the tile beside it already is that number.
       sub: Number.isFinite(Number(stats.totalInvested))
-        ? `auf ${formatUsd(stats.totalInvested)} investiert`
+        ? t("kpi.investedSub", { amount: formatUsd(stats.totalInvested) })
         : headerProfitSubLabel,
       positive: headerProfitPositive,
     },
@@ -230,17 +226,17 @@ export function PortfolioOverviewSection({
       // `totalQuantity` counts pieces, not positions — a stack of 400 cases is
       // one position. The design's "Positionen 42" has no equivalent field, so
       // the tile is labelled for what it actually shows.
-      label: "Items im Bestand",
+      label: t("kpi.itemsHeld"),
       value: String(stats.totalQuantity ?? 0),
-      sub: "Stueck insgesamt",
+      sub: t("kpi.piecesTotal"),
     },
     {
-      label: "Bestes Item",
+      label: t("kpi.bestItem"),
       value: bestItemName ? parseItemName(bestItemName).short : "—",
       title: bestItemName || undefined,
       sub: Number.isFinite(Number(bestItemChange))
-        ? `${formatSignedPercent(bestItemChange)} · 7 Tage`
-        : "Keine 7-Tage-Bewegung",
+        ? t("kpi.sevenDayChange", { percent: formatSignedPercent(bestItemChange) })
+        : t("kpi.noSevenDayMove"),
       truncate: true,
     },
   ];
@@ -284,7 +280,7 @@ export function PortfolioOverviewSection({
 
         <div>
           <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
-            Portfolio-Wert
+            {t("hero.portfolioValue")}
           </span>
           {statsPending ? (
             <Skeleton className="mt-1.5 h-9 w-48" />
@@ -351,7 +347,7 @@ export function PortfolioOverviewSection({
         >
           <button
             type="button"
-            aria-label="Jahresrueckblick ausblenden"
+            aria-label={t("wrappedBanner.dismiss")}
             onClick={(event) => {
               event.stopPropagation();
               handleDismissYearWrapped();
@@ -364,14 +360,14 @@ export function PortfolioOverviewSection({
             <div className="flex min-w-0 items-center gap-2">
               <Sparkles className="h-4 w-4 shrink-0 text-primary" />
               <span className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Jahresrueckblick {yearWrappedYear}
+                {t("wrappedBanner.eyebrow", { year: yearWrappedYear })}
               </span>
             </div>
             <p className="text-base font-semibold text-foreground sm:text-lg">
-              Dein CS-Investment-Jahr {yearWrappedYear}
+              {t("wrappedBanner.title", { year: yearWrappedYear })}
             </p>
             <p className="text-sm text-muted-foreground">
-              Kaeufe, Ausgaben, Plattformen und die Kurve deines Portfolios — jetzt ansehen.
+              {t("wrappedBanner.body")}
             </p>
           </div>
         </div>
@@ -395,16 +391,16 @@ export function PortfolioOverviewSection({
               <div className="flex min-w-0 items-center gap-2">
                 <span className="h-2 w-2 shrink-0 rounded-full bg-warn" />
                 <span className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  VAC Ban-Welle
+                  {t("banWaveBanner.eyebrow")}
                 </span>
               </div>
               <Badge variant="outline" className="shrink-0 border-warn/30 bg-warn/10 text-warn">
-                aktuell
+                {t("banWaveBanner.badge")}
               </Badge>
             </div>
             <p className="line-clamp-2 text-base font-semibold text-foreground sm:text-lg">{freshBanWaveItem.title}</p>
             <p className="text-sm text-muted-foreground">
-              Erhöhte Ban-Aktivität erkannt — Marktbewegungen bei Skins und Cases möglich.
+              {t("banWaveBanner.body")}
             </p>
           </div>
         </div>
@@ -428,11 +424,11 @@ export function PortfolioOverviewSection({
               <div className="flex min-w-0 items-center gap-2">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${latestCsUpdateBannerTone.dot}`} />
                 <span className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  CS Update · seit {formatRelativeHours(latestCsUpdateAgeHours)}
+                  {t("csUpdateBanner.eyebrow", { age: formatRelativeHours(latestCsUpdateAgeHours) })}
                 </span>
                 {hasUnreadCsUpdate ? (
                   <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                    neu
+                    {t("csUpdateBanner.new")}
                   </span>
                 ) : null}
               </div>
@@ -446,11 +442,11 @@ export function PortfolioOverviewSection({
             </p>
 
             <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-              <span className="text-muted-foreground">Aktion</span>
+              <span className="text-muted-foreground">{t("csUpdateBanner.action")}</span>
               <span className="text-foreground">{latestCsUpdateImpact.actionLabel}</span>
               {latestCsUpdate?.aiReasoning ? (
                 <>
-                  <span className="text-muted-foreground">Grund</span>
+                  <span className="text-muted-foreground">{t("csUpdateBanner.reason")}</span>
                   <span className="line-clamp-2 text-muted-foreground">{latestCsUpdate.aiReasoning}</span>
                 </>
               ) : null}
@@ -465,13 +461,13 @@ export function PortfolioOverviewSection({
                   onClick={(event) => event.stopPropagation()}
                   className="inline-flex items-center gap-1 font-medium text-foreground hover:underline"
                 >
-                  Original Update öffnen
+                  {t("csUpdateBanner.openOriginal")}
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </a>
               ) : null}
               <span className="inline-flex items-center gap-1">
                 {latestCsUpdate?.url ? <span className="text-muted-foreground/50">·</span> : null}
-                KI generiert{latestCsUpdateAiModelLabel ? ` · ${latestCsUpdateAiModelLabel}` : ""}
+                {t("csUpdateBanner.aiGenerated")}{latestCsUpdateAiModelLabel ? ` · ${latestCsUpdateAiModelLabel}` : ""}
               </span>
             </div>
           </div>
@@ -533,18 +529,18 @@ export function PortfolioOverviewSection({
       <div className="grid grid-cols-3 gap-[9px] sm:hidden">
         {[
           {
-            label: "Gesamt-ROI",
-            value: `${headerPortfolioPercent >= 0 ? "+" : "−"}${Math.abs(headerPortfolioPercent).toFixed(1).replace(".", ",")} %`,
+            label: t("kpi.totalRoi"),
+            value: formatSignedPercent(headerPortfolioPercent),
             tone: headerPortfolioPositive ? "text-success" : "text-danger",
           },
-          { label: "Positionen", value: String(stats.totalQuantity ?? 0), tone: "" },
+          { label: t("kpi.positions"), value: String(stats.totalQuantity ?? 0), tone: "" },
           // Real item names run far past the design's "Kilowatt" and this tile
           // is a third of a phone wide, so it shows the parsed short name —
           // the variant prefix and the wear are what push "Sawed-Off | Parched"
           // out of view, and neither is what the tile is answering. The full
           // canonical name stays on the title attribute.
           {
-            label: "Bestes Item",
+            label: t("kpi.bestItem"),
             value: bestItemName ? parseItemName(bestItemName).short : "—",
             title: bestItemName || undefined,
             tone: "",
@@ -570,7 +566,7 @@ export function PortfolioOverviewSection({
       {allocationByType.length > 0 ? (
         <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5 sm:hidden">
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Allokation
+            {t("allocation.title")}
           </p>
           <div className="flex h-[11px] overflow-hidden rounded-full bg-surface-2">
             {allocationByType.map((entry, index) => (
@@ -594,7 +590,7 @@ export function PortfolioOverviewSection({
                   className="size-2 rounded-full bg-foreground"
                   style={{ opacity: allocationOpacity(index) }}
                 />
-                {entry.label} · {formatAllocationShare(entry.percentage, allocationByType.length)}
+                {entry.label} · {formatAllocationShare(entry.percentage, allocationByType.length, t)}
               </span>
             ))}
           </div>
@@ -604,11 +600,11 @@ export function PortfolioOverviewSection({
       {portfolioMovers.sourceCount > 0 ? (
         <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5 sm:hidden">
           <div className="mb-2.5 flex items-center justify-between gap-2">
-            <p className="text-[12.5px] font-bold">Top Bewegungen · 7 Tage</p>
+            <p className="text-[12.5px] font-bold">{t("movers.title")}</p>
             <div className="inline-flex gap-0.5 rounded-lg bg-surface-1 p-0.5">
               {[
-                { value: "gainers", label: "Gewinner" },
-                { value: "losers", label: "Verlierer" },
+                { value: "gainers", label: t("movers.gainers") },
+                { value: "losers", label: t("movers.losers") },
               ].map((tab) => (
                 <button
                   key={tab.value}
@@ -635,14 +631,13 @@ export function PortfolioOverviewSection({
                     mover.changePercent >= 0 ? "text-success" : "text-danger"
                   }`}
                 >
-                  {mover.changePercent >= 0 ? "+" : "−"}
-                  {Math.abs(mover.changePercent).toFixed(1).replace(".", ",")} %
+                  {formatSignedPercent(mover.changePercent)}
                 </span>
               </div>
             ))
           ) : (
             <p className="py-1.5 text-[11.5px] text-muted-foreground">
-              Keine {moverTab === "gainers" ? "Gewinner" : "Verlierer"} im 7-Tage-Vergleich.
+              {moverTab === "gainers" ? t("movers.emptyGainers") : t("movers.emptyLosers")}
             </p>
           )}
         </div>
@@ -655,7 +650,7 @@ export function PortfolioOverviewSection({
       {recentActivityLoading || recentActivity.length > 0 ? (
         <div className="rounded-2xl border border-border bg-card px-[15px] py-3.5 sm:hidden">
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Letzte Aktivität
+            {t("activity.title")}
           </p>
           {recentActivityLoading ? (
             <div className="mt-3 space-y-3">
@@ -671,14 +666,14 @@ export function PortfolioOverviewSection({
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${
                       entry.appliedAt ? "bg-muted-foreground" : "bg-primary"
                     }`}
-                    title={entry.appliedAt ? undefined : "Noch nicht synchronisiert"}
+                    title={entry.appliedAt ? undefined : t("activity.notSynced")}
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[12.5px] font-semibold text-foreground">
-                      {entry.name || describeActivityEntity(entry.entityType)}
+                      {entry.name || describeActivityEntity(entry.entityType, t)}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {describeActivityAction(entry)} · vor {formatAge(activityAgeSeconds(entry.createdAt))}
+                      {describeActivityAction(entry, t)} · {t("activity.ago", { age: formatAge(activityAgeSeconds(entry.createdAt)) })}
                     </p>
                   </div>
                 </div>
@@ -694,7 +689,7 @@ export function PortfolioOverviewSection({
           {allocationByType.length > 0 ? (
             <>
               <p className="text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Allokation nach Kategorie
+                {t("allocation.titleByCategory")}
               </p>
               <div className="mt-[18px] flex h-3 overflow-hidden rounded-full bg-surface-2">
                 {allocationByType.map((entry, index) => (
@@ -721,7 +716,7 @@ export function PortfolioOverviewSection({
                     <span className="flex-1 truncate text-[13px] font-bold">{entry.label}</span>
                     <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                       {formatUsd(entry.value)} ·{" "}
-                      {formatAllocationShare(entry.percentage, allocationByType.length)}
+                      {formatAllocationShare(entry.percentage, allocationByType.length, t)}
                     </span>
                   </div>
                 ))}
@@ -732,14 +727,17 @@ export function PortfolioOverviewSection({
           {portfolioMovers.sourceCount > 0 ? (
             <>
               <p className="mt-8 text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Top Bewegungen · 7 Tage
+                {t("movers.title")}
               </p>
               {/* Desktop shows both sides at once — the mobile tab switch only
                   exists because two columns do not fit a phone. */}
               <div className="mt-3.5 grid gap-8 md:grid-cols-2">
                 {[
-                  { key: "gainers", label: "Gewinner", rows: portfolioMovers.gainers },
-                  { key: "losers", label: "Verlierer", rows: portfolioMovers.losers },
+                  // `emptyKey` rather than lowercasing the label into a
+                  // sentence: German capitalises nouns, so the old
+                  // `label.toLowerCase()` printed "Keine gewinner ...".
+                  { key: "gainers", label: t("movers.gainers"), emptyKey: "movers.emptyGainers", rows: portfolioMovers.gainers },
+                  { key: "losers", label: t("movers.losers"), emptyKey: "movers.emptyLosers", rows: portfolioMovers.losers },
                 ].map((column) => (
                   <div key={column.key} className="flex min-w-0 flex-col">
                     <span className="pb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
@@ -763,7 +761,7 @@ export function PortfolioOverviewSection({
                       ))
                     ) : (
                       <p className="py-[11px] text-[11.5px] text-muted-foreground">
-                        Keine {column.label.toLowerCase()} im 7-Tage-Vergleich.
+                        {t(column.emptyKey)}
                       </p>
                     )}
                   </div>
@@ -777,7 +775,7 @@ export function PortfolioOverviewSection({
           {recentActivityLoading || recentActivity.length > 0 ? (
             <>
               <p className="mb-[18px] text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Letzte Aktivität
+                {t("activity.title")}
               </p>
               {recentActivityLoading ? (
                 <div className="space-y-3">
@@ -794,7 +792,7 @@ export function PortfolioOverviewSection({
                           className={`size-2 rounded-full ${
                             entry.appliedAt ? "bg-foreground" : "bg-primary"
                           }`}
-                          title={entry.appliedAt ? undefined : "Noch nicht synchronisiert"}
+                          title={entry.appliedAt ? undefined : t("activity.notSynced")}
                         />
                         {index < visibleActivity.length - 1 ? (
                           <span className="mt-1 w-px flex-1 bg-border-soft" />
@@ -802,13 +800,13 @@ export function PortfolioOverviewSection({
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-[13px] font-bold">
-                          {entry.name || describeActivityEntity(entry.entityType)}
+                          {entry.name || describeActivityEntity(entry.entityType, t)}
                         </span>
                         <span className="block pt-[3px] text-[11.5px] text-muted-foreground">
-                          {describeActivityAction(entry)}
+                          {describeActivityAction(entry, t)}
                         </span>
                         <span className="block pt-0.5 text-[11px] text-muted-foreground">
-                          vor {formatAge(activityAgeSeconds(entry.createdAt))}
+                          {t("activity.ago", { age: formatAge(activityAgeSeconds(entry.createdAt)) })}
                         </span>
                       </span>
                     </div>
@@ -821,7 +819,7 @@ export function PortfolioOverviewSection({
                   onClick={() => setActivityExpanded((current) => !current)}
                   className="h-[34px] w-full rounded-[10px] border border-border text-xs font-bold text-foreground transition-colors hover:bg-surface-1"
                 >
-                  {activityExpanded ? "Weniger anzeigen" : "Alle Aktivitäten anzeigen"}
+                  {activityExpanded ? t("activity.showLess") : t("activity.showAll")}
                 </button>
               ) : null}
             </>
@@ -838,14 +836,14 @@ export function PortfolioOverviewSection({
             <div className="mt-8">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[13px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                  Watchlist-Alarme
+                  {t("alerts.title")}
                 </p>
                 <button
                   type="button"
                   onClick={() => handleTabSelect("watchlist")}
                   className="shrink-0 rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10.5px] font-bold text-warn transition-colors hover:bg-warn/20"
                 >
-                  {alertActiveCount} aktiv
+                  {t("alerts.activeCount", { count: alertActiveCount })}
                 </button>
               </div>
               <div className="mt-3.5">

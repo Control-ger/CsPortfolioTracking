@@ -79,7 +79,8 @@ import {
   normalizePortfolioGroupColor,
   preservePortfolioGroupColors,
 } from "@shared/lib/portfolioGroups.js";
-import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
+import { useTranslation } from "react-i18next";
+import { getActiveIntlLocale, translate } from "@shared/lib/i18n/index.js";
 import {
   formatDateSafe,
   normalizeSearchText,
@@ -91,6 +92,7 @@ import {
   buildGroupDetailSelection,
   buildGroupClusterDetailSelection,
   getItemNameKey,
+  formatPercent,
   MANUAL_ITEM_TYPES,
 } from "../lib/portfolioHelpers.js";
 import {
@@ -188,22 +190,24 @@ const CS_UPDATE_NOTIFIED_KEY = "cs-update:last-notified-id:v1";
 const YEAR_WRAPPED_DISMISS_KEY_PREFIX = "year-wrapped:dismissed:";
 const DEFAULT_CS_UPDATES_BANNER_VISIBLE_HOURS = 24 * 7;
 const JOURNEY_STEP_ORDER = ["server", "import_defaults", "csfloat_key", "csfloat_import", "push_notifications", "matching", "management"];
+// Page-local copy of the rail (see architecture-overview.md §5); labels are
+// keys for the same reason the shared rail's are.
 const DESKTOP_SIDEBAR_TABS = [
-  { key: "overview", label: "Uebersicht", icon: LayoutGrid },
-  { key: "inventory", label: "Inventar", icon: Package },
-  { key: "watchlist", label: "Watchlist", icon: Eye },
-  { key: "management", label: "Verwaltung", icon: FolderCog, desktopOnly: true },
-  { key: "updates", label: "Updates", icon: Newspaper, route: "/cs-updates" },
-  { key: "settings", label: "Einstellungen", icon: Cog, route: "/settings" },
+  { key: "overview", labelKey: "tabs.overview", icon: LayoutGrid },
+  { key: "inventory", labelKey: "tabs.inventory", icon: Package },
+  { key: "watchlist", labelKey: "tabs.watchlist", icon: Eye },
+  { key: "management", labelKey: "tabs.management", icon: FolderCog, desktopOnly: true },
+  { key: "updates", labelKey: "tabs.updates", icon: Newspaper, route: "/cs-updates" },
+  { key: "settings", labelKey: "tabs.settings", icon: Cog, route: "/settings" },
 ];
 const GLOBAL_SEARCH_CATEGORIES = [
-  { key: "all", label: "All" },
-  { key: "skins", label: "Skins" },
-  { key: "cases", label: "Cases" },
-  { key: "stickers", label: "Sticker" },
-  { key: "agents", label: "Agents" },
-  { key: "capsules", label: "Capsules" },
-  { key: "everything_else", label: "Everything else" },
+  { key: "all", labelKey: "categories.all" },
+  { key: "skins", labelKey: "categories.skins" },
+  { key: "cases", labelKey: "categories.cases" },
+  { key: "stickers", labelKey: "categories.stickers" },
+  { key: "agents", labelKey: "categories.agents" },
+  { key: "capsules", labelKey: "categories.capsules" },
+  { key: "everything_else", labelKey: "categories.everythingElse" },
 ];
 
 function normalizeGlobalSearchInput(value) {
@@ -401,7 +405,7 @@ function buildManagementClusters(items = []) {
       groups.set(key, {
         id: `cluster-${key}`,
         key,
-        name: item.name || item.marketHashName || "Unknown Item",
+        name: item.name || item.marketHashName || translate("portfolio:item.unknown"),
         type: item.type || "skin",
         imageUrl: item.imageUrl || null,
         positions: [],
@@ -446,18 +450,18 @@ function formatSteamSyncError(error) {
   const raw = String(error?.message || error || "");
   const upper = raw.toUpperCase();
   if (upper.includes("INVENTORY_ACCESS_DENIED")) {
-    return "Steam-Inventar ist nicht oeffentlich erreichbar. Pruefe Privatsphaere/Inventar-Sichtbarkeit in Steam und versuche es erneut.";
+    return translate("portfolio:steamSyncError.accessDenied");
   }
   if (upper.includes("RATE") || upper.includes("429")) {
-    return "Steam hat den Abruf temporaer begrenzt (Rate Limit). Bitte in einigen Minuten erneut versuchen.";
+    return translate("portfolio:steamSyncError.rateLimit");
   }
   if (upper.includes("INVALID RESPONSE") || upper.includes("JSON")) {
-    return "Steam hat keine gueltige Inventarantwort geliefert. Bitte spaeter erneut versuchen.";
+    return translate("portfolio:steamSyncError.invalidResponse");
   }
   if (upper.includes("FAILED TO FETCH") || upper.includes("NETWORK")) {
-    return "Netzwerkfehler beim Steam-Sync. Bitte Verbindung pruefen und erneut starten.";
+    return translate("portfolio:steamSyncError.network");
   }
-  return raw || "Steam Sync fehlgeschlagen.";
+  return raw || translate("portfolio:steamSyncError.generic");
 }
 
 function formatApiWarningMetaLine(warning) {
@@ -466,10 +470,10 @@ function formatApiWarningMetaLine(warning) {
     metaParts.push(`HTTP ${warning.statusCode}`);
   }
   if (warning?.occurrences > 1) {
-    metaParts.push(`${warning.occurrences} Vorgaenge`);
+    metaParts.push(translate("portfolio:warnings.occurrences", { count: warning.occurrences }));
   }
   if (Array.isArray(warning?.items) && warning.items.length > 0) {
-    metaParts.push(`Items: ${warning.items.join(", ")}`);
+    metaParts.push(translate("portfolio:warnings.items", { items: warning.items.join(", ") }));
   }
   return metaParts.join(" | ");
 }
@@ -483,7 +487,7 @@ function mapWarningsToNotifications(warnings, { sourceKey, sourceLabel }) {
     const warningMeta = formatApiWarningMetaLine(warning);
     const metaParts = [];
     if (sourceLabel) {
-      metaParts.push(`Quelle: ${sourceLabel}`);
+      metaParts.push(translate("portfolio:warnings.source", { source: sourceLabel }));
     }
     if (warningMeta) {
       metaParts.push(warningMeta);
@@ -491,13 +495,14 @@ function mapWarningsToNotifications(warnings, { sourceKey, sourceLabel }) {
 
     return {
       id: `csfloat-warning-${sourceKey}-${warning?.code || "warning"}-${warning?.statusCode || "na"}-${index}`,
-      message: warning?.message || "CSFloat Warnung",
+      message: warning?.message || translate("portfolio:warnings.csfloatFallback"),
       meta: metaParts.join(" | "),
     };
   });
 }
 
 export function PortfolioPage({ initialTab = "overview", useExternalDesktopSidebarShell = false }) {
+  const { t } = useTranslation("portfolio");
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const isDesktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
   const runtimeTabs = useMemo(
@@ -1025,7 +1030,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         }
         console.warn("Failed to load portfolio groups", groupLoadError);
         setPortfolioGroups([]);
-        setPortfolioGroupError("Gruppen konnten nicht geladen werden.");
+        setPortfolioGroupError(t("errors.groupsLoad"));
       } finally {
         if (!cancelled) {
           setPortfolioGroupsLoading(false);
@@ -1037,7 +1042,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     return () => {
       cancelled = true;
     };
-  }, [shouldLoadPortfolioGroups]);
+  }, [shouldLoadPortfolioGroups, t]);
 
   useEffect(() => {
     if (!isDesktopRuntime || typeof document === "undefined") {
@@ -1102,7 +1107,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         setMatchingRows(Array.isArray(matches) ? matches : []);
         setManagementError("");
       } catch (loadError) {
-        setManagementError(loadError?.message || "Verwaltungsdaten konnten nicht geladen werden.");
+        setManagementError(loadError?.message || t("errors.managementLoad"));
         setManagementInvestments([]);
         setMatchingRows([]);
       } finally {
@@ -1112,7 +1117,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
 
     void loadManagementInvestments();
-  }, [compositionRefreshToken, isDesktopRuntime, shouldPrepareInventoryData, shouldPrepareManagementData]);
+  }, [compositionRefreshToken, isDesktopRuntime, shouldPrepareInventoryData, shouldPrepareManagementData, t]);
 
   useEffect(() => {
     if (managementSection !== "create") {
@@ -1159,7 +1164,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       } catch (error) {
         if (!cancelled) {
           setManualNameSuggestions([]);
-          setManualNameSuggestionsError(error?.message || "Vorschlaege konnten nicht geladen werden.");
+          setManualNameSuggestionsError(error?.message || t("errors.suggestionsLoad"));
         }
       } finally {
         if (!cancelled) {
@@ -1172,7 +1177,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [managementSection, manualItemDraft.name, manualSelectedSuggestion]);
+  }, [managementSection, manualItemDraft.name, manualSelectedSuggestion, t]);
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -1342,7 +1347,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
       const inventoryResult = await fetchCS2Inventory(steamId);
       if (!inventoryResult?.success || !Array.isArray(inventoryResult.items)) {
-        throw new Error(inventoryResult?.error || "Steam-Inventar konnte nicht geladen werden.");
+        throw new Error(inventoryResult?.error || t("errors.steamInventoryLoad"));
       }
 
       const marketableItems = inventoryResult.items.filter((item) => item?.marketable);
@@ -1388,7 +1393,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           lastSyncedAt: syncedAt,
         }));
         if (manual) {
-          setManualSteamSyncInfo("Keine neuen Steam Items gefunden.");
+          setManualSteamSyncInfo(t("success.noNewSteamItems"));
           if (manualSteamSyncInfoTimeoutRef.current) {
             window.clearTimeout(manualSteamSyncInfoTimeoutRef.current);
           }
@@ -1417,7 +1422,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     } finally {
       setIsSteamSyncing(false);
     }
-  }, [authRequired, isElectronRuntime, isSteamSyncing, portfolioPreferences.steamImportBucket, refreshPortfolio]);
+  }, [authRequired, isElectronRuntime, isSteamSyncing, portfolioPreferences.steamImportBucket, refreshPortfolio, t]);
 
   useEffect(() => () => {
     if (manualSteamSyncInfoTimeoutRef.current) {
@@ -1652,7 +1657,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           }
           setSelectedItemHistory(buildWeightedGroupHistory(withHistory));
         } catch (groupHistoryError) {
-          console.error("Fehler beim Laden der Gruppen-Historie:", groupHistoryError);
+          console.error(t("errors.groupHistory"), groupHistoryError);
           if (!cancelled) {
             setSelectedItemHistory([]);
           }
@@ -1692,7 +1697,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           setSelectedItemHistory([]);
         }
       } catch (historyError) {
-        console.error("Fehler beim Laden der Positionshistorie:", historyError);
+        console.error(t("errors.positionHistory"), historyError);
         if (!cancelled) {
           setSelectedItemHistory([]);
         }
@@ -1707,7 +1712,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     return () => {
       cancelled = true;
     };
-  }, [selectedItemWithLive]);
+  }, [selectedItemWithLive, t]);
 
   const handleTabSelect = useCallback((nextTab) => {
     if (!runtimeTabs.includes(nextTab)) {
@@ -1801,7 +1806,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     const thesis = String(portfolioGroupDraft?.thesis || "").trim();
     const color = normalizePortfolioGroupColor(portfolioGroupDraft?.color);
     if (!name) {
-      setPortfolioGroupError("Bitte einen Gruppennamen vergeben.");
+      setPortfolioGroupError(t("errors.groupNameRequired"));
       return;
     }
 
@@ -1847,17 +1852,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           color: normalizePortfolioGroupColor(savedGroup.color),
         });
       }
-      setPortfolioGroupMessage(existingGroup ? "Gruppe aktualisiert." : "Gruppe angelegt.");
+      setPortfolioGroupMessage(existingGroup ? t("success.groupUpdated") : t("success.groupCreated"));
       setPortfolioGroupError("");
     } catch (groupSaveError) {
       console.warn("Failed to persist portfolio group", groupSaveError);
-      setPortfolioGroupError("Gruppe konnte nicht gespeichert werden.");
+      setPortfolioGroupError(t("errors.groupSaveFailed"));
     }
   }, [
     persistPortfolioGroups,
     portfolioGroupDraft,
     portfolioGroupEditorId,
     portfolioGroups,
+    t,
   ]);
 
   const handleDeletePortfolioGroup = useCallback(async (groupId) => {
@@ -1873,17 +1879,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       if (portfolioGroupEditorId === normalizedGroupId) {
         resetPortfolioGroupEditor();
       }
-      setPortfolioGroupMessage("Gruppe geloescht.");
+      setPortfolioGroupMessage(t("success.groupDeleted"));
       setPortfolioGroupError("");
     } catch (groupDeleteError) {
       console.warn("Failed to delete portfolio group", groupDeleteError);
-      setPortfolioGroupError("Gruppe konnte nicht geloescht werden.");
+      setPortfolioGroupError(t("errors.groupDeleteFailed"));
     }
   }, [
     persistPortfolioGroups,
     portfolioGroupEditorId,
     portfolioGroups,
     resetPortfolioGroupEditor,
+    t,
   ]);
 
   const toggleExpandedGroupManagementCluster = useCallback((clusterKey) => {
@@ -1922,13 +1929,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           };
         }),
       );
-      setPortfolioGroupMessage("Mitglieder zur Gruppe hinzugefuegt.");
+      setPortfolioGroupMessage(t("success.membersAdded"));
       setPortfolioGroupError("");
     } catch (groupAssignError) {
       console.warn("Failed to assign investments to group", groupAssignError);
-      setPortfolioGroupError("Mitglieder konnten nicht zur Gruppe hinzugefuegt werden.");
+      setPortfolioGroupError(t("errors.membersAddFailed"));
     }
-  }, [persistPortfolioGroups, portfolioGroups]);
+  }, [persistPortfolioGroups, portfolioGroups, t]);
 
   const handleRemoveInvestmentIdsFromGroup = useCallback(async (groupId, investmentIds = []) => {
     const normalizedGroupId = String(groupId || "").trim();
@@ -1952,13 +1959,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             : group,
         ),
       );
-      setPortfolioGroupMessage("Mitglieder aus der Gruppe entfernt.");
+      setPortfolioGroupMessage(t("success.membersRemoved"));
       setPortfolioGroupError("");
     } catch (groupRemoveError) {
       console.warn("Failed to remove investments from group", groupRemoveError);
-      setPortfolioGroupError("Mitglieder konnten nicht aus der Gruppe entfernt werden.");
+      setPortfolioGroupError(t("errors.membersRemoveFailed"));
     }
-  }, [persistPortfolioGroups, portfolioGroups]);
+  }, [persistPortfolioGroups, portfolioGroups, t]);
 
   const handleOpenPortfolioGroupInInventory = useCallback((groupId) => {
     const normalizedGroupId = String(groupId || "").trim();
@@ -2178,7 +2185,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           key,
           source,
           sourcePriority: source === "investment" ? 0 : 1,
-          sourceLabel: source === "investment" ? "Investments" : "Inventar",
+          sourceLabel: source === "investment" ? t("source.investments") : t("source.inventory"),
           sourceItemId: item?.id || null,
           name,
           nameKey: normalizeSearchText(name),
@@ -2233,7 +2240,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           key,
           source: "watchlist",
           sourcePriority: 2,
-          sourceLabel: "Watchlist",
+          sourceLabel: t("source.watchlist"),
           sourceItemId: item?.id || null,
           name,
           nameKey: normalizeSearchText(name),
@@ -2276,7 +2283,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     });
 
     return Array.from(grouped.values());
-  }, [enrichedInvestments, globalSearchWatchlistItems]);
+  }, [enrichedInvestments, globalSearchWatchlistItems, t]);
 
   const globalSearchKnownItemsByName = useMemo(() => {
     const map = new Map();
@@ -2340,9 +2347,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   }, [globalSearchKnownItems, globalSearchTermNormalized]);
   const globalSearchLocalSuggestionGroups = useMemo(() => {
     const order = [
-      { key: "investment", label: "Investments" },
-      { key: "inventory", label: "Inventar" },
-      { key: "watchlist", label: "Watchlist" },
+      { key: "investment", label: t("source.investments") },
+      { key: "inventory", label: t("source.inventory") },
+      { key: "watchlist", label: t("source.watchlist") },
     ];
     return order
       .map((group) => ({
@@ -2350,7 +2357,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         entries: globalSearchLocalSuggestions.filter((entry) => entry.source === group.key),
       }))
       .filter((group) => group.entries.length > 0);
-  }, [globalSearchLocalSuggestions]);
+  }, [globalSearchLocalSuggestions, t]);
 
   const globalSearchFilteredCatalogResults = useMemo(() => {
     if (globalSearchCategory === "all") {
@@ -2435,12 +2442,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         await createWatchlistItemData(marketHashName, String(candidate?.itemType || "other"));
         await loadGlobalSearchWatchlistItems();
       } catch (watchlistError) {
-        setGlobalSearchCatalogError(watchlistError?.message || "Konnte Item nicht zur Watchlist hinzufuegen.");
+        setGlobalSearchCatalogError(watchlistError?.message || t("errors.watchlistAddFailed"));
       } finally {
         setGlobalSearchAddingItem("");
       }
     },
-    [loadGlobalSearchWatchlistItems],
+    [loadGlobalSearchWatchlistItems, t],
   );
 
   const globalSearchKeyboardEntries = useMemo(() => {
@@ -2835,7 +2842,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     // Capture primitives at effect entry to avoid stale closure during async IPC
     const itemId = String(freshBanWaveItem.id);
-    const itemTitle = freshBanWaveItem.title || "Erhöhte Ban-Aktivität in CS2";
+    const itemTitle = freshBanWaveItem.title || t("notifications.banWaveMessage");
     const itemPublishedAt = freshBanWaveItem.publishedAt || new Date().toISOString();
     const itemAiImpactLevel = String(freshBanWaveItem.aiImpactLevel || "").toLowerCase();
 
@@ -2858,7 +2865,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           await window.electronAPI.localStore.createNotification({
             userId,
             category: "cs_updates",
-            title: "VAC Ban-Welle erkannt",
+            title: t("notifications.banWaveTitle"),
             message: itemTitle,
             payload: { source: "ban_wave", itemId },
             createdAt: itemPublishedAt,
@@ -2871,7 +2878,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
 
     void trigger();
-  }, [freshBanWaveItem, isDesktopRuntime, portfolioPreferences.notifyBanWaveDesktop, portfolioPreferences.notifyBanWaveDesktopMinLevel]);
+  }, [freshBanWaveItem, isDesktopRuntime, portfolioPreferences.notifyBanWaveDesktop, portfolioPreferences.notifyBanWaveDesktopMinLevel, t]);
 
   const freshCsUpdateItem = useMemo(() => {
     if (!csUpdatesItems || csUpdatesFreshItemIds.length === 0) return null;
@@ -2891,7 +2898,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     // Capture primitives at effect entry to avoid stale closure during async IPC
     const itemId = String(freshCsUpdateItem.id);
-    const itemTitle = freshCsUpdateItem.title || "Neues CS2 Update";
+    const itemTitle = freshCsUpdateItem.title || t("notifications.csUpdateTitle");
     const itemPublishedAt = freshCsUpdateItem.publishedAt || new Date().toISOString();
     const itemAiImpactLevel = String(freshCsUpdateItem.aiImpactLevel || "").toLowerCase();
 
@@ -2914,7 +2921,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           await window.electronAPI.localStore.createNotification({
             userId,
             category: "cs_updates",
-            title: "Neues CS2 Update",
+            title: t("notifications.csUpdateTitle"),
             message: itemTitle,
             payload: { source: "cs_update", itemId },
             createdAt: itemPublishedAt,
@@ -2927,7 +2934,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     };
 
     void trigger();
-  }, [freshCsUpdateItem, isDesktopRuntime, portfolioPreferences.notifyCsUpdatesDesktop, portfolioPreferences.notifyCsUpdatesDesktopMinLevel]);
+  }, [freshCsUpdateItem, isDesktopRuntime, portfolioPreferences.notifyCsUpdatesDesktop, portfolioPreferences.notifyCsUpdatesDesktopMinLevel, t]);
 
   const formatUsdPrice = useCallback(
     (value, decimals = 2) =>
@@ -2945,8 +2952,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const headerProfitSubLabel = hoveredChartData?.date
     ? formatDateSafe(hoveredChartData.date)
     : shouldPreferHistorySummary || (hasStatsTotalValue && hasStatsRoiPercent)
-      ? "ROI gesamt"
-      : `ROI ${String(chartTrendData?.rangeLabel || "90T")}`;
+      ? t("header.roiTotal")
+      : t("header.roiRange", { range: String(chartTrendData?.rangeLabel || "90T") });
   const managementClusters = buildManagementClusters(managementInvestments);
   const managementInvestmentById = new Map(
     managementInvestments.map((item) => [String(item.id), item]),
@@ -3205,23 +3212,23 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       // "Kauf"/"Verkauf", not "Kaufziel"/"Verkaufsziel": the note shares one row
       // with the item name, and the direction is the part that cannot be
       // inferred from the number beside it.
-      const kind = target.direction === TARGET_DIRECTION_ABOVE ? "Verkauf" : "Kauf";
+      const kind = target.direction === TARGET_DIRECTION_ABOVE ? t("target.sell") : t("target.buy");
       const suffix = target.reached
-        ? "erreicht"
+        ? t("target.reached")
         : Number.isFinite(target.distancePercent)
-          ? `${Math.abs(target.distancePercent).toFixed(1).replace(".", ",")} %`
+          ? formatPercent(Math.abs(target.distancePercent), 1)
           : null;
 
       return {
         id: String(item?.id || item?.name),
-        name: item?.name || "Watchlist-Item",
+        name: item?.name || t("item.watchlistItem"),
         note: suffix ? `${kind} ${targetLabel} · ${suffix}` : `${kind} ${targetLabel}`,
         reached: target.reached,
       };
     });
 
     return { rows, activeCount: withTargets.length };
-  }, [dashboardWatchlistItems, formatPrice]);
+  }, [dashboardWatchlistItems, formatPrice, t]);
   const steamInventoryItemsAll = managementInvestments.filter((item) => {
     const platform = String(item.platform || item.source || "").toLowerCase();
     return platform === "steam_inventory" || Boolean(item.steamAssetId);
@@ -3302,7 +3309,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       if (!groups.has(key)) {
         groups.set(key, {
           key,
-          name: item.name || item.marketHashName || "Unknown Item",
+          name: item.name || item.marketHashName || translate("portfolio:item.unknown"),
           imageUrl: item.imageUrl || item.iconUrl || null,
           bucket: normalizeBucket(item.bucket, "inventory"),
           positions: [],
@@ -3436,8 +3443,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           await localStore.createNotification({
             userId,
             category: "action_match",
-            title: "Matching bestätigen",
-            message: `${matchingSuggestedCount} ${matchingSuggestedCount === 1 ? "Item braucht" : "Items brauchen"} eine Bestätigung`,
+            title: t("actions.matchingTitle"),
+            message: t("actions.matchingMessage", { count: matchingSuggestedCount }),
             payload: { count: matchingSuggestedCount },
           });
         }
@@ -3445,8 +3452,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           await localStore.createNotification({
             userId,
             category: "action_price",
-            title: "Preis ergänzen",
-            message: `${priceMissingCount} ${priceMissingCount === 1 ? "Item braucht" : "Items brauchen"} einen Preis`,
+            title: t("actions.priceTitle"),
+            message: t("actions.priceMessage", { count: priceMissingCount }),
             payload: { count: priceMissingCount },
           });
         }
@@ -3472,6 +3479,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     actionNotificationRefreshToken,
     matchingSuggestedCount,
     priceMissingCount,
+    t,
   ]);
 
   const handleManagementExcludeToggle = async (investmentId, exclude) => {
@@ -3681,15 +3689,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     const suggestionImageUrl = String(chosenSuggestion?.iconUrl || "").trim() || null;
 
     if (!name) {
-      setManagementError("Bitte einen Item-Namen angeben.");
+      setManagementError(t("errors.itemNameRequired"));
       return;
     }
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      setManagementError("Bitte eine gueltige Menge > 0 angeben.");
+      setManagementError(t("errors.quantityInvalid"));
       return;
     }
     if (!Number.isFinite(buyPriceInput) || buyPriceInput < 0) {
-      setManagementError("Bitte einen gueltigen Einkaufspreis angeben.");
+      setManagementError(t("errors.buyPriceInvalid"));
       return;
     }
     const buyPriceUsd = Number(convertToUsd(buyPriceInput).toFixed(2));
@@ -3737,7 +3745,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setManualNameSuggestionsError("");
       setManagementSection("exclude");
     } catch (createError) {
-      setManagementError(createError?.message || "Item konnte nicht erstellt werden.");
+      setManagementError(createError?.message || t("errors.itemCreateFailed"));
     } finally {
       setManualItemSaving(false);
     }
@@ -3745,37 +3753,37 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const appUpdateState = String(appUpdateNotification?.state || "idle");
   const appUpdateVersionLabel = appUpdateNotification?.version
     ? `v${appUpdateNotification.version}`
-    : "neue Version";
+    : t("appUpdate.fallbackVersion");
   const appUpdateStatusLabel = (() => {
     if (appUpdateState === "checking") {
-      return "Suche nach Updates...";
+      return t("appUpdate.checking");
     }
     if (appUpdateState === "available") {
-      return `${appUpdateVersionLabel} verfuegbar`;
+      return t("appUpdate.available", { version: appUpdateVersionLabel });
     }
     if (appUpdateState === "manual") {
-      return `${appUpdateVersionLabel} verfuegbar (manueller Download)`;
+      return t("appUpdate.manual", { version: appUpdateVersionLabel });
     }
     if (appUpdateState === "downloading") {
       const percent = Number(appUpdateNotification?.percent || 0);
-      return `Download laeuft (${Math.max(0, Math.min(100, Math.round(percent)))}%)`;
+      return t("appUpdate.downloading", { percent: Math.max(0, Math.min(100, Math.round(percent))) });
     }
     if (appUpdateState === "downloaded") {
-      return `${appUpdateVersionLabel} heruntergeladen`;
+      return t("appUpdate.downloaded", { version: appUpdateVersionLabel });
     }
     if (appUpdateState === "installing") {
-      return `${appUpdateVersionLabel} wird installiert`;
+      return t("appUpdate.installing", { version: appUpdateVersionLabel });
     }
     if (appUpdateState === "handoff") {
-      return `${appUpdateVersionLabel} im System-Installer geoeffnet`;
+      return t("appUpdate.handoff", { version: appUpdateVersionLabel });
     }
     if (appUpdateState === "not-available") {
-      return "App ist aktuell";
+      return t("appUpdate.upToDate");
     }
     if (appUpdateState === "error") {
-      return appUpdateNotification?.message || "Update-Pruefung fehlgeschlagen";
+      return appUpdateNotification?.message || t("appUpdate.checkFailed");
     }
-    return "Noch kein Update-Status vorhanden";
+    return t("appUpdate.noStatus");
   })();
   const appUpdateNotificationClass = (() => {
     if (appUpdateState === "downloaded") {
@@ -3797,27 +3805,27 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   })();
   const appUpdateHintLabel = (() => {
     if (appUpdateState === "downloaded") {
-      return "Klick: Jetzt updaten.";
+      return t("appUpdate.hintDownloaded");
     }
     if (appUpdateState === "downloading") {
-      return "Download laeuft im Hintergrund.";
+      return t("appUpdate.hintDownloading");
     }
     if (appUpdateState === "installing") {
-      return "Bitte die Passwortabfrage bestaetigen.";
+      return t("appUpdate.hintInstalling");
     }
     if (appUpdateState === "handoff") {
-      return "App schliessen und im System-Installer bestaetigen.";
+      return t("appUpdate.hintHandoff");
     }
     if (appUpdateState === "available") {
-      return "Klick: Jetzt updaten oder spaeter.";
+      return t("appUpdate.hintAvailable");
     }
     if (appUpdateState === "manual") {
-      return "Klick: Auf GitHub herunterladen.";
+      return t("appUpdate.hintManual");
     }
     if (appUpdateState === "error") {
-      return "Klick: Fehlerdetails und manueller Download.";
+      return t("appUpdate.hintError");
     }
-    return "Klick: Update-Status ansehen.";
+    return t("appUpdate.hintDefault");
   })();
   const APP_UPDATE_VISIBLE_STATES = [
     "available",
@@ -3853,11 +3861,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     });
   }, []);
   const handleWatchlistWarningsChange = useCallback((nextWarnings = []) => {
-    handleUiWarningsChange("watchlist-live", "Watchlist", nextWarnings);
-  }, [handleUiWarningsChange]);
+    handleUiWarningsChange("watchlist-live", t("source.watchlist"), nextWarnings);
+  }, [handleUiWarningsChange, t]);
   const portfolioWarningNotifications = useMemo(
-    () => mapWarningsToNotifications(warnings, { sourceKey: "portfolio", sourceLabel: "Portfolio" }),
-    [warnings],
+    () => mapWarningsToNotifications(warnings, { sourceKey: "portfolio", sourceLabel: t("source.portfolio") }),
+    [warnings, t],
   );
   const uiWarningNotifications = useMemo(
     () => Object.values(uiWarningNotificationsBySource).flat(),
@@ -3878,9 +3886,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const formatCompactNewCount = (count) => {
     const value = Number(count || 0);
     if (value > 999) {
-      return "999+ neu";
+      return t("notifications.newCountOverflow");
     }
-    return `${Math.max(0, value)} neu`;
+    return t("notifications.newCount", { count: Math.max(0, value) });
   };
   const unreadActionNotifications = useMemo(
     () =>
@@ -3933,7 +3941,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   };
   const renderNotificationsDropdownContent = () => (
     <>
-      <DropdownMenuLabel>Benachrichtigungen</DropdownMenuLabel>
+      <DropdownMenuLabel>{t("notifications.title")}</DropdownMenuLabel>
       <DropdownMenuSeparator />
       <div className="space-y-2 px-2 py-1">
         {hasVisibleAppUpdateNotification ? (
@@ -3943,7 +3951,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             className={appUpdateNotificationClass}
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold">App Update</p>
+              <p className="text-sm font-semibold">{t("notifications.appUpdate")}</p>
               {hasUnreadAppUpdate ? (
                 <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                   neu
@@ -3951,7 +3959,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               ) : null}
             </div>
             {installedAppVersion ? (
-              <p className="text-[11px] text-muted-foreground">Installiert: v{installedAppVersion}</p>
+              <p className="text-[11px] text-muted-foreground">{t("appUpdate.installed", { version: installedAppVersion })}</p>
             ) : null}
             <p className="text-[11px] text-muted-foreground">{appUpdateStatusLabel}</p>
             <p className="text-[11px] text-muted-foreground">{appUpdateHintLabel}</p>
@@ -3967,7 +3975,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             className="w-full rounded-xl border border-info/30 bg-info/10 px-2 py-2 text-left hover:bg-info/10"
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold">CS Update Feed</p>
+              <p className="text-sm font-semibold">{t("notifications.csUpdateFeed")}</p>
               {hasUnreadCsUpdate ? (
                 <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                   neu
@@ -3982,7 +3990,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         {warningNotifications.length > 0 ? (
-          <Callout tone="warn" title="Systemhinweise">
+          <Callout tone="warn" title={t("notifications.systemHints")}>
             <div className="mt-1.5 space-y-1.5">
               {warningNotifications.slice(0, 4).map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-warn/30 bg-warn/10 px-2 py-1.5">
@@ -3997,7 +4005,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         ) : null}
 
         <div className="rounded-md border p-2">
-          <p className="text-xs font-semibold">Offene Aktionen</p>
+          <p className="text-xs font-semibold">{t("notifications.openActions")}</p>
           {unreadActionNotifications.length > 0 ? (
             <div className="mt-1 space-y-1">
               {unreadActionNotifications.slice(0, 5).map((entry) => (
@@ -4020,7 +4028,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               ))}
             </div>
           ) : (
-            <p className="mt-1 text-[11px] text-muted-foreground">Alles erledigt – keine offenen Aktionen.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{t("notifications.allDone")}</p>
           )}
           {manualSteamSyncInfo ? (
             <p className="mt-1 text-[11px] text-muted-foreground">{manualSteamSyncInfo}</p>
@@ -4040,41 +4048,41 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const journeySteps = [
     {
       id: "server",
-      label: "Server-Verbindung eingerichtet",
+      label: t("journey.serverDone"),
       done: Boolean(serverSetup.configured),
     },
     {
       id: "import_defaults",
-      label: "Steam-Importziel bestaetigt",
+      label: t("journey.importTargetDone"),
       done: Boolean(journeyState?.importBucketConfirmedAt),
     },
     {
       id: "csfloat_key",
       label: hasCsFloatKey
-        ? "CSFloat API Key hinterlegt"
+        ? t("journey.csfloatKeyStored")
         : csFloatKeySkipped
-          ? "CSFloat ohne Key uebersprungen"
-          : "CSFloat API Key entschieden",
+          ? t("journey.csfloatSkipped")
+          : t("journey.csfloatKeyDecided"),
       done: hasCsFloatKey || csFloatKeySkipped,
     },
     {
       id: "csfloat_import",
-      label: "CSFloat-Import entschieden",
+      label: t("journey.csfloatImportDecided"),
       done: Boolean(journeyState?.csfloatImportCompletedAt || journeyState?.csfloatImportSkippedAt || csFloatKeySkipped),
     },
     {
       id: "push_notifications",
-      label: "Push-Benachrichtigung entschieden",
+      label: t("journey.pushDecided"),
       done: Boolean(journeyState?.pushPreferenceSetAt),
     },
     {
       id: "matching",
-      label: "Matching geprueft",
+      label: t("journey.matchingChecked"),
       done: Boolean(journeyState?.matchingReviewedAt) || matchingSuggestedCount === 0,
     },
     {
       id: "management",
-      label: "Verwaltung-Hinweise gesehen",
+      label: t("journey.managementHintsSeen"),
       done: Boolean(journeyState?.managementHintsSeenAt),
     },
   ];
@@ -4176,7 +4184,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     });
     setJourneyApiKey("");
     setJourneyApiKeyError("");
-    setJourneyApiKeySuccess("CSFloat wurde uebersprungen. Du kannst spaeter in den Einstellungen einen Key hinterlegen.");
+    setJourneyApiKeySuccess(t("journey.csfloatSkippedHint"));
     setJourneyApiKeyHelper("");
   };
   const handleGoNextJourneyStep = async () => {
@@ -4264,14 +4272,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const handleSaveJourneyCsFloatKey = async () => {
     const normalizedKey = normalizeCsFloatApiKeyInput(journeyApiKey);
     if (!normalizedKey) {
-      setJourneyApiKeyError("Bitte einen gueltigen CSFloat API Key eingeben.");
+      setJourneyApiKeyError(t("journey.keyInvalid"));
       setJourneyApiKeySuccess("");
       setJourneyApiKeyHelper("");
       return;
     }
 
     if (normalizedKey.length < 20) {
-      setJourneyApiKeyError("Der CSFloat API Key wirkt unvollstaendig. Bitte kopiere den kompletten Key.");
+      setJourneyApiKeyError(t("journey.keyIncomplete"));
       setJourneyApiKeySuccess("");
       setJourneyApiKeyHelper(`Aktuell erkannt: ${normalizedKey.length} Zeichen`);
       return;
@@ -4284,8 +4292,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setJourneyApiKeyHelper(`Speichere ${normalizedKey.length} Zeichen...`);
       await updateCsFloatApiKey(normalizedKey);
       setJourneyApiKey("");
-      setJourneyApiKeySuccess("CSFloat API Key wurde gespeichert.");
-      setJourneyApiKeyHelper("Key erfolgreich gespeichert.");
+      setJourneyApiKeySuccess(t("journey.keySaved"));
+      setJourneyApiKeyHelper(t("journey.keySavedShort"));
       const keyConnected = await handleRefreshCsFloatStatus();
       if (keyConnected) {
         await updateJourneyState({
@@ -4295,7 +4303,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         });
       }
     } catch (error) {
-      setJourneyApiKeyError(error?.message || "CSFloat API Key konnte nicht gespeichert werden.");
+      setJourneyApiKeyError(error?.message || t("journey.keySaveFailed"));
       setJourneyApiKeySuccess("");
       setJourneyApiKeyHelper("");
     } finally {
@@ -4399,8 +4407,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               useDesktopSidebarShell ? "lg:hidden" : ""
             }`}>
               <div className="flex-1">
-                <h1 className="text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">Portfolio</h1>
-                <p className="text-sm text-muted-foreground md:text-base">Investments, Inventar und Watchlist</p>
+                <h1 className="text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">{t("header.title")}</h1>
+                <p className="text-sm text-muted-foreground md:text-base">{t("header.subtitle")}</p>
               </div>
               <div className="flex items-center gap-2">
                 <ThemeToggle />
@@ -4422,16 +4430,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         {showJourneyBannerLegacy ? (
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Setup Journey</CardTitle>
+              <CardTitle className="text-base">{t("journey.title")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p>
-                Steam-Import ist aktiv. Als naechsten Schritt verbinde CSFloat:
-                <span className="font-medium"> CSFloat → Profile → Developer → New Key</span>.
+                {t("journey.legacyBannerLead")}
+                <span className="font-medium"> {t("journey.csfloatKeyPath")}</span>.
               </p>
               <div className="space-y-1 rounded-md border bg-background/70 p-2">
                 <p className="text-xs font-semibold">
-                  Fortschritt: {completedJourneySteps}/{journeySteps.length} Schritte
+                  {t("journey.progressSteps", { done: completedJourneySteps, total: journeySteps.length })}
                 </p>
                 {journeySteps.map((step) => (
                   <p key={step.id} className="text-xs text-muted-foreground">
@@ -4473,11 +4481,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             </CardHeader>
             <CardContent className="space-y-6 text-sm">
               {showStartupAutoSyncEmptyHint ? (
-                <Callout tone="info">Keine neuen Steam Items beim letzten Auto-Sync.</Callout>
+                <Callout tone="info">{t("journey.noNewAutoSyncItems")}</Callout>
               ) : null}
               <div className="space-y-3 rounded-xl border border-border bg-surface-1 p-4">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Fortschritt</span>
+                  <span>{t("journey.progress")}</span>
                   <span>{journeyProgressPercent}%</span>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-2">
@@ -4512,15 +4520,15 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               {!journeyStarted ? (
                 <div className="space-y-4 rounded-xl border border-border bg-surface-1 p-4">
                   <p className="text-foreground">
-                    Reihenfolge: Login, Server, Steam-Importziel, CSFloat-Key, CSFloat-Import, Push, Matching, Verwaltung.
+                    {t("journey.order")}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button onClick={() => void handleStartJourney()}>Journey starten</Button>
+                    <Button onClick={() => void handleStartJourney()}>{t("journey.start")}</Button>
                     <Button
                       variant="ghost"
                       onClick={() => void handleSkipJourney()}
                     >
-                      Ueberspringen
+                      {t("journey.skip")}
                     </Button>
                   </div>
                 </div>
@@ -4531,9 +4539,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   {activeJourneyStepId === "server" ? (
                     <div className="space-y-4 rounded-xl border border-warn/30 bg-warn/10 p-4">
                       <div>
-                        <p className="font-semibold text-foreground">1. Server-Verbindung</p>
+                        <p className="font-semibold text-foreground">{t("journey.step1Title")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Diese URL wird fuer Sync und serverseitige Preisdaten benoetigt.
+                          {t("journey.step1Body")}
                         </p>
                       </div>
                       {serverSetupError ? <p className="text-xs text-foreground">{serverSetupError}</p> : null}
@@ -4564,7 +4572,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             try {
                               const normalizedHost = normalizeServerHostInput(serverSetup.serverUrl);
                               if (!normalizedHost) {
-                                setServerSetupError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                                setServerSetupError(t("journey.hostnameInvalid"));
                                 return;
                               }
                               setServerSetupTesting(true);
@@ -4573,18 +4581,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                               const result = await window.electronAPI.serverConfig.test(normalizedHost);
                               if (result?.ok) {
                                 setServerSetup((current) => ({ ...current, serverUrl: normalizedHost }));
-                                setServerSetupMessage(result?.message || "Verbindung erfolgreich.");
+                                setServerSetupMessage(result?.message || t("journey.connectionOk"));
                               } else {
-                                setServerSetupError(result?.message || "Verbindung fehlgeschlagen.");
+                                setServerSetupError(result?.message || t("journey.connectionFailed"));
                               }
                             } catch (error) {
-                              setServerSetupError(error?.message || "Verbindungstest fehlgeschlagen.");
+                              setServerSetupError(error?.message || t("journey.connectionTestFailed"));
                             } finally {
                               setServerSetupTesting(false);
                             }
                           }}
                         >
-                          {serverSetupTesting ? "Teste..." : "Verbindung testen"}
+                          {serverSetupTesting ? t("journey.testing") : t("journey.testConnection")}
                         </Button>
                         <Button
                           size="sm"
@@ -4593,7 +4601,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             try {
                               const normalizedHost = normalizeServerHostInput(serverSetup.serverUrl);
                               if (!normalizedHost) {
-                                setServerSetupError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                                setServerSetupError(t("journey.hostnameInvalid"));
                                 return;
                               }
                               setServerSetupSaving(true);
@@ -4603,20 +4611,20 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                 serverUrl: normalizedHost,
                               });
                               setServerSetup((current) => ({ ...current, configured: true, serverUrl: normalizedHost }));
-                              setServerSetupMessage("Server-URL gespeichert.");
+                              setServerSetupMessage(t("journey.serverUrlSaved"));
                               await handleGoNextJourneyStep();
                             } catch (error) {
-                              setServerSetupError(error?.message || "Server-URL konnte nicht gespeichert werden.");
+                              setServerSetupError(error?.message || t("journey.serverUrlSaveFailed"));
                             } finally {
                               setServerSetupSaving(false);
                             }
                           }}
                         >
-                          {serverSetupSaving ? "Speichert..." : "Speichern"}
+                          {serverSetupSaving ? t("journey.saving") : t("journey.save")}
                         </Button>
                         {serverSetup.configured ? (
                           <Button size="sm" onClick={() => void handleGoNextJourneyStep()}>
-                            Weiter
+                            {t("journey.next")}
                           </Button>
                         ) : null}
                       </div>
@@ -4625,14 +4633,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   {activeJourneyStepId === "import_defaults" ? (
                     <div className="space-y-4 rounded-xl border border-border bg-surface-1 p-4">
                       <div>
-                        <p className="font-semibold text-foreground">2. Ziel fuer Steam-Items waehlen</p>
+                        <p className="font-semibold text-foreground">{t("journey.step2Title")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Kleiner Hinweis: Das kannst du spaeter jederzeit in den Einstellungen aendern.
+                          {t("journey.step2Body")}
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">Steam-Import</label>
+                          <label className="text-xs text-muted-foreground">{t("journey.steamImport")}</label>
                           <select
                             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                             value={portfolioPreferences.steamImportBucket}
@@ -4643,12 +4651,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                               setPortfolioPreferences(updated);
                             }}
                           >
-                            <option value="inventory">Inventar einsortieren</option>
-                            <option value="investment">In Investments einsortieren</option>
+                            <option value="inventory">{t("journey.sortInventory")}</option>
+                            <option value="investment">{t("journey.sortInvestments")}</option>
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">CSFloat-Import</label>
+                          <label className="text-xs text-muted-foreground">{t("journey.csfloatImport")}</label>
                           <select
                             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                             value={portfolioPreferences.csfloatImportBucket}
@@ -4659,12 +4667,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                               setPortfolioPreferences(updated);
                             }}
                           >
-                            <option value="investment">In Investments einsortieren</option>
-                            <option value="inventory">In Inventar einsortieren</option>
+                            <option value="investment">{t("journey.sortInvestments")}</option>
+                            <option value="inventory">{t("journey.sortInventory")}</option>
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-muted-foreground">SkinBaron-Import</label>
+                          <label className="text-xs text-muted-foreground">{t("journey.skinbaronImport")}</label>
                           <select
                             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                             value={portfolioPreferences.skinBaronImportBucket}
@@ -4675,8 +4683,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                               setPortfolioPreferences(updated);
                             }}
                           >
-                            <option value="investment">In Investments einsortieren</option>
-                            <option value="inventory">In Inventar einsortieren</option>
+                            <option value="investment">{t("journey.sortInvestments")}</option>
+                            <option value="inventory">{t("journey.sortInventory")}</option>
                           </select>
                         </div>
                       </div>
@@ -4691,16 +4699,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           }}
                           className="mt-0.5 h-4 w-4 accent-cyan-400"
                         />
-                        <span>Importziel verstanden und bestaetigt.</span>
+                        <span>{t("journey.importTargetConfirmed")}</span>
                       </label>
                     </div>
                   ) : null}
                   {activeJourneyStepId === "csfloat_key" ? (
                     <div className="space-y-4 rounded-xl border border-info/30 bg-info/10 p-4">
                       <div>
-                        <p className="font-semibold text-foreground">3. CSFloat API Key hinterlegen</p>
+                        <p className="font-semibold text-foreground">{t("journey.step3Title")}</p>
                         <p className="mt-1 text-xs text-foreground">
-                          Der Key wird nur lokal und verschluesselt gespeichert. Nie im Web-Build und nie auf dem Server.
+                          {t("journey.step3Body")}
                         </p>
                       </div>
                       <ol className="list-decimal space-y-1 pl-4 text-xs text-foreground">
@@ -4713,10 +4721,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           >
                             csfloat.com
                           </a>{" "}
-                          oeffnen
+                          {t("journey.step3Open")}
                         </li>
                         <li>
-                          Profil aufrufen:{" "}
+                          {t("journey.step3ProfileLead")}{" "}
                           <a
                             href="https://csfloat.com/profile"
                             target="_blank"
@@ -4726,12 +4734,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             csfloat.com/profile
                           </a>
                         </li>
-                        <li>Zum Reiter Developer gehen</li>
-                        <li>Neuen Schluessel erstellen und kopieren</li>
+                        <li>{t("journey.gotoDeveloperTab")}</li>
+                        <li>{t("journey.createAndCopyKey")}</li>
                       </ol>
                       <Callout tone="warn">
-                        Gib den Schluessel nicht weiter. Falls du einen Leak vermutest: alten Schluessel loeschen und neu
-                        erstellen. Du kannst den Key spaeter jederzeit in der Verwaltung aendern.
+                        {t("journey.step3Warning")}
                       </Callout>
                       {journeyApiKeyError ? (
                         <Callout tone="danger">{journeyApiKeyError}</Callout>
@@ -4743,7 +4750,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         <Callout tone="info">{journeyApiKeyHelper}</Callout>
                       ) : null}
                       <div className="space-y-2">
-                        <label className="text-xs font-medium text-foreground">CSFloat API Key</label>
+                        <label className="text-xs font-medium text-foreground">{t("journey.csfloatApiKey")}</label>
                         <input
                           type="password"
                           value={journeyApiKey}
@@ -4759,7 +4766,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                               setJourneyApiKey(normalized);
                             }
                           }}
-                          placeholder="CSFloat API Key..."
+                          placeholder={t("journey.csfloatApiKeyPlaceholder")}
                           className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground"
                         />
                         <div className="flex flex-wrap items-center gap-2">
@@ -4768,21 +4775,21 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             disabled={journeyApiKeySaving || !normalizeCsFloatApiKeyInput(journeyApiKey)}
                             onClick={() => void handleSaveJourneyCsFloatKey()}
                           >
-                            {journeyApiKeySaving ? "Speichert..." : "Key speichern"}
+                            {journeyApiKeySaving ? t("journey.saving") : t("journey.saveKey")}
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => void handleRefreshCsFloatStatus()}
                           >
-                            Status aktualisieren
+                            {t("journey.refreshStatus")}
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => void handleMarkCsFloatKeySkipped()}
                           >
-                            Ohne CSFloat weiter
+                            {t("journey.continueWithoutCsfloat")}
                           </Button>
                         </div>
                       </div>
@@ -4791,9 +4798,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   {activeJourneyStepId === "csfloat_import" ? (
                     <div className="space-y-4 rounded-xl border border-border bg-surface-1 p-4">
                       <div>
-                        <p className="font-semibold text-foreground">4. CSFloat-Import jetzt starten?</p>
+                        <p className="font-semibold text-foreground">{t("journey.step4Title")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Beim Import siehst du direkt die Ladeanzeige im CSFloat-Sync-Dialog.
+                          {t("journey.step4Body")}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -4802,30 +4809,30 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             setIsCsFloatSyncOpen(true);
                           }}
                         >
-                          CSFloat-Import starten
+                          {t("journey.startCsfloatImport")}
                         </Button>
                         <Button
                           variant="outline"
                           onClick={() => void handleMarkCsFloatImportSkipped()}
                         >
-                          Spaeter / Skip
+                          {t("journey.laterSkip")}
                         </Button>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        Wenn du jetzt importierst, leiten wir dich danach direkt zum Matching-Schritt.
+                        {t("journey.step4Hint")}
                       </p>
                     </div>
                   ) : null}
                   {activeJourneyStepId === "push_notifications" ? (
                     <div className="space-y-4 rounded-xl border border-border bg-surface-1 p-4">
                       <div>
-                        <p className="font-semibold text-foreground">5. Push-Benachrichtigungen fuer CS-Updates</p>
+                        <p className="font-semibold text-foreground">{t("journey.step5Title")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Browser Push ist fuer Mobile gedacht. In Electron reicht der integrierte Feed, daher aktivierst du Push am besten im Mobile Companion.
+                          {t("journey.step5Body")}
                         </p>
                       </div>
                       <Callout tone="info">
-                        Empfehlung: Server auf dem Handy oeffnen, einloggen und unter Einstellungen - Allgemein Browser Push aktivieren.
+                        {t("journey.step5Recommendation")}
                       </Callout>
                       {mobileCompanionSetupUrl ? (
                         <div className="rounded-md border border-border bg-surface-1 p-3 text-xs text-foreground">
@@ -4835,7 +4842,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       ) : null}
                       <div className="flex flex-wrap items-center gap-2">
                         <Button size="sm" onClick={() => void handleSetJourneyPushPreference(false)}>
-                          Ohne Push weiter (Standard)
+                          {t("journey.continueWithoutPush")}
                         </Button>
                         <Button
                           size="sm"
@@ -4845,7 +4852,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             await handleSetJourneyPushPreference(true);
                           }}
                         >
-                          Mobile Push einrichten (Server oeffnen)
+                          {t("journey.setUpMobilePush")}
                         </Button>
                       </div>
                     </div>
@@ -4853,7 +4860,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   {activeJourneyStepId === "matching" ? (
                     <div className="space-y-4 rounded-xl border border-border bg-surface-1 p-4">
                       <div>
-                        <p className="font-semibold text-foreground">6. Steam und CSFloat Matching pruefen</p>
+                        <p className="font-semibold text-foreground">{t("journey.step6Title")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Offene Matching-Vorschlaege: <span className="font-semibold">{matchingSuggestedCount}</span>
                         </p>
@@ -4866,7 +4873,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                             setManagementSection("matching");
                           }}
                         >
-                          Matching in Verwaltung oeffnen
+                          {t("journey.openMatchingInManagement")}
                         </Button>
                         <Button size="sm" onClick={() => void handleMarkMatchingReviewed()}>
                           Matching geprueft
@@ -4877,23 +4884,23 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   {activeJourneyStepId === "management" ? (
                     <div className="space-y-4 rounded-xl border border-border bg-surface-1 p-4">
                       <div>
-                        <p className="font-semibold text-foreground">7. Verwaltung kurz erklaert</p>
+                        <p className="font-semibold text-foreground">{t("journey.step7Title")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Hier steuerst du Matching, Preise und Exclude-Logik fuer deine Items.
+                          {t("journey.step7Body")}
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="rounded-lg border border-border bg-surface-1 p-3">
-                          <p className="text-xs font-semibold uppercase text-foreground">Matching</p>
-                          <p className="mt-1 text-xs text-muted-foreground">Vorschlaege bestaetigen oder korrigieren.</p>
+                          <p className="text-xs font-semibold uppercase text-foreground">{t("journey.matching")}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{t("journey.matchingHint")}</p>
                         </div>
                         <div className="rounded-lg border border-border bg-surface-1 p-3">
-                          <p className="text-xs font-semibold uppercase text-foreground">Preise</p>
-                          <p className="mt-1 text-xs text-muted-foreground">Fehlende Einkaufspreise schnell nachpflegen.</p>
+                          <p className="text-xs font-semibold uppercase text-foreground">{t("journey.prices")}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{t("journey.pricesHint")}</p>
                         </div>
                         <div className="rounded-lg border border-border bg-surface-1 p-3">
-                          <p className="text-xs font-semibold uppercase text-foreground">Exclude</p>
-                          <p className="mt-1 text-xs text-muted-foreground">Positionen aus Kennzahlen ausblenden.</p>
+                          <p className="text-xs font-semibold uppercase text-foreground">{t("journey.exclude")}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{t("journey.excludeHint")}</p>
                         </div>
                       </div>
                       <label className="flex items-start gap-3 rounded-md border border-border bg-surface-1 p-3 text-xs text-foreground">
@@ -4907,13 +4914,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           }}
                           className="mt-0.5 h-4 w-4 accent-cyan-400"
                         />
-                        <span>Hinweise verstanden.</span>
+                        <span>{t("journey.hintsUnderstood")}</span>
                       </label>
                       <Button
                         onClick={() => void handleCompleteJourney()}
                         disabled={!journeyState?.managementHintsSeenAt}
                       >
-                        Setup abschliessen
+                        {t("journey.completeSetup")}
                       </Button>
                     </div>
                   ) : null}
@@ -4929,14 +4936,14 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       onClick={() => void handleGoBackJourneyStep()}
                       disabled={activeJourneyStepId === JOURNEY_STEP_ORDER[0]}
                     >
-                      Zurueck
+                      {t("journey.back")}
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => navigate("/settings", { replace: true })}
                     >
-                      Einstellungen
+                      {t("journey.settings")}
                     </Button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -4945,7 +4952,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       variant="ghost"
                       onClick={() => void handleSkipJourney()}
                     >
-                      Journey beenden
+                      {t("journey.finishJourney")}
                     </Button>
                     {activeJourneyStepId !== "management" ? (
                       <Button
@@ -4953,7 +4960,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         variant="outline"
                         onClick={() => void handleGoNextJourneyStep()}
                       >
-                        Schritt ueberspringen
+                        {t("journey.skipStep")}
                       </Button>
                     ) : null}
                   </div>
@@ -5003,8 +5010,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                 ? "border-primary/35 bg-primary text-primary-foreground shadow-none dark:shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
                                 : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-accent/70 hover:text-foreground"
                             }`}
-                            title={tab.label}
-                            aria-label={tab.label}
+                            title={t(tab.labelKey)}
+                            aria-label={t(tab.labelKey)}
                           >
                             <span className="relative inline-flex">
                               <Icon className="h-5 w-5" />
@@ -5070,7 +5077,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         }
                       }}
                       onKeyDown={handleGlobalSearchInputKeyDown}
-                      placeholder="Suche nach Item, Typ oder Kategorie (Strg+K)"
+                      placeholder={t("globalSearch.placeholder")}
                       className="flex h-11 w-full items-center rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground placeholder:text-foreground/60 shadow-none outline-none transition-colors focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
                     />
                   </form>
@@ -5104,7 +5111,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     }
                   }}
                   onKeyDown={handleGlobalSearchInputKeyDown}
-                  placeholder="Suche nach Item, Typ oder Kategorie..."
+                  placeholder={t("globalSearch.placeholderShort")}
                   className="h-11 w-full rounded-md border border-border bg-transparent pl-10 pr-3 text-sm text-foreground shadow-none outline-none focus:border-border dark:rounded-xl dark:border-border/70 dark:bg-card/75"
                 />
               </form>
@@ -5117,11 +5124,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             {/* Tab Navigation - auf Desktop Runtime durch Sidebar ersetzt */}
             <div className={useDesktopSidebarShell ? "hidden sm:block lg:hidden" : "hidden sm:block"}>
               <TabsList className={`grid w-full gap-1 sm:max-w-200 ${isDesktopRuntime ? "grid-cols-5" : "grid-cols-4"}`}>
-                <TabsTrigger value="overview" className="text-xs sm:text-sm">Uebersicht</TabsTrigger>
-                <TabsTrigger value="inventory" className="text-xs sm:text-sm">Inventar</TabsTrigger>
-                <TabsTrigger value="watchlist" className="text-xs sm:text-sm">Watchlist</TabsTrigger>
-                <TabsTrigger value="search" className="text-xs sm:text-sm">Suche</TabsTrigger>
-                {isDesktopRuntime ? <TabsTrigger value="management" className="text-xs sm:text-sm">Verwaltung</TabsTrigger> : null}
+                <TabsTrigger value="overview" className="text-xs sm:text-sm">{t("tabs.overview")}</TabsTrigger>
+                <TabsTrigger value="inventory" className="text-xs sm:text-sm">{t("tabs.inventory")}</TabsTrigger>
+                <TabsTrigger value="watchlist" className="text-xs sm:text-sm">{t("tabs.watchlist")}</TabsTrigger>
+                <TabsTrigger value="search" className="text-xs sm:text-sm">{t("tabs.search")}</TabsTrigger>
+                {isDesktopRuntime ? <TabsTrigger value="management" className="text-xs sm:text-sm">{t("tabs.management")}</TabsTrigger> : null}
               </TabsList>
             </div>
 
@@ -5370,7 +5377,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
               onClick={(event) => event.stopPropagation()}
               role="dialog"
               aria-modal="true"
-              aria-label="Globale Suche"
+              aria-label={t("globalSearch.title")}
               data-keyboard-scope="modal"
               tabIndex={-1}
             >
@@ -5388,7 +5395,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       value={globalSearchTerm}
                       onChange={(event) => setGlobalSearchTerm(event.target.value)}
                       onKeyDown={handleGlobalSearchInputKeyDown}
-                      placeholder="Suche nach Item, Typ oder Kategorie..."
+                      placeholder={t("globalSearch.placeholderShort")}
                       className="h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm text-foreground outline-none focus:border-border/80 dark:rounded-xl dark:border-border/70 dark:bg-card/85"
                     />
                   </form>
@@ -5409,7 +5416,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   {!globalSearchTermNormalized && globalSearchRecentTerms.length > 0 ? (
                     <section className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-sm font-semibold text-foreground">Letzte Suchvorgaenge</h3>
+                        <h3 className="text-sm font-semibold text-foreground">{t("globalSearch.recent")}</h3>
                         <button
                           type="button"
                           onClick={clearGlobalRecentSearches}
@@ -5445,7 +5452,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
                   {globalSearchLocalSuggestions.length > 0 ? (
                     <section className="space-y-2">
-                      <h3 className="text-sm font-semibold text-foreground">Bereits in deinem Bestand</h3>
+                      <h3 className="text-sm font-semibold text-foreground">{t("globalSearch.alreadyOwned")}</h3>
                       <div className="space-y-3">
                         {globalSearchLocalSuggestionGroups.map((group, groupIndex) => (
                           <div
@@ -5502,7 +5509,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
                   {globalSearchGroupSuggestions.length > 0 ? (
                     <section className="space-y-2">
-                      <h3 className="text-sm font-semibold text-foreground">Investment Gruppen</h3>
+                      <h3 className="text-sm font-semibold text-foreground">{t("groups.title")}</h3>
                       <div className="space-y-2">
                         {globalSearchGroupSuggestions.map((group) => {
                           const summary = group.summary || null;
@@ -5521,15 +5528,19 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                     className="h-full w-full object-cover"
                                   />
                                 ) : (
-                                  <span className="text-[11px] text-muted-foreground">GR</span>
+                                  <span className="text-[11px] text-muted-foreground">{t("groups.badge")}</span>
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-semibold">{group.name}</p>
                                 <p className="text-xs text-muted-foreground">
                                   {summary
-                                    ? `${summary.clusterCount} Cluster | ${summary.memberCount} Positionen | ${formatUsdPrice(summary.totalValue)}`
-                                    : "Noch leer - nur in Verwaltung sichtbar"}
+                                    ? t("groups.summary", {
+                                        clusters: summary.clusterCount,
+                                        members: summary.memberCount,
+                                        value: formatUsdPrice(summary.totalValue),
+                                      })
+                                    : t("groups.emptyHint")}
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center gap-2">

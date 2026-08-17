@@ -102,6 +102,19 @@ export function getActiveIntlLocale() {
   return resolveIntlLocale(getActiveLanguage());
 }
 
+/**
+ * Translation for module-level pure functions that have no React context to
+ * read from — the same escape hatch, and the same rationale, as
+ * `getActiveIntlLocale`. Components must use `useTranslation` instead: this
+ * does not subscribe, so a caller that only uses `translate` will not re-render
+ * on a language switch.
+ *
+ * Keys must be namespace-qualified (`"common:units.hoursShort"`).
+ */
+export function translate(key, options) {
+  return i18next.t(key, options);
+}
+
 export async function changeLanguage(language) {
   const normalized = normalizeLanguage(language);
   if (!normalized) {

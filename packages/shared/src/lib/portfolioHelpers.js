@@ -1,30 +1,58 @@
-import { getActiveIntlLocale } from "./i18n/index.js";
+import { getActiveIntlLocale, translate } from "./i18n/index.js";
+
 /**
  * Shared utility functions extracted from PortfolioPage.jsx
  * for use across PortfolioPage section components.
  */
 
 /**
+ * Signed percentage, with the minus as U+2212 like every other figure on the
+ * dashboard.
+ *
+ * The decimal separator comes from `Intl`, not from a `.replace(".", ",")` —
+ * that swap was applied unconditionally in eight places and printed German
+ * commas into an English UI.
+ */
+export function formatSignedPercent(value, decimals = 1) {
+  const number = Number(value) || 0;
+  const magnitude = new Intl.NumberFormat(getActiveIntlLocale(), {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(Math.abs(number));
+  return `${number >= 0 ? "+" : "−"}${magnitude} %`;
+}
+
+/** Unsigned percentage in the active locale's number format. */
+export function formatPercent(value, decimals = 1) {
+  return `${new Intl.NumberFormat(getActiveIntlLocale(), {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(Number(value) || 0)} %`;
+}
+
+/**
  * Format seconds into a human-readable age string (e.g., "5m", "2h", "3d").
  */
 export function formatAge(seconds) {
   if (typeof seconds !== "number" || Number.isNaN(seconds)) {
-    return "-";
+    return translate("common:units.notAvailable");
   }
 
   if (seconds < 60) {
-    return `${seconds}s`;
+    return translate("common:units.secondsShort", { count: seconds });
   }
 
   if (seconds < 3600) {
-    return `${Math.floor(seconds / 60)}m`;
+    return translate("common:units.minutesShort", { count: Math.floor(seconds / 60) });
   }
 
   if (seconds < 86400) {
-    return `${Math.floor(seconds / 3600)}h`;
+    return translate("common:units.hoursShort", { count: Math.floor(seconds / 3600) });
   }
 
-  return `${Math.floor(seconds / 86400)}d`;
+  // The day suffix is the one unit that actually differs: "d" in English,
+  // "T" in German.
+  return translate("common:units.daysShort", { count: Math.floor(seconds / 86400) });
 }
 
 /**
@@ -68,22 +96,22 @@ export function getClusterUpdatedAt(cluster) {
  */
 export function syncHealthLabel(oldestAgeSeconds, liveItemsCount) {
   if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
-    return "keine live quotes";
+    return translate("common:syncHealth.noLiveQuotes");
   }
 
   if (!Number.isFinite(oldestAgeSeconds)) {
-    return "status unbekannt";
+    return translate("common:syncHealth.unknown");
   }
 
   if (oldestAgeSeconds <= 90 * 60) {
-    return "im plan";
+    return translate("common:syncHealth.onSchedule");
   }
 
   if (oldestAgeSeconds <= 3 * 60 * 60) {
-    return "verzoegert";
+    return translate("common:syncHealth.delayed");
   }
 
-  return "nachlauf";
+  return translate("common:syncHealth.lagging");
 }
 
 /**
@@ -91,22 +119,22 @@ export function syncHealthLabel(oldestAgeSeconds, liveItemsCount) {
  */
 export function formatRelativeHours(hours) {
   if (!Number.isFinite(hours)) {
-    return "unbekannt";
+    return translate("common:units.unknown");
   }
 
   if (hours < 1) {
-    return "<1h";
+    return translate("common:units.underOneHour");
   }
 
-  return `${Math.max(1, Math.round(hours))}h`;
+  return translate("common:units.hoursShort", { count: Math.max(1, Math.round(hours)) });
 }
 
 /**
- * Format a date value into a short German locale date string.
+ * Format a date value into a short date string in the active locale.
  */
 export function formatDateSafe(value) {
   if (!value) {
-    return "-";
+    return translate("common:units.notAvailable");
   }
   const timestamp = Date.parse(String(value));
   if (!Number.isFinite(timestamp)) {

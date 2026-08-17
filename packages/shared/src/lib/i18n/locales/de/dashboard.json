@@ -1,1 +1,70 @@
-{}
+{
+  "hero": {
+    "portfolioValue": "Portfolio-Wert",
+    "priceAge": "Preise vor {{age}} aktualisiert",
+    "priceAgeUnknown": "Preisalter unbekannt"
+  },
+  "scope": {
+    "all": "Alle Positionen",
+    "investments": "Investments"
+  },
+  "kpi": {
+    "totalRoi": "Gesamt-ROI",
+    "totalGain": "Gesamt Zuwachs",
+    "investedSub": "auf {{amount}} investiert",
+    "itemsHeld": "Items im Bestand",
+    "piecesTotal": "Stück insgesamt",
+    "positions": "Positionen",
+    "bestItem": "Bestes Item",
+    "sevenDayChange": "{{percent}} · 7 Tage",
+    "noSevenDayMove": "Keine 7-Tage-Bewegung"
+  },
+  "wrappedBanner": {
+    "dismiss": "Jahresrückblick ausblenden",
+    "eyebrow": "Jahresrückblick {{year}}",
+    "title": "Dein CS-Investment-Jahr {{year}}",
+    "body": "Käufe, Ausgaben, Plattformen und die Kurve deines Portfolios — jetzt ansehen."
+  },
+  "banWaveBanner": {
+    "eyebrow": "VAC Ban-Welle",
+    "badge": "aktuell",
+    "body": "Erhöhte Ban-Aktivität erkannt — Marktbewegungen bei Skins und Cases möglich."
+  },
+  "csUpdateBanner": {
+    "eyebrow": "CS Update · seit {{age}}",
+    "new": "neu",
+    "action": "Aktion",
+    "reason": "Grund",
+    "openOriginal": "Original Update öffnen",
+    "aiGenerated": "KI generiert"
+  },
+  "allocation": {
+    "title": "Allokation",
+    "titleByCategory": "Allokation nach Kategorie",
+    "belowTenth": "<0,1 %",
+    "aboveNinetyNine": ">99 %"
+  },
+  "movers": {
+    "title": "Top Bewegungen · 7 Tage",
+    "gainers": "Gewinner",
+    "losers": "Verlierer",
+    "emptyGainers": "Keine Gewinner im 7-Tage-Vergleich.",
+    "emptyLosers": "Keine Verlierer im 7-Tage-Vergleich."
+  },
+  "activity": {
+    "title": "Letzte Aktivität",
+    "notSynced": "Noch nicht synchronisiert",
+    "showLess": "Weniger anzeigen",
+    "showAll": "Alle Aktivitäten anzeigen",
+    "ago": "vor {{age}}",
+    "entityInvestment": "Investment",
+    "entityWatchlistItem": "Watchlist-Item",
+    "entityFallback": "Eintrag",
+    "actionRemoved": "{{entity}} entfernt",
+    "actionUpserted": "{{entity}} hinzugefügt oder bearbeitet"
+  },
+  "alerts": {
+    "title": "Watchlist-Alarme",
+    "activeCount": "{{count}} aktiv"
+  }
+}

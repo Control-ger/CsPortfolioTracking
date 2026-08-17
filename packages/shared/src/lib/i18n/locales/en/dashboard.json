@@ -1,1 +1,70 @@
-{}
+{
+  "hero": {
+    "portfolioValue": "Portfolio value",
+    "priceAge": "Prices updated {{age}} ago",
+    "priceAgeUnknown": "Price age unknown"
+  },
+  "scope": {
+    "all": "All positions",
+    "investments": "Investments"
+  },
+  "kpi": {
+    "totalRoi": "Total ROI",
+    "totalGain": "Total gain",
+    "investedSub": "on {{amount}} invested",
+    "itemsHeld": "Items held",
+    "piecesTotal": "pieces in total",
+    "positions": "Positions",
+    "bestItem": "Best item",
+    "sevenDayChange": "{{percent}} · 7 days",
+    "noSevenDayMove": "No 7-day movement"
+  },
+  "wrappedBanner": {
+    "dismiss": "Hide year in review",
+    "eyebrow": "Year in review {{year}}",
+    "title": "Your CS investment year {{year}}",
+    "body": "Purchases, spending, platforms and your portfolio's curve — take a look."
+  },
+  "banWaveBanner": {
+    "eyebrow": "VAC ban wave",
+    "badge": "current",
+    "body": "Elevated ban activity detected — price movements on skins and cases are possible."
+  },
+  "csUpdateBanner": {
+    "eyebrow": "CS update · {{age}} ago",
+    "new": "new",
+    "action": "Action",
+    "reason": "Reason",
+    "openOriginal": "Open original update",
+    "aiGenerated": "AI generated"
+  },
+  "allocation": {
+    "title": "Allocation",
+    "titleByCategory": "Allocation by category",
+    "belowTenth": "<0.1 %",
+    "aboveNinetyNine": ">99 %"
+  },
+  "movers": {
+    "title": "Top movers · 7 days",
+    "gainers": "Gainers",
+    "losers": "Losers",
+    "emptyGainers": "No gainers over the 7-day comparison.",
+    "emptyLosers": "No losers over the 7-day comparison."
+  },
+  "activity": {
+    "title": "Recent activity",
+    "notSynced": "Not synced yet",
+    "showLess": "Show less",
+    "showAll": "Show all activity",
+    "ago": "{{age}} ago",
+    "entityInvestment": "Investment",
+    "entityWatchlistItem": "Watchlist item",
+    "entityFallback": "Entry",
+    "actionRemoved": "{{entity}} removed",
+    "actionUpserted": "{{entity}} added or edited"
+  },
+  "alerts": {
+    "title": "Watchlist alerts",
+    "activeCount": "{{count}} active"
+  }
+}

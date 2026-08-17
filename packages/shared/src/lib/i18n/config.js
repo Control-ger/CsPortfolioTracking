@@ -24,6 +24,8 @@ export const LANGUAGE_STORAGE_KEY = "preferred_language";
 export const I18N_NAMESPACES = Object.freeze([
   "common",
   "dashboard",
+  "portfolio",
+  "management",
   "inventory",
   "watchlist",
   "search",

@@ -86,5 +86,21 @@
     "downloading": "Downloading {{version}}",
     "updateFallbackVersion": "Update",
     "progressOf": "{{transferred}} of {{total}}"
+  },
+  "units": {
+    "secondsShort": "{{count}}s",
+    "minutesShort": "{{count}}m",
+    "hoursShort": "{{count}}h",
+    "daysShort": "{{count}}d",
+    "underOneHour": "<1h",
+    "unknown": "unknown",
+    "notAvailable": "-"
+  },
+  "syncHealth": {
+    "noLiveQuotes": "no live quotes",
+    "unknown": "status unknown",
+    "onSchedule": "on schedule",
+    "delayed": "delayed",
+    "lagging": "lagging"
   }
 }
