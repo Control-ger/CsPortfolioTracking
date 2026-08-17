@@ -3,6 +3,7 @@ import { Eye, EyeOff, AppWindow } from "lucide-react";
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { SettingsKeyRow, SettingsKeyInput } from "@shared/components/ui/settings-card";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 /**
  * SkinBaron row of the "API-Schlüssel" card. Unlike CSFloat this is a session
  * cookie, and the primary path is the browser login — "Verbinden" opens an
@@ -36,7 +37,7 @@ export function SkinBaronApiKeySection({
   const importReady =
     skinBaronApiKeyStatus?.importReady === true || sessionCookieAccess?.allowed === true;
   const checkedAt = skinBaronApiKeyStatus?.sessionCookieCheckedAt
-    ? new Date(skinBaronApiKeyStatus.sessionCookieCheckedAt).toLocaleString("de-DE")
+    ? new Date(skinBaronApiKeyStatus.sessionCookieCheckedAt).toLocaleString(getActiveIntlLocale())
     : "";
 
   const state = skinBaronApiKeyError

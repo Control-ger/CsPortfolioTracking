@@ -19,6 +19,7 @@ import {
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { resolveItemCategory } from "../lib/portfolioCalculations.js";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 const InventoryTable = lazy(() =>
   import("./InventoryTable.jsx").then((module) => ({
     default: module.InventoryTable,
@@ -142,7 +143,7 @@ export function PortfolioInventorySection({
       seen.get(key).count += 1;
     });
     return Array.from(seen.values()).sort((left, right) =>
-      left.label.localeCompare(right.label, "de"),
+      left.label.localeCompare(right.label, getActiveIntlLocale()),
     );
   }, [inventoryTabItems]);
 

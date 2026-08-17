@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
-import { ThemeProvider, ModalProvider } from '@shared/contexts'
+import { ThemeProvider, ModalProvider, LanguageProvider } from '@shared/contexts'
 import { AppErrorBoundary } from '@shared/components'
 import { installFrontendTelemetryHandlers } from '@shared/lib'
 
@@ -91,13 +91,17 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator && window.loca
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <HashRouter>
-      <ThemeProvider>
-        <ModalProvider>
-          <AppErrorBoundary>
-            <App />
-          </AppErrorBoundary>
-        </ModalProvider>
-      </ThemeProvider>
+      {/* Outermost of the app providers: AppErrorBoundary's own copy is
+          translated too, so the catalogue has to be live before it can catch. */}
+      <LanguageProvider>
+        <ThemeProvider>
+          <ModalProvider>
+            <AppErrorBoundary>
+              <App />
+            </AppErrorBoundary>
+          </ModalProvider>
+        </ThemeProvider>
+      </LanguageProvider>
     </HashRouter>
   </StrictMode>,
 )

@@ -1,3 +1,4 @@
+import { getActiveIntlLocale } from "./i18n/index.js";
 const GROUP_MEMBER_LIMIT = 5000;
 
 function normalizeText(value) {
@@ -244,7 +245,7 @@ export function mergePortfolioGroups(localGroups = [], remoteGroups = []) {
   return Array.from(byId.values()).sort((left, right) => {
     const leftAt = Date.parse(left.createdAt) || 0;
     const rightAt = Date.parse(right.createdAt) || 0;
-    return leftAt - rightAt || left.name.localeCompare(right.name, "de");
+    return leftAt - rightAt || left.name.localeCompare(right.name, getActiveIntlLocale());
   });
 }
 
@@ -419,7 +420,7 @@ export function buildPortfolioGroupSummaries({
 
       const clusterRowsForGroup = Array.from(clusters.values())
         .map(finalizeClusterAggregate)
-        .sort((left, right) => right.totalValue - left.totalValue || left.name.localeCompare(right.name, "de"))
+        .sort((left, right) => right.totalValue - left.totalValue || left.name.localeCompare(right.name, getActiveIntlLocale()))
         .map((cluster) => ({
           ...cluster,
           sharePercent: totalValue > 0 ? (cluster.totalValue / totalValue) * 100 : 0,
@@ -465,7 +466,7 @@ export function buildPortfolioGroupSummaries({
       };
     })
     .filter(Boolean)
-    .sort((left, right) => right.totalValue - left.totalValue || left.name.localeCompare(right.name, "de"));
+    .sort((left, right) => right.totalValue - left.totalValue || left.name.localeCompare(right.name, getActiveIntlLocale()));
 }
 
 /**

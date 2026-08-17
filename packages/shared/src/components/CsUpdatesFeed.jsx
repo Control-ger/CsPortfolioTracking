@@ -11,6 +11,7 @@ import { ScrollArea } from "@shared/components/ui/scroll-area";
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { cn } from "@shared/lib/utils";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 const CLOSED_ITEM_SENTINEL = "__closed__";
 
 function toTimestamp(value) {
@@ -46,7 +47,7 @@ function formatDateTime(value) {
     return "unbekannt";
   }
 
-  return new Intl.DateTimeFormat("de-DE", {
+  return new Intl.DateTimeFormat(getActiveIntlLocale(), {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",

@@ -77,6 +77,7 @@ import {
   normalizePortfolioGroupColor,
   preservePortfolioGroupColors,
 } from "@shared/lib/portfolioGroups.js";
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 import {
   formatDateSafe,
   normalizeSearchText,
@@ -436,7 +437,7 @@ function buildManagementClusters(items = []) {
         activeCount: Math.max(0, totalCount - excludedCount),
       };
     })
-    .sort((a, b) => a.name.localeCompare(b.name, "de"));
+    .sort((a, b) => a.name.localeCompare(b.name, getActiveIntlLocale()));
 }
 
 function formatSteamSyncError(error) {
@@ -2329,7 +2330,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         if (left.matchScore !== right.matchScore) {
           return left.matchScore - right.matchScore;
         }
-        return left.name.localeCompare(right.name, "de");
+        return left.name.localeCompare(right.name, getActiveIntlLocale());
       })
       .slice(0, 8);
   }, [globalSearchKnownItems, globalSearchTermNormalized]);
@@ -3010,18 +3011,18 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     rows.sort((left, right) => {
       if (managementSortBy === "name_desc") {
-        return right.name.localeCompare(left.name, "de");
+        return right.name.localeCompare(left.name, getActiveIntlLocale());
       }
       if (managementSortBy === "qty_desc") {
-        return right.totalCount - left.totalCount || left.name.localeCompare(right.name, "de");
+        return right.totalCount - left.totalCount || left.name.localeCompare(right.name, getActiveIntlLocale());
       }
       if (managementSortBy === "qty_asc") {
-        return left.totalCount - right.totalCount || left.name.localeCompare(right.name, "de");
+        return left.totalCount - right.totalCount || left.name.localeCompare(right.name, getActiveIntlLocale());
       }
       if (managementSortBy === "updated_desc") {
-        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, "de");
+        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, getActiveIntlLocale());
       }
-      return left.name.localeCompare(right.name, "de");
+      return left.name.localeCompare(right.name, getActiveIntlLocale());
     });
     return rows;
   })();
@@ -3044,9 +3045,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
 
     rows.sort((left, right) => {
       if (groupSortBy === "updated_desc") {
-        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, "de");
+        return getClusterUpdatedAt(right) - getClusterUpdatedAt(left) || left.name.localeCompare(right.name, getActiveIntlLocale());
       }
-      return left.name.localeCompare(right.name, "de");
+      return left.name.localeCompare(right.name, getActiveIntlLocale());
     });
     return rows;
   }, [groupSearchQuery, groupSortBy, managementClusters, managementGroupsByClusterKey]);
@@ -3058,7 +3059,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           .filter(Boolean),
       ),
     );
-    uniqueTypes.sort((left, right) => left.localeCompare(right, "de"));
+    uniqueTypes.sort((left, right) => left.localeCompare(right, getActiveIntlLocale()));
     return uniqueTypes;
   })();
   const portfolioGroupEditor = portfolioGroups.find((group) => group.id === portfolioGroupEditorId) || null;
@@ -3089,7 +3090,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       .sort((left, right) => {
         const leftValue = Number(left?.summary?.totalValue || 0);
         const rightValue = Number(right?.summary?.totalValue || 0);
-        return rightValue - leftValue || String(left.name || "").localeCompare(String(right.name || ""), "de");
+        return rightValue - leftValue || String(left.name || "").localeCompare(String(right.name || ""), getActiveIntlLocale());
       })
       .slice(0, 8);
   }, [globalSearchTermNormalized, portfolioGroupSummaryById, portfolioGroups]);
@@ -3252,7 +3253,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       const rightQuantity = Number(right.quantity || 0);
 
       if (priceSortBy === "name_desc") {
-        return String(right.name || "").localeCompare(String(left.name || ""), "de");
+        return String(right.name || "").localeCompare(String(left.name || ""), getActiveIntlLocale());
       }
       if (priceSortBy === "price_desc") {
         return rightPrice - leftPrice;
@@ -3263,7 +3264,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       if (priceSortBy === "qty_desc") {
         return rightQuantity - leftQuantity;
       }
-      return String(left.name || "").localeCompare(String(right.name || ""), "de");
+      return String(left.name || "").localeCompare(String(right.name || ""), getActiveIntlLocale());
     });
     return rows;
   })();

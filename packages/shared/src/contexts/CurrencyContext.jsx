@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { fetchExchangeRate, fetchCurrencyPreference, updateCurrencyPreference } from "@shared/lib/apiClient.js";
+import { useLanguage } from "./LanguageContext.jsx";
 
 const STORAGE_KEY = "preferred_currency";
 const DEFAULT_CURRENCY = "EUR";
@@ -30,16 +31,9 @@ function normalizeCurrencyCode(value) {
   return isValidCurrencyCode(normalized) ? normalized : "";
 }
 
-function getLocale() {
-  if (typeof navigator !== "undefined" && typeof navigator.language === "string" && navigator.language.trim() !== "") {
-    return navigator.language;
-  }
-  return "en-US";
-}
-
-function getCurrencySymbolVariant(code, currencyDisplay) {
+function getCurrencySymbolVariant(code, currencyDisplay, locale) {
   try {
-    const parts = new Intl.NumberFormat(getLocale(), {
+    const parts = new Intl.NumberFormat(locale, {
       style: "currency",
       currency: code,
       currencyDisplay,
@@ -66,13 +60,13 @@ function isSymbolEffectivelyCode(symbol, code) {
   return /^[A-Z]{3}$/.test(normalizedSymbol);
 }
 
-function getCurrencySymbol(code) {
-  const narrow = getCurrencySymbolVariant(code, "narrowSymbol");
+function getCurrencySymbol(code, locale) {
+  const narrow = getCurrencySymbolVariant(code, "narrowSymbol", locale);
   if (!isSymbolEffectivelyCode(narrow, code)) {
     return narrow;
   }
 
-  const generic = getCurrencySymbolVariant(code, "symbol");
+  const generic = getCurrencySymbolVariant(code, "symbol", locale);
   if (!isSymbolEffectivelyCode(generic, code)) {
     return generic;
   }
@@ -80,9 +74,9 @@ function getCurrencySymbol(code) {
   return "";
 }
 
-function getCurrencyName(code) {
+function getCurrencyName(code, locale) {
   try {
-    const displayNames = new Intl.DisplayNames([getLocale()], { type: "currency" });
+    const displayNames = new Intl.DisplayNames([locale], { type: "currency" });
     return displayNames.of(code) || code;
   } catch {
     return code;
@@ -112,13 +106,13 @@ function regionToFlagEmoji(regionCode) {
   return String.fromCodePoint(...chars);
 }
 
-function getRegionName(regionCode) {
+function getRegionName(regionCode, locale) {
   if (!regionCode || !/^[A-Z]{2}$/.test(regionCode)) {
     return null;
   }
 
   try {
-    const displayNames = new Intl.DisplayNames([getLocale()], { type: "region" });
+    const displayNames = new Intl.DisplayNames([locale], { type: "region" });
     return displayNames.of(regionCode) || null;
   } catch {
     return null;
@@ -172,7 +166,7 @@ function normalizePopularCurrencies(rawPopularCurrencies) {
   return normalizedEntries;
 }
 
-function buildCurrencyCatalog(rates) {
+function buildCurrencyCatalog(rates, locale) {
   const codes = Object.keys(rates).filter((code) => isValidCurrencyCode(code.toUpperCase()));
   codes.sort((left, right) => {
     if (left === DEFAULT_CURRENCY) {
@@ -186,14 +180,14 @@ function buildCurrencyCatalog(rates) {
 
   return codes.reduce((result, code) => {
     const regionCode = inferRegionCode(code);
-    const symbol = getCurrencySymbol(code);
+    const symbol = getCurrencySymbol(code, locale);
     result[code] = {
       code,
       symbol,
       hasDistinctSymbol: Boolean(symbol),
-      name: getCurrencyName(code),
+      name: getCurrencyName(code, locale),
       regionCode,
-      regionName: getRegionName(regionCode),
+      regionName: getRegionName(regionCode, locale),
       flag: regionToFlagEmoji(regionCode),
     };
     return result;
@@ -201,6 +195,11 @@ function buildCurrencyCatalog(rates) {
 }
 
 export function CurrencyProvider({ children }) {
+  // Formatting depends on the active locale, so the memoised formatters have to
+  // be invalidated when the language changes. `getActiveIntlLocale()` alone is a
+  // module read that React cannot observe — reading it through the context is
+  // what makes a language switch actually repaint prices.
+  const { locale } = useLanguage();
   const [currency, setCurrency] = useState(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -215,7 +214,9 @@ export function CurrencyProvider({ children }) {
   const [ratesLoading, setRatesLoading] = useState(false);
   const [popularCurrencies, setPopularCurrencies] = useState([]);
 
-  const currencies = useMemo(() => buildCurrencyCatalog(exchangeRates), [exchangeRates]);
+  // `locale` is a real dependency, not noise: the catalogue carries localised
+  // currency and region names.
+  const currencies = useMemo(() => buildCurrencyCatalog(exchangeRates, locale), [exchangeRates, locale]);
   const popularCurrencyCodes = useMemo(
     () => popularCurrencies.map((entry) => entry.currency).filter((code) => isValidCurrencyCode(code)),
     [popularCurrencies],
@@ -337,7 +338,7 @@ export function CurrencyProvider({ children }) {
       : convertPrice(price);
 
     try {
-      return new Intl.NumberFormat(getLocale(), {
+      return new Intl.NumberFormat(locale, {
         style: "currency",
         currency,
         minimumFractionDigits: decimals,
@@ -346,7 +347,7 @@ export function CurrencyProvider({ children }) {
     } catch {
       return `${currency} ${Number(convertedPrice || 0).toFixed(decimals)}`;
     }
-  }, [currency, convertPrice, convertFromUsd]);
+  }, [currency, convertPrice, convertFromUsd, locale]);
 
   const value = {
     currency,

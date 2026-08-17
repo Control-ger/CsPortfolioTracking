@@ -12,6 +12,7 @@ import {
 import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 import { getCurrentUser, resolveDesktopLocalUserId, runAppUpdateAction } from "@shared/lib";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 /**
  * The system-notification bell: unread-count button plus its dropdown inbox.
  *
@@ -410,7 +411,7 @@ export function NotificationBell({
                       </p>
                       <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        {entry.createdAt ? new Date(entry.createdAt).toLocaleString("de-DE") : ""}
+                        {entry.createdAt ? new Date(entry.createdAt).toLocaleString(getActiveIntlLocale()) : ""}
                       </p>
                     </div>
                     <button

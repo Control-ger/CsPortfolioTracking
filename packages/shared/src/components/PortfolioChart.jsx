@@ -9,6 +9,7 @@ import { toneForDelta, toneText } from "./ui/tone.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { parseHistoryTimestamp, resolveHistoryValueUsd } from "@shared/lib/portfolioHelpers";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 const RANGE_OPTIONS = [
   { key: "7T", label: "7T", days: 7 },
   { key: "30T", label: "30T", days: 30 },
@@ -72,10 +73,10 @@ function formatTickDate(timestamp, spanDays) {
   }
 
   if (Number.isFinite(spanDays) && spanDays > MONTH_TICKS_THRESHOLD_DAYS) {
-    return date.toLocaleDateString("de-DE", { month: "short", year: "2-digit" });
+    return date.toLocaleDateString(getActiveIntlLocale(), { month: "short", year: "2-digit" });
   }
 
-  return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+  return date.toLocaleDateString(getActiveIntlLocale(), { day: "2-digit", month: "2-digit" });
 }
 
 function formatTooltipDate(timestamp) {
@@ -84,7 +85,7 @@ function formatTooltipDate(timestamp) {
     return "unbekannt";
   }
 
-  const dateLabel = date.toLocaleDateString("de-DE", {
+  const dateLabel = date.toLocaleDateString(getActiveIntlLocale(), {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
@@ -96,7 +97,7 @@ function formatTooltipDate(timestamp) {
     return dateLabel;
   }
 
-  return `${dateLabel}, ${date.toLocaleTimeString("de-DE", {
+  return `${dateLabel}, ${date.toLocaleTimeString(getActiveIntlLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   })}`;

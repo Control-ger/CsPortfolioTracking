@@ -13,6 +13,7 @@ import {
 } from "@shared/lib/apiClient";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 function formatDate(value) {
   if (!value) {
     return "-";
@@ -23,7 +24,7 @@ function formatDate(value) {
     return String(value);
   }
 
-  return new Date(parsed).toLocaleString("de-DE");
+  return new Date(parsed).toLocaleString(getActiveIntlLocale());
 }
 
 function Stat({ label, value, tone = "muted" }) {

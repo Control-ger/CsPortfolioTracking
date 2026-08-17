@@ -15,6 +15,7 @@ import {
 
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 /**
  * Column template of the Inventar design's table. Head, rows and nested cluster
  * rows all share it — see `GridTable`.
@@ -239,7 +240,7 @@ export function InventoryTable({
     rows.sort((a, b) => {
       let comparison = 0;
       if (typeof a.sortValue === "string" && typeof b.sortValue === "string") {
-        comparison = a.sortValue.localeCompare(b.sortValue, "de");
+        comparison = a.sortValue.localeCompare(b.sortValue, getActiveIntlLocale());
       } else {
         comparison = Number(a.sortValue) - Number(b.sortValue);
       }

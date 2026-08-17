@@ -72,6 +72,7 @@ import {
 } from "@shared/lib/watchlistViewSnapshot.js";
 
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 function resolveBuyOrderItemName(row) {
   return String(
     row?.marketHashName ||
@@ -216,7 +217,7 @@ function sortWatchlistItems(items, sortKey, sortDirection) {
 
     let comparison;
     if (typeof leftValue === "string" || typeof rightValue === "string") {
-      comparison = String(leftValue).localeCompare(String(rightValue), "de", {
+      comparison = String(leftValue).localeCompare(String(rightValue), getActiveIntlLocale(), {
         numeric: true,
         sensitivity: "base",
       });
@@ -229,7 +230,7 @@ function sortWatchlistItems(items, sortKey, sortDirection) {
     }
 
     // Stable tie-break by name so order stays deterministic across renders.
-    return String(left?.name || "").localeCompare(String(right?.name || ""), "de", {
+    return String(left?.name || "").localeCompare(String(right?.name || ""), getActiveIntlLocale(), {
       sensitivity: "base",
     });
   });
@@ -293,7 +294,7 @@ function formatWatchedSince(item) {
   if (!Number.isFinite(timestamp)) {
     return null;
   }
-  return new Date(timestamp).toLocaleDateString("de-DE", {
+  return new Date(timestamp).toLocaleDateString(getActiveIntlLocale(), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -380,7 +381,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       seen.get(key).count += 1;
     });
     return Array.from(seen.values()).sort((left, right) =>
-      left.label.localeCompare(right.label, "de"),
+      left.label.localeCompare(right.label, getActiveIntlLocale()),
     );
   }, [watchlistItems]);
 

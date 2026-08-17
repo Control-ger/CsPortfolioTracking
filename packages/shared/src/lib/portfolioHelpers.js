@@ -1,3 +1,4 @@
+import { getActiveIntlLocale } from "./i18n/index.js";
 /**
  * Shared utility functions extracted from PortfolioPage.jsx
  * for use across PortfolioPage section components.
@@ -111,7 +112,7 @@ export function formatDateSafe(value) {
   if (!Number.isFinite(timestamp)) {
     return String(value);
   }
-  return new Date(timestamp).toLocaleDateString("de-DE", {
+  return new Date(timestamp).toLocaleDateString(getActiveIntlLocale(), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

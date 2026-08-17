@@ -16,6 +16,7 @@ import { Button } from "@shared/components/ui/button";
 import { getCurrentUser, resolveDesktopLocalUserId, runAppUpdateAction } from "@shared/lib";
 import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 
+import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 const DESKTOP_SIDEBAR_ITEMS = [
   { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/?tab=overview" },
   { key: "inventory", label: "Inventar", icon: Package, to: "/?tab=inventory" },
@@ -267,7 +268,7 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
                               <p className="font-semibold text-foreground">{entry.title || "Hinweis"}</p>
                               <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
                               <p className="mt-1 text-[11px] text-muted-foreground">
-                                {entry.createdAt ? new Date(entry.createdAt).toLocaleString("de-DE") : ""}
+                                {entry.createdAt ? new Date(entry.createdAt).toLocaleString(getActiveIntlLocale()) : ""}
                               </p>
                             </button>
                           ))
