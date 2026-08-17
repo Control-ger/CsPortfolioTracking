@@ -1,1 +1,90 @@
-{}
+{
+  "appName": "CS Portfolio Tracking",
+  "nav": {
+    "dashboard": "Dashboard",
+    "overview": "Overview",
+    "inventory": "Inventory",
+    "watchlist": "Watchlist",
+    "search": "Search",
+    "management": "Management",
+    "settings": "Settings",
+    "updates": "Updates",
+    "fallbackTitle": "CS Portfolio",
+    "openDrawer": "Open navigation",
+    "mainNavigation": "Main navigation"
+  },
+  "search": {
+    "globalPlaceholder": "Search everything"
+  },
+  "userMenu": {
+    "open": "Open user menu",
+    "openWithWarning": "Open user menu — {{reason}}",
+    "sessionExpired": "Session expired — sync paused. Please sign in again.",
+    "sessionLocalOnly": "Signed in locally only — sync inactive. Please sign in again.",
+    "accountFallback": "Steam account",
+    "steamConnected": "Steam connected",
+    "syncInactive": "Sync inactive",
+    "steamAvatar": "Steam avatar",
+    "steamAvatarOf": "{{name}} Steam avatar",
+    "signOut": "Sign out",
+    "signOutAndLock": "Sign out & lock"
+  },
+  "titlebar": {
+    "minimize": "Minimise",
+    "minimizeWindow": "Minimise window",
+    "maximize": "Maximise",
+    "maximizeWindow": "Maximise window",
+    "close": "Close",
+    "closeWindow": "Close window"
+  },
+  "vault": {
+    "welcome": "Welcome to CS Investor Hub",
+    "welcomeSubtitle": "Sign in with your app password and go straight to the dashboard.",
+    "steamConnected": "Steam connected",
+    "steamNotConnected": "Not connected yet",
+    "accountFallback": "Steam account",
+    "createPassword": "Create app password",
+    "unlockApp": "Unlock app",
+    "passwordPlaceholder": "App password",
+    "minCharsPlaceholder": "At least {{count}} characters",
+    "confirmPasswordPlaceholder": "Confirm password",
+    "passwordHint": "Recommended: a long passphrase with upper and lower case, digits and symbols.",
+    "setPassword": "Set app password",
+    "saving": "Saving…",
+    "unlock": "Unlock",
+    "unlocking": "Unlocking…",
+    "progressSetup": "Set up local access",
+    "progressUnlocking": "Unlocking…",
+    "progressReady": "Ready to unlock",
+    "errorTooShort": "App password must be at least {{count}} characters.",
+    "errorMismatch": "Password confirmation does not match.",
+    "errorEmpty": "Please enter your app password.",
+    "errorStatus": "Could not load Secret Vault status.",
+    "errorSetPassword": "Could not set app password.",
+    "errorUnlock": "Could not unlock Secret Vault."
+  },
+  "boot": {
+    "finishingSignIn": "Finishing sign-in…",
+    "checkingSession": "Checking session…",
+    "loadingView": "Loading view…"
+  },
+  "theme": {
+    "toggle": "Toggle colour mode",
+    "systemActive": "System mode active ({{mode}}) — click to override",
+    "modeDark": "dark",
+    "modeLight": "light",
+    "activateLight": "Switch to light theme",
+    "activateDark": "Switch to dark theme"
+  },
+  "notifications": {
+    "title": "System notifications",
+    "deleteAll": "Delete all",
+    "empty": "No notifications.",
+    "webHint": "On the web, system notifications are delivered via browser push.",
+    "entryFallbackTitle": "Notice",
+    "dismiss": "Remove",
+    "downloading": "Downloading {{version}}",
+    "updateFallbackVersion": "Update",
+    "progressOf": "{{transferred}} of {{total}}"
+  }
+}

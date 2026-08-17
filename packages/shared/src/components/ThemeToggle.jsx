@@ -1,19 +1,22 @@
+import { useTranslation } from 'react-i18next';
+
 import { useTheme } from '../ThemeContext';
 
 export function ThemeToggle() {
+  const { t } = useTranslation('common');
   const { isDark, toggle, themeMode } = useTheme();
   const title =
     themeMode === 'system'
-      ? `Systemmodus aktiv (${isDark ? 'dunkel' : 'hell'}) - klicken zum Ueberschreiben`
+      ? t('theme.systemActive', { mode: isDark ? t('theme.modeDark') : t('theme.modeLight') })
       : isDark
-        ? 'Helles Design aktivieren'
-        : 'Dunkles Design aktivieren';
+        ? t('theme.activateLight')
+        : t('theme.activateDark');
 
   return (
     <button
       onClick={toggle}
       className="relative rounded-xl border border-border/80 bg-card/75 p-2.5 text-muted-foreground transition-colors hover:bg-accent/80 hover:text-foreground"
-      aria-label="Farbmodus umschalten"
+      aria-label={t('theme.toggle')}
       title={title}
     >
       {isDark ? (

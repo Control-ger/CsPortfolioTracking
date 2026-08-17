@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Lock, UserRound } from "lucide-react";
 
@@ -81,6 +82,7 @@ function resolveSteamIdFromUser(user) {
 }
 
 export default function App() {
+  const { t } = useTranslation("common");
   const isElectron = window.electronAPI !== undefined;
   const desktopRuntime = Boolean(window.electronAPI?.localStore);
   const [vaultStatus, setVaultStatus] = useState(null);
@@ -123,7 +125,7 @@ export default function App() {
         setVaultError("");
         return nextStatus || null;
       } catch (error) {
-        setVaultError(error?.message || "Secret-Vault Status konnte nicht geladen werden.");
+        setVaultError(error?.message || t("vault.errorStatus"));
         return null;
       } finally {
         if (!quiet) {
@@ -131,7 +133,9 @@ export default function App() {
         }
       }
     };
-  }, [shouldUseVaultGate]);
+    // `t` changes identity only on a language switch, so this re-creates the
+    // callback exactly when the fallback error copy would otherwise go stale.
+  }, [shouldUseVaultGate, t]);
 
   const isVaultUnlocked = !shouldUseVaultGate || (vaultStatus?.configured === true && vaultStatus?.unlocked === true);
   // Steam kommt vor dem App-Passwort: ohne verbundene Session waere "App entsperren"
@@ -284,7 +288,7 @@ export default function App() {
   if (isProcessingAuthCallback) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <p className="text-sm text-muted-foreground">Anmeldung wird abgeschlossen...</p>
+        <p className="text-sm text-muted-foreground">{t("boot.finishingSignIn")}</p>
       </div>
     );
   }
@@ -292,7 +296,7 @@ export default function App() {
   if (shouldUseVaultGate && !desktopSessionChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <p className="text-sm text-muted-foreground">Sitzung wird geprueft...</p>
+        <p className="text-sm text-muted-foreground">{t("boot.checkingSession")}</p>
       </div>
     );
   }
@@ -300,11 +304,11 @@ export default function App() {
   const handleSetVaultPassword = async () => {
     const minLength = Number(vaultStatus?.minPasswordLength || 16);
     if (setupPassword.length < minLength) {
-      setVaultError(`App-Passwort muss mindestens ${minLength} Zeichen haben.`);
+      setVaultError(t("vault.errorTooShort", { count: minLength }));
       return;
     }
     if (setupPassword !== setupPasswordConfirm) {
-      setVaultError("Passwort-Bestaetigung stimmt nicht ueberein.");
+      setVaultError(t("vault.errorMismatch"));
       return;
     }
 
@@ -316,7 +320,7 @@ export default function App() {
       setSetupPasswordConfirm("");
       await refreshVaultStatus();
     } catch (error) {
-      setVaultError(error?.message || "App-Passwort konnte nicht gesetzt werden.");
+      setVaultError(error?.message || t("vault.errorSetPassword"));
     } finally {
       setVaultActionRunning(false);
     }
@@ -324,7 +328,7 @@ export default function App() {
 
   const handleUnlockVault = async () => {
     if (!unlockPassword.trim()) {
-      setVaultError("Bitte App-Passwort eingeben.");
+      setVaultError(t("vault.errorEmpty"));
       return;
     }
 
@@ -335,7 +339,7 @@ export default function App() {
       setUnlockPassword("");
       await refreshVaultStatus();
     } catch (error) {
-      setVaultError(error?.message || "Secret Vault konnte nicht entsperrt werden.");
+      setVaultError(error?.message || t("vault.errorUnlock"));
     } finally {
       setVaultActionRunning(false);
     }
@@ -347,10 +351,10 @@ export default function App() {
     const vaultLoginStep = requiresSetup ? 1 : vaultActionRunning ? 3 : 2;
     const vaultLoginProgressPercent = Math.round((vaultLoginStep / 3) * 100);
     const vaultLoginProgressLabel = requiresSetup
-      ? "Lokalen Zugang einrichten"
+      ? t("vault.progressSetup")
       : vaultActionRunning
-        ? "Entsperren..."
-        : "Bereit zum Entsperren";
+        ? t("vault.progressUnlocking")
+        : t("vault.progressReady");
     const hasVaultSteamUser = Boolean(resolveSteamIdFromUser(vaultLoginUser));
     const vaultDisplayName =
       hasVaultSteamUser
@@ -358,8 +362,8 @@ export default function App() {
             vaultLoginUser?.name,
             vaultLoginUser?.steamName,
             vaultLoginUser?.steam_name,
-          ) || "Steam Account"
-        : "Steam Account";
+          ) || t("vault.accountFallback")
+        : t("vault.accountFallback");
     const vaultAvatarUrl = hasVaultSteamUser
       ? normalizeAvatarUrl(
           firstNonEmptyString(
@@ -395,8 +399,8 @@ export default function App() {
                   <Lock className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-base font-semibold">Welcome to CS Investor Hub</p>
-                  <p className="text-xs text-muted-foreground">Mit App-Passwort anmelden und direkt ins Dashboard.</p>
+                  <p className="text-base font-semibold">{t("vault.welcome")}</p>
+                  <p className="text-xs text-muted-foreground">{t("vault.welcomeSubtitle")}</p>
                 </div>
               </div>
 
@@ -419,7 +423,7 @@ export default function App() {
                 <div>
                   <p className="text-sm font-semibold text-foreground">{vaultDisplayName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {hasVaultSteamUser ? "Steam verbunden" : "Noch nicht verbunden"}
+                    {hasVaultSteamUser ? t("vault.steamConnected") : t("vault.steamNotConnected")}
                   </p>
                 </div>
               </div>
@@ -432,12 +436,12 @@ export default function App() {
                     void handleSetVaultPassword();
                   }}
                 >
-                  <p className="text-sm font-medium">App-Passwort erstellen</p>
+                  <p className="text-sm font-medium">{t("vault.createPassword")}</p>
                   <Input
                     type="password"
                     value={setupPassword}
                     onChange={(event) => setSetupPassword(event.target.value)}
-                    placeholder={`Mindestens ${minPasswordLength} Zeichen`}
+                    placeholder={t("vault.minCharsPlaceholder", { count: minPasswordLength })}
                     disabled={vaultActionRunning}
                     className="border-border bg-surface-1 text-foreground placeholder:text-muted-foreground"
                   />
@@ -445,12 +449,12 @@ export default function App() {
                     type="password"
                     value={setupPasswordConfirm}
                     onChange={(event) => setSetupPasswordConfirm(event.target.value)}
-                    placeholder="Passwort bestaetigen"
+                    placeholder={t("vault.confirmPasswordPlaceholder")}
                     disabled={vaultActionRunning}
                     className="border-border bg-surface-1 text-foreground placeholder:text-muted-foreground"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Empfehlung: Lange Passphrase mit Gross-/Kleinbuchstaben, Zahlen und Sonderzeichen.
+                    {t("vault.passwordHint")}
                   </p>
                   <Button
                     type="submit"
@@ -458,7 +462,7 @@ export default function App() {
                     disabled={vaultActionRunning}
                     data-keyboard-default
                   >
-                    {vaultActionRunning ? "Speichert..." : "App-Passwort setzen"}
+                    {vaultActionRunning ? t("vault.saving") : t("vault.setPassword")}
                   </Button>
                 </form>
               ) : (
@@ -469,12 +473,12 @@ export default function App() {
                     void handleUnlockVault();
                   }}
                 >
-                  <p className="text-sm font-medium">App entsperren</p>
+                  <p className="text-sm font-medium">{t("vault.unlockApp")}</p>
                   <Input
                     type="password"
                     value={unlockPassword}
                     onChange={(event) => setUnlockPassword(event.target.value)}
-                    placeholder="App-Passwort"
+                    placeholder={t("vault.passwordPlaceholder")}
                     disabled={vaultActionRunning}
                     className="border-border bg-surface-1 text-foreground placeholder:text-muted-foreground"
                   />
@@ -484,7 +488,7 @@ export default function App() {
                     disabled={vaultActionRunning}
                     data-keyboard-default
                   >
-                    {vaultActionRunning ? "Entsperrt..." : "Entsperren"}
+                    {vaultActionRunning ? t("vault.unlocking") : t("vault.unlock")}
                   </Button>
                 </form>
               )}
@@ -516,7 +520,7 @@ export default function App() {
 
   const routeFallback = (
     <div className="flex min-h-[30vh] items-center justify-center">
-      <p className="text-sm text-muted-foreground">Ansicht wird geladen...</p>
+      <p className="text-sm text-muted-foreground">{t("boot.loadingView")}</p>
     </div>
   );
 

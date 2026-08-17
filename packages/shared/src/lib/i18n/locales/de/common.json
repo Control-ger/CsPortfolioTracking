@@ -1,1 +1,90 @@
-{}
+{
+  "appName": "CS Portfolio Tracking",
+  "nav": {
+    "dashboard": "Dashboard",
+    "overview": "Übersicht",
+    "inventory": "Inventar",
+    "watchlist": "Watchlist",
+    "search": "Suche",
+    "management": "Verwaltung",
+    "settings": "Einstellungen",
+    "updates": "Updates",
+    "fallbackTitle": "CS Portfolio",
+    "openDrawer": "Navigation öffnen",
+    "mainNavigation": "Hauptnavigation"
+  },
+  "search": {
+    "globalPlaceholder": "Global suchen"
+  },
+  "userMenu": {
+    "open": "Benutzermenü öffnen",
+    "openWithWarning": "Benutzermenü öffnen — {{reason}}",
+    "sessionExpired": "Sitzung abgelaufen — Sync pausiert. Bitte neu anmelden.",
+    "sessionLocalOnly": "Nur lokal angemeldet — Sync inaktiv. Bitte neu anmelden.",
+    "accountFallback": "Steam-Konto",
+    "steamConnected": "Steam verbunden",
+    "syncInactive": "Sync inaktiv",
+    "steamAvatar": "Steam Avatar",
+    "steamAvatarOf": "{{name}} Steam Avatar",
+    "signOut": "Abmelden",
+    "signOutAndLock": "Abmelden & sperren"
+  },
+  "titlebar": {
+    "minimize": "Minimieren",
+    "minimizeWindow": "Fenster minimieren",
+    "maximize": "Maximieren",
+    "maximizeWindow": "Fenster maximieren",
+    "close": "Schließen",
+    "closeWindow": "Fenster schließen"
+  },
+  "vault": {
+    "welcome": "Willkommen bei CS Investor Hub",
+    "welcomeSubtitle": "Mit App-Passwort anmelden und direkt ins Dashboard.",
+    "steamConnected": "Steam verbunden",
+    "steamNotConnected": "Noch nicht verbunden",
+    "accountFallback": "Steam-Konto",
+    "createPassword": "App-Passwort erstellen",
+    "unlockApp": "App entsperren",
+    "passwordPlaceholder": "App-Passwort",
+    "minCharsPlaceholder": "Mindestens {{count}} Zeichen",
+    "confirmPasswordPlaceholder": "Passwort bestätigen",
+    "passwordHint": "Empfehlung: Lange Passphrase mit Groß-/Kleinbuchstaben, Zahlen und Sonderzeichen.",
+    "setPassword": "App-Passwort setzen",
+    "saving": "Speichert…",
+    "unlock": "Entsperren",
+    "unlocking": "Entsperrt…",
+    "progressSetup": "Lokalen Zugang einrichten",
+    "progressUnlocking": "Entsperren…",
+    "progressReady": "Bereit zum Entsperren",
+    "errorTooShort": "App-Passwort muss mindestens {{count}} Zeichen haben.",
+    "errorMismatch": "Passwort-Bestätigung stimmt nicht überein.",
+    "errorEmpty": "Bitte App-Passwort eingeben.",
+    "errorStatus": "Secret-Vault Status konnte nicht geladen werden.",
+    "errorSetPassword": "App-Passwort konnte nicht gesetzt werden.",
+    "errorUnlock": "Secret Vault konnte nicht entsperrt werden."
+  },
+  "boot": {
+    "finishingSignIn": "Anmeldung wird abgeschlossen…",
+    "checkingSession": "Sitzung wird geprüft…",
+    "loadingView": "Ansicht wird geladen…"
+  },
+  "theme": {
+    "toggle": "Farbmodus umschalten",
+    "systemActive": "Systemmodus aktiv ({{mode}}) — klicken zum Überschreiben",
+    "modeDark": "dunkel",
+    "modeLight": "hell",
+    "activateLight": "Helles Design aktivieren",
+    "activateDark": "Dunkles Design aktivieren"
+  },
+  "notifications": {
+    "title": "System-Benachrichtigungen",
+    "deleteAll": "Alle löschen",
+    "empty": "Keine Benachrichtigungen.",
+    "webHint": "Im Web werden System-Benachrichtigungen per Browser Push zugestellt.",
+    "entryFallbackTitle": "Hinweis",
+    "dismiss": "Entfernen",
+    "downloading": "{{version}} wird heruntergeladen",
+    "updateFallbackVersion": "Update",
+    "progressOf": "{{transferred}} von {{total}}"
+  }
+}

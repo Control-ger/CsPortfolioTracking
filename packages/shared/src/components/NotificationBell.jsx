@@ -12,6 +12,7 @@ import {
 import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 import { getCurrentUser, resolveDesktopLocalUserId, runAppUpdateAction } from "@shared/lib";
 
+import { useTranslation } from "react-i18next";
 import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 /**
  * The system-notification bell: unread-count button plus its dropdown inbox.
@@ -72,14 +73,14 @@ function formatMegabytes(bytes) {
 
 // "12,3 MB von 78,0 MB · 2,1 MB/s" — omits whatever electron-updater did not
 // report rather than rendering "0.0 MB von 0.0 MB".
-function describeDownloadProgress(progress) {
+function describeDownloadProgress(progress, t) {
   const transferred = formatMegabytes(progress?.transferred);
   const total = formatMegabytes(progress?.total);
   const speed = formatMegabytes(progress?.bytesPerSecond);
 
   const parts = [];
   if (transferred && total) {
-    parts.push(`${transferred} von ${total}`);
+    parts.push(t("notifications.progressOf", { transferred, total }));
   } else if (transferred) {
     parts.push(transferred);
   }
@@ -93,21 +94,23 @@ function describeDownloadProgress(progress) {
 // second — persisting it would hammer SQLite and leave an orphan row if the app
 // dies mid-download. It lives as an ephemeral entry instead, rebuilt from the
 // live updater status (and replayed via getLastStatus on mount).
-function buildDownloadProgressEntry(progress) {
+function buildDownloadProgressEntry(progress, t) {
   if (!progress) {
     return null;
   }
   const rawPercent = Number(progress.percent || 0);
   const percent = Number.isFinite(rawPercent) ? Math.min(100, Math.max(0, rawPercent)) : 0;
-  const versionLabel = progress.version ? `v${normalizeVersion(progress.version)}` : "Update";
+  const versionLabel = progress.version
+    ? `v${normalizeVersion(progress.version)}`
+    : t("notifications.updateFallbackVersion");
 
   return {
     id: "__app-update-download__",
     ephemeral: true,
     percent,
     category: "app_update",
-    title: `${versionLabel} wird heruntergeladen`,
-    message: describeDownloadProgress(progress),
+    title: t("notifications.downloading", { version: versionLabel }),
+    message: describeDownloadProgress(progress, t),
     payload: { state: "downloading", version: progress.version || null },
   };
 }
@@ -130,6 +133,7 @@ export function NotificationBell({
   menuSide = "right",
   menuAlign = "end",
 }) {
+  const { t } = useTranslation("common");
   const navigate = useNavigate();
   const [syncNotifications, setSyncNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -242,7 +246,7 @@ export function NotificationBell({
     };
   }, [desktopRuntime]);
 
-  const downloadProgressEntry = buildDownloadProgressEntry(downloadProgress);
+  const downloadProgressEntry = buildDownloadProgressEntry(downloadProgress, t);
   const visibleNotifications = downloadProgressEntry
     ? [downloadProgressEntry, ...syncNotifications]
     : syncNotifications;
@@ -324,7 +328,7 @@ export function NotificationBell({
       </DropdownMenuTrigger>
       <DropdownMenuContent side={menuSide} align={menuAlign} className="w-80">
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-          <DropdownMenuLabel className="p-0">System-Benachrichtigungen</DropdownMenuLabel>
+          <DropdownMenuLabel className="p-0">{t("notifications.title")}</DropdownMenuLabel>
           {desktopRuntime && unreadNotificationCount > 0 ? (
             <button
               type="button"
@@ -332,7 +336,7 @@ export function NotificationBell({
               className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Alle löschen
+              {t("notifications.deleteAll")}
             </button>
           ) : null}
         </div>
@@ -407,7 +411,7 @@ export function NotificationBell({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className={`font-semibold ${isError ? "text-destructive" : "text-foreground"}`}>
-                        {entry.title || "Hinweis"}
+                        {entry.title || t("notifications.entryFallbackTitle")}
                       </p>
                       <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
@@ -417,8 +421,8 @@ export function NotificationBell({
                     <button
                       type="button"
                       onClick={(event) => void handleDismissNotification(event, entry)}
-                      title="Entfernen"
-                      aria-label="Entfernen"
+                      title={t("notifications.dismiss")}
+                      aria-label={t("notifications.dismiss")}
                       className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -427,12 +431,12 @@ export function NotificationBell({
                 );
               })
             ) : (
-              <p className="p-2 text-xs text-muted-foreground">Keine Benachrichtigungen.</p>
+              <p className="p-2 text-xs text-muted-foreground">{t("notifications.empty")}</p>
             )}
           </div>
         ) : (
           <p className="p-2 text-xs text-muted-foreground">
-            Im Web werden System-Benachrichtigungen per Browser Push zugestellt.
+            {t("notifications.webHint")}
           </p>
         )}
       </DropdownMenuContent>

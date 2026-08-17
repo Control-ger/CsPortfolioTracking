@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 import { UserRound, LogOut, Lock, AlertTriangle } from "lucide-react"
 
@@ -29,6 +30,7 @@ export function UserMenu({
   menuAlign = "end",
   menuSideOffset = 4,
 }) {
+  const { t } = useTranslation("common")
   const [user, setUser] = useState(null)
   const [sessionHealth, setSessionHealth] = useState(getSessionHealth)
 
@@ -107,8 +109,8 @@ export function UserMenu({
   const sessionUnhealthy = sessionHealth.status !== SESSION_HEALTH_OK
   const sessionBadgeLabel =
     sessionHealth.status === SESSION_HEALTH_REJECTED
-      ? "Sitzung abgelaufen — Sync pausiert. Bitte neu anmelden."
-      : "Nur lokal angemeldet — Sync inaktiv. Bitte neu anmelden."
+      ? t("userMenu.sessionExpired")
+      : t("userMenu.sessionLocalOnly")
 
   return (
     <DropdownMenu>
@@ -116,8 +118,8 @@ export function UserMenu({
         <IconCircleButton
           aria-label={
             sessionUnhealthy
-              ? `Benutzermenue oeffnen — ${sessionBadgeLabel}`
-              : "Benutzermenue oeffnen"
+              ? t("userMenu.openWithWarning", { reason: sessionBadgeLabel })
+              : t("userMenu.open")
           }
           title={sessionUnhealthy ? sessionBadgeLabel : undefined}
         >
@@ -130,13 +132,13 @@ export function UserMenu({
                 autoPlay
                 loop
                 playsInline
-                aria-label={user?.name ? `${user.name} Steam Avatar` : "Steam Avatar"}
+                aria-label={user?.name ? t("userMenu.steamAvatarOf", { name: user.name }) : t("userMenu.steamAvatar")}
                 className="h-10 w-10 rounded-full object-cover"
               />
             ) : (
               <img
                 src={avatarUrl}
-                alt={user?.name ? `${user.name} Steam Avatar` : "Steam Avatar"}
+                alt={user?.name ? t("userMenu.steamAvatarOf", { name: user.name }) : t("userMenu.steamAvatar")}
                 className="h-10 w-10 rounded-full object-cover"
               />
             )
@@ -182,21 +184,21 @@ export function UserMenu({
             destinations and the mobile bottom bar carries both of these. */}
         <DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
           <span className="truncate text-[13px] font-bold text-foreground">
-            {user?.name || "Steam-Konto"}
+            {user?.name || t("userMenu.accountFallback")}
           </span>
           <span className="text-[11px] font-normal text-muted-foreground">
-            {sessionUnhealthy ? "Sync inaktiv" : "Steam verbunden"}
+            {sessionUnhealthy ? t("userMenu.syncInactive") : t("userMenu.steamConnected")}
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
-          <span>Abmelden</span>
+          <span>{t("userMenu.signOut")}</span>
         </DropdownMenuItem>
         {window.electronAPI?.secrets?.lockVault ? (
           <DropdownMenuItem onClick={() => void handleLogout({ lockVault: true })} className="text-destructive focus:text-destructive">
             <Lock className="mr-2 h-4 w-4" />
-            <span>Abmelden & sperren</span>
+            <span>{t("userMenu.signOutAndLock")}</span>
           </DropdownMenuItem>
         ) : null}
       </DropdownMenuContent>

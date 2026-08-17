@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Cog, Eye, FolderCog, LayoutGrid, Menu, Newspaper, Package, Search } from "lucide-react";
 
@@ -16,15 +17,22 @@ import { UserMenu } from "@shared/components/UserMenu";
  *
  * Rendered once by the app shell, above the routed view: the title and the
  * active nav item both derive from the route, so no screen has to own it.
+ *
+ * Items carry a `labelKey`, not a literal: the desktop rail renders the same
+ * destinations from its own list, so both read one set of `common:nav.*` keys
+ * and cannot drift apart in one language but not the other. The overview entry
+ * is deliberately `nav.dashboard` here and `nav.overview` in the rail — the
+ * mobile screen title and the rail tooltip already said different things, and
+ * unifying them would be a UX change rather than a translation.
  */
 const NAV_ITEMS = [
-  { key: "overview", label: "Dashboard", icon: LayoutGrid, to: "/" },
-  { key: "inventory", label: "Inventar", icon: Package, to: "/inventory" },
-  { key: "watchlist", label: "Watchlist", icon: Eye, to: "/watchlist" },
-  { key: "search", label: "Suche", icon: Search, to: "/search" },
-  { key: "management", label: "Verwaltung", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
-  { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
-  { key: "updates", label: "Updates", icon: Newspaper, to: "/cs-updates" },
+  { key: "overview", labelKey: "nav.dashboard", icon: LayoutGrid, to: "/" },
+  { key: "inventory", labelKey: "nav.inventory", icon: Package, to: "/inventory" },
+  { key: "watchlist", labelKey: "nav.watchlist", icon: Eye, to: "/watchlist" },
+  { key: "search", labelKey: "nav.search", icon: Search, to: "/search" },
+  { key: "management", labelKey: "nav.management", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
+  { key: "settings", labelKey: "nav.settings", icon: Cog, to: "/settings" },
+  { key: "updates", labelKey: "nav.updates", icon: Newspaper, to: "/cs-updates" },
 ];
 
 /** Route → screen title. The management view is a tab on `/`, not its own route. */
@@ -39,6 +47,7 @@ function resolveActiveKey(pathname, tabParam) {
 }
 
 export function MobileTopbar({ desktopRuntime = false }) {
+  const { t } = useTranslation("common");
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -46,7 +55,8 @@ export function MobileTopbar({ desktopRuntime = false }) {
   const [query, setQuery] = useState("");
 
   const activeKey = resolveActiveKey(location.pathname, searchParams.get("tab"));
-  const title = NAV_ITEMS.find((item) => item.key === activeKey)?.label ?? "CS Portfolio";
+  const activeItem = NAV_ITEMS.find((item) => item.key === activeKey);
+  const title = activeItem ? t(activeItem.labelKey) : t("nav.fallbackTitle");
 
   // Escape closes, and the page behind must not scroll under the overlay.
   useEffect(() => {
@@ -76,7 +86,7 @@ export function MobileTopbar({ desktopRuntime = false }) {
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          aria-label="Navigation öffnen"
+          aria-label={t("nav.openDrawer")}
           aria-expanded={drawerOpen}
           className="grid size-11 flex-none place-items-center text-foreground"
         >
@@ -88,8 +98,8 @@ export function MobileTopbar({ desktopRuntime = false }) {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Global suchen"
-            aria-label="Global suchen"
+            placeholder={t("search.globalPlaceholder")}
+            aria-label={t("search.globalPlaceholder")}
             className="h-8 w-full rounded-[9px] border border-border bg-background pl-7 pr-2.5 text-[11.5px] text-foreground outline-none"
           />
         </form>
@@ -105,12 +115,12 @@ export function MobileTopbar({ desktopRuntime = false }) {
           className="absolute inset-0 z-50 bg-black/50 md:hidden"
         >
           <nav
-            aria-label="Hauptnavigation"
+            aria-label={t("nav.mainNavigation")}
             onClick={(event) => event.stopPropagation()}
             className="flex h-full w-[250px] flex-col gap-[3px] border-r border-border bg-sidebar px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[calc(1.375rem+env(safe-area-inset-top))]"
           >
             <div className="px-2.5 pb-4 text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
-              CS Portfolio Tracking
+              {t("appName")}
             </div>
             {NAV_ITEMS.filter((item) => !item.desktopOnly || desktopRuntime).map((item) => {
               const Icon = item.icon;
@@ -134,7 +144,7 @@ export function MobileTopbar({ desktopRuntime = false }) {
                   }`}
                 >
                   <Icon className="size-[18px] flex-none" strokeWidth={1.8} />
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               );
             })}
