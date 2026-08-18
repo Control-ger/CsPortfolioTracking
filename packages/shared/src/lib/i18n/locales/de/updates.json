@@ -1,1 +1,37 @@
-{}
+{
+  "title": "CS Updates",
+  "cs2Update": "CS2 Update",
+  "impact": {
+    "pendingLabel": "KI läuft",
+    "pendingAction": "Eilmeldung lesen, Bewertung folgt.",
+    "noneLabel": "Impact none",
+    "noneAction": "Kein akuter Markt-Impact.",
+    "lowLabel": "Impact niedrig",
+    "lowAction": "Beobachten.",
+    "mediumLabel": "Impact mittel",
+    "mediumAction": "Heute monitoren.",
+    "highLabel": "Impact hoch",
+    "highAction": "Schnell relevante Positionen prüfen.",
+    "failedLabel": "KI fehlgeschlagen",
+    "failedAction": "Patchnotes manuell bewerten.",
+    "unratedLabel": "KI ausstehend",
+    "unratedAction": "Noch keine Bewertung verfügbar."
+  },
+  "aiSummary": "KI Zusammenfassung",
+  "action": "Aktion:",
+  "reason": "Begründung:",
+  "loadFailed": "CS Updates konnten nicht geladen werden",
+  "stale": "Veraltet",
+  "current": "Aktuell",
+  "refreshing": "Aktualisiere…",
+  "refresh": "Aktualisieren",
+  "emptyTitle": "Noch keine CS-Updates verfügbar",
+  "emptyBody": "Neue Meldungen erscheinen automatisch, sobald sie erkannt werden.",
+  "loading": "Lade…",
+  "loadOlder": "Ältere laden",
+  "backToPortfolio": "Zurück zum Portfolio",
+  "notifications": "Benachrichtigungen",
+  "notice": "Hinweis",
+  "noNotifications": "Keine Benachrichtigungen.",
+  "reload": "Erneut laden"
+}

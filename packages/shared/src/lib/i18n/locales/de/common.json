@@ -111,5 +111,18 @@
     "collapseFilter": "Filter einklappen",
     "expandFilter": "Filter ausklappen",
     "soon": "Noch nicht verfügbar"
+  },
+  "pagination": {
+    "previousPage": "Vorherige Seite",
+    "nextPage": "Nächste Seite"
+  },
+  "abbreviations": {
+    "roi": "Prozentuale Rendite der Investition",
+    "cashIn": "Kauf über CSFloat Wallet Guthaben",
+    "wallet": "Kauf über Steam Wallet Guthaben",
+    "api": "Schnittstelle für Datenabfrage",
+    "fx": "Währungsumrechnung",
+    "csfloat": "Externe Preisdatenbank",
+    "eur": "Währung: Euro"
   }
 }

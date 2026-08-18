@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package } from "lucide-react";
 
@@ -18,12 +19,12 @@ import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 
 import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 const DESKTOP_SIDEBAR_ITEMS = [
-  { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/?tab=overview" },
-  { key: "inventory", label: "Inventar", icon: Package, to: "/?tab=inventory" },
-  { key: "watchlist", label: "Watchlist", icon: Eye, to: "/?tab=watchlist" },
-  { key: "management", label: "Verwaltung", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
-  { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
-  { key: "updates", label: "Updates", icon: Newspaper, to: "/cs-updates" },
+  { key: "overview", labelKey: "nav.overview", icon: LayoutGrid, to: "/?tab=overview" },
+  { key: "inventory", labelKey: "nav.inventory", icon: Package, to: "/?tab=inventory" },
+  { key: "watchlist", labelKey: "nav.watchlist", icon: Eye, to: "/?tab=watchlist" },
+  { key: "management", labelKey: "nav.management", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
+  { key: "settings", labelKey: "nav.settings", icon: Cog, to: "/settings" },
+  { key: "updates", labelKey: "nav.updates", icon: Newspaper, to: "/cs-updates" },
 ];
 const CS_UPDATES_SEEN_KEY = "cs-updates:last-seen-id:v1";
 
@@ -68,6 +69,7 @@ function isStaleAppUpdateEntry(entry, installedVersion) {
 }
 
 export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }) {
+  const { t } = useTranslation(["updates", "common"]);
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
   const desktopRuntime = isElectronRuntime && Boolean(window.electronAPI?.localStore);
   const useDesktopSidebarShell = true;
@@ -189,12 +191,12 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
             <ThemeToggle />
             <UserMenu />
             <Button asChild variant="outline" size="icon" className="sm:hidden">
-              <Link to="/" aria-label="Zurueck zum Portfolio">
+              <Link to="/" aria-label={t("backToPortfolio")}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" className="hidden sm:inline-flex">
-              <Link to="/">Zurueck zum Portfolio</Link>
+              <Link to="/">{t("backToPortfolio")}</Link>
             </Button>
           </div>
         </header>
@@ -237,8 +239,8 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
                               ? "border-primary/35 bg-primary text-primary-foreground shadow-none dark:shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
                               : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-accent/70 hover:text-foreground"
                           }`}
-                          title={item.label}
-                          aria-label={item.label}
+                          title={t(item.labelKey, { ns: "common" })}
+                          aria-label={t(item.labelKey, { ns: "common" })}
                         >
                           <Icon className="h-5 w-5" />
                         </button>
@@ -254,7 +256,7 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
                       </IconCircleButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="right" align="end" className="w-80">
-                      <DropdownMenuLabel>Benachrichtigungen</DropdownMenuLabel>
+                      <DropdownMenuLabel>{t("notifications")}</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <div className="max-h-72 space-y-1 overflow-y-auto">
                         {syncNotifications.length > 0 ? (
@@ -265,7 +267,7 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
                               onClick={() => void handleNotificationClick(entry)}
                               className="w-full rounded-md p-2 text-left text-xs transition-colors hover:bg-accent"
                             >
-                              <p className="font-semibold text-foreground">{entry.title || "Hinweis"}</p>
+                              <p className="font-semibold text-foreground">{entry.title || t("notice")}</p>
                               <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
                               <p className="mt-1 text-[11px] text-muted-foreground">
                                 {entry.createdAt ? new Date(entry.createdAt).toLocaleString(getActiveIntlLocale()) : ""}
@@ -273,7 +275,7 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
                             </button>
                           ))
                         ) : (
-                          <p className="p-2 text-xs text-muted-foreground">Keine Benachrichtigungen.</p>
+                          <p className="p-2 text-xs text-muted-foreground">{t("noNotifications")}</p>
                         )}
                       </div>
                     </DropdownMenuContent>

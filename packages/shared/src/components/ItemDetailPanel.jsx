@@ -20,6 +20,7 @@ import { toggleExcludeInvestment } from "../lib/apiClient";
 import { PortfolioChart } from "./PortfolioChart";
 import { PortfolioCompositionChart } from "./PortfolioCompositionChart";
 import { GroupWeightingList } from "./GroupWeightingList";
+import { resolveItemCategorySingular } from "../lib/portfolioCalculations.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 /**
@@ -151,7 +152,13 @@ function buildMetaLine(item) {
     item?.fundingMode === "cash_in"
       ? translate("inventory:detail.cashIn")
       : translate("inventory:detail.wallet");
-  return [item?.type, bucketLabel, fundingLabel].filter(Boolean).join(" · ");
+  // Catalogue category, not `item.type`: that field is importer-supplied and
+  // defaults to "skin", so the inspector labelled every case, sticker and
+  // capsule "SKIN" while the table row beside it said "CASE". Same resolver the
+  // table uses, so the two cannot disagree.
+  return [resolveItemCategorySingular(item), bucketLabel, fundingLabel]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export const ItemDetailPanel = ({

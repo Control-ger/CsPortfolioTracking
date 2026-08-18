@@ -1,1 +1,65 @@
-{}
+{
+  "platform": {
+    "steamInventory": "Steam Inventar",
+    "other": "Sonstige"
+  },
+  "player": {
+    "investor": "Investor"
+  },
+  "purchases": {
+    "onePurchase": "Ein Kauf in diesem Jahr",
+    "totalSpend": "Gesamtausgaben",
+    "averagePrice": "Durchschnittspreis",
+    "perPiece": "pro Stück",
+    "peakMonthPurchases": "Käufe im Peak-Monat"
+  },
+  "outliers": {
+    "title": "Deine Ausreißer des Jahres",
+    "mostBought": "Meistgekauft",
+    "priciestSingle": "Teuerster Einzelkauf"
+  },
+  "platforms": {
+    "title": "Deine Plattformen",
+    "hint": "Anteile nach Ausgaben, nicht nach Anzahl der Käufe.",
+    "leader": "Am meisten über {{platform}}"
+  },
+  "portfolio": {
+    "grew": "Dein Portfolio ist gewachsen",
+    "declined": "Dein Portfolio hat nachgegeben",
+    "start": "Start",
+    "end": "Ende",
+    "change": "Veränderung",
+    "bestAndWorstDay": "Bester und schlechtester Tag"
+  },
+  "positions": {
+    "title": "Top und Flop deiner Positionen",
+    "hint": "Unrealisierte Entwicklung der aktuell gehaltenen Positionen.",
+    "mostProfit": "Hier hast du am meisten Profit gemacht",
+    "mostPain": "Und hier hat es am meisten wehgetan"
+  },
+  "watchlist": {
+    "title": "Was du im Blick behalten hast",
+    "newlyWatched": "Neu beobachtet"
+  },
+  "summary": {
+    "purchases": "Käufe",
+    "spend": "Ausgaben",
+    "busiestMonth": "Aktivster Monat",
+    "portfolioChange": "Portfolio-Entwicklung",
+    "newWatchlistItems": "Neue Watchlist-Items"
+  },
+  "controls": {
+    "resumePlayback": "Wiedergabe fortsetzen",
+    "pausePlayback": "Wiedergabe pausieren",
+    "resumeSpace": "Fortsetzen (Leertaste)",
+    "pauseSpace": "Pausieren (Leertaste)",
+    "soundsOff": "Sounds ausschalten",
+    "soundsOn": "Sounds einschalten",
+    "soundsOffShort": "Sounds aus",
+    "soundsOnShort": "Sounds an",
+    "close": "Jahresrückblick schließen",
+    "calculating": "Jahresrückblick wird berechnet…",
+    "done": "Fertig",
+    "next": "Weiter"
+  }
+}

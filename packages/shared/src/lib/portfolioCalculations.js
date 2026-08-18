@@ -1,3 +1,4 @@
+import { translate } from "./i18n/index.js";
 /**
  * Portfolio calculation helpers extracted from dataSource.js.
  * Pure functions for summary, grouping, clustering, composition.
@@ -369,23 +370,27 @@ export function buildPortfolioCompositionFromRows(rows = [], options = {}) {
 }
 
 /**
- * German label per catalogue category, for the mobile allocation bar.
+ * Category *key* per importer-supplied `type`, for the mobile allocation bar.
  *
- * Fallback only — see `resolveAllocationLabel`. `investments.type` is supplied
+ * Keys, not labels: the label is looked up per language at render time, and the
+ * singular form used to be keyed by the German plural ("Skins" → "Skin"), which
+ * silently broke the moment the plural was translated.
+ *
+ * Fallback only — see `resolveItemCategoryKey`. `investments.type` is supplied
  * by whichever importer created the row and defaults to `"skin"`, so it says
  * "skin" for Fever Case and "case" for Kilowatt Case in the same portfolio.
  */
-const ALLOCATION_LABELS = {
-  skin: "Skins",
-  case: "Cases",
-  souvenir_package: "Cases",
-  container: "Cases",
-  sticker: "Sticker",
-  patch: "Sticker",
-  graffiti: "Sticker",
-  charm: "Sticker",
-  agent: "Agents",
-  sticker_capsule: "Kapseln",
+const ALLOCATION_KEYS = {
+  skin: "skins",
+  case: "cases",
+  souvenir_package: "cases",
+  container: "cases",
+  sticker: "stickers",
+  patch: "stickers",
+  graffiti: "stickers",
+  charm: "stickers",
+  agent: "agents",
+  sticker_capsule: "capsules",
 };
 
 /**
@@ -394,20 +399,20 @@ const ALLOCATION_LABELS = {
  * skin is one category, because "Rifles / SMGs / Pistolen" splits the same kind
  * of asset into slices that answer no question the dashboard is asking.
  */
-const CATALOG_TYPE_ALLOCATION_LABELS = {
-  skin: "Skins",
-  case: "Cases",
-  container: "Cases",
-  sticker_capsule: "Kapseln",
-  souvenir_package: "Souvenir-Pakete",
-  sticker: "Sticker",
-  patch: "Patches",
-  graffiti: "Graffiti",
-  agent: "Agents",
-  charm: "Charms",
-  music_kit: "Musik-Kits",
-  key: "Keys",
-  tool: "Tools",
+const CATALOG_TYPE_ALLOCATION_KEYS = {
+  skin: "skins",
+  case: "cases",
+  container: "cases",
+  sticker_capsule: "capsules",
+  souvenir_package: "souvenirPackages",
+  sticker: "stickers",
+  patch: "patches",
+  graffiti: "graffiti",
+  agent: "agents",
+  charm: "charms",
+  music_kit: "musicKits",
+  key: "keys",
+  tool: "tools",
 };
 
 /**
@@ -419,14 +424,14 @@ const CATALOG_TYPE_ALLOCATION_LABELS = {
  * calls all three "Cases". Every weapon class collapses into "Skins".
  */
 const MARKET_TYPE_ALLOCATION_RULES = [
-  [/\b(container|case|capsule|package)\b/i, "Cases"],
-  [/\bsticker\b/i, "Sticker"],
-  [/\bpatch\b/i, "Patches"],
-  [/\bgraffiti\b/i, "Graffiti"],
-  [/\bagent\b/i, "Agents"],
-  [/\bcharm\b/i, "Charms"],
-  [/\bmusic kit\b/i, "Musik-Kits"],
-  [/\b(rifle|smg|pistol|shotgun|machinegun|knife|knives|bayonet|karambit|gloves|hand wraps|equipment)\b/i, "Skins"],
+  [/\b(container|case|capsule|package)\b/i, "cases"],
+  [/\bsticker\b/i, "stickers"],
+  [/\bpatch\b/i, "patches"],
+  [/\bgraffiti\b/i, "graffiti"],
+  [/\bagent\b/i, "agents"],
+  [/\bcharm\b/i, "charms"],
+  [/\bmusic kit\b/i, "musicKits"],
+  [/\b(rifle|smg|pistol|shotgun|machinegun|knife|knives|bayonet|karambit|gloves|hand wraps|equipment)\b/i, "skins"],
 ];
 
 /**
@@ -444,10 +449,10 @@ const MARKET_TYPE_ALLOCATION_RULES = [
  * the `marketTypeLabel` path produces the same labels except that cases,
  * capsules and souvenir packages all land in "Cases".
  */
-export function resolveItemCategory(row) {
+export function resolveItemCategoryKey(row) {
   const catalogType = String(row?.catalogItemType || "").trim().toLowerCase();
-  if (catalogType && CATALOG_TYPE_ALLOCATION_LABELS[catalogType]) {
-    return CATALOG_TYPE_ALLOCATION_LABELS[catalogType];
+  if (catalogType && CATALOG_TYPE_ALLOCATION_KEYS[catalogType]) {
+    return CATALOG_TYPE_ALLOCATION_KEYS[catalogType];
   }
 
   const marketType = String(row?.marketTypeLabel || "").trim();
@@ -458,7 +463,12 @@ export function resolveItemCategory(row) {
     }
   }
 
-  return ALLOCATION_LABELS[String(row?.type || "").trim().toLowerCase()] || "Sonstige";
+  return ALLOCATION_KEYS[String(row?.type || "").trim().toLowerCase()] || "other";
+}
+
+/** Plural label for the resolved category, in the active language. */
+export function resolveItemCategory(row) {
+  return translate(`inventory:category.${resolveItemCategoryKey(row)}`);
 }
 
 /** Categories shown before the tail is folded into one "Sonstige" slice. */
@@ -507,7 +517,7 @@ export function buildPortfolioAllocationByType(rows = [], options = {}) {
   const tail = ranked.slice(ALLOCATION_MAX_CATEGORIES);
   if (tail.length > 0) {
     head.push({
-      label: "Sonstige",
+      label: translate("inventory:category.other"),
       value: tail.reduce((sum, entry) => sum + entry.value, 0),
     });
   }
@@ -534,7 +544,7 @@ export function selectPortfolioMovers(rows = [], options = {}) {
   const withChange = scopedRows
     .map((row) => ({
       id: row.id ?? row.itemId ?? row.marketHashName ?? row.name,
-      name: row.name || row.marketHashName || "Unbekannt",
+      name: row.name || row.marketHashName || translate("inventory:detail.unknown"),
       changePercent: Number(row.change7dPercent),
     }))
     .filter((entry) => Number.isFinite(entry.changePercent) && entry.changePercent !== 0);
@@ -563,21 +573,13 @@ export function buildPortfolioHistoryFromSnapshots(snapshots = []) {
   });
 }
 
-/** Singular form, for a chip that labels one row rather than a bucket. */
-const CATEGORY_SINGULAR = {
-  Skins: "Skin",
-  Cases: "Case",
-  Kapseln: "Kapsel",
-  "Souvenir-Pakete": "Souvenir-Paket",
-  Patches: "Patch",
-  Agents: "Agent",
-  Charms: "Charm",
-  "Musik-Kits": "Musik-Kit",
-  Keys: "Key",
-  Tools: "Tool",
-};
-
+/**
+ * Singular form, for a chip that labels one row rather than a bucket.
+ *
+ * Resolved from the same key as the plural. It used to be a map keyed by the
+ * German plural label, which meant the singular silently fell back to the
+ * plural for every language whose plural was not literally "Skins".
+ */
 export function resolveItemCategorySingular(row) {
-  const label = resolveItemCategory(row);
-  return CATEGORY_SINGULAR[label] ?? label;
+  return translate(`inventory:categorySingular.${resolveItemCategoryKey(row)}`);
 }

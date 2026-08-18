@@ -1,1 +1,65 @@
-{}
+{
+  "platform": {
+    "steamInventory": "Steam inventory",
+    "other": "Other"
+  },
+  "player": {
+    "investor": "Investor"
+  },
+  "purchases": {
+    "onePurchase": "One purchase this year",
+    "totalSpend": "Total spend",
+    "averagePrice": "Average price",
+    "perPiece": "per piece",
+    "peakMonthPurchases": "purchases in the peak month"
+  },
+  "outliers": {
+    "title": "Your outliers of the year",
+    "mostBought": "Most bought",
+    "priciestSingle": "Priciest single purchase"
+  },
+  "platforms": {
+    "title": "Your platforms",
+    "hint": "Shares by spend, not by number of purchases.",
+    "leader": "Mostly via {{platform}}"
+  },
+  "portfolio": {
+    "grew": "Your portfolio grew",
+    "declined": "Your portfolio declined",
+    "start": "Start",
+    "end": "End",
+    "change": "Change",
+    "bestAndWorstDay": "Best and worst day"
+  },
+  "positions": {
+    "title": "Top and flop of your positions",
+    "hint": "Unrealised performance of the positions you currently hold.",
+    "mostProfit": "This is where you made the most profit",
+    "mostPain": "And this is where it hurt most"
+  },
+  "watchlist": {
+    "title": "What you kept an eye on",
+    "newlyWatched": "Newly watched"
+  },
+  "summary": {
+    "purchases": "Purchases",
+    "spend": "Spend",
+    "busiestMonth": "Busiest month",
+    "portfolioChange": "Portfolio change",
+    "newWatchlistItems": "New watchlist items"
+  },
+  "controls": {
+    "resumePlayback": "Resume playback",
+    "pausePlayback": "Pause playback",
+    "resumeSpace": "Resume (space)",
+    "pauseSpace": "Pause (space)",
+    "soundsOff": "Turn sounds off",
+    "soundsOn": "Turn sounds on",
+    "soundsOffShort": "Sounds off",
+    "soundsOnShort": "Sounds on",
+    "close": "Close year in review",
+    "calculating": "Calculating your year in review…",
+    "done": "Done",
+    "next": "Next"
+  }
+}

@@ -11,7 +11,8 @@ import { ScrollArea } from "@shared/components/ui/scroll-area";
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { cn } from "@shared/lib/utils";
 
-import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
+import { useTranslation } from "react-i18next";
+import { getActiveIntlLocale, translate } from "@shared/lib/i18n/index.js";
 const CLOSED_ITEM_SENTINEL = "__closed__";
 
 function toTimestamp(value) {
@@ -110,7 +111,7 @@ function resolveDisplayTitle(item) {
     return deriveShortTitle(rawSummary);
   }
 
-  return "CS2 Update";
+  return translate("updates:cs2Update");
 }
 
 function resolveUpdateDescription(item, displayTitle) {
@@ -181,8 +182,8 @@ function deriveMarketImpact(item) {
   if (aiStatus === "pending") {
     return {
       level: "pending",
-      label: "KI laeuft",
-      action: "Eilmeldung lesen, Bewertung folgt.",
+      label: translate("updates:impact.pendingLabel"),
+      action: translate("updates:impact.pendingAction"),
       badgeClass: "border-info/30 bg-info/10 text-info",
       itemClass: "border-border bg-transparent",
     };
@@ -191,24 +192,24 @@ function deriveMarketImpact(item) {
   if (aiStatus === "rated" && ["none", "low", "medium", "high"].includes(aiImpactLevel)) {
     const map = {
       none: {
-        label: "Impact none",
+        label: translate("updates:impact.noneLabel"),
         badgeClass: "border-border bg-muted/30 text-muted-foreground",
-        action: "Kein akuter Markt-Impact.",
+        action: translate("updates:impact.noneAction"),
       },
       low: {
-        label: "Impact niedrig",
+        label: translate("updates:impact.lowLabel"),
         badgeClass: "border-success/30 bg-success/8 text-success",
-        action: "Beobachten.",
+        action: translate("updates:impact.lowAction"),
       },
       medium: {
-        label: "Impact mittel",
+        label: translate("updates:impact.mediumLabel"),
         badgeClass: "border-warn/30 bg-warn/10 text-warn",
-        action: "Heute monitoren.",
+        action: translate("updates:impact.mediumAction"),
       },
       high: {
-        label: "Impact hoch",
+        label: translate("updates:impact.highLabel"),
         badgeClass: "border-danger/30 bg-danger/8 text-danger",
-        action: "Schnell relevante Positionen pruefen.",
+        action: translate("updates:impact.highAction"),
       },
     };
 
@@ -225,8 +226,8 @@ function deriveMarketImpact(item) {
   if (aiStatus === "failed") {
     return {
       level: "failed",
-      label: "KI fehlgeschlagen",
-      action: "Patchnotes manuell bewerten.",
+      label: translate("updates:impact.failedLabel"),
+      action: translate("updates:impact.failedAction"),
       badgeClass: "border-danger/30 bg-danger/10 text-danger",
       itemClass: "border-border bg-transparent",
     };
@@ -234,8 +235,8 @@ function deriveMarketImpact(item) {
 
   return {
     level: "unrated",
-    label: "KI ausstehend",
-    action: "Noch keine Bewertung verfuegbar.",
+    label: translate("updates:impact.unratedLabel"),
+    action: translate("updates:impact.unratedAction"),
     badgeClass: "border-border bg-muted/30 text-muted-foreground",
     itemClass: "border-border bg-transparent",
   };
@@ -262,16 +263,17 @@ function LoadingState() {
  * so the tone is the only thing that varies.
  */
 function ErrorState({ message, onRetry, hasItems }) {
+  const { t } = useTranslation("updates");
   return (
     <Callout
       tone={hasItems ? "warn" : "danger"}
       icon={<AlertCircle className="size-4" />}
-      title="CS Updates konnten nicht geladen werden"
+      title={t("loadFailed")}
     >
       <p className="text-muted-foreground">{message}</p>
       <Button variant="outline" size="sm" onClick={onRetry} className="mt-3">
         <RefreshCw className="mr-2 h-4 w-4" />
-        Erneut laden
+        {t("reload")}
       </Button>
     </Callout>
   );
@@ -286,6 +288,7 @@ function ErrorState({ message, onRetry, hasItems }) {
  * parent.
  */
 export function FeedItem({ item, isOpen, isFresh, compact }) {
+  const { t } = useTranslation("updates");
   const impact = deriveMarketImpact(item);
   const hasAiText = Boolean(item?.aiRecommendedAction || item?.aiReasoning);
   const aiModelLabel = String(item?.aiModel || "").trim();
@@ -360,16 +363,16 @@ export function FeedItem({ item, isOpen, isFresh, compact }) {
             <div className="p-1">
               <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" />
-                KI Zusammenfassung{aiModelLabel ? ` (${aiModelLabel})` : ""}
+                {t("aiSummary")}{aiModelLabel ? ` (${aiModelLabel})` : ""}
               </p>
               {item.aiRecommendedAction ? (
                 <p className="text-xs text-foreground">
-                  <span className="font-semibold">Aktion:</span> {item.aiRecommendedAction}
+                  <span className="font-semibold">{t("action")}</span> {item.aiRecommendedAction}
                 </p>
               ) : null}
               {item.aiReasoning ? (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">Begruendung:</span> {item.aiReasoning}
+                  <span className="font-semibold text-foreground">{t("reason")}</span> {item.aiReasoning}
                 </p>
               ) : null}
             </div>
@@ -428,6 +431,7 @@ export function CsUpdatesFeed({
   preferredOpenItemId = null,
   onLatestVisible = null,
 } = {}) {
+  const { t } = useTranslation("updates");
   const {
     items,
     meta,
@@ -523,7 +527,7 @@ export function CsUpdatesFeed({
                 variant="outline"
                 className={meta.isStale ? "border-warn/30 bg-warn/10 text-warn" : "border-success/30 bg-success/8 text-success"}
               >
-                {meta.isStale ? "Veraltet" : "Aktuell"}
+                {meta.isStale ? t("stale") : t("current")}
               </Badge>
               {newestFreshItem ? (
                 <Badge variant="outline" className="border-border text-muted-foreground">
@@ -539,7 +543,7 @@ export function CsUpdatesFeed({
           <div className="flex flex-col items-start gap-2 sm:items-end">
             <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading || isRefreshing}>
               <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing ? "animate-spin" : "")} />
-              {isRefreshing ? "Aktualisiere..." : "Aktualisieren"}
+              {isRefreshing ? t("refreshing") : t("refresh")}
             </Button>
             <p className="text-xs text-muted-foreground">Letztes Update: {lastUpdateLabel}</p>
           </div>
@@ -549,8 +553,8 @@ export function CsUpdatesFeed({
         {!isLoading && error ? <ErrorState message={error} onRetry={refresh} hasItems={hasItems} /> : null}
         {!isLoading && !hasItems && !error ? (
           <EmptyState
-            title="Noch keine CS-Updates verfuegbar"
-            description="Neue Meldungen erscheinen automatisch, sobald sie erkannt werden."
+            title={t("emptyTitle")}
+            description={t("emptyBody")}
           />
         ) : null}
 
@@ -563,7 +567,7 @@ export function CsUpdatesFeed({
               {hasMore ? (
                 <div className="flex justify-center pt-1">
                   <Button variant="outline" size="sm" onClick={loadOlder} disabled={isLoadingOlder || isRefreshing}>
-                    {isLoadingOlder ? "Lade..." : "Load older"}
+                    {isLoadingOlder ? t("loading") : t("loadOlder")}
                   </Button>
                 </div>
               ) : null}

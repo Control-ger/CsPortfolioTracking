@@ -1,3 +1,4 @@
+import { getActiveIntlLocale, translate } from "./i18n/index.js";
 /**
  * Year Wrapped statistics.
  *
@@ -21,27 +22,35 @@ import { getItemNameKey } from "./portfolioHelpers.js";
 const WRAPPED_SEASON_START_MONTH = 11; // December
 const WRAPPED_SEASON_START_DAY = 15;
 
-export const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mär",
-  "Apr",
-  "Mai",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Okt",
-  "Nov",
-  "Dez",
-];
+/**
+ * Short month names in the active locale.
+ *
+ * Derived from `Intl`, not from a hardcoded array: the twelve abbreviations are
+ * exactly the kind of thing the platform already knows per language, and a
+ * translated array would be twelve more strings to keep in sync for nothing.
+ * Called rather than exported as a constant so it follows a language switch.
+ */
+export function getMonthLabels() {
+  const formatter = new Intl.DateTimeFormat(getActiveIntlLocale(), { month: "short" });
+  // Day 1 of each month in a non-leap year; the year is irrelevant to the name.
+  return Array.from({ length: 12 }, (_, month) => formatter.format(new Date(2021, month, 1)));
+}
 
-const PLATFORM_LABELS = {
-  csfloat: "CSFloat",
-  skinbaron: "SkinBaron",
-  steam_inventory: "Steam Inventar",
-  other: "Sonstige",
+const PLATFORM_LABEL_KEYS = {
+  csfloat: null,
+  skinbaron: null,
+  steam_inventory: "wrapped:platform.steamInventory",
+  other: "wrapped:platform.other",
 };
+
+/** CSFloat and SkinBaron are brand names and stay as they are. */
+function resolvePlatformLabel(key) {
+  const translationKey = PLATFORM_LABEL_KEYS[key];
+  if (translationKey) {
+    return translate(translationKey);
+  }
+  return key === "csfloat" ? "CSFloat" : key === "skinbaron" ? "SkinBaron" : key;
+}
 
 /**
  * Decide whether the seasonal entry point is live and which year it covers.
@@ -130,7 +139,7 @@ function buildPurchaseStats(datedRows, undatedCount) {
 }
 
 function buildMonthlyStats(datedRows) {
-  const buckets = MONTH_LABELS.map((label, index) => ({
+  const buckets = getMonthLabels().map((label, index) => ({
     month: index,
     label,
     count: 0,
@@ -211,7 +220,7 @@ function buildPlatformStats(datedRows) {
   datedRows.forEach((entry) => {
     const key = resolvePlatformKey(entry.row);
     if (!groups.has(key)) {
-      groups.set(key, { key, label: PLATFORM_LABELS[key], count: 0, spentUsd: 0 });
+      groups.set(key, { key, label: resolvePlatformLabel(key), count: 0, spentUsd: 0 });
     }
     const group = groups.get(key);
     group.count += 1;
@@ -338,7 +347,7 @@ function buildPerformerStats(enrichedInvestments) {
 
 function buildWatchlistStats(watchlistItems, year) {
   const items = Array.isArray(watchlistItems) ? watchlistItems : [];
-  const buckets = MONTH_LABELS.map((label, index) => ({ month: index, label, count: 0 }));
+  const buckets = getMonthLabels().map((label, index) => ({ month: index, label, count: 0 }));
   let addedCount = 0;
 
   items.forEach((item) => {

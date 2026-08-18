@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@shared/components/ui/tooltip";
+import { useTranslation } from "react-i18next";
 import { ABBREVIATIONS } from "@shared/lib/constants";
 import { HelpCircle } from "lucide-react";
 import { cn } from "@shared/lib/utils";
@@ -14,6 +15,7 @@ export function AbbreviationTooltip({
   showIcon = false,
   iconClassName
 }) {
+  const { t } = useTranslation("common");
   const info = ABBREVIATIONS[term];
   
   if (!info) {
@@ -35,7 +37,7 @@ export function AbbreviationTooltip({
         <TooltipContent side="top">
           <div className="space-y-0.5">
             <p className="font-medium normal-case">{info.full}</p>
-            <p className="text-[10px] text-muted-foreground normal-case leading-tight">{info.description}</p>
+            <p className="text-[10px] text-muted-foreground normal-case leading-tight">{t(info.descriptionKey)}</p>
           </div>
         </TooltipContent>
       </Tooltip>

@@ -32,41 +32,45 @@ export const KEYBOARD = {
 
 // Tab indices for navigation
 // Abbreviations with descriptions for tooltips
+/**
+ * `short` and `full` are acronyms and their expansions — the same in every
+ * language — so only the description carries a key.
+ */
 export const ABBREVIATIONS = {
   ROI: {
     short: 'ROI',
     full: 'Return on Investment',
-    description: 'Prozentuale Rendite der Investition',
+    descriptionKey: 'common:abbreviations.roi',
   },
   'Cash-In': {
     short: 'Cash-In',
     full: 'CSFloat Wallet',
-    description: 'Kauf über CSFloat Wallet Guthaben',
+    descriptionKey: 'common:abbreviations.cashIn',
   },
   Wallet: {
     short: 'Wallet',
     full: 'Steam Wallet',
-    description: 'Kauf über Steam Wallet Guthaben',
+    descriptionKey: 'common:abbreviations.wallet',
   },
   API: {
     short: 'API',
     full: 'Application Programming Interface',
-    description: 'Schnittstelle für Datenabfrage',
+    descriptionKey: 'common:abbreviations.api',
   },
   FX: {
     short: 'FX',
     full: 'Foreign Exchange',
-    description: 'Währungsumrechnung',
+    descriptionKey: 'common:abbreviations.fx',
   },
   CSFloat: {
     short: 'CSFloat',
     full: 'CSFloat Database',
-    description: 'Externe Preisdatenbank',
+    descriptionKey: 'common:abbreviations.csfloat',
   },
   EUR: {
     short: 'EUR',
     full: 'Euro',
-    description: 'Währung: Euro',
+    descriptionKey: 'common:abbreviations.eur',
   },
 };
 

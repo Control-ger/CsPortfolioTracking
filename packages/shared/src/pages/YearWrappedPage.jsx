@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 
@@ -55,6 +56,7 @@ function parseYearParam(rawValue, fallbackYear) {
 }
 
 export function YearWrappedPage() {
+  const { t } = useTranslation("wrapped");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -348,8 +350,8 @@ export function YearWrappedPage() {
           <button
             type="button"
             onClick={togglePaused}
-            aria-label={isPaused ? "Wiedergabe fortsetzen" : "Wiedergabe pausieren"}
-            title={isPaused ? "Fortsetzen (Leertaste)" : "Pausieren (Leertaste)"}
+            aria-label={isPaused ? t("controls.resumePlayback") : t("controls.pausePlayback")}
+            title={isPaused ? t("controls.resumeSpace") : t("controls.pauseSpace")}
             className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
@@ -358,8 +360,8 @@ export function YearWrappedPage() {
             type="button"
             onClick={toggleSounds}
             data-no-sound
-            aria-label={soundsEnabled ? "Sounds ausschalten" : "Sounds einschalten"}
-            title={soundsEnabled ? "Sounds aus" : "Sounds an"}
+            aria-label={soundsEnabled ? t("controls.soundsOff") : t("controls.soundsOn")}
+            title={soundsEnabled ? t("controls.soundsOffShort") : t("controls.soundsOnShort")}
             className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             {soundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
@@ -367,7 +369,7 @@ export function YearWrappedPage() {
           <button
             type="button"
             onClick={handleClose}
-            aria-label="Jahresrueckblick schliessen"
+            aria-label={t("controls.close")}
             data-keyboard-cancel
             className="rounded-full border border-border/60 bg-card/70 p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
@@ -377,7 +379,7 @@ export function YearWrappedPage() {
 
         <div className="flex flex-1 items-center justify-center">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Jahresrueckblick wird berechnet...</p>
+            <p className="text-sm text-muted-foreground">{t("controls.calculating")}</p>
           ) : !hasAnyData ? (
             <div className="wrapped-slide flex w-full max-w-2xl flex-col gap-4 rounded-3xl border border-border/60 bg-card/85 p-6 text-center shadow-xl backdrop-blur-md sm:p-10">
               <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
@@ -430,7 +432,7 @@ export function YearWrappedPage() {
               data-keyboard-default
               className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-              {activeIndex === slideCount - 1 ? "Fertig" : "Weiter"}
+              {activeIndex === slideCount - 1 ? t("controls.done") : t("controls.next")}
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>

@@ -111,5 +111,18 @@
     "collapseFilter": "Collapse filter",
     "expandFilter": "Expand filter",
     "soon": "Not available yet"
+  },
+  "pagination": {
+    "previousPage": "Previous page",
+    "nextPage": "Next page"
+  },
+  "abbreviations": {
+    "roi": "Percentage return on the investment",
+    "cashIn": "Purchase from CSFloat wallet balance",
+    "wallet": "Purchase from Steam wallet balance",
+    "api": "Interface for data queries",
+    "fx": "Currency conversion",
+    "csfloat": "External price database",
+    "eur": "Currency: euro"
   }
 }

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { translate } from "../../lib/i18n/index.js";
 
 import { cn } from "../../lib/utils.js";
 import { toneText } from "./tone.js";
@@ -242,7 +243,7 @@ function Pagination({ page, pageCount, onPageChange, window: windowSize = 5, cla
     <div className={cn("flex gap-1.5", className)} {...props}>
       <button
         type="button"
-        aria-label="Vorherige Seite"
+        aria-label={translate("common:pagination.previousPage")}
         disabled={page <= 1}
         onClick={() => onPageChange?.(page - 1)}
         className={cn(cell, "border border-border text-muted-foreground hover:text-foreground disabled:opacity-40")}
@@ -267,7 +268,7 @@ function Pagination({ page, pageCount, onPageChange, window: windowSize = 5, cla
       ))}
       <button
         type="button"
-        aria-label="Nächste Seite"
+        aria-label={translate("common:pagination.nextPage")}
         disabled={page >= pageCount}
         onClick={() => onPageChange?.(page + 1)}
         className={cn(cell, "border border-border text-muted-foreground hover:text-foreground disabled:opacity-40")}

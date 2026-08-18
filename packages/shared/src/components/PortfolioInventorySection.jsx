@@ -18,7 +18,7 @@ import {
   withBuyOrderFields,
 } from "../lib/portfolioHelpers.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
-import { resolveItemCategory } from "../lib/portfolioCalculations.js";
+import { resolveItemCategory, resolveItemCategoryKey } from "../lib/portfolioCalculations.js";
 
 import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 const InventoryTable = lazy(() =>
@@ -67,8 +67,10 @@ function resolveRowBucket(item) {
 // Both derive from the catalogue category, never from `item.type`: that field is
 // importer-supplied and defaults to "skin", so the chip row offered a single
 // "Skin" entry that also swallowed every case, sticker and patch.
+// The key is the language-independent category id, not the lowercased label:
+// a filter keyed on the label would reset itself on every language switch.
 function categoryKey(item) {
-  return resolveItemCategory(item).toLowerCase();
+  return resolveItemCategoryKey(item);
 }
 
 function categoryLabel(item) {

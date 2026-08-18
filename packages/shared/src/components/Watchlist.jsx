@@ -7,7 +7,11 @@ import { PortfolioChart } from "./PortfolioChart";
 import { AlignLeft, Bell, ChevronDown, List, Trash2 } from "lucide-react";
 import { ItemThumb } from "./ui/item-thumb";
 import { ItemName } from "./ui/item-name.jsx";
-import { resolveItemCategory, resolveItemCategorySingular } from "../lib/portfolioCalculations.js";
+import {
+  resolveItemCategory,
+  resolveItemCategoryKey,
+  resolveItemCategorySingular,
+} from "../lib/portfolioCalculations.js";
 import { Sparkline, TargetMeter } from "./ui/data-display";
 import {
   GridTable,
@@ -376,7 +380,8 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
   const watchlistCategories = useMemo(() => {
     const seen = new Map();
     watchlistItems.forEach((item) => {
-      const key = resolveItemCategory(item).toLowerCase();
+      // Language-independent id — see PortfolioInventorySection's categoryKey.
+      const key = resolveItemCategoryKey(item);
       if (!seen.has(key)) {
         seen.set(key, { key, label: resolveItemCategory(item), count: 0 });
       }
@@ -406,7 +411,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     }
     if (activeCategory !== WATCHLIST_ALL_CATEGORIES) {
       scoped = scoped.filter(
-        (item) => resolveItemCategory(item).toLowerCase() === activeCategory,
+        (item) => resolveItemCategoryKey(item) === activeCategory,
       );
     }
     return sortWatchlistItems(scoped, sortKey, sortDirection);

@@ -12,12 +12,13 @@ import {
   XAxis,
 } from "recharts";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CalendarRange, Eye, Flame, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 
 import { useCurrency } from "../contexts/CurrencyContext.jsx";
 import { useCountUp } from "../hooks/useCountUp.js";
 import { formatDateSafe } from "../lib/portfolioHelpers.js";
-import { MONTH_LABELS } from "../lib/yearWrapped.js";
+import { getMonthLabels } from "../lib/yearWrapped.js";
 import { toneText } from "./ui/tone.js";
 
 // Chart marks use the opaque siblings of the avatar palette (set by
@@ -124,12 +125,13 @@ function ItemTile({ label, name, imageUrl, primary, secondary }) {
 }
 
 export function WrappedIntroSlide({ year, user }) {
+  const { t } = useTranslation("wrapped");
   // Static avatar only, mirroring resolveAvatarUrls()'s `staticAvatarUrl` in
   // SteamLoginPrompt: animated Steam avatars are video URLs and would not
   // render inside an <img>.
   const avatarUrl =
     user?.avatar || user?.steam_avatar || user?.steamAvatar || user?.avatarUrl || user?.avatar_url || null;
-  const displayName = user?.name || "Investor";
+  const displayName = user?.name || t("player.investor");
 
   return (
     <WrappedSlideShell
@@ -156,6 +158,7 @@ export function WrappedIntroSlide({ year, user }) {
 }
 
 export function WrappedPurchasesSlide({ year, purchases }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
   const animatedCount = useCountUp(purchases.count, { sound: true });
   const animatedPieces = useCountUp(purchases.totalQuantity);
@@ -165,7 +168,7 @@ export function WrappedPurchasesSlide({ year, purchases }) {
       eyebrow={`Kaeufe ${year}`}
       title={
         purchases.count === 1
-          ? "Ein Kauf in diesem Jahr"
+          ? t("purchases.onePurchase")
           : `${Math.round(animatedCount)} Kaeufe in diesem Jahr`
       }
       icon={Flame}
@@ -177,16 +180,16 @@ export function WrappedPurchasesSlide({ year, purchases }) {
     >
       <div className="grid gap-6 sm:grid-cols-2">
         <StatBlock
-          label="Gesamtausgaben"
+          label={t("purchases.totalSpend")}
           countTo={purchases.totalSpentUsd}
           format={formatUsd}
           hint={`${Math.round(animatedPieces)} Stueck insgesamt`}
         />
         <StatBlock
-          label="Durchschnittspreis"
+          label={t("purchases.averagePrice")}
           countTo={purchases.avgBuyPriceUsd}
           format={formatUsd}
-          hint="pro Stueck"
+          hint={t("purchases.perPiece")}
         />
       </div>
     </WrappedSlideShell>
@@ -194,8 +197,9 @@ export function WrappedPurchasesSlide({ year, purchases }) {
 }
 
 export function WrappedMonthlySlide({ year, monthly }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
-  const peakLabel = MONTH_LABELS[monthly.peakMonth?.month ?? 0];
+  const peakLabel = getMonthLabels()[monthly.peakMonth?.month ?? 0];
   // Recharts grows every bar at once, so the months are revealed by feeding the
   // chart one more real value per step — that is what makes them come up in
   // sequence instead of as a single block.
@@ -221,7 +225,7 @@ export function WrappedMonthlySlide({ year, monthly }) {
     >
       <div className="grid gap-6 sm:grid-cols-2">
         <StatBlock
-          label="Kaeufe im Peak-Monat"
+          label={t("purchases.peakMonthPurchases")}
           countTo={monthly.peakMonth?.count ?? 0}
           format={(v) => String(Math.round(v))}
           hint={formatUsd(monthly.peakMonth?.spentUsd ?? 0)}
@@ -264,14 +268,15 @@ export function WrappedMonthlySlide({ year, monthly }) {
 }
 
 export function WrappedHighlightsSlide({ year, highlights }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
 
   return (
-    <WrappedSlideShell eyebrow={`Highlights ${year}`} title="Deine Ausreisser des Jahres" icon={Sparkles}>
+    <WrappedSlideShell eyebrow={`Highlights ${year}`} title={t("outliers.title")} icon={Sparkles}>
       <div className="flex flex-col gap-3">
         {highlights.mostBoughtItem ? (
           <ItemTile
-            label="Meistgekauft"
+            label={t("outliers.mostBought")}
             name={highlights.mostBoughtItem.name}
             imageUrl={highlights.mostBoughtItem.imageUrl}
             primary={`${highlights.mostBoughtItem.count} Stueck`}
@@ -280,7 +285,7 @@ export function WrappedHighlightsSlide({ year, highlights }) {
         ) : null}
         {highlights.mostExpensivePurchase ? (
           <ItemTile
-            label="Teuerster Einzelkauf"
+            label={t("outliers.priciestSingle")}
             name={highlights.mostExpensivePurchase.name}
             imageUrl={highlights.mostExpensivePurchase.imageUrl}
             primary={formatUsd(highlights.mostExpensivePurchase.spentUsd)}
@@ -293,14 +298,15 @@ export function WrappedHighlightsSlide({ year, highlights }) {
 }
 
 export function WrappedPlatformsSlide({ year, platforms }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
   const leader = platforms.entries[0];
 
   return (
     <WrappedSlideShell
       eyebrow={`Plattform-Mix ${year}`}
-      title={leader ? `Am meisten ueber ${leader.label}` : "Deine Plattformen"}
-      footnote="Anteile nach Ausgaben, nicht nach Anzahl der Kaeufe."
+      title={leader ? t("platforms.leader", { platform: leader.label }) : t("platforms.title")}
+      footnote={t("platforms.hint")}
       icon={Sparkles}
     >
       <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -374,6 +380,7 @@ export function WrappedPlatformsSlide({ year, platforms }) {
 }
 
 export function WrappedCurveSlide({ year, curve }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
   const isPositive = curve.deltaUsd >= 0;
   const startsAtYearStart = String(curve.coverageFrom || "").slice(5) === "01-01";
@@ -381,7 +388,7 @@ export function WrappedCurveSlide({ year, curve }) {
   return (
     <WrappedSlideShell
       eyebrow={`Portfolio-Kurve ${year}`}
-      title={isPositive ? "Dein Portfolio ist gewachsen" : "Dein Portfolio hat nachgegeben"}
+      title={isPositive ? t("portfolio.grew") : t("portfolio.declined")}
       icon={isPositive ? TrendingUp : TrendingDown}
       footnote={
         startsAtYearStart
@@ -390,10 +397,10 @@ export function WrappedCurveSlide({ year, curve }) {
       }
     >
       <div className="grid gap-6 sm:grid-cols-3">
-        <StatBlock label="Start" countTo={curve.firstValue} format={formatUsd} />
-        <StatBlock label="Ende" countTo={curve.lastValue} format={formatUsd} sound />
+        <StatBlock label={t("portfolio.start")} countTo={curve.firstValue} format={formatUsd} />
+        <StatBlock label={t("portfolio.end")} countTo={curve.lastValue} format={formatUsd} sound />
         <StatBlock
-          label="Veraenderung"
+          label={t("portfolio.change")}
           countTo={curve.deltaPercent}
           format={(v) => formatPercent(v)}
           hint={formatUsd(curve.deltaUsd)}
@@ -419,10 +426,11 @@ export function WrappedCurveSlide({ year, curve }) {
 }
 
 export function WrappedExtremesSlide({ year, extremes }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
 
   return (
-    <WrappedSlideShell eyebrow={`Extreme ${year}`} title="Bester und schlechtester Tag" icon={TrendingUp}>
+    <WrappedSlideShell eyebrow={`Extreme ${year}`} title={t("portfolio.bestAndWorstDay")} icon={TrendingUp}>
       <div className="grid gap-6 sm:grid-cols-2">
         <StatBlock
           label={`Bester Tag · ${formatDateSafe(extremes.bestDay.date)}`}
@@ -494,25 +502,26 @@ function PerformerReveal({ headline, performer, tone, delayMs, formatUsd }) {
 }
 
 export function WrappedPerformersSlide({ year, performers }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
 
   return (
     <WrappedSlideShell
       eyebrow={`Performer ${year}`}
-      title="Top und Flop deiner Positionen"
+      title={t("positions.title")}
       icon={TrendingUp}
-      footnote="Unrealisierte Entwicklung der aktuell gehaltenen Positionen."
+      footnote={t("positions.hint")}
     >
       <div className="flex flex-col gap-6">
         <PerformerReveal
-          headline="Hier hast du am meisten Profit gemacht"
+          headline={t("positions.mostProfit")}
           performer={performers.best}
           tone="success"
           delayMs={0}
           formatUsd={formatUsd}
         />
         <PerformerReveal
-          headline="Und hier hat es am meisten wehgetan"
+          headline={t("positions.mostPain")}
           performer={performers.worst}
           tone="danger"
           delayMs={900}
@@ -524,6 +533,7 @@ export function WrappedPerformersSlide({ year, performers }) {
 }
 
 export function WrappedWatchlistSlide({ year, watchlist }) {
+  const { t } = useTranslation("wrapped");
   const buckets = Array.isArray(watchlist.buckets) ? watchlist.buckets : [];
   const sharePercent =
     watchlist.totalCount > 0
@@ -533,7 +543,7 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
   return (
     <WrappedSlideShell
       eyebrow={`Watchlist ${year}`}
-      title="Was du im Blick behalten hast"
+      title={t("watchlist.title")}
       icon={Eye}
       footnote={
         watchlist.peakMonth
@@ -543,7 +553,7 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
     >
       <div className="grid items-center gap-6 sm:grid-cols-2">
         <StatBlock
-          label="Neu beobachtet"
+          label={t("watchlist.newlyWatched")}
           countTo={watchlist.addedCount}
           format={(v) => String(Math.round(v))}
           hint={`von aktuell ${watchlist.totalCount} Eintraegen`}
@@ -603,23 +613,24 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
 }
 
 export function WrappedOutroSlide({ year, stats, onClose }) {
+  const { t } = useTranslation("wrapped");
   const formatUsd = useUsdFormatter();
 
   const summaryRows = [
     stats.purchases.available
-      ? { label: "Kaeufe", value: String(stats.purchases.count) }
+      ? { label: t("summary.purchases"), value: String(stats.purchases.count) }
       : null,
     stats.purchases.available
-      ? { label: "Ausgaben", value: formatUsd(stats.purchases.totalSpentUsd) }
+      ? { label: t("summary.spend"), value: formatUsd(stats.purchases.totalSpentUsd) }
       : null,
     stats.monthly.available
-      ? { label: "Aktivster Monat", value: MONTH_LABELS[stats.monthly.peakMonth.month] }
+      ? { label: t("summary.busiestMonth"), value: getMonthLabels()[stats.monthly.peakMonth.month] }
       : null,
     stats.curve.available
-      ? { label: "Portfolio-Entwicklung", value: formatPercent(stats.curve.deltaPercent) }
+      ? { label: t("summary.portfolioChange"), value: formatPercent(stats.curve.deltaPercent) }
       : null,
     stats.watchlist.available
-      ? { label: "Neue Watchlist-Items", value: String(stats.watchlist.addedCount) }
+      ? { label: t("summary.newWatchlistItems"), value: String(stats.watchlist.addedCount) }
       : null,
   ].filter(Boolean);
 

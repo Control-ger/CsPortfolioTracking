@@ -147,5 +147,35 @@
   },
   "summary": "{{scope}} · {{positions}} Positionen{{groups}} · {{value}}",
   "groupsSuffix_one": " · {{count}} Gruppe",
-  "groupsSuffix_other": " · {{count}} Gruppen"
+  "groupsSuffix_other": " · {{count}} Gruppen",
+  "category": {
+    "skins": "Skins",
+    "cases": "Cases",
+    "capsules": "Kapseln",
+    "souvenirPackages": "Souvenir-Pakete",
+    "stickers": "Sticker",
+    "patches": "Patches",
+    "graffiti": "Graffiti",
+    "agents": "Agents",
+    "charms": "Charms",
+    "musicKits": "Musik-Kits",
+    "keys": "Keys",
+    "tools": "Tools",
+    "other": "Sonstige"
+  },
+  "categorySingular": {
+    "skins": "Skin",
+    "cases": "Case",
+    "capsules": "Kapsel",
+    "souvenirPackages": "Souvenir-Paket",
+    "stickers": "Sticker",
+    "patches": "Patch",
+    "graffiti": "Graffiti",
+    "agents": "Agent",
+    "charms": "Charm",
+    "musicKits": "Musik-Kit",
+    "keys": "Key",
+    "tools": "Tool",
+    "other": "Sonstige"
+  }
 }

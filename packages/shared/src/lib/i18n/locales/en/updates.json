@@ -1,1 +1,37 @@
-{}
+{
+  "title": "CS updates",
+  "cs2Update": "CS2 update",
+  "impact": {
+    "pendingLabel": "AI running",
+    "pendingAction": "Read the breaking news, rating to follow.",
+    "noneLabel": "Impact none",
+    "noneAction": "No acute market impact.",
+    "lowLabel": "Impact low",
+    "lowAction": "Keep an eye on it.",
+    "mediumLabel": "Impact medium",
+    "mediumAction": "Monitor today.",
+    "highLabel": "Impact high",
+    "highAction": "Check relevant positions quickly.",
+    "failedLabel": "AI failed",
+    "failedAction": "Assess the patch notes manually.",
+    "unratedLabel": "AI pending",
+    "unratedAction": "No rating available yet."
+  },
+  "aiSummary": "AI summary",
+  "action": "Action:",
+  "reason": "Reason:",
+  "loadFailed": "CS updates could not be loaded",
+  "stale": "Stale",
+  "current": "Current",
+  "refreshing": "Refreshing…",
+  "refresh": "Refresh",
+  "emptyTitle": "No CS updates yet",
+  "emptyBody": "New reports appear automatically as soon as they are detected.",
+  "loading": "Loading…",
+  "loadOlder": "Load older",
+  "backToPortfolio": "Back to portfolio",
+  "notifications": "Notifications",
+  "notice": "Notice",
+  "noNotifications": "No notifications.",
+  "reload": "Reload"
+}

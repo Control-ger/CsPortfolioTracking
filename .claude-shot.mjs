@@ -1,0 +1,10 @@
+import { chromium } from 'playwright-core';
+const b = await chromium.connectOverCDP('http://127.0.0.1:9222');
+const page = b.contexts()[0].pages().find(p => p.url().includes('index.html'));
+const s = await page.context().newCDPSession(page);
+await s.send('Emulation.setDeviceMetricsOverride', { width: 1520, height: 1400, deviceScaleFactor: 1, mobile: false });
+await page.waitForTimeout(800);
+await page.getByText('Souvenirs', { exact: true }).first().click();
+await page.waitForTimeout(2500);
+await page.screenshot({ path: process.argv[2] });
+await b.close();
