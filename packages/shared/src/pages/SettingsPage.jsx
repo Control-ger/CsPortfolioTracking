@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Eye, LayoutGrid, Package, FolderCog, Cog, Search, CreditCard } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
@@ -62,66 +63,41 @@ import { CsFloatApiKeySection } from "@shared/components/CsFloatApiKeySection";
 import { SkinBaronApiKeySection } from "@shared/components/SkinBaronApiKeySection";
 import { ServerConfigSection } from "@shared/components/ServerConfigSection";
 
+// Page-local rail copy; labels share the `common:nav.*` keys with the shell.
 const DESKTOP_SIDEBAR_ITEMS = [
-  { key: "overview", label: "Uebersicht", icon: LayoutGrid, to: "/?tab=overview" },
-  { key: "inventory", label: "Inventar", icon: Package, to: "/?tab=inventory" },
-  { key: "watchlist", label: "Watchlist", icon: Eye, to: "/?tab=watchlist" },
-  { key: "management", label: "Verwaltung", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
-  { key: "settings", label: "Einstellungen", icon: Cog, to: "/settings" },
+  { key: "overview", labelKey: "nav.overview", icon: LayoutGrid, to: "/?tab=overview" },
+  { key: "inventory", labelKey: "nav.inventory", icon: Package, to: "/?tab=inventory" },
+  { key: "watchlist", labelKey: "nav.watchlist", icon: Eye, to: "/?tab=watchlist" },
+  { key: "management", labelKey: "nav.management", icon: FolderCog, to: "/?tab=management", desktopOnly: true },
+  { key: "settings", labelKey: "nav.settings", icon: Cog, to: "/settings" },
 ];
 
 // Left-hand category column. `keywords` only feeds the search box — they are the
 // words a user is likely to type for a setting that lives inside the category
 // but is not in its title ("Lautstärke" for Darstellung, "Vault" for Verbindungen).
 const SETTINGS_CATEGORIES = [
-  {
-    id: "look",
-    label: "Darstellung",
-    hint: "Theme, Sounds, Fenster",
-    keywords: "theme dark light hell dunkel system sound lautstärke titelleiste fenster buttons",
-  },
-  {
-    id: "money",
-    label: "Währung & Gebühren",
-    hint: "Anzeige, Fees, Kurs",
-    keywords: "währung currency euro dollar wechselkurs gebühren fee seller auszahlung einzahlung fx",
-  },
-  {
-    id: "prices",
-    label: "Preise & Sync",
-    hint: "Quelle, CSFloat, Steam",
-    keywords: "preis preisquelle live csfloat steam watchlist buy orders import sync",
-  },
-  {
-    id: "notify",
-    label: "Benachrichtigungen",
-    hint: "Desktop und Web Push",
-    keywords: "benachrichtigung notification push ban welle vac updates impact",
-  },
-  {
-    id: "conn",
-    label: "Verbindungen",
-    hint: "API-Keys, Server, Vault",
-    desktopOnly: true,
-    keywords: "api key schlüssel skinbaron authid server host cloudflare secret vault passwort",
-  },
-  {
-    id: "about",
-    label: "Über die App",
-    hint: "Version, Updates",
-    desktopOnly: true,
-    keywords: "version update aktualisierung github release info",
-  },
+  { id: "look", labelKey: "categories.lookLabel", hintKey: "categories.lookHint", keywordsKey: "categories.lookKeywords" },
+  { id: "money", labelKey: "categories.moneyLabel", hintKey: "categories.moneyHint", keywordsKey: "categories.moneyKeywords" },
+  { id: "prices", labelKey: "categories.pricesLabel", hintKey: "categories.pricesHint", keywordsKey: "categories.pricesKeywords" },
+  { id: "notify", labelKey: "categories.notifyLabel", hintKey: "categories.notifyHint", keywordsKey: "categories.notifyKeywords" },
+  { id: "conn", labelKey: "categories.connLabel", hintKey: "categories.connHint", keywordsKey: "categories.connKeywords", desktopOnly: true },
+  { id: "about", labelKey: "categories.aboutLabel", hintKey: "categories.aboutHint", keywordsKey: "categories.aboutKeywords", desktopOnly: true },
 ];
 
 const LIGHT_SWATCH = "linear-gradient(oklch(93% .004 260) 0 11px, oklch(98% .003 260) 11px 100%)";
 const DARK_SWATCH = "linear-gradient(oklch(25% .011 260) 0 11px, oklch(16.5% .01 260) 11px 100%)";
 const SYSTEM_SWATCH = `linear-gradient(103deg, transparent 0 49.5%, oklch(100% 0 0 / .16) 49.5% 50.5%, oklch(16.5% .01 260) 50.5% 100%), ${LIGHT_SWATCH}`;
 
-const IMPACT_LEVEL_LABELS = { none: "Kein", low: "Niedrig", medium: "Mittel", high: "Hoch" };
+const IMPACT_LEVEL_KEYS = {
+  none: "impact.none",
+  low: "impact.low",
+  medium: "impact.medium",
+  high: "impact.high",
+};
 
 /** Level pill strip of a notification row. */
 function ImpactLevelPicker({ value, disabled, onSelect }) {
+  const { t } = useTranslation("settings");
   return (
     <span className="flex flex-wrap gap-1.5">
       {IMPACT_LEVELS.map((level) => {
@@ -138,7 +114,7 @@ function ImpactLevelPicker({ value, disabled, onSelect }) {
                 : "border-border bg-transparent text-muted-foreground hover:border-border-strong"
             }`}
           >
-            {IMPACT_LEVEL_LABELS[level]}
+            {t(IMPACT_LEVEL_KEYS[level])}
           </button>
         );
       })}
@@ -175,6 +151,7 @@ function NotificationRow({ title, description, enabled, onToggle, level, onLevel
 }
 
 export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
+  const { t } = useTranslation(["settings", "common"]);
   const [form, setForm] = useState(DEFAULT_FORM);
   // Baselines for the header's dirty state: what the server last confirmed.
   const [savedForm, setSavedForm] = useState(DEFAULT_FORM);
@@ -321,8 +298,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   };
 
   const notificationChannels = [
-    ...(desktopRuntime ? [{ value: "desktop", label: "Desktop" }] : []),
-    ...(!isElectronRuntime ? [{ value: "push", label: "Web Push" }] : []),
+    ...(desktopRuntime ? [{ value: "desktop", label: t("channel.desktop") }] : []),
+    ...(!isElectronRuntime ? [{ value: "push", label: t("channel.push") }] : []),
   ];
   const [notificationChannel, setNotificationChannel] = useState(() =>
     isDesktopRuntime() ? "desktop" : "push",
@@ -396,7 +373,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         }
         setError("");
       } catch (loadError) {
-        setError(loadError.message || "Settings konnten nicht geladen werden.");
+        setError(loadError.message || t("errors.settingsLoad"));
       } finally {
         setLoading(false);
         setApiKeyLoading(false);
@@ -405,7 +382,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     };
 
     void loadSettings();
-  }, [desktopRuntime]);
+  }, [desktopRuntime, t]);
 
   useEffect(() => {
     const loadServerConfig = async () => {
@@ -418,14 +395,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         const normalizedHost = normalizeServerHostInput(config?.serverUrl || "");
         setServerUrl(normalizedHost || String(config?.serverUrl || ""));
       } catch (error) {
-        setServerConfigError(error?.message || "Server-Konfiguration konnte nicht geladen werden.");
+        setServerConfigError(error?.message || t("errors.serverConfigLoad"));
       } finally {
         setServerConfigLoading(false);
       }
     };
 
     void loadServerConfig();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const loadAppVersion = async () => {
@@ -511,7 +488,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             ? { state: "dev" }
             : {
                 state: "error",
-                message: result?.error || "Update-Suche fehlgeschlagen.",
+                message: result?.error || t("errors.updateCheckFailed"),
                 url: result?.url,
               },
         );
@@ -519,7 +496,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       // On success the main process emits app-updater-status (available / not-available),
       // which the subscription above turns into the displayed state.
     } catch (checkError) {
-      setUpdateStatus({ state: "error", message: checkError?.message || "Update-Suche fehlgeschlagen." });
+      setUpdateStatus({ state: "error", message: checkError?.message || t("errors.updateCheckFailed") });
     } finally {
       setUpdateChecking(false);
     }
@@ -604,7 +581,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setCsfloatWatchlistAutoImport(Boolean(saved?.csfloatWatchlistAutoImport));
     } catch (error) {
       setCsfloatWatchlistAutoImport(!next);
-      setCsfloatWatchlistError(error?.message || "Einstellung konnte nicht gespeichert werden.");
+      setCsfloatWatchlistError(error?.message || t("errors.settingSaveFailed"));
     } finally {
       setCsfloatWatchlistSaving(false);
     }
@@ -628,7 +605,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       }
     } catch (error) {
       setter(currentValue);
-      setNotifyError(error?.message || "Einstellung konnte nicht gespeichert werden.");
+      setNotifyError(error?.message || t("errors.settingSaveFailed"));
     } finally {
       setNotifySaving(false);
     }
@@ -642,7 +619,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       const result = await importCsFloatWatchlistData({ force: true });
       if (result?.skipped) {
         if (result.reason === "auth-required") {
-          setCsfloatWatchlistError("Bitte zuerst bei CSFloat/Steam anmelden.");
+          setCsfloatWatchlistError(t("errors.signInFirst"));
         } else if (result.reason === "upstream-error") {
           const code = String(result?.error?.code || "CSFLOAT_ERROR");
           const status = Number(result?.error?.statusCode || 0);
@@ -650,23 +627,23 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             `CSFloat-Watchlist konnte nicht geladen werden (${code}${status ? ` ${status}` : ""}).`,
           );
         } else {
-          setCsfloatWatchlistError("Import wurde übersprungen.");
+          setCsfloatWatchlistError(t("errors.importSkipped"));
         }
       } else {
         const added = Number(result?.added || 0);
         const fetched = Number(result?.fetched || 0);
         const notInCatalog = Number(result?.notInCatalog || 0);
         const skippedSuffix = notInCatalog > 0
-          ? ` ${notInCatalog} nicht im Katalog – übersprungen.`
+          ? t("csfloatSync.importSkipped", { count: notInCatalog })
           : "";
         setCsfloatWatchlistMessage(
           (added > 0
-            ? `${added} neue${added === 1 ? "s Item" : " Items"} aus der CSFloat-Watchlist hinzugefügt (${fetched} geprüft).`
-            : `Keine neuen Items – Watchlist ist bereits aktuell (${fetched} geprüft).`) + skippedSuffix,
+            ? t("csfloatSync.watchlistAdded", { count: added, fetched })
+            : t("csfloatSync.watchlistNone", { fetched })) + skippedSuffix,
         );
       }
     } catch (error) {
-      setCsfloatWatchlistError(error?.message || "CSFloat-Watchlist-Import fehlgeschlagen.");
+      setCsfloatWatchlistError(error?.message || t("errors.watchlistImportFailed"));
     } finally {
       setCsfloatWatchlistImporting(false);
     }
@@ -683,7 +660,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setCsfloatBuyOrderAutoImport(Boolean(saved?.csfloatBuyOrderAutoImport));
     } catch (error) {
       setCsfloatBuyOrderAutoImport(!next);
-      setCsfloatBuyOrderError(error?.message || "Einstellung konnte nicht gespeichert werden.");
+      setCsfloatBuyOrderError(error?.message || t("errors.settingSaveFailed"));
     } finally {
       setCsfloatBuyOrderSaving(false);
     }
@@ -697,7 +674,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       const result = await importCsFloatBuyOrdersAsWatchlistData({ force: true });
       if (result?.skipped) {
         if (result.reason === "auth-required") {
-          setCsfloatBuyOrderError("Bitte zuerst bei CSFloat/Steam anmelden.");
+          setCsfloatBuyOrderError(t("errors.signInFirst"));
         } else if (result.reason === "upstream-error") {
           const code = String(result?.error?.code || "CSFLOAT_ERROR");
           const status = Number(result?.error?.statusCode || 0);
@@ -705,23 +682,23 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             `CSFloat Buy Orders konnten nicht geladen werden (${code}${status ? ` ${status}` : ""}).`,
           );
         } else {
-          setCsfloatBuyOrderError("Import wurde übersprungen.");
+          setCsfloatBuyOrderError(t("errors.importSkipped"));
         }
       } else {
         const added = Number(result?.added || 0);
         const fetched = Number(result?.fetched || 0);
         const notInCatalog = Number(result?.notInCatalog || 0);
         const skippedSuffix = notInCatalog > 0
-          ? ` ${notInCatalog} nicht im Katalog – übersprungen.`
+          ? t("csfloatSync.importSkipped", { count: notInCatalog })
           : "";
         setCsfloatBuyOrderMessage(
           (added > 0
-            ? `${added} neue${added === 1 ? "s Item" : " Items"} aus den CSFloat Buy Orders hinzugefügt (${fetched} geprüft).`
-            : `Keine neuen Items – alle Buy Orders bereits in der Watchlist (${fetched} geprüft).`) + skippedSuffix,
+            ? t("csfloatSync.buyOrdersAdded", { count: added, fetched })
+            : t("csfloatSync.buyOrdersNone", { fetched })) + skippedSuffix,
         );
       }
     } catch (error) {
-      setCsfloatBuyOrderError(error?.message || "CSFloat Buy Order-Import fehlgeschlagen.");
+      setCsfloatBuyOrderError(error?.message || t("errors.buyOrderImportFailed"));
     } finally {
       setCsfloatBuyOrderImporting(false);
     }
@@ -748,14 +725,14 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         const subscription = await registration.pushManager.getSubscription();
         setWebPushSubscribed(Boolean(subscription));
       } catch (error) {
-        setWebPushError(error?.message || "Push-Status konnte nicht geladen werden.");
+        setWebPushError(error?.message || t("errors.pushStatusLoad"));
       } finally {
         setWebPushLoading(false);
       }
     };
 
     void loadWebPushState();
-  }, [webPushSupported]);
+  }, [webPushSupported, t]);
 
   // A deep link into the push settings must also select the channel it means —
   // landing on the Desktop channel would show a table without the row asked for.
@@ -792,20 +769,20 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setApiKeySuccess("");
 
       if (!desktopRuntime) {
-        setApiKeyError("CSFloat API Key kann nur in der Desktop-App gesetzt werden.");
+        setApiKeyError(t("errors.apiKeyDesktopOnly"));
         return;
       }
 
       const trimmedApiKey = apiKey.trim();
       await updateCsFloatApiKey(trimmedApiKey);
 
-      setApiKeySuccess("API Key wurde erfolgreich aktualisiert.");
+      setApiKeySuccess(t("errors.apiKeyUpdated"));
       setApiKey("");
 
       const statusResponse = await fetchCsFloatApiKeyStatus();
       setApiKeyStatus(statusResponse?.data || statusResponse);
     } catch (err) {
-      setApiKeyError(err.message || "Fehler beim Aktualisieren des API Keys.");
+      setApiKeyError(err.message || t("errors.apiKeyUpdateFailed"));
     } finally {
       setApiKeySaving(false);
     }
@@ -868,9 +845,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setSaving(true);
       try {
         await handleSaveFees();
-        setSuccess("Gebühren gespeichert.");
+        setSuccess(t("errors.feesSaved"));
       } catch (saveError) {
-        setError(saveError.message || "Fee-Settings konnten nicht gespeichert werden.");
+        setError(saveError.message || t("errors.feesSaveFailed"));
       } finally {
         setSaving(false);
       }
@@ -880,9 +857,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setPriceSourceSaving(true);
       try {
         await handleSavePriceSource();
-        setPriceSourceSuccess("Gespeichert.");
+        setPriceSourceSuccess(t("errors.saved"));
       } catch (saveError) {
-        setPriceSourceError(saveError?.message || "Preisquelle konnte nicht gespeichert werden.");
+        setPriceSourceError(saveError?.message || t("errors.priceSourceSaveFailed"));
       } finally {
         setPriceSourceSaving(false);
       }
@@ -905,21 +882,21 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setSkinBaronApiKeySuccess("");
 
       if (!desktopRuntime) {
-        setSkinBaronApiKeyError("SkinBaron Session-Cookie kann nur in der Desktop-App gesetzt werden.");
+        setSkinBaronApiKeyError(t("errors.cookieDesktopOnly"));
         return;
       }
 
       const trimmedCookie = skinBaronSessionCookie.trim();
       await updateSkinBaronSessionCookie(trimmedCookie);
 
-      setSkinBaronApiKeySuccess("Session-Cookie gespeichert und Purchases-Zugriff geprüft.");
+      setSkinBaronApiKeySuccess(t("errors.cookieSaved"));
       setSkinBaronSessionCookie("");
 
       const statusResponse = await fetchSkinBaronApiKeyStatus();
       const nextStatus = statusResponse?.data || statusResponse || {};
       setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(nextStatus));
     } catch (err) {
-      setSkinBaronApiKeyError(err.message || "Fehler beim Speichern des Session-Cookies.");
+      setSkinBaronApiKeyError(err.message || t("errors.cookieSaveFailed"));
     } finally {
       setSkinBaronSessionSaving(false);
     }
@@ -932,19 +909,19 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setSkinBaronApiKeySuccess("");
 
       if (!desktopRuntime) {
-        setSkinBaronApiKeyError("SkinBaron Browser-Login ist nur in der Desktop-App verfuegbar.");
+        setSkinBaronApiKeyError(t("errors.browserLoginDesktopOnly"));
         return;
       }
 
       await connectSkinBaronSessionCookieViaBrowser();
-      setSkinBaronApiKeySuccess("Per Browser verbunden und verifiziert.");
+      setSkinBaronApiKeySuccess(t("errors.browserConnected"));
       setSkinBaronSessionCookie("");
 
       const statusResponse = await fetchSkinBaronApiKeyStatus();
       const nextStatus = statusResponse?.data || statusResponse || {};
       setSkinBaronApiKeyStatus(normalizeSkinBaronStatusPayload(nextStatus));
     } catch (err) {
-      setSkinBaronApiKeyError(err.message || "SkinBaron Browser-Login fehlgeschlagen.");
+      setSkinBaronApiKeyError(err.message || t("errors.browserLoginFailed"));
     } finally {
       setSkinBaronSessionBrowserConnecting(false);
     }
@@ -958,7 +935,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
   const handleEnableWebPush = async () => {
     if (!webPushSupported) {
-      setWebPushError("Browser Push wird in dieser Umgebung nicht unterstuetzt.");
+      setWebPushError(t("errors.pushUnsupported"));
       return;
     }
 
@@ -974,13 +951,13 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       setWebPushPublicKey(publicKey);
 
       if (!configured || !publicKey) {
-        setWebPushError("Push ist serverseitig noch nicht konfiguriert (VAPID Keys fehlen).");
+        setWebPushError(t("errors.pushNotConfigured"));
         return;
       }
 
       if (Notification.permission === "denied") {
         setWebPushPermission("denied");
-        setWebPushError("Browser-Benachrichtigungen sind blockiert. Bitte im Browser erlauben.");
+        setWebPushError(t("errors.pushBlocked"));
         return;
       }
 
@@ -990,7 +967,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           : await Notification.requestPermission();
       setWebPushPermission(permission);
       if (permission !== "granted") {
-        setWebPushError("Benachrichtigungsberechtigung wurde nicht erteilt.");
+        setWebPushError(t("errors.pushPermissionDenied"));
         return;
       }
 
@@ -1009,9 +986,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       await subscribeWebPush(payload, userId);
 
       setWebPushSubscribed(true);
-      setWebPushSuccess("Browser Push fuer CS-Updates ist aktiviert.");
+      setWebPushSuccess(t("errors.pushEnabled"));
     } catch (error) {
-      setWebPushError(error?.message || "Browser Push konnte nicht aktiviert werden.");
+      setWebPushError(error?.message || t("errors.pushEnableFailed"));
     } finally {
       setWebPushSaving(false);
     }
@@ -1019,7 +996,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
   const handleDisableWebPush = async () => {
     if (!webPushSupported) {
-      setWebPushError("Browser Push wird in dieser Umgebung nicht unterstuetzt.");
+      setWebPushError(t("errors.pushUnsupported"));
       return;
     }
 
@@ -1042,9 +1019,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       }
 
       setWebPushSubscribed(false);
-      setWebPushSuccess("Browser Push wurde deaktiviert.");
+      setWebPushSuccess(t("errors.pushDisabled"));
     } catch (error) {
-      setWebPushError(error?.message || "Browser Push konnte nicht deaktiviert werden.");
+      setWebPushError(error?.message || t("errors.pushDisableFailed"));
     } finally {
       setWebPushSaving(false);
     }
@@ -1057,10 +1034,10 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   };
 
   const themeModeLabel = themeMode === "system"
-    ? `System (${isDark ? "dunkel" : "hell"})`
+    ? t("theme.themeSystemWith", { mode: isDark ? t("theme.modeDark") : t("theme.modeLight") })
     : themeMode === "dark"
-      ? "Dunkel"
-      : "Hell";
+      ? t("theme.dark")
+      : t("theme.light");
 
   // Credentials that are missing or no longer valid — the only badge in the nav
   // that carries a real signal rather than a count of controls.
@@ -1076,7 +1053,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
   const normalizedCategorySearch = categorySearchTerm.trim().toLowerCase();
   const visibleCategories = normalizedCategorySearch
     ? availableCategories.filter((category) =>
-        `${category.label} ${category.hint} ${category.keywords}`
+        // The keyword list is translated too: a German user searches "währung",
+        // an English one "currency", and neither should have to know the other.
+        `${t(category.labelKey)} ${t(category.hintKey)} ${t(category.keywordsKey)}`
           .toLowerCase()
           .includes(normalizedCategorySearch),
       )
@@ -1086,20 +1065,22 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     <>
       <SettingsCard id="settings-section-appearance">
         <SettingsCardHeader
-          title="Darstellung"
-          description="Hell, dunkel oder automatisch nach Systempräferenz."
+          title={t("theme.title")}
+          description={t("theme.hint")}
         />
         <SettingsCardBody className="flex flex-col gap-3.5">
           <div className="grid gap-2.5 sm:grid-cols-3">
             {[
               {
                 value: "system",
-                label: "System",
-                hint: `Folgt dem Betriebssystem (${systemPrefersDark ? "dunkel" : "hell"})`,
+                label: t("theme.system"),
+                hint: t("theme.systemHint", {
+                  mode: systemPrefersDark ? t("theme.modeDark") : t("theme.modeLight"),
+                }),
                 swatch: SYSTEM_SWATCH,
               },
-              { value: "light", label: "Hell", hint: "Immer helles Design", swatch: LIGHT_SWATCH },
-              { value: "dark", label: "Dunkel", hint: "Immer dunkles Design", swatch: DARK_SWATCH },
+              { value: "light", label: t("theme.light"), hint: t("theme.lightHint"), swatch: LIGHT_SWATCH },
+              { value: "dark", label: t("theme.dark"), hint: t("theme.darkHint"), swatch: DARK_SWATCH },
             ].map((option) => (
               <SettingsTile
                 key={option.value}
@@ -1113,9 +1094,10 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           </div>
           <SettingsNote>
             <span>
-              Aktiver Modus: <span className="font-bold text-foreground">{themeModeLabel}</span>
+              {t("theme.activeMode")}{" "}
+              <span className="font-bold text-foreground">{themeModeLabel}</span>
             </span>
-            <span>Gilt für Desktop und Web-Client</span>
+            <span>{t("theme.appliesEverywhere")}</span>
           </SettingsNote>
         </SettingsCardBody>
       </SettingsCard>
@@ -1162,15 +1144,15 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       {desktopRuntime ? (
         <SettingsCard id="settings-section-csfloat-sync">
           <SettingsCardHeader
-            title="CSFloat-Sync"
-            description="Watchlist und Buy Orders übernehmen. Es wird nur hinzugefügt, nie entfernt."
+            title={t("csfloatSync.title")}
+            description={t("csfloatSync.hint")}
           />
           <SettingsRow
-            title="Watchlist automatisch importieren"
+            title={t("csfloatSync.autoWatchlist")}
             description={
               csfloatWatchlistAutoImport
-                ? "Aktiv: bei jedem CSFloat-Sync werden neue Watchlist-Items übernommen."
-                : "Inaktiv: nur per manuellem Import."
+                ? t("csfloatSync.autoWatchlistOn")
+                : t("csfloatSync.autoWatchlistOff")
             }
           >
             <button
@@ -1179,21 +1161,21 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               disabled={csfloatWatchlistImporting}
               className="h-8 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
             >
-              {csfloatWatchlistImporting ? "Importiert…" : "Jetzt importieren"}
+              {csfloatWatchlistImporting ? t("csfloatSync.importing") : t("csfloatSync.importNow")}
             </button>
             <Switch
               checked={csfloatWatchlistAutoImport}
               onCheckedChange={handleToggleCsfloatWatchlistAutoImport}
               disabled={csfloatWatchlistSaving}
-              aria-label="Watchlist automatisch importieren"
+              aria-label={t("csfloatSync.autoWatchlist")}
             />
           </SettingsRow>
           <SettingsRow
-            title="Buy Orders synchronisieren"
+            title={t("csfloatSync.autoBuyOrders")}
             description={
               csfloatBuyOrderAutoImport
-                ? "Aktiv: bei jedem Watchlist-Load werden neue Buy Order-Items übernommen."
-                : "Inaktiv: nur per manuellem Import."
+                ? t("csfloatSync.autoBuyOrdersOn")
+                : t("csfloatSync.autoWatchlistOff")
             }
             divider={Boolean(
               csfloatWatchlistMessage || csfloatWatchlistError || csfloatBuyOrderMessage || csfloatBuyOrderError,
@@ -1205,13 +1187,13 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               disabled={csfloatBuyOrderImporting}
               className="h-8 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
             >
-              {csfloatBuyOrderImporting ? "Importiert…" : "Jetzt importieren"}
+              {csfloatBuyOrderImporting ? t("csfloatSync.importing") : t("csfloatSync.importNow")}
             </button>
             <Switch
               checked={csfloatBuyOrderAutoImport}
               onCheckedChange={handleToggleCsfloatBuyOrderAutoImport}
               disabled={csfloatBuyOrderSaving}
-              aria-label="Buy Orders synchronisieren"
+              aria-label={t("csfloatSync.autoBuyOrders")}
             />
           </SettingsRow>
           {csfloatWatchlistMessage || csfloatWatchlistError || csfloatBuyOrderMessage || csfloatBuyOrderError ? (
@@ -1233,8 +1215,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       ? [
           {
             id: "cs-updates-push",
-            title: "CS2 Updates",
-            description: "Web-Push-Nachricht bei neuen CS2-Updates.",
+            title: t("notifications.cs2Updates"),
+            description: t("notifications.cs2UpdatesPushHint"),
             enabled: notifyCsUpdatesWebPush,
             onToggle: () =>
               void handleToggleNotifyPref(
@@ -1255,8 +1237,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       : [
           {
             id: "ban-wave",
-            title: "VAC Ban-Welle erkannt",
-            description: "Bei erhöhter Ban-Aktivität in CS2.",
+            title: t("notifications.banWave"),
+            description: t("notifications.banWaveHint"),
             enabled: notifyBanWaveDesktop,
             onToggle: () =>
               void handleToggleNotifyPref(
@@ -1275,8 +1257,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           },
           {
             id: "cs-updates",
-            title: "CS2 Updates",
-            description: "Neue Game-Updates im Feed.",
+            title: t("notifications.cs2Updates"),
+            description: t("notifications.cs2UpdatesFeedHint"),
             enabled: notifyCsUpdatesDesktop,
             onToggle: () =>
               void handleToggleNotifyPref(
@@ -1295,8 +1277,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           },
           {
             id: "steam-sync",
-            title: "Steam Sync (neue Items)",
-            description: "Wenn der Sync neue Items findet.",
+            title: t("notifications.steamSync"),
+            description: t("notifications.steamSyncHint"),
             enabled: notifySteamSyncDesktop,
             onToggle: () =>
               void handleToggleNotifyPref(
@@ -1312,8 +1294,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     return (
       <SettingsCard id="settings-section-push-notifications">
         <SettingsCardHeader
-          title="Benachrichtigungen"
-          description="Ein Ereignis pro Zeile, Kanal und Mindest-Impact direkt daneben."
+          title={t("notifications.title")}
+          description={t("notifications.hint")}
           action={
             notificationChannels.length > 1 ? (
               <SegmentedControl
@@ -1326,9 +1308,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           }
         />
         <div className="hidden grid-cols-[minmax(0,1fr)_300px_62px] items-center gap-3 border-b border-border px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground lg:grid">
-          <span>Ereignis</span>
-          <span>Mindest-Impact</span>
-          <span className="text-right">Aktiv</span>
+          <span>{t("notifications.columnEvent")}</span>
+          <span>{t("notifications.columnMinImpact")}</span>
+          <span className="text-right">{t("notifications.columnActive")}</span>
         </div>
         {rows.map((row, index) => (
           <NotificationRow
@@ -1375,32 +1357,32 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     return (
       <SettingsCard id="settings-section-vault">
         <SettingsCardHeader
-          title="Secret Vault"
+          title={t("vault.title")}
           description="Verschlüsselter Speicher für Schlüssel und Sessions. Unlock ist nach jedem App-Start erforderlich."
           action={
             <>
               <StatusPill tone={isUnlocked ? "success" : "warn"} dot>
-                {isUnlocked ? "Entsperrt" : "Gesperrt"}
+                {isUnlocked ? t("vault.unlocked") : t("vault.locked")}
               </StatusPill>
               <StatusPill tone={isConfigured ? "muted" : "danger"}>
-                {isConfigured ? "App-Passwort gesetzt" : "App-Passwort fehlt"}
+                {isConfigured ? t("vault.passwordSet") : t("vault.passwordMissing")}
               </StatusPill>
             </>
           }
         />
         <SettingsRow
-          title="Auto-Sperre"
+          title={t("vault.autoLock")}
           description={
             autoLockEnabled
               ? `Aktiv: sperrt nach ${idleMinutes} Minuten Inaktivität`
-              : "Inaktiv: nur bei Neustart oder explizitem Sperren"
+              : t("vault.autoLockOff")
           }
           divider={false}
         >
           <Switch
             checked={autoLockEnabled}
             disabled={vaultActionSaving || !window.electronAPI?.secrets?.setVaultPreferences}
-            aria-label="Auto-Sperre"
+            aria-label={t("vault.autoLock")}
             onCheckedChange={async () => {
               try {
                 setVaultActionSaving(true);
@@ -1409,7 +1391,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                 });
                 setVaultStatus(result?.status || vaultStatus);
               } catch (error) {
-                setError(error?.message || "Secret-Vault Einstellungen konnten nicht gespeichert werden.");
+                setError(error?.message || t("errors.vaultSaveFailed"));
               } finally {
                 setVaultActionSaving(false);
               }
@@ -1424,8 +1406,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     <>
       <SettingsCard id="settings-section-api-keys">
         <SettingsCardHeader
-          title="API-Schlüssel"
-          description="Keys liegen im Secret Vault und verlassen das Gerät nicht."
+          title={t("vault.apiKeys")}
+          description={t("vault.apiKeysHint")}
         />
         <SettingsBanner tone="info" icon={<CreditCard className="size-4 text-info" />}>
           <span className="font-bold text-foreground">
@@ -1481,7 +1463,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               try {
                 const normalizedHost = normalizeServerHostInput(serverUrl);
                 if (!normalizedHost) {
-                  setServerConfigError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                  setServerConfigError(t("errors.hostnameInvalid"));
                   return;
                 }
                 setServerConfigTesting(true);
@@ -1489,13 +1471,13 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                 setServerConfigMessage("");
                 const result = await window.electronAPI.serverConfig.test(normalizedHost);
                 if (result?.ok) {
-                  setServerConfigMessage(result?.message || "Verbindung erfolgreich.");
+                  setServerConfigMessage(result?.message || t("errors.connectionOk"));
                   setServerUrl(normalizedHost);
                 } else {
-                  setServerConfigError(result?.message || "Verbindung fehlgeschlagen.");
+                  setServerConfigError(result?.message || t("errors.connectionFailed"));
                 }
               } catch (error) {
-                setServerConfigError(error?.message || "Verbindungstest fehlgeschlagen.");
+                setServerConfigError(error?.message || t("errors.connectionTestFailed"));
               } finally {
                 setServerConfigTesting(false);
               }
@@ -1504,7 +1486,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               try {
                 const normalizedHost = normalizeServerHostInput(serverUrl);
                 if (!normalizedHost) {
-                  setServerConfigError("Bitte gueltigen Hostnamen eingeben (z.B. cs2.clustercontrol.cc).");
+                  setServerConfigError(t("errors.hostnameInvalid"));
                   return;
                 }
                 setServerConfigSaving(true);
@@ -1512,9 +1494,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                 setServerConfigMessage("");
                 await window.electronAPI.serverConfig.set({ serverUrl: normalizedHost });
                 setServerUrl(normalizedHost);
-                setServerConfigMessage("Server-URL gespeichert.");
+                setServerConfigMessage(t("errors.serverUrlSaved"));
               } catch (error) {
-                setServerConfigError(error?.message || "Server-URL konnte nicht gespeichert werden.");
+                setServerConfigError(error?.message || t("errors.serverUrlSaveFailed"));
               } finally {
                 setServerConfigSaving(false);
               }
@@ -1539,15 +1521,15 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             : updateStatus.state === "downloaded"
               ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} bereit zur Installation.`
               : updateStatus.state === "installing"
-                ? "Wird installiert — bitte die Passwortabfrage bestätigen."
+                ? t("about.installing")
                 : updateStatus.state === "handoff"
                   ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} wurde im System-Installer geöffnet — App schließen und dort bestätigen.`
                   : updateStatus.state === "not-available"
-                    ? "Du hast die neueste Version."
+                    ? t("about.upToDate")
                     : updateStatus.state === "dev"
-                      ? "Update-Suche ist nur in der installierten App verfügbar."
+                      ? t("about.installedAppOnly")
                       : updateStatus.state === "error"
-                        ? `${updateStatus.message || "Update-Suche fehlgeschlagen."} Alternativ manuell von GitHub laden.`
+                        ? `${updateStatus.message || t("errors.updateCheckFailed")} Alternativ manuell von GitHub laden.`
                         : "";
     const updateTone =
       updateStatus?.state === "error" || updateStatus?.state === "manual"
@@ -1557,23 +1539,23 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           : "text-muted-foreground";
 
     const facts = [
-      { label: "App-Version", value: appVersion ? `v${appVersion}` : "unbekannt" },
-      { label: "Server-Host", value: serverUrl || "nicht gesetzt" },
-      { label: "Anzeigewährung", value: currencyContext.currency },
+      { label: t("about.appVersion"), value: appVersion ? `v${appVersion}` : t("about.unknown") },
+      { label: t("about.serverHost"), value: serverUrl || t("about.notSet") },
+      { label: t("about.displayCurrency"), value: currencyContext.currency },
       {
-        label: "Live-Preisquelle",
+        label: t("about.livePriceSource"),
         value:
           savedPriceSourceMode === "csfloat"
-            ? "Nur CSFloat"
+            ? t("about.csfloatOnly")
             : savedPriceSourceMode === "steam"
-              ? "Nur Steam"
-              : "Auto",
+              ? t("about.steamOnly")
+              : t("about.auto"),
       },
     ];
 
     return (
       <SettingsCard id="settings-section-about">
-        <SettingsCardHeader title="Über die App" description="Version, Datenstand und Wartung." />
+        <SettingsCardHeader title={t("about.title")} description={t("about.hint")} />
         <SettingsCardBody className="grid gap-2.5 sm:grid-cols-2">
           {facts.map((fact) => (
             <div
@@ -1595,8 +1577,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             className="h-[34px] rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
           >
             {updateChecking || updateStatus?.state === "checking"
-              ? "Suche nach Updates…"
-              : "Nach Updates suchen"}
+              ? t("about.checking")
+              : t("about.checkForUpdates")}
           </button>
 
           {updateStatus?.state === "available" ? (
@@ -1606,7 +1588,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               disabled={updateDownloading}
               className="h-[34px] rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
             >
-              {updateDownloading ? "Wird heruntergeladen…" : "Jetzt herunterladen"}
+              {updateDownloading ? t("about.downloading") : t("about.downloadNow")}
             </button>
           ) : null}
 
@@ -1655,7 +1637,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         <div className="flex min-w-0 items-center gap-3">
           <Link
             to="/"
-            aria-label="Zurück"
+            aria-label={t("back")}
             className={`inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground ${
               useDesktopSidebarShell ? "lg:hidden" : ""
             }`}
@@ -1667,9 +1649,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               Einstellungen
             </h1>
             <p className="mt-1 truncate text-[12px] text-muted-foreground">
-              {desktopRuntime ? "Desktop-App" : "Web-App"}
-              {appVersion ? ` · Version ${appVersion}` : ""}
-              {serverUrl ? ` · Server ${serverUrl}` : ""}
+              {desktopRuntime ? t("desktopApp") : t("webApp")}
+              {appVersion ? t("about.versionSuffix", { version: appVersion }) : ""}
+              {serverUrl ? t("about.serverSuffix", { server: serverUrl }) : ""}
             </p>
           </div>
         </div>
@@ -1677,7 +1659,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             ran off the right edge and cut "Verwerfen" in half. */}
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
           <StatusPill tone={dirty ? "warn" : "success"} size="default" dot>
-            {dirty ? "Nicht gespeicherte Änderungen" : "Alles gespeichert"}
+            {dirty ? t("unsavedChanges") : t("allSaved")}
           </StatusPill>
           <button
             type="button"
@@ -1685,7 +1667,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             disabled={!dirty || savingAny}
             className="h-9 whitespace-nowrap rounded-[10px] bg-primary px-4 text-[13px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            {savingAny ? "Speichert…" : "Änderungen speichern"}
+            {savingAny ? t("saving") : t("saveChanges")}
           </button>
           <button
             type="button"
@@ -1693,7 +1675,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             disabled={!dirty || savingAny}
             className="h-9 whitespace-nowrap rounded-[10px] border border-border-strong px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
           >
-            Verwerfen
+            {t("discard")}
           </button>
           <div className={`ml-1 items-center gap-2 ${useDesktopSidebarShell ? "hidden" : "flex"}`}>
             <UserMenu />
@@ -1712,7 +1694,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             <input
               value={categorySearchTerm}
               onChange={(event) => setCategorySearchTerm(event.target.value)}
-              placeholder="Einstellung suchen…"
+              placeholder={t("searchPlaceholder")}
               className="h-[38px] w-full rounded-[10px] border border-border bg-card pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
             />
           </label>
@@ -1733,9 +1715,9 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                   }`}
                 >
                   <span className="min-w-0">
-                    <span className="block text-[13px] font-bold">{category.label}</span>
+                    <span className="block text-[13px] font-bold">{t(category.labelKey)}</span>
                     <span className="mt-0.5 block text-[11px] font-medium opacity-70">
-                      {category.hint}
+                      {t(category.hintKey)}
                     </span>
                   </span>
                   {badge > 0 ? (
@@ -1808,8 +1790,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
                               ? "border-primary/35 bg-primary text-primary-foreground shadow-none dark:shadow-[0_10px_24px_rgba(255,255,255,0.14)]"
                               : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-accent/70 hover:text-foreground"
                           }`}
-                          title={item.label}
-                          aria-label={item.label}
+                          title={t(item.labelKey, { ns: "common" })}
+                          aria-label={t(item.labelKey, { ns: "common" })}
                         >
                           <Icon className="h-5 w-5" />
                         </button>

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import {
   SettingsCard,
   SettingsCardBody,
@@ -7,9 +9,9 @@ import {
 import { StatusPill } from "@shared/components/ui/status-pill";
 
 const PRICE_SOURCE_OPTIONS = [
-  { value: "auto", label: "Auto", hint: "CSFloat zuerst, Steam als Fallback" },
-  { value: "csfloat", label: "CSFloat", hint: "Nur CSFloat bevorzugen" },
-  { value: "steam", label: "Steam", hint: "Nur Steam bevorzugen" },
+  { value: "auto", labelKey: "priceSource.auto", hintKey: "priceSource.autoHint" },
+  { value: "csfloat", labelKey: "priceSource.csfloat", hintKey: "priceSource.csfloatHint" },
+  { value: "steam", labelKey: "priceSource.steam", hintKey: "priceSource.steamHint" },
 ];
 
 /**
@@ -22,11 +24,12 @@ export function PriceSourceSettingsSection({
   priceSourceSuccess,
   onPriceSourceChange,
 }) {
+  const { t } = useTranslation("settings");
   return (
     <SettingsCard id="settings-section-price-source">
       <SettingsCardHeader
-        title="Live-Preisquelle"
-        description="Woher die App aktuelle Marktpreise zieht."
+        title={t("priceSource.title")}
+        description={t("priceSource.hint")}
         action={
           priceSourceError ? (
             <StatusPill tone="danger">{priceSourceError}</StatusPill>
@@ -43,8 +46,8 @@ export function PriceSourceSettingsSection({
             <SettingsTile
               key={option.value}
               active={priceSourceMode === option.value}
-              label={option.label}
-              hint={option.hint}
+              label={t(option.labelKey)}
+              hint={t(option.hintKey)}
               onClick={() => onPriceSourceChange(option.value)}
             />
           ))}

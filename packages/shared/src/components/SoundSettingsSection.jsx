@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Switch } from "./ui/switch.jsx";
 import { SettingsCard, SettingsCardHeader, SettingsRow } from "./ui/settings-card.jsx";
@@ -13,6 +14,7 @@ import {
 } from "../lib/uiSounds.js";
 
 export function SoundSettingsSection() {
+  const { t } = useTranslation("settings");
   const [enabled, setEnabled] = useState(() => isUiSoundsEnabled());
   const [volume, setVolume] = useState(() => getUiSoundVolume());
 
@@ -50,12 +52,12 @@ export function SoundSettingsSection() {
   return (
     <SettingsCard id="settings-section-sounds">
       <SettingsCardHeader
-        title="Sounds"
-        description="Kurzes Klick-Feedback bei Aktionen und im Jahresrückblick. Die Töne werden im Browser erzeugt — es werden keine Audiodateien geladen."
+        title={t("sounds.title")}
+        description={t("sounds.description")}
       />
       <SettingsRow
-        title="UI-Sounds"
-        description="Gilt app-weit und bleibt über Neustarts erhalten."
+        title={t("sounds.uiSounds")}
+        description={t("sounds.hint")}
         divider={false}
       >
         {/* The slider sits inline with the switch (design), but a 160px track
@@ -70,7 +72,7 @@ export function SoundSettingsSection() {
             value={percent}
             onChange={handleVolumeChange}
             disabled={!enabled}
-            aria-label="Lautstärke"
+            aria-label={t("sounds.volume")}
             data-no-sound
             className="ui-range w-[160px] disabled:opacity-40"
             style={{
@@ -84,7 +86,7 @@ export function SoundSettingsSection() {
         <Switch
           checked={enabled}
           onCheckedChange={handleToggle}
-          aria-label="Sounds umschalten"
+          aria-label={t("sounds.toggle")}
           data-no-sound
         />
       </SettingsRow>

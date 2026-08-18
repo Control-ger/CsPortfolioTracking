@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 
 import {
@@ -16,15 +17,16 @@ import {
   subscribeWindowControlsStyle,
 } from "../lib/windowControls.js";
 
-const SOURCE_LABELS = {
-  "gtk-theme": "GTK-Theme",
-  "icon-theme": "Icon-Theme",
-  platform: "Betriebssystem",
-  fallback: "keine Theme-Icons gefunden",
+const SOURCE_LABEL_KEYS = {
+  "gtk-theme": "windowControls.gtkTheme",
+  "icon-theme": "windowControls.iconTheme",
+  platform: "windowControls.operatingSystem",
+  fallback: "windowControls.noThemeIcons",
 };
 
 /** Desktop only — the web build has no custom titlebar to style. */
 export function WindowControlsSettingsSection() {
+  const { t } = useTranslation("settings");
   const [style, setStyle] = useState(() => getWindowControlsStyle());
   const [detection, setDetection] = useState(null);
   // Starts true: the first detection is kicked off by the mount effect below,
@@ -52,28 +54,30 @@ export function WindowControlsSettingsSection() {
 
   const resolved = resolveWindowControls(style, detection);
   const detectedThemeLabel = detection
-    ? `${SOURCE_LABELS[detection.source] || detection.source}${
-        detection.themeName ? `: ${detection.themeName}` : ""
-      }`
-    : "wird ermittelt …";
+    ? `${
+        SOURCE_LABEL_KEYS[detection.source]
+          ? t(SOURCE_LABEL_KEYS[detection.source])
+          : detection.source
+      }${detection.themeName ? `: ${detection.themeName}` : ""}`
+    : t("windowControls.detecting");
 
   const options = [
     {
       value: "auto",
-      label: "Automatisch",
+      label: t("windowControls.automatic"),
       hint: detection?.assets?.close
-        ? "Icons aus deinem Desktop-Theme"
-        : "Passt sich dem Betriebssystem an",
+        ? t("windowControls.automaticHint")
+        : t("windowControls.systemHint"),
     },
-    { value: "windows", label: "Windows", hint: "Striche rechts, roter Schließen-Button" },
-    { value: "macos", label: "macOS", hint: "Farbige Punkte links" },
+    { value: "windows", label: "Windows", hint: t("windowControls.windowsHint") },
+    { value: "macos", label: "macOS", hint: t("windowControls.macosHint") },
   ];
 
   return (
     <SettingsCard id="settings-section-window-controls">
       <SettingsCardHeader
-        title="Fenster-Buttons"
-        description="Die App zeichnet ihre Titelleiste selbst. Automatisch übernimmt sie unter Linux Position und Icons deines Desktop-Themes — auch eigene Theme-Icons."
+        title={t("windowControls.title")}
+        description={t("windowControls.description")}
       />
       <SettingsCardBody className="flex flex-col gap-3">
         <div className="grid gap-2.5 sm:grid-cols-3">
@@ -91,12 +95,13 @@ export function WindowControlsSettingsSection() {
         <SettingsNote>
           <span className="flex min-w-0 flex-col gap-[3px]">
             <span>
-              Erkannt: <span className="font-bold text-foreground">{detectedThemeLabel}</span>
+              {t("windowControls.detected")}{" "}
+              <span className="font-bold text-foreground">{detectedThemeLabel}</span>
             </span>
             <span>
-              Aktive Darstellung:{" "}
+              {t("windowControls.activePresentation")}{" "}
               <span className="font-bold text-foreground">
-                {resolved.preset === "native" ? "Theme-Icons" : resolved.preset}
+                {resolved.preset === "native" ? t("windowControls.themeIcons") : resolved.preset}
               </span>
             </span>
           </span>
@@ -107,7 +112,7 @@ export function WindowControlsSettingsSection() {
             className="inline-flex h-8 shrink-0 items-center gap-[7px] rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-50"
           >
             <RefreshCw className={`size-[13px] ${detecting ? "animate-spin" : ""}`} />
-            Neu erkennen
+            {t("windowControls.redetect")}
           </button>
         </SettingsNote>
       </SettingsCardBody>

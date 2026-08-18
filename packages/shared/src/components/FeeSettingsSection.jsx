@@ -1,5 +1,8 @@
+import { useTranslation } from "react-i18next";
+
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { StatusPill } from "@shared/components/ui/status-pill";
+import { formatNumber } from "@shared/lib/portfolioHelpers.js";
 import {
   SettingsBanner,
   SettingsCard,
@@ -10,33 +13,33 @@ import {
 const FEE_FIELDS = [
   {
     field: "sellerFeePercent",
-    label: "Seller-Gebühr",
+    labelKey: "fees.sellerLabel",
     unit: "%",
-    hint: "Marktplatz-Anteil beim Verkauf",
+    hintKey: "fees.sellerHint",
   },
   {
     field: "fxFeePercent",
-    label: "FX-Gebühr",
+    labelKey: "fees.fxLabel",
     unit: "%",
-    hint: "Umrechnung USD → Anzeigewährung",
+    hintKey: "fees.fxHint",
   },
   {
     field: "withdrawalFeePercent",
-    label: "Auszahlung",
+    labelKey: "fees.payoutLabel",
     unit: "%",
-    hint: "Beim Abheben auf dein Konto",
+    hintKey: "fees.payoutHint",
   },
   {
     field: "depositFeePercent",
-    label: "Einzahlung",
+    labelKey: "fees.depositLabel",
     unit: "%",
-    hint: "Prozentualer Anteil",
+    hintKey: "fees.depositHint",
   },
   {
     field: "depositFeeFixedEur",
-    label: "Einzahlung fix",
+    labelKey: "fees.depositFixedLabel",
     unit: "€",
-    hint: "Fixbetrag je Einzahlung",
+    hintKey: "fees.depositFixedHint",
   },
 ];
 
@@ -51,10 +54,11 @@ const percent = (value) => {
  * design where the whole panel commits at once.
  */
 export function FeeSettingsSection({ form, source, loading, saving, error, success, handleChange }) {
+  const { t } = useTranslation("settings");
   if (loading) {
     return (
       <SettingsCard>
-        <SettingsCardHeader title="Gebühren" description="Wird geladen …" />
+        <SettingsCardHeader title={t("fees.title")} description={t("fees.loading")} />
         <SettingsCardBody className="grid gap-3 sm:grid-cols-3">
           {[1, 2, 3, 4, 5].map((entry) => (
             <div key={entry} className="space-y-1.5">
@@ -75,11 +79,11 @@ export function FeeSettingsSection({ form, source, loading, saving, error, succe
   return (
     <SettingsCard id="settings-section-fees">
       <SettingsCardHeader
-        title="Gebühren"
-        description="Fließen in Nettoerlös, Break-even und Rendite ein."
+        title={t("fees.title")}
+        description={t("fees.hint")}
         action={
           <StatusPill tone={source === "db" ? "success" : "muted"} dot={source === "db"}>
-            {source === "db" ? "Gespeichert" : "Standardwerte"}
+            {source === "db" ? t("fees.saved") : t("fees.defaults")}
           </StatusPill>
         }
       />
@@ -93,7 +97,7 @@ export function FeeSettingsSection({ form, source, loading, saving, error, succe
         {FEE_FIELDS.map((entry) => (
           <label key={entry.field} className="flex flex-col gap-1.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-              {entry.label}
+              {t(entry.labelKey)}
             </span>
             <span className="relative block">
               <input
@@ -111,19 +115,19 @@ export function FeeSettingsSection({ form, source, loading, saving, error, succe
                 {entry.unit}
               </span>
             </span>
-            <span className="text-[11px] text-muted-foreground">{entry.hint}</span>
+            <span className="text-[11px] text-muted-foreground">{t(entry.hintKey)}</span>
           </label>
         ))}
 
         <div className="flex flex-wrap items-center gap-2.5 rounded-[12px] border border-border-soft bg-surface-1 px-3.5 py-3 sm:col-span-2 lg:col-span-3">
           <span className="text-[12px] text-muted-foreground">
-            Beispiel: Verkauf für 100,00 € ergibt netto
+            {t("fees.exampleLead")}
           </span>
           <span className="text-[13px] font-bold tabular-nums text-success">
-            {netOnHundred.toFixed(2).replace(".", ",")} €
+            {formatNumber(netOnHundred, 2)} €
           </span>
           <span className="text-[11px] text-muted-foreground">
-            nach Seller- und Auszahlungsgebühr
+            {t("fees.exampleTrail")}
           </span>
         </div>
       </SettingsCardBody>

@@ -1,4 +1,5 @@
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { SettingsKeyRow, SettingsKeyInput } from "@shared/components/ui/settings-card";
@@ -21,9 +22,10 @@ export function CsFloatApiKeySection({
   onToggleShowApiKey,
   onUpdate,
 }) {
+  const { t } = useTranslation("settings");
   if (apiKeyLoading) {
     return (
-      <SettingsKeyRow name="CSFloat" state="wird geladen …">
+      <SettingsKeyRow name="CSFloat" state={t("csfloatKey.loading")}>
         <Skeleton className="h-[38px] w-full rounded-[10px]" />
       </SettingsKeyRow>
     );
@@ -35,11 +37,11 @@ export function CsFloatApiKeySection({
       ? apiKeySuccess
       : !encryptionReady
         ? desktopRuntime
-          ? "OS-Verschlüsselung nicht verfügbar"
-          : "Verschlüsselung nicht konfiguriert"
+          ? t("csfloatKey.osEncryptionUnavailable")
+          : t("csfloatKey.encryptionNotConfigured")
         : apiKeyStatus.configured
-          ? `Gültig · endet auf ${apiKeyStatus.lastFour}`
-          : "Kein Schlüssel hinterlegt";
+          ? t("csfloatKey.validEndsIn", { lastFour: apiKeyStatus.lastFour })
+          : t("csfloatKey.noKeyStored");
   const stateTone = apiKeyError
     ? "danger"
     : apiKeySuccess
@@ -58,7 +60,9 @@ export function CsFloatApiKeySection({
           value={apiKey}
           onChange={onApiKeyChange}
           placeholder={
-            apiKeyStatus.configured ? "Zum Ändern neuen Key eingeben…" : "CSFloat API Key…"
+            apiKeyStatus.configured
+              ? t("csfloatKey.changePlaceholder")
+              : t("csfloatKey.placeholder")
           }
           disabled={apiKeySaving || !encryptionReady || !desktopRuntime}
           className="pr-10"
@@ -67,7 +71,7 @@ export function CsFloatApiKeySection({
           type="button"
           onClick={onToggleShowApiKey}
           disabled={apiKeySaving}
-          aria-label={showApiKey ? "Key verbergen" : "Key anzeigen"}
+          aria-label={showApiKey ? t("csfloatKey.hideKey") : t("csfloatKey.showKey")}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
         >
           {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -80,7 +84,7 @@ export function CsFloatApiKeySection({
           disabled={apiKeySaving || !encryptionReady || !apiKey.trim()}
           className="h-[34px] whitespace-nowrap rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
-          {apiKeySaving ? "Speichert…" : "Speichern"}
+          {apiKeySaving ? t("csfloatKey.saving") : t("csfloatKey.save")}
         </button>
       </span>
     </SettingsKeyRow>

@@ -1,7 +1,9 @@
-const PERMISSION_LABEL = {
-  granted: "erteilt",
-  denied: "blockiert",
-  default: "noch nicht erteilt",
+import { useTranslation } from "react-i18next";
+
+const PERMISSION_LABEL_KEYS = {
+  granted: "webPush.permGranted",
+  denied: "webPush.permDenied",
+  default: "webPush.notGranted",
 };
 
 /**
@@ -24,16 +26,17 @@ export function WebPushSettingsSection({
   onEnable,
   onDisable,
 }) {
+  const { t } = useTranslation("settings");
   const message = webPushError
     ? webPushError
     : webPushSuccess
       ? webPushSuccess
       : !webPushSupported
-        ? "Browser Push ist in dieser Umgebung nicht verfügbar."
+        ? t("webPush.unavailable")
         : webPushLoading
-          ? "Push-Status wird geladen …"
+          ? t("webPush.loading")
           : !webPushConfigured
-            ? "Push ist serverseitig noch nicht konfiguriert (VAPID Keys fehlen)."
+            ? t("webPush.notConfigured")
             : null;
   const tone = webPushError ? "text-danger" : webPushSuccess ? "text-success" : "text-muted-foreground";
 
@@ -42,7 +45,7 @@ export function WebPushSettingsSection({
       <p className={`min-w-0 text-[11px] leading-[1.55] ${tone}`}>
         {message ?? (
           <>
-            Web Push braucht eine erteilte Browser-Berechtigung. Status:{" "}
+            {t("webPush.permissionLead")}{" "}
             <span
               className={`font-bold ${
                 webPushPermission === "granted"
@@ -52,11 +55,13 @@ export function WebPushSettingsSection({
                     : "text-warn"
               }`}
             >
-              {PERMISSION_LABEL[webPushPermission] || webPushPermission}
+              {PERMISSION_LABEL_KEYS[webPushPermission]
+                ? t(PERMISSION_LABEL_KEYS[webPushPermission])
+                : webPushPermission}
             </span>{" "}
-            · Abo auf diesem Gerät{" "}
+            {t("webPush.subscriptionLead")}{" "}
             <span className={`font-bold ${webPushSubscribed ? "text-success" : "text-muted-foreground"}`}>
-              {webPushSubscribed ? "aktiv" : "inaktiv"}
+              {webPushSubscribed ? t("webPush.subActive") : t("webPush.subInactive")}
             </span>
             .
           </>
@@ -69,10 +74,10 @@ export function WebPushSettingsSection({
         className="h-8 shrink-0 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
       >
         {webPushSaving
-          ? "Moment …"
+          ? t("webPush.working")
           : webPushSubscribed
-            ? "Push deaktivieren"
-            : "Push aktivieren"}
+            ? t("webPush.disable")
+            : t("webPush.enable")}
       </button>
     </div>
   );

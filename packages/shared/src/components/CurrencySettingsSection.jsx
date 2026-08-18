@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { StatusPill } from "@shared/components/ui/status-pill";
@@ -21,6 +22,7 @@ export function CurrencySettingsSection({
   currencySearchTerm,
   setCurrencySearchTerm,
 }) {
+  const { t } = useTranslation("settings");
   const currencyEntries = Object.entries(currencies);
   const popularRankByCode = new Map(
     popularCurrencyCodes.map((code, index) => [String(code || "").toUpperCase(), index]),
@@ -82,16 +84,16 @@ export function CurrencySettingsSection({
   return (
     <SettingsCard id="settings-section-currency">
       <SettingsCardHeader
-        title="Währung"
-        description="Anzeigewährung. Gespeichert wird weiterhin in USD."
+        title={t("currency.title")}
+        description={t("currency.hint")}
         action={
           ratesLoading ? (
             <Skeleton className="h-[26px] w-44 rounded-full" />
           ) : (
             <StatusPill tone="muted">
               {usdRate
-                ? `Kurs 1 USD = ${formatExchangeRate(usdRate)} ${currency}`
-                : "Kein Wechselkurs verfügbar"}
+                ? t("currency.rate", { rate: formatExchangeRate(usdRate), currency })
+                : t("currency.noRate")}
             </StatusPill>
           )
         }
@@ -126,7 +128,7 @@ export function CurrencySettingsSection({
           <input
             value={currencySearchTerm}
             onChange={(event) => setCurrencySearchTerm(event.target.value)}
-            placeholder="Weitere Währung suchen (Code, Name, Land)"
+            placeholder={t("currency.searchMore")}
             className="h-[38px] w-full rounded-[10px] border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
           />
         </label>
@@ -140,7 +142,7 @@ export function CurrencySettingsSection({
                   key={code}
                   type="button"
                   onClick={() => setCurrency(code)}
-                  title={`${info.name} · ${info.regionName || info.regionCode || "Global"}`}
+                  title={`${info.name} · ${info.regionName || info.regionCode || t("currency.global")}`}
                   className={`flex min-w-0 items-center gap-2 rounded-[10px] border px-2.5 py-2 text-left transition-colors ${
                     active
                       ? "border-success/45 bg-success/10"
@@ -166,7 +168,10 @@ export function CurrencySettingsSection({
         </div>
 
         <p className="text-[11px] text-muted-foreground">
-          {filteredCurrencyEntries.length} von {currencyEntries.length} Währungen sichtbar
+          {t("currency.visibleCount", {
+            shown: filteredCurrencyEntries.length,
+            total: currencyEntries.length,
+          })}
           {hasCurrentCurrencyRate && currency !== "EUR" ? (
             <>
               {" · "}1 EUR = {formatExchangeRate(currentCurrencyRate)} {currency}

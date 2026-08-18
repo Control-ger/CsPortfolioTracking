@@ -1,4 +1,5 @@
 import { AppWindow } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { SettingsKeyRow, SettingsKeyInput } from "@shared/components/ui/settings-card";
 
@@ -14,17 +15,18 @@ export function ServerConfigSection({
   onTestConnection,
   onSave,
 }) {
+  const { t } = useTranslation("settings");
   const state = serverConfigError
     ? serverConfigError
     : serverConfigMessage
       ? serverConfigMessage
       : serverConfigLoading
-        ? "wird geladen …"
-        : "Ziel für Sync & Server";
+        ? t("server.loading")
+        : t("server.target");
   const stateTone = serverConfigError ? "danger" : serverConfigMessage ? "success" : "muted";
 
   return (
-    <SettingsKeyRow name="Server-Host" state={state} stateTone={stateTone} divider={false}>
+    <SettingsKeyRow name={t("server.host")} state={state} stateTone={stateTone} divider={false}>
       <SettingsKeyInput
         value={serverUrl}
         onChange={onUrlChange}
@@ -34,13 +36,13 @@ export function ServerConfigSection({
       <span className="flex gap-2">
         <button
           type="button"
-          title="Kann ein Chromium-Fenster für die Cloudflare-Bestätigung öffnen"
+          title={t("server.chromiumHint")}
           onClick={onTestConnection}
           disabled={serverConfigLoading || serverConfigTesting || !serverUrl.trim()}
           className="inline-flex h-[34px] items-center gap-1.5 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
         >
           <AppWindow className="size-[13px] shrink-0 opacity-70" />
-          {serverConfigTesting ? "Testet…" : "Verbindung testen"}
+          {serverConfigTesting ? t("server.testing") : t("server.testConnection")}
         </button>
         <button
           type="button"
@@ -48,7 +50,7 @@ export function ServerConfigSection({
           disabled={serverConfigLoading || serverConfigSaving || !serverUrl.trim()}
           className="h-[34px] whitespace-nowrap rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
-          {serverConfigSaving ? "Speichert…" : "Speichern"}
+          {serverConfigSaving ? t("server.saving") : t("server.save")}
         </button>
       </span>
     </SettingsKeyRow>

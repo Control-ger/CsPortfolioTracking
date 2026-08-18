@@ -1,4 +1,5 @@
 import { Eye, EyeOff, AppWindow } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { SettingsKeyRow, SettingsKeyInput } from "@shared/components/ui/settings-card";
@@ -25,9 +26,10 @@ export function SkinBaronApiKeySection({
   onSaveSessionCookie,
   onConnectViaBrowser,
 }) {
+  const { t } = useTranslation("settings");
   if (skinBaronStatusLoading) {
     return (
-      <SettingsKeyRow name="SkinBaron" state="wird geladen …">
+      <SettingsKeyRow name="SkinBaron" state={t("skinbaron.loading")}>
         <Skeleton className="h-[38px] w-full rounded-[10px]" />
       </SettingsKeyRow>
     );
@@ -45,10 +47,12 @@ export function SkinBaronApiKeySection({
     : skinBaronApiKeySuccess
       ? skinBaronApiKeySuccess
       : importReady
-        ? `Import bereit${checkedAt ? ` · geprüft ${checkedAt}` : ""}`
+        ? `${t("skinbaron.importReady")}${checkedAt ? t("skinbaron.checkedSuffix", { at: checkedAt }) : ""}`
         : skinBaronApiKeyStatus?.sessionCookieConfigured
-          ? `Session abgelaufen · AUTHID …${skinBaronApiKeyStatus.sessionCookieLastFour || "----"}`
-          : "Keine Session hinterlegt";
+          ? t("skinbaron.sessionExpired", {
+              lastFour: skinBaronApiKeyStatus.sessionCookieLastFour || "----",
+            })
+          : t("skinbaron.noSession");
   const stateTone = skinBaronApiKeyError
     ? "danger"
     : skinBaronApiKeySuccess || importReady
@@ -60,13 +64,13 @@ export function SkinBaronApiKeySection({
   const busy = skinBaronSessionSaving || skinBaronSessionBrowserConnecting;
 
   return (
-    <SettingsKeyRow name="SkinBaron (AUTHID)" state={state} stateTone={stateTone}>
+    <SettingsKeyRow name={t("skinbaron.label")} state={state} stateTone={stateTone}>
       <span className="relative block min-w-0">
         <SettingsKeyInput
           type={showSkinBaronSessionCookie ? "text" : "password"}
           value={skinBaronSessionCookie}
           onChange={onSessionCookieChange}
-          placeholder="AUTHID=…"
+          placeholder={t("skinbaron.placeholder")}
           disabled={busy || !encryptionReady}
           className="pr-10"
         />
@@ -74,7 +78,7 @@ export function SkinBaronApiKeySection({
           type="button"
           onClick={onToggleShowSessionCookie}
           disabled={busy}
-          aria-label={showSkinBaronSessionCookie ? "Cookie verbergen" : "Cookie anzeigen"}
+          aria-label={showSkinBaronSessionCookie ? t("skinbaron.hideCookie") : t("skinbaron.showCookie")}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
         >
           {showSkinBaronSessionCookie ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -83,13 +87,13 @@ export function SkinBaronApiKeySection({
       <span className="flex gap-2">
         <button
           type="button"
-          title="Öffnet ein Chromium-Fenster zum Anmelden"
+          title={t("skinbaron.browserHint")}
           onClick={onConnectViaBrowser}
           disabled={busy || !encryptionReady}
           className="inline-flex h-[34px] items-center gap-1.5 whitespace-nowrap rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40"
         >
           <AppWindow className="size-[13px] shrink-0 opacity-70" />
-          {skinBaronSessionBrowserConnecting ? "Warte auf Login…" : "Verbinden"}
+          {skinBaronSessionBrowserConnecting ? t("skinbaron.waitingForLogin") : t("skinbaron.connect")}
         </button>
         <button
           type="button"
@@ -97,7 +101,7 @@ export function SkinBaronApiKeySection({
           disabled={busy || !encryptionReady || !skinBaronSessionCookie.trim()}
           className="h-[34px] whitespace-nowrap rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
-          {skinBaronSessionSaving ? "Prüft…" : "Speichern"}
+          {skinBaronSessionSaving ? t("skinbaron.checking") : t("skinbaron.save")}
         </button>
       </span>
     </SettingsKeyRow>
