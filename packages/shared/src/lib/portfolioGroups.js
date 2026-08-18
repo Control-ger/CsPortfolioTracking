@@ -96,6 +96,11 @@ function createEmptyClusterAggregate({ clusterKey, clusterRow, rawItem }) {
       normalizeText(clusterRow?.name || clusterRow?.marketHashName || rawItem?.name || rawItem?.marketHashName) ||
       "Unbekanntes Cluster",
     imageUrl: clusterRow?.imageUrl || rawItem?.imageUrl || rawItem?.iconUrl || null,
+    // A cluster is one item, so it inherits that item's 30-day series for the
+    // table's sparkline column. Groups deliberately get none — see InventoryTable.
+    priceSparkline:
+      (Array.isArray(clusterRow?.priceSparkline) ? clusterRow.priceSparkline : null) ??
+      (Array.isArray(rawItem?.priceSparkline) ? rawItem.priceSparkline : null),
     quantity: 0,
     totalInvested: 0,
     totalValue: 0,

@@ -224,5 +224,23 @@
     "step7Body": "This is where you control matching, prices and exclude logic for your items.",
     "legacyBannerLead": "Steam import is active. As the next step, connect CSFloat:",
     "progressSteps": "Progress: {{done}}/{{total}} steps"
+  },
+  "ui": {
+    "clearAll": "Delete all",
+    "journeyNextHint": "Afterwards you can start the CSFloat import and edit matching and prices under Management.",
+    "storeCsfloatKey": "Store CSFloat key",
+    "iHaveConnected": "I have connected",
+    "skipJourney": "Skip journey",
+    "journeyTitleFor": "Setup journey for {{name}}",
+    "journeyIntro": "We split everything into clear steps. You can change every point again later in Settings.",
+    "matchingReviewed": "Matching checked",
+    "close": "Close",
+    "clearHistory": "Clear history",
+    "inInventory": "In inventory",
+    "inManagement": "Management",
+    "enterOpensSearch": "Enter opens the product search with filters on the search page.",
+    "minTwoChars": "Enter at least 2 characters to start the item browser.",
+    "inHoldings": "In holdings",
+    "cloudflareLoginNeeded": "Cloudflare Access sign-in required. Please sign in in the login window and start the sync again."
   }
 }

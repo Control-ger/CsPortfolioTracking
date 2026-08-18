@@ -135,8 +135,8 @@ export function WrappedIntroSlide({ year, user }) {
 
   return (
     <WrappedSlideShell
-      eyebrow={`Jahresrueckblick ${year}`}
-      title={`Dein CS-Investment-Jahr ${year}`}
+      eyebrow={t("eyebrow.eyebrowReview", { year })}
+      title={t("intro.title", { year })}
       icon={Sparkles}
     >
       <div className="flex items-center gap-4">
@@ -146,12 +146,12 @@ export function WrappedIntroSlide({ year, user }) {
         <div className="flex flex-col">
           <span className="text-lg font-semibold text-foreground">{displayName}</span>
           <span className="text-sm text-muted-foreground">
-            Ein Rueckblick auf zwoelf Monate Portfolio.
+            {t("intro.subtitle")}
           </span>
         </div>
       </div>
       <p className="text-base text-muted-foreground">
-        Kaeufe, Ausgaben, Plattformen und die Kurve deines Portfolios — Slide fuer Slide.
+        {t("intro.body")}
       </p>
     </WrappedSlideShell>
   );
@@ -169,12 +169,12 @@ export function WrappedPurchasesSlide({ year, purchases }) {
       title={
         purchases.count === 1
           ? t("purchases.onePurchase")
-          : `${Math.round(animatedCount)} Kaeufe in diesem Jahr`
+          : t("purchases.countThisYear", { count: Math.round(animatedCount) })
       }
       icon={Flame}
       footnote={
         purchases.undatedCount > 0
-          ? `${purchases.undatedCount} Position(en) ohne Kaufdatum sind hier nicht beruecksichtigt.`
+          ? t("purchases.undatedNote", { count: purchases.undatedCount })
           : null
       }
     >
@@ -219,8 +219,8 @@ export function WrappedMonthlySlide({ year, monthly }) {
 
   return (
     <WrappedSlideShell
-      eyebrow={`Aktivster Monat ${year}`}
-      title={`Im ${peakLabel} warst du am aktivsten`}
+      eyebrow={t("eyebrow.eyebrowBusiestMonth", { year })}
+      title={t("monthly.mostActive", { month: peakLabel })}
       icon={CalendarRange}
     >
       <div className="grid gap-6 sm:grid-cols-2">
@@ -393,7 +393,7 @@ export function WrappedCurveSlide({ year, curve }) {
       footnote={
         startsAtYearStart
           ? null
-          : `Historie liegt erst ab ${formatDateSafe(curve.coverageFrom)} vor.`
+          : t("curve.coverageFrom", { date: formatDateSafe(curve.coverageFrom) })
       }
     >
       <div className="grid gap-6 sm:grid-cols-3">
@@ -547,7 +547,7 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
       icon={Eye}
       footnote={
         watchlist.peakMonth
-          ? `Die meisten Eintraege kamen im ${watchlist.peakMonth.label} dazu.`
+          ? t("watchlist.peakMonth", { month: watchlist.peakMonth.label })
           : null
       }
     >
@@ -561,7 +561,7 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
         />
         <div className="flex flex-col gap-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            Anteil am Bestand
+            {t("watchlist.shareOfHoldings")}
           </span>
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted-foreground/15">
             <span
@@ -635,7 +635,11 @@ export function WrappedOutroSlide({ year, stats, onClose }) {
   ].filter(Boolean);
 
   return (
-    <WrappedSlideShell eyebrow={`Fazit ${year}`} title={`Das war ${year}`} icon={Sparkles}>
+    <WrappedSlideShell
+      eyebrow={t("eyebrow.eyebrowConclusion", { year })}
+      title={t("outro.thatWas", { year })}
+      icon={Sparkles}
+    >
       <dl className="flex flex-col divide-y divide-border/60">
         {summaryRows.map((row) => (
           <div key={row.label} className="flex items-center justify-between gap-4 py-3">
@@ -649,7 +653,7 @@ export function WrappedOutroSlide({ year, stats, onClose }) {
         onClick={onClose}
         className="self-start rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
-        Zurueck zum Dashboard
+        {t("outro.backToDashboard")}
       </button>
     </WrappedSlideShell>
   );

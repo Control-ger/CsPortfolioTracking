@@ -1,3 +1,5 @@
+import { translate } from "../i18n/index.js";
+
 import {
   request,
   requestWithMeta,
@@ -163,7 +165,7 @@ export async function connectSkinBaronSessionCookieViaBrowser() {
   if (desktopSecrets?.connectSkinBaronSessionCookieViaBrowser) {
     const result = await desktopSecrets.connectSkinBaronSessionCookieViaBrowser();
     if (!result?.ok) {
-      throw new Error(result?.error || "SkinBaron Login konnte nicht abgeschlossen werden.");
+      throw new Error(result?.error || translate("common:runtimeErrors.skinbaronLoginFailed"));
     }
 
     return {
@@ -174,7 +176,7 @@ export async function connectSkinBaronSessionCookieViaBrowser() {
     };
   }
 
-  throw new Error("SkinBaron Browser-Login ist nur in der Desktop-App verfuegbar.");
+  throw new Error(translate("common:runtimeErrors.skinbaronBrowserDesktopOnly"));
 }
 
 export async function fetchWebPushPublicKey() {

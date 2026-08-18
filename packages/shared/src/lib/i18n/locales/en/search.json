@@ -60,5 +60,9 @@
     "priceUnder": "< {{amount}}",
     "priceBetween": "{{min}}–{{max}}",
     "priceOver": "> {{amount}}"
-  }
+  },
+  "priceInEur": "Price in €",
+  "knownPriceOnly": "Shows only items with a known price.",
+  "ownedOnlyHint": "Hides everything you do not own",
+  "reset": "Reset"
 }

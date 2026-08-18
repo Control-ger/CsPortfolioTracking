@@ -279,5 +279,22 @@
     "importReady": "Import ready",
     "checkedSuffix": " · checked {{at}}",
     "sessionExpired": "Session expired · AUTHID …{{lastFour}}"
+  },
+  "ui": {
+    "watchlistLoadFailed": "CSFloat watchlist could not be loaded ({{detail}}).",
+    "buyOrdersLoadFailed": "CSFloat buy orders could not be loaded ({{detail}}).",
+    "vaultDescription": "Encrypted storage for keys and sessions. Unlock is required after every app start.",
+    "autoLockOn": "Active: locks after {{minutes}} minutes of inactivity",
+    "browserWindowHint": "Testing and saving may open a browser window.",
+    "updateAvailable": "Update available{{version}}.",
+    "updateManual": "Update available{{version}}. This installation cannot update itself — please download manually from GitHub.",
+    "updateDownloading": "Downloading… {{percent}}%",
+    "updateReady": "Update{{version}} ready to install.",
+    "updateHandoff": "Update{{version}} was opened in the system installer — close the app and confirm there.",
+    "updateErrorSuffix": "{{message}} Alternatively download manually from GitHub.",
+    "downloadFromGithub": "Download from GitHub",
+    "title": "Settings",
+    "connectionsHint": "API, server and vault settings are grouped under Connections.",
+    "allSettings": "All settings"
   }
 }

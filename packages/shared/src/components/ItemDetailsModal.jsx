@@ -7,6 +7,7 @@ import { ItemDetailPanel } from "@shared/components/ItemDetailPanel";
 import { Badge } from "@shared/components/ui/badge";
 import { ExcludeInvestmentDialog } from "@shared/components/ExcludeInvestmentDialog";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { translate } from "../lib/i18n/index.js";
 
 const formatSignedPrice = (value, formatPrice) =>
   typeof value === "number" && !Number.isNaN(value)
@@ -217,7 +218,7 @@ export function ItemDetailsModal({
                 Funding: {item.fundingMode === "cash_in" ? t("detail.cashIn") : t("detail.wallet")}
               </Badge>
               <Badge variant="outline" className={freshnessBadgeClass(item.freshnessStatus)}>
-                {item.freshnessLabel || "unbekannt"}
+                {item.freshnessLabel || translate("common:units.unknownLower")}
               </Badge>
             </div>
           </div>
@@ -360,7 +361,7 @@ export function ItemDetailsModal({
           </div>
         ) : (
           <div className="flex items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/60 p-3 sm:p-4 text-sm text-muted-foreground">
-            Keine Positionshistorie verfuegbar.
+            {t("detail.noPositionHistoryShort")}
           </div>
         )}
 
@@ -380,14 +381,14 @@ export function ItemDetailsModal({
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  In Portfolio einbeziehen
+                  {t("detail.includeInPortfolio")}
                 </>
               ) : (
                 <>
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  Aus Portfolio ausschliessen
+                  {t("detail.excludeFromPortfolio")}
                 </>
               )}
             </button>

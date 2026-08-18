@@ -242,7 +242,7 @@ export function PortfolioInventorySection({
                   key={entry.key}
                   active={activeCategory === entry.key}
                   onClick={() => setCategory(entry.key)}
-                  title={`${entry.count} Positionen`}
+                  title={t("table.positionsCount", { count: entry.count })}
                 >
                   {entry.label}
                 </FilterChip>
@@ -268,7 +268,7 @@ export function PortfolioInventorySection({
 
         {activeCategory !== ALL_CATEGORIES ? (
           <p className="text-[10.5px] leading-[1.5] text-muted-foreground">
-            Gruppen bündeln mehrere Typen und sind deshalb nur ohne Kategoriefilter sichtbar.
+            {t("table.groupsFilterHint")}
           </p>
         ) : null}
       </FilterSidebar>

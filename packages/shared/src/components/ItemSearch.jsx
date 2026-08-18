@@ -591,7 +591,7 @@ export const ItemSearch = ({
 
         <div>
           <p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
-            Preis in €
+            {t("priceInEur")}
           </p>
           <div className="flex items-center gap-2">
             <input
@@ -638,7 +638,7 @@ export const ItemSearch = ({
               search, so the range is stricter than it looks. */}
           {priceRangeActive ? (
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Zeigt nur Items mit bekanntem Preis.
+              {t("knownPriceOnly")}
             </p>
           ) : null}
         </div>
@@ -646,11 +646,11 @@ export const ItemSearch = ({
         <div className="flex items-center justify-between gap-3 opacity-45">
           <span className="min-w-0">
             <span className="flex items-center gap-2 text-[13px] font-bold">
-              Nur Items im Bestand
+              {t("filters.ownedOnly")}
               <SoonBadge />
             </span>
             <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              Blendet alles aus, was du nicht besitzt
+              {t("ownedOnlyHint")}
             </span>
           </span>
           <Switch checked={false} disabled aria-label={t("filters.ownedOnly")} />
@@ -668,7 +668,7 @@ export const ItemSearch = ({
             }}
             className="h-[42px] shrink-0 rounded-[10px] border border-border-strong px-4 text-[12.5px] font-bold"
           >
-            Zurücksetzen
+            {t("reset")}
           </button>
           <button
             type="button"

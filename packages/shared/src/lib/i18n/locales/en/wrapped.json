@@ -11,7 +11,9 @@
     "totalSpend": "Total spend",
     "averagePrice": "Average price",
     "perPiece": "per piece",
-    "peakMonthPurchases": "purchases in the peak month"
+    "peakMonthPurchases": "purchases in the peak month",
+    "countThisYear": "{{count}} purchases this year",
+    "undatedNote": "{{count}} position(s) without a purchase date are not included here."
   },
   "outliers": {
     "title": "Your outliers of the year",
@@ -39,7 +41,9 @@
   },
   "watchlist": {
     "title": "What you kept an eye on",
-    "newlyWatched": "Newly watched"
+    "newlyWatched": "Newly watched",
+    "peakMonth": "Most entries were added in {{month}}.",
+    "shareOfHoldings": "Share of holdings"
   },
   "summary": {
     "purchases": "Purchases",
@@ -60,6 +64,27 @@
     "close": "Close year in review",
     "calculating": "Calculating your year in review…",
     "done": "Done",
-    "next": "Next"
+    "next": "Next",
+    "back": "Back"
+  },
+  "intro": {
+    "subtitle": "A look back at twelve months of portfolio.",
+    "body": "Purchases, spending, platforms and your portfolio's curve — slide by slide.",
+    "title": "Your CS investment year {{year}}"
+  },
+  "monthly": {
+    "mostActive": "You were most active in {{month}}"
+  },
+  "curve": {
+    "coverageFrom": "History is only available from {{date}}."
+  },
+  "outro": {
+    "thatWas": "That was {{year}}",
+    "backToDashboard": "Back to the dashboard"
+  },
+  "eyebrow": {
+    "eyebrowReview": "Year in review {{year}}",
+    "eyebrowBusiestMonth": "Busiest month {{year}}",
+    "eyebrowConclusion": "Conclusion {{year}}"
   }
 }

@@ -184,7 +184,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
                 ))}
               </div>
             ) : sampleRows.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Keine neuen SkinBaron-Eintraege zum Import gefunden.</div>
+              <div className="text-sm text-muted-foreground">{t("syncModal.noNewEntries")}</div>
             ) : (
               <div className="h-full space-y-2 overflow-y-auto pr-1">
                 {sampleRows.slice(0, 20).map((trade) => {
@@ -243,12 +243,12 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
               onChange={(event) => setPreviewConfirmed(event.target.checked)}
               className="h-4 w-4 rounded border border-input"
             />
-            Preview bestaetigen
+            {t("syncModal.confirmPreview")}
           </label>
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button type="button" variant="outline" onClick={loadPreview} disabled={loadingPreview || executing}>
-              Preview neu laden
+              {t("syncModal.reloadPreview")}
             </Button>
             <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !previewConfirmed} data-keyboard-default>
               {executing ? t("syncModal.importRunning") : t("syncModal.startImport")}

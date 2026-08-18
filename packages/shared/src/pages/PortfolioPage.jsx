@@ -1370,7 +1370,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
         const syncMessage = String(desktopSyncError?.message || "");
         if (syncMessage.toLowerCase().includes("cloudflare access")) {
           setSteamSyncError(
-            "Cloudflare Access Anmeldung erforderlich. Bitte melde dich im Login-Fenster an und starte den Sync erneut.",
+            t("ui.cloudflareLoginNeeded"),
           );
         }
       }
@@ -4086,7 +4086,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           {unreadActionNotifications.length > 0 ? (
             <div className="mt-2">
               <Button size="sm" variant="ghost" onClick={() => void handleClearActionNotifications()}>
-                Alle löschen
+                {t("ui.clearAll")}
               </Button>
             </div>
           ) : null}
@@ -4498,7 +4498,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Danach kannst du CSFloat-Import starten und in der Verwaltung Matching sowie Preise bearbeiten.
+                {t("ui.journeyNextHint")}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -4506,13 +4506,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                   variant="default"
                   onClick={() => navigate("/settings", { replace: true })}
                 >
-                  CSFloat Key hinterlegen
+                  {t("ui.storeCsfloatKey")}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => void handleRefreshCsFloatStatus()}>
-                  Ich habe verbunden
+                  {t("ui.iHaveConnected")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => void handleSkipJourney()}>
-                  Journey ueberspringen
+                  {t("ui.skipJourney")}
                 </Button>
               </div>
             </CardContent>
@@ -4523,10 +4523,12 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           <Card className="steam-journey-card relative overflow-hidden border-border bg-card/80 text-foreground shadow-2xl backdrop-blur-xl">
             <CardHeader className="space-y-2 pb-3">
               <CardTitle className="text-2xl tracking-tight text-foreground">
-                Setup Journey{journeyUserName ? ` fuer ${journeyUserName}` : ""}
+                {journeyUserName
+                  ? t("ui.journeyTitleFor", { name: journeyUserName })
+                  : t("journey.title")}
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Wir teilen alles in klare Schritte auf. Du kannst spaeter in den Einstellungen jeden Punkt wieder aendern.
+                {t("ui.journeyIntro")}
               </p>
             </CardHeader>
             <CardContent className="space-y-6 text-sm">
@@ -4926,7 +4928,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           {t("journey.openMatchingInManagement")}
                         </Button>
                         <Button size="sm" onClick={() => void handleMarkMatchingReviewed()}>
-                          Matching geprueft
+                          {t("ui.matchingReviewed")}
                         </Button>
                       </div>
                     </div>
@@ -5457,7 +5459,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     onClick={() => setGlobalSearchOpen(false)}
                     data-keyboard-cancel
                   >
-                    Schliessen
+                    {t("ui.close")}
                   </Button>
                 </div>
               </div>
@@ -5473,7 +5475,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                           onClick={clearGlobalRecentSearches}
                           className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
                         >
-                          Verlauf loeschen
+                          {t("ui.clearHistory")}
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -5605,7 +5607,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   disabled={!canOpenInventory}
                                   onClick={() => handleOpenPortfolioGroupInInventory(group.id)}
                                 >
-                                  Im Inventar
+                                  {t("ui.inInventory")}
                                 </Button>
                                 <Button
                                   type="button"
@@ -5613,7 +5615,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                   variant="outline"
                                   onClick={() => handleOpenPortfolioGroupInManagement(group.id)}
                                 >
-                                  Verwaltung
+                                  {t("ui.inManagement")}
                                 </Button>
                               </div>
                             </div>
@@ -5641,13 +5643,13 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       </button>
                       {hasPendingCatalogSearch ? (
                         <p className="text-xs text-muted-foreground">
-                          Enter oeffnet die Produktsuche mit Filtern auf der Suchseite.
+                          {t("ui.enterOpensSearch")}
                         </p>
                       ) : null}
                     </section>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Mindestens 2 Zeichen eingeben, um den Item-Browser zu starten.
+                      {t("ui.minTwoChars")}
                     </p>
                   )}
 
@@ -5735,7 +5737,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                         handleGlobalSearchSelectKnownItem(preferredKnownMatch);
                                       }}
                                     >
-                                      Im Bestand
+                                      {t("ui.inHoldings")}
                                     </Button>
                                   ) : null}
                                   <Button
@@ -5749,10 +5751,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                     }}
                                   >
                                     {!canAddToWatchlist
-                                      ? "In Watchlist"
+                                      ? t("globalSearch.inWatchlist")
                                       : globalSearchAddingItem === marketHashName
-                                        ? "Speichert..."
-                                        : "Zur Watchlist"}
+                                        ? t("globalSearch.saving")
+                                        : t("globalSearch.addToWatchlist")}
                                   </Button>
                                 </div>
                               </div>

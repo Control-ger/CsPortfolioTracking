@@ -122,7 +122,7 @@ function isTargetNotification(entry) {
 
 function isErrorNotification(entry) {
   const category = String(entry?.category || "").trim().toLowerCase();
-  if (category.includes("error") || category.includes("fehler")) {
+  if (category.includes("error") || category.includes("error")) {
     return true;
   }
   const payload = entry?.payload && typeof entry.payload === "object" ? entry.payload : {};

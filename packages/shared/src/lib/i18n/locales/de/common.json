@@ -101,7 +101,8 @@
     "daysShort": "{{count}}T",
     "underOneHour": "<1h",
     "unknown": "unbekannt",
-    "notAvailable": "-"
+    "notAvailable": "-",
+    "unknownLower": "unbekannt"
   },
   "syncHealth": {
     "noLiveQuotes": "keine Live-Quotes",
@@ -111,13 +112,20 @@
     "lagging": "Nachlauf"
   },
   "actions": {
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "remove": "Entfernen",
+    "reset": "Zurücksetzen",
+    "back": "Zurück"
   },
   "filters": {
     "filter": "Filter",
     "collapseFilter": "Filter einklappen",
     "expandFilter": "Filter ausklappen",
-    "soon": "Noch nicht verfügbar"
+    "soon": "Noch nicht verfügbar",
+    "soonSuffix": "{{label}} — noch nicht verfügbar",
+    "soonBadge": "Bald"
   },
   "pagination": {
     "previousPage": "Vorherige Seite",
@@ -131,5 +139,94 @@
     "fx": "Währungsumrechnung",
     "csfloat": "Externe Preisdatenbank",
     "eur": "Währung: Euro"
+  },
+  "appUpdate": {
+    "updateGeneric": "Das Update",
+    "openReleasesPrompt": "{{message}}\n\nMöchtest du die GitHub-Releases-Seite öffnen und die neue Version manuell herunterladen?",
+    "available": "{{version}} ist verfügbar.",
+    "downloadNoAnswer": "{{version}}: Der Update-Download hat nicht geantwortet.",
+    "metadataNotReady": "{{version}}: Updater-Metadaten sind noch nicht bereit.",
+    "installedAppOnly": "Updates sind nur in der installierten Desktop-App verfügbar.",
+    "downloadStartFailed": "Update-Download konnte nicht gestartet werden.",
+    "downloadedRestart": "{{version}} wurde heruntergeladen. Jetzt neu starten und installieren?",
+    "handoffOpened": "{{version}} wurde im System-Installer geöffnet.\n\n",
+    "handoffCloseApp": "Schließe die App und bestätige dort die Installation.",
+    "installFailed": "Das Update konnte nicht installiert werden.",
+    "cannotSelfUpdate": "{{version}} ist verfügbar, aber diese Installation kann sich nicht selbst aktualisieren.",
+    "installing": "{{version}} wird installiert. Bitte die Passwortabfrage bestätigen.",
+    "genericError": "Beim Update ist ein Fehler aufgetreten."
+  },
+  "runtimeErrors": {
+    "endpointBuildFailed": "Sync endpoint URL konnte nicht aufgebaut werden.",
+    "cloudflareLoginRequired": "Cloudflare Access Anmeldung erforderlich — die Sitzung konnte nicht erneuert werden.",
+    "pushSessionRejected": "Sync push abgebrochen: Der Server hat die gespeicherte Session abgelehnt. Sie wurde verworfen — bitte neu anmelden.",
+    "pullSessionRejected": "Sync pull abgebrochen: Der Server hat die gespeicherte Session abgelehnt. Sie wurde verworfen — bitte neu anmelden.",
+    "noServerUrl": "Keine Server-URL konfiguriert.",
+    "upstreamUnavailable": "Upstream-Portfolio konnte nicht geladen werden. Lokale Daten ohne Livepreise aktiv.",
+    "portfolioLoadFailed": "Fehler beim Laden der Portfolio-Daten.",
+    "csUpdatesLoadFailed": "CS Updates konnten nicht geladen werden.",
+    "steamLoginStartFailed": "Steam-Login konnte am Server nicht gestartet werden.",
+    "steamLoginCancelled": "Steam-Login wurde abgebrochen.",
+    "sessionValidationFailed": "Session-Validierung am Server fehlgeschlagen.",
+    "apiError": "API-Fehler ({{status}}) für {{url}}",
+    "skinbaronLoginFailed": "SkinBaron Login konnte nicht abgeschlossen werden.",
+    "skinbaronBrowserDesktopOnly": "SkinBaron Browser-Login ist nur in der Desktop-App verfügbar."
+  },
+  "steamLogin": {
+    "inventoryAccessDenied": "Steam-Inventar ist nicht öffentlich erreichbar. Stelle in Steam Profil und Inventar auf öffentlich und versuche es erneut.",
+    "inventoryRateLimit": "Steam hat den Zugriff temporär begrenzt. Bitte in einigen Minuten erneut versuchen.",
+    "inventoryInvalidResponse": "Steam hat keine gültige Inventarantwort geliefert. Bitte später erneut versuchen.",
+    "inventoryImportFailed": "Steam-Inventar konnte nicht importiert werden.",
+    "stepCheckConnection": "Steam-Verbindung prüfen",
+    "stepFetchInventory": "Steam-Inventar abrufen",
+    "stepProcessResponse": "Inventarantwort verarbeiten",
+    "stepFilterMarketable": "Marketable Items filtern",
+    "stepPreparePayload": "Import-Payload vorbereiten",
+    "stepSyncLocally": "Investments lokal synchronisieren",
+    "stepLoadPositions": "Portfolio-Positionen laden",
+    "stepLoadHistory": "Portfolio-Historie laden",
+    "stepPrepareMetrics": "Kennzahlen aufbereiten",
+    "stepFinalize": "Dashboard finalisieren",
+    "stepCheckSignIn": "Anmeldung prüfen",
+    "detailFetchInventory": "Steam-Inventar abrufen (SteamID {{steamId}})",
+    "detailProcessResponse": "Inventarantwort verarbeiten: {{count}} Items erhalten",
+    "detailFiltered": "{{marketable}} marketable von {{total}} Items gefiltert",
+    "detailPayloadPrepared": "Import-Payload für {{count}} Items vorbereitet",
+    "detailImporting": "Importiere {{count}} Items in die lokale DB…",
+    "detailImportDone": "Import abgeschlossen: {{imported}} neu · {{updated}} aktualisiert",
+    "syncSummary": "Steam Sync: {{imported}} neu, {{updated}} aktualisiert, {{missing}} als fehlend markiert, {{suggested}} Matching-Vorschläge.",
+    "syncNoMarketable": "Steam Sync: Keine marketable Items im Inventar gefunden.",
+    "syncEmptyInventory": "Steam Sync: Inventar ist leer.",
+    "detailFetchPortfolio": "Portfolio-Positionen & Preise abfragen…",
+    "detailHistoryPoints": "Portfolio-Historie laden: {{count}} Punkte",
+    "detailMetrics": "Kennzahlen aufbereiten: {{count}} Positionen",
+    "portfolioLoaded": "Portfolio geladen: {{positions}} Positionen, {{points}} Historienpunkte.",
+    "accountConnected": "Dein Steam-Account ist verbunden. Wir bereiten jetzt deine Daten für das Dashboard vor.",
+    "steamConnected": "Steam verbunden",
+    "toDashboard": "Zum Dashboard",
+    "loadingData": "Daten werden geladen…",
+    "welcome": "Willkommen, {{name}}!",
+    "preparing": "Vorbereitung",
+    "stepOf": "Schritt {{done}} von {{total}}",
+    "preparationFailed": "Vorbereitung fehlgeschlagen: {{error}}",
+    "steamAvatarOf": "{{name}} Steam Avatar",
+    "signInTitle": "Willkommen bei CS Investor Hub",
+    "signInSubtitle": "Verbinde deinen Steam-Account, um dein CS2-Portfolio und deine Investments zu verfolgen.",
+    "featureOpenId": "Sichere Steam-OpenID-Authentifizierung",
+    "featureImport": "CS2-Inventar automatisch importieren",
+    "featurePrices": "Preise und Portfolio-Wert verfolgen",
+    "featureLocalFirst": "Local-first: Deine Daten bleiben auf deinem Gerät",
+    "connecting": "Verbinde mit Steam…",
+    "signIn": "Mit Steam anmelden"
+  },
+  "errors": {
+    "uiTitle": "UI-Fehler",
+    "uiBody": "Die Anwendung ist abgestürzt. Bitte Seite neu laden.",
+    "reload": "Neu laden"
+  },
+  "relative": {
+    "minutesAgo": "vor {{count}}m",
+    "hoursAgo": "vor {{count}}h",
+    "daysAgo": "vor {{count}}T"
   }
 }

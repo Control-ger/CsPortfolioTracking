@@ -624,7 +624,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           const code = String(result?.error?.code || "CSFLOAT_ERROR");
           const status = Number(result?.error?.statusCode || 0);
           setCsfloatWatchlistError(
-            `CSFloat-Watchlist konnte nicht geladen werden (${code}${status ? ` ${status}` : ""}).`,
+            t("ui.watchlistLoadFailed", { detail: `${code}${status ? ` ${status}` : ""}` }),
           );
         } else {
           setCsfloatWatchlistError(t("errors.importSkipped"));
@@ -679,7 +679,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           const code = String(result?.error?.code || "CSFLOAT_ERROR");
           const status = Number(result?.error?.statusCode || 0);
           setCsfloatBuyOrderError(
-            `CSFloat Buy Orders konnten nicht geladen werden (${code}${status ? ` ${status}` : ""}).`,
+            t("ui.buyOrdersLoadFailed", { detail: `${code}${status ? ` ${status}` : ""}` }),
           );
         } else {
           setCsfloatBuyOrderError(t("errors.importSkipped"));
@@ -1358,7 +1358,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
       <SettingsCard id="settings-section-vault">
         <SettingsCardHeader
           title={t("vault.title")}
-          description="Verschlüsselter Speicher für Schlüssel und Sessions. Unlock ist nach jedem App-Start erforderlich."
+          description={t("ui.vaultDescription")}
           action={
             <>
               <StatusPill tone={isUnlocked ? "success" : "warn"} dot>
@@ -1374,7 +1374,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           title={t("vault.autoLock")}
           description={
             autoLockEnabled
-              ? `Aktiv: sperrt nach ${idleMinutes} Minuten Inaktivität`
+              ? t("ui.autoLockOn", { minutes: idleMinutes })
               : t("vault.autoLockOff")
           }
           divider={false}
@@ -1411,7 +1411,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
         />
         <SettingsBanner tone="info" icon={<CreditCard className="size-4 text-info" />}>
           <span className="font-bold text-foreground">
-            Testen und Speichern können ein Browserfenster öffnen.
+            {t("ui.browserWindowHint")}
           </span>{" "}
           Verlangt SkinBaron einen Login oder Cloudflare beim Server eine Bestätigung, startet die
           App ein eingebettetes Chromium-Fenster. Schließe es erst, wenn die Anmeldung durch ist —
@@ -1513,23 +1513,25 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
     const updateMessage = !updateStatus
       ? ""
       : updateStatus.state === "available"
-        ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}.`
+        ? t("ui.updateAvailable", { version: updateStatus.version ? ` (v${updateStatus.version})` : "" })
         : updateStatus.state === "manual"
-          ? `Update verfügbar${updateStatus.version ? ` (v${updateStatus.version})` : ""}. Diese Installation kann sich nicht selbst aktualisieren — bitte manuell von GitHub laden.`
+          ? t("ui.updateManual", { version: updateStatus.version ? ` (v${updateStatus.version})` : "" })
           : updateStatus.state === "downloading"
-            ? `Wird heruntergeladen… ${Math.round(Number(updateStatus.percent || 0))}%`
+            ? t("ui.updateDownloading", { percent: Math.round(Number(updateStatus.percent || 0)) })
             : updateStatus.state === "downloaded"
-              ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} bereit zur Installation.`
+              ? t("ui.updateReady", { version: updateStatus.version ? ` v${updateStatus.version}` : "" })
               : updateStatus.state === "installing"
                 ? t("about.installing")
                 : updateStatus.state === "handoff"
-                  ? `Update${updateStatus.version ? ` v${updateStatus.version}` : ""} wurde im System-Installer geöffnet — App schließen und dort bestätigen.`
+                  ? t("ui.updateHandoff", { version: updateStatus.version ? ` v${updateStatus.version}` : "" })
                   : updateStatus.state === "not-available"
                     ? t("about.upToDate")
                     : updateStatus.state === "dev"
                       ? t("about.installedAppOnly")
                       : updateStatus.state === "error"
-                        ? `${updateStatus.message || t("errors.updateCheckFailed")} Alternativ manuell von GitHub laden.`
+                        ? t("ui.updateErrorSuffix", {
+                            message: updateStatus.message || t("errors.updateCheckFailed"),
+                          })
                         : "";
     const updateTone =
       updateStatus?.state === "error" || updateStatus?.state === "manual"
@@ -1600,7 +1602,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               onClick={() => void openAppReleasesPage(updateStatus?.url)}
               className="h-[34px] rounded-[9px] border border-border-strong px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-surface-2"
             >
-              Auf GitHub herunterladen
+              {t("ui.downloadFromGithub")}
             </button>
           ) : null}
 
@@ -1646,7 +1648,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           </Link>
           <div className="min-w-0">
             <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-foreground">
-              Einstellungen
+              {t("ui.title")}
             </h1>
             <p className="mt-1 truncate text-[12px] text-muted-foreground">
               {desktopRuntime ? t("desktopApp") : t("webApp")}
@@ -1741,7 +1743,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
 
           {desktopRuntime ? (
             <p className="px-1 text-[11px] leading-[1.5] text-muted-foreground">
-              API-, Server- und Vault-Einstellungen liegen gebündelt unter Verbindungen.
+              {t("ui.connectionsHint")}
             </p>
           ) : null}
         </aside>
@@ -1755,7 +1757,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             className="inline-flex items-center gap-1.5 self-start text-[13px] font-semibold text-muted-foreground lg:hidden"
           >
             <ArrowLeft className="size-4" />
-            Alle Einstellungen
+            {t("ui.allSettings")}
           </button>
           {(categoryPanels[activeCategory] || renderLookCategory)()}
         </div>

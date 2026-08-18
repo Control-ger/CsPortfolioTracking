@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { translate } from "@shared/lib/i18n/index.js";
 
 import { fetchCsUpdatesFeed } from "@shared/lib/apiClient";
 import { getMockCsUpdatesFeed } from "@shared/lib/csUpdatesFeed.mock";
@@ -300,7 +301,7 @@ export function useCsUpdatesFeed({ loader = defaultLoader } = {}) {
           updatedAt: Date.now(),
         };
       } catch (loadError) {
-        setError(loadError?.message || "CS Updates konnten nicht geladen werden.");
+        setError(loadError?.message || translate("common:runtimeErrors.csUpdatesLoadFailed"));
 
         if (mode === "initial") {
           const fallbackPayload = await getMockCsUpdatesFeed();

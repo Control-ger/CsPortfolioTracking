@@ -161,7 +161,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                   {err?.statusCode ? `${err.statusCode} ` : ""}
                   {err?.message || err?.label || err?.code || t("syncModal.csfloatUnknownError")}
                   {String(err?.code || "").includes("UNAUTHORIZED") || err?.statusCode === 401
-                    ? " — API-Key pruefen (Einstellungen → CSFloat)."
+                    ? ` ${t("syncModal.checkApiKey")}`
                     : ""}
                 </li>
               ))}
@@ -225,7 +225,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 ))}
               </div>
             ) : sampleRows.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Keine neuen Cluster zum Import gefunden.</div>
+              <div className="text-sm text-muted-foreground">{t("syncModal.noNewClusters")}</div>
             ) : (
               <div className="h-full space-y-2 overflow-y-auto pr-1">
                 {sampleRows.slice(0, 20).map((trade) => (
@@ -276,12 +276,12 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
               onChange={(event) => setPreviewConfirmed(event.target.checked)}
               className="h-4 w-4 rounded border border-input"
             />
-            Preview bestätigen
+            {t("syncModal.confirmPreview")}
           </label>
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button type="button" variant="outline" onClick={loadPreview} disabled={loadingPreview || executing}>
-              Preview neu laden
+              {t("syncModal.reloadPreview")}
             </Button>
             <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !previewConfirmed} data-keyboard-default>
               {executing ? t("syncModal.importRunning") : t("syncModal.startImport")}

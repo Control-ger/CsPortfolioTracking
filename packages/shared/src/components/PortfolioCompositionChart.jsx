@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { BREAKPOINTS } from "../lib/constants.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
+import { useTranslation } from "react-i18next";
 
 const COLOR_PALETTE = ["#5ca9ff", "#4d93ee", "#3e7cdc", "#2f67ca", "#2b56b1", "#23529a", "#1b4d82", "#144168"];
 const OTHER_SLICE_COLOR = "#64748b";
@@ -85,11 +86,16 @@ export function PortfolioCompositionChart({
   // overview (e.g. cluster weighting inside a group's detail panel). Defaults
   // keep the overview call site unchanged: its `value`s are USD.
   valuesAreUsd = true,
-  centerLabel = "Portfolio Wert",
-  shareSuffix = "des Portfolios",
+  // Defaults resolve inside the body, not in the parameter list: a default
+  // there cannot call the hook, and a module constant cannot see the language.
+  centerLabel = null,
+  shareSuffix = null,
   assetCountLabel = "Assets",
 }) {
+  const { t } = useTranslation("inventory");
   const { formatPrice } = useCurrency();
+  const resolvedCenterLabel = centerLabel ?? t("composition.centerLabel");
+  const resolvedShareSuffix = shareSuffix ?? t("composition.ofPortfolio");
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < BREAKPOINTS.MOBILE);
 
@@ -106,7 +112,7 @@ export function PortfolioCompositionChart({
   if (!data || data.length === 0) {
     return (
       <div className="flex h-96 items-center justify-center rounded-2xl border border-border/70 bg-card/65">
-        <p className="text-muted-foreground">Keine Daten verfuegbar</p>
+        <p className="text-muted-foreground">{t("composition.noData")}</p>
       </div>
     );
   }
@@ -144,7 +150,7 @@ export function PortfolioCompositionChart({
         <p className="font-semibold text-primary">
           {formatSliceValue(value)}
         </p>
-        <p className="text-muted-foreground">{percentage}% {shareSuffix}</p>
+        <p className="text-muted-foreground">{percentage}% {resolvedShareSuffix}</p>
       </div>
     );
   };
@@ -182,13 +188,13 @@ export function PortfolioCompositionChart({
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <div className="text-center">
-              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase">{centerLabel}</p>
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase">{resolvedCenterLabel}</p>
               <p className="text-xl sm:text-2xl font-bold">
                 {totalValueLabel || formatSliceValue(totalValue)}
               </p>
               <p className="text-[10px] sm:text-xs text-muted-foreground">{sourceAssetCount} {assetCountLabel}</p>
               {!hasRenderableChartData ? (
-                <p className="mt-1 text-[10px] text-muted-foreground">Noch keine csfloat-Livewerte</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{t("composition.noCsfloatValues")}</p>
               ) : null}
             </div>
           </div>

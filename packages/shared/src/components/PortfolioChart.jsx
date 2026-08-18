@@ -10,6 +10,8 @@ import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { parseHistoryTimestamp, resolveHistoryValueUsd } from "@shared/lib/portfolioHelpers";
 
 import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
+import { useTranslation } from "react-i18next";
+import { translate } from "../lib/i18n/index.js";
 const RANGE_OPTIONS = [
   { key: "7T", label: "7T", days: 7 },
   { key: "30T", label: "30T", days: 30 },
@@ -82,7 +84,7 @@ function formatTickDate(timestamp, spanDays) {
 function formatTooltipDate(timestamp) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {
-    return "unbekannt";
+    return translate("common:units.unknownLower");
   }
 
   const dateLabel = date.toLocaleDateString(getActiveIntlLocale(), {
@@ -230,15 +232,17 @@ function filterHistoryByRange(history, rangeKey) {
 
 export const PortfolioChart = ({
   history,
-  title = "Portfolio Entwicklung",
-  emptyLabel = "Noch keine Historie-Daten verfuegbar",
-  valueLabel = "Wert",
+  // Null defaults resolved in the body: a parameter default cannot call the
+  // hook, and a module constant cannot see the active language.
+  title = null,
+  emptyLabel = null,
+  valueLabel = null,
   isLoading = false,
   onHoverChange = null,
   onTrendChange = null,
   showAbsolute = false,
   referenceLineValue = null,
-  referenceLineLabel = "Buy-In",
+  referenceLineLabel = null,
   referenceLineTimestamp = null,
   disableDarkGlass = false,
   metricsScope = null,
@@ -256,7 +260,12 @@ export const PortfolioChart = ({
   // and everything below it has to stay reachable without a long scroll.
   chartHeightClassName = "h-[300px] sm:h-[340px]",
 }) => {
+  const { t } = useTranslation("inventory");
   const { formatPrice, currency } = useCurrency();
+  const resolvedTitle = title ?? t("chart.title");
+  const resolvedEmptyLabel = emptyLabel ?? t("chart.noHistory");
+  const resolvedValueLabel = valueLabel ?? t("chart.valueLabel");
+  const resolvedReferenceLineLabel = referenceLineLabel ?? t("chart.buyIn");
   // Several PortfolioCharts can be mounted at once; a shared SVG gradient id would
   // make every instance pick up the first one's trend color.
   const fillGradientId = `portfolio-chart-fill-${useId()}`;
@@ -537,7 +546,7 @@ export const PortfolioChart = ({
           }`}
         >
           {headerSlot ?? (
-            <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{title}</CardTitle>
+            <CardTitle className="hidden text-base font-bold sm:block sm:text-lg">{resolvedTitle}</CardTitle>
           )}
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {typeof onMetricsScopeChange === "function" ? (
@@ -545,8 +554,8 @@ export const PortfolioChart = ({
               // the top of the screen, above the value it changes.
               <div className="hidden w-fit items-center rounded-xl border border-border/70 bg-card/55 p-1 sm:inline-flex">
                 {[
-                  { key: "investments", label: "Investments" },
-                  { key: "all", label: "Alles" },
+                  { key: "investments", label: t("chart.investments") },
+                  { key: "all", label: t("chart.all") },
                 ].map((option) => {
                   const isActive = metricsScope === option.key;
                   return (
@@ -604,7 +613,7 @@ export const PortfolioChart = ({
           </div>
         ) : chartData.length === 0 ? (
           <div className={`flex items-center justify-center text-muted-foreground ${chartHeightClassName}`}>
-            <p className="text-sm">{emptyLabel}</p>
+            <p className="text-sm">{resolvedEmptyLabel}</p>
           </div>
         ) : (
           <ChartContainer config={chartConfig} className={`aspect-auto w-full ${chartHeightClassName}`}>
@@ -687,7 +696,7 @@ export const PortfolioChart = ({
                       return (
                         <div className="flex w-full flex-col gap-1">
                           <div className="flex w-full items-center justify-between gap-4">
-                            <span className="text-muted-foreground">{valueLabel}</span>
+                            <span className="text-muted-foreground">{resolvedValueLabel}</span>
                             <span className="font-mono font-medium tabular-nums text-foreground">
                               {formatUsdTick(wert)}
                             </span>
@@ -700,7 +709,9 @@ export const PortfolioChart = ({
                           </div>
                           {showReferenceLine && normalizedReferenceLineValue > 0 ? (
                             <div className="flex w-full items-center justify-between gap-4">
-                              <span className="text-muted-foreground">vs. {referenceLineLabel}</span>
+                              <span className="text-muted-foreground">
+                                {t("chart.vsReference", { label: resolvedReferenceLineLabel })}
+                              </span>
                               <span className="font-mono font-medium tabular-nums text-foreground">
                                 {formatSignedPercent(
                                   ((wert - normalizedReferenceLineValue) /
@@ -775,7 +786,7 @@ export const PortfolioChart = ({
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             </div>
             <div className="leading-none text-muted-foreground">
-              Zeitraum: {rangeKey} - {valueLabel}
+              {t("chart.rangeSummary", { range: rangeKey, value: resolvedValueLabel })}
             </div>
           </>
         )}

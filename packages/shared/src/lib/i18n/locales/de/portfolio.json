@@ -224,5 +224,23 @@
     "step7Body": "Hier steuerst du Matching, Preise und Exclude-Logik für deine Items.",
     "legacyBannerLead": "Steam-Import ist aktiv. Als nächsten Schritt verbinde CSFloat:",
     "progressSteps": "Fortschritt: {{done}}/{{total}} Schritte"
+  },
+  "ui": {
+    "clearAll": "Alle löschen",
+    "journeyNextHint": "Danach kannst du CSFloat-Import starten und in der Verwaltung Matching sowie Preise bearbeiten.",
+    "storeCsfloatKey": "CSFloat Key hinterlegen",
+    "iHaveConnected": "Ich habe verbunden",
+    "skipJourney": "Journey überspringen",
+    "journeyTitleFor": "Setup Journey für {{name}}",
+    "journeyIntro": "Wir teilen alles in klare Schritte auf. Du kannst später in den Einstellungen jeden Punkt wieder ändern.",
+    "matchingReviewed": "Matching geprüft",
+    "close": "Schließen",
+    "clearHistory": "Verlauf löschen",
+    "inInventory": "Im Inventar",
+    "inManagement": "Verwaltung",
+    "enterOpensSearch": "Enter öffnet die Produktsuche mit Filtern auf der Suchseite.",
+    "minTwoChars": "Mindestens 2 Zeichen eingeben, um den Item-Browser zu starten.",
+    "inHoldings": "Im Bestand",
+    "cloudflareLoginNeeded": "Cloudflare Access Anmeldung erforderlich. Bitte melde dich im Login-Fenster an und starte den Sync erneut."
   }
 }

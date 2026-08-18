@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { translate } from "@shared/lib/i18n/index.js";
 import { fetchPortfolioData } from "@shared/lib/dataSource.js";
 import { getCurrentUser } from "@shared/lib/auth.js";
 import {
@@ -407,7 +408,7 @@ export function usePortfolio(options = {}) {
     } catch (err) {
       // Don't update state for abort errors
       if (err.name === 'AbortError') return;
-      setError(err.message || "Fehler beim Laden der Portfolio-Daten.");
+      setError(err.message || translate("common:runtimeErrors.portfolioLoadFailed"));
       if (!localSnapshotApplied) {
         setWarnings([]);
       }

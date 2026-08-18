@@ -33,5 +33,18 @@
   "notifications": "Benachrichtigungen",
   "notice": "Hinweis",
   "noNotifications": "Keine Benachrichtigungen.",
-  "reload": "Erneut laden"
+  "reload": "Erneut laden",
+  "rating": {
+    "ratingRunning": "KI Rating läuft",
+    "checkBreakingNow": "Eilmeldung jetzt prüfen",
+    "noActionNeeded": "Kein akuter Handlungsbedarf",
+    "watch": "Beobachten",
+    "checkToday": "Heute prüfen",
+    "checkQuickly": "Schnell prüfen",
+    "ratingFailed": "KI Rating fehlgeschlagen",
+    "checkManually": "Manuell prüfen",
+    "ratingPending": "KI Rating ausstehend",
+    "noRatingYet": "Noch keine Bewertung verfügbar"
+  },
+  "subtitle": "Live Patchnotes und KI-Einschätzung."
 }

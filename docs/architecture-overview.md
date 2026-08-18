@@ -226,6 +226,72 @@ The rule both follow: **cross the boundary with a ratio or not at all.** Where a
 
 The structural fix that would remove the boundary altogether is to convert `portfolioHistory` to display currency **once** at load and drop `useUsd` from the chart path; that touches `PortfolioChart`, Year Wrapped and the `portfolio-view-snapshot:*` cache keys, so it stays a separate change.
 
+### 5.6 Internationalisation (i18n)
+
+Two languages: **English is the source, German is a translation of it.** The
+fallback chain is `de → en`, so a missing German key yields a complete English
+string rather than a raw key path.
+
+- **Catalogues are bundled, never fetched** (`import.meta.glob` in
+  `packages/shared/src/lib/i18n/index.js`). The desktop runtime loads from
+  `file://` and must work with no network, which rules out an HTTP backend.
+  Consequence: adding a new locale JSON file needs a dev-server restart, since
+  the glob is resolved at transform time.
+- **Namespaces mirror the surfaces in this document** — `common`, `dashboard`,
+  `portfolio`, `management`, `inventory`, `watchlist`, `search`, `settings`,
+  `updates`, `wrapped` — so a catalogue file maps onto one screen.
+- **Two readers, and the difference matters.** Components use
+  `useTranslation(ns)`, which subscribes and re-renders on a switch.
+  Module-level pure functions (`formatAge`, `resolveItemCategory`,
+  `buildMetaLine`, the `deriveMarketImpact` tables) have no context to read
+  from and use `translate("ns:key")`, which does **not** subscribe. That is why
+  `translate` is safe in helpers called *from* a translated component and wrong
+  as a component's only translation call.
+- `LanguageProvider` owns persistence (`localStorage` `preferred_language`),
+  navigator auto-detect and the document's `lang` attribute. It is the
+  outermost app provider, above `AppErrorBoundary`, whose own copy is
+  translated too.
+
+**Formatting follows the UI language, not the OS.** `getActiveIntlLocale()` is
+the single source for every `Intl.*` call. It keeps the user's own region when
+that region agrees with the chosen language (`en-GB` dates for a British user
+reading English) and falls back to the language default otherwise. Before this
+existed, `CurrencyContext` resolved its locale from `navigator.language` while
+all 30+ date and sort sites were hardcoded `de-DE`, so an English-locale user
+already saw English numbers next to German dates. `CurrencyProvider` takes
+`locale` from the context rather than calling the module reader, because a
+memoised formatter has to be invalidated when the language changes.
+
+Three rules that are easy to get wrong, each of which was a real defect:
+
+- **Never `toFixed().replace(".", ",")`.** That swap was applied
+  unconditionally in eight places and printed German commas into English copy.
+  `formatNumber` / `formatPercent` / `formatSignedPercent` in
+  `portfolioHelpers.js` are the locale-aware replacements.
+- **Never key state or grouping on a translated label.** The inventory and
+  watchlist category filters keyed on `resolveItemCategory(item).toLowerCase()`
+  — a language-dependent grouping key, so the active filter would reset on a
+  switch. `resolveItemCategoryKey` returns the stable id; `resolveItemCategory`
+  and `resolveItemCategorySingular` translate it. The singular form used to be
+  a map keyed by the *German plural* ("Skins" → "Skin"), which would have
+  silently fallen back to the plural in every other language.
+- **Never lowercase a noun into a sentence.** The desktop movers list built
+  `Keine ${label.toLowerCase()} im …`, which is wrong in German — nouns are
+  capitalised. Sentences that embed a label need their own key per case.
+
+What the platform already knows is not translated: month abbreviations come
+from `Intl.DateTimeFormat(locale, { month: "short" })` (`getMonthLabels()`),
+and currency/region names from `Intl.DisplayNames`. Brand names (CSFloat,
+SkinBaron, Steam) and acronym expansions (`ABBREVIATIONS.short`/`.full`) stay
+literal.
+
+Persisted notification text is a separate problem with its own contract — see
+`docs/local-db-schema.md` §3.1.
+
+`DesignSystemPage.jsx` and `csUpdatesFeed.mock.js` are deliberately
+untranslated: the first is a builder's tool reached only by URL, the second is
+fixtures.
+
 ### 5.2 Mobile inventory (below `md`)
 
 `InventoryTable` already carried a card list below `md`; it now renders the design's position card (`ui/position-card.jsx`) instead of `ItemListRow` — thumb, name with optional GRUPPE badge, meta chips (type, quantity, average buy) and a right column of live value plus ROI pill. `ItemListRow` stays as-is: it is the watchlist/search shape and is shared by three surfaces, so folding both into one component would mean a prop per screen.

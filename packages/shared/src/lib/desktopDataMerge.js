@@ -21,6 +21,7 @@ import {
 } from "./portfolioCalculations.js";
 
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
+import { translate } from "./i18n/index.js";
 import { normalizeWatchlistTargetFields } from "./watchlistTargets.js";
 
 /** Desktop LocalStore accessor */
@@ -183,6 +184,9 @@ function enrichDesktopRowsWithUpstreamLiveData(localRows = [], upstreamRows = []
       change30dEuro: upstream.change30dEuro ?? row.change30dEuro,
       change30dPercent: upstream.change30dPercent ?? row.change30dPercent,
       changes: upstream.changes ?? row.changes,
+      // Server-owned: the 30-day series comes from `price_history_hourly`, which
+      // the desktop sidecar has no copy of.
+      priceSparkline: upstream.priceSparkline ?? row.priceSparkline ?? null,
       lastPriceUpdateAt: upstream.lastPriceUpdateAt ?? row.lastPriceUpdateAt,
       priceAgeSeconds: upstream.priceAgeSeconds ?? row.priceAgeSeconds,
       freshnessStatus: upstream.freshnessStatus ?? row.freshnessStatus,
@@ -528,7 +532,7 @@ export async function fetchDesktopPortfolioData(options = {}, fetchApiPortfolioI
     const upstreamHint = upstreamMeta?.upstreamHint || {};
     const hintCode = String(upstreamHint?.code || "UPSTREAM_UNAVAILABLE");
     const hintMessage = String(
-      upstreamHint?.message || "Upstream-Portfolio konnte nicht geladen werden. Lokale Daten ohne Livepreise aktiv.",
+      upstreamHint?.message || translate("common:runtimeErrors.upstreamUnavailable"),
     );
     const nextWarnings = Array.isArray(meta.warnings) ? [...meta.warnings] : [];
     nextWarnings.push({

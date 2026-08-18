@@ -89,5 +89,17 @@
   "summary": "{{shown}}{{ofTotal}} Items · {{withOrders}} mit Buyorder · Preise aus dem Server-Cache",
   "ofTotal": " von {{total}}",
   "emptyList": "Keine Items in der Watchlist. Nutze die Suche oben und füge neue Items hinzu.",
-  "itemsCount": "{{count}} Items"
+  "itemsCount": "{{count}} Items",
+  "emptyOverview": "Noch keine Items in der Watchlist",
+  "noPriceHistory": "Keine Preishistorie verfügbar.",
+  "distanceToTarget": "Abstand zum Zielpreis",
+  "watchedSince": "Beobachtet seit",
+  "noBuyorders": "Du hast aktuell keine Buyorders bei CSFloat für dieses Item gesetzt.",
+  "pickItem": "Wähle ein Item aus,",
+  "pickItemHint": "um den Preisverlauf anzuzeigen.",
+  "sortedByHint": "Sortiert nach {{current}} — tippen für {{next}}",
+  "targetPrice": "Zielpreis",
+  "targetPriceIn": "Zielpreis in {{currency}}",
+  "removeFromWatchlistAction": "Aus Watchlist entfernen",
+  "noMatchingBuyorders": "Keine passenden Buyorders für dieses Item gefunden."
 }

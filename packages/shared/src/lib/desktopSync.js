@@ -1,4 +1,5 @@
 import { getSession, logout, validateSession } from "./auth.js";
+import { translate } from "./i18n/index.js";
 import { reportSessionRejected } from "./sessionHealthBus.js";
 import { get as cacheGet, set as cacheSet } from "./localCache.js";
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
@@ -82,7 +83,7 @@ function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
 async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, options) {
   const candidates = buildSyncEndpointCandidates(serverBaseUrl, endpointPath);
   if (candidates.length === 0) {
-    throw new Error("Sync endpoint URL konnte nicht aufgebaut werden.");
+    throw new Error(translate("common:runtimeErrors.endpointBuildFailed"));
   }
 
   let lastResponse = null;
@@ -114,7 +115,7 @@ async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, option
   // PortfolioPage matches on this wording to show the re-login hint.
   if (sawAccessChallenge) {
     throw new Error(
-      "Cloudflare Access Anmeldung erforderlich — die Sitzung konnte nicht erneuert werden.",
+      translate("common:runtimeErrors.cloudflareLoginRequired"),
     );
   }
 
@@ -536,7 +537,7 @@ async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localSt
     const body = response ? await response.text().catch(() => "") : "";
     if (await handleDeadSessionResponse(response, body)) {
       throw new Error(
-        "Sync push abgebrochen: Der Server hat die gespeicherte Session abgelehnt. Sie wurde verworfen — bitte neu anmelden.",
+        translate("common:runtimeErrors.pushSessionRejected"),
       );
     }
     throw new Error(`Sync push failed with status ${status}${body ? ` response: ${body}` : ""}`);
@@ -721,7 +722,7 @@ async function pullServerChanges(serverBaseUrl, syncIdentity, token, localStore,
     const body = response ? await response.text().catch(() => "") : "";
     if (await handleDeadSessionResponse(response, body)) {
       throw new Error(
-        "Sync pull abgebrochen: Der Server hat die gespeicherte Session abgelehnt. Sie wurde verworfen — bitte neu anmelden.",
+        translate("common:runtimeErrors.pullSessionRejected"),
       );
     }
     throw new Error(`Sync pull failed with status ${status}${body ? ` response: ${body}` : ""}`);

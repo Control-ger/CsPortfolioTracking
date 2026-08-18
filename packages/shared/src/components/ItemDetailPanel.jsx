@@ -187,7 +187,7 @@ export const ItemDetailPanel = ({
   if (!item) {
     return (
       <InspectorEmpty>
-        Wähle eine Position aus der Liste,
+        {t("detail.pickPosition")}
         <br />
         um Details zu sehen.
       </InspectorEmpty>
@@ -277,7 +277,7 @@ export const ItemDetailPanel = ({
           badge={
             item.excluded ? (
               <StatusPill tone="warn" className="shrink-0">
-                Ausgeschlossen
+                {t("detail.excluded")}
               </StatusPill>
             ) : null
           }
@@ -331,7 +331,16 @@ export const ItemDetailPanel = ({
         ) : null}
 
         {hasWeightableClusters ? (
-          <InspectorBlock label={t("detail.clusterWeighting")}>
+          <InspectorBlock
+            label={t("detail.weightingInGroup")}
+            // Muted, not the `aside` slot's default info blue — the design
+            // reserves that accent for the buy-order figure on the chart band.
+            aside={
+              <span className="font-semibold text-muted-foreground">
+                {t("detail.clusters", { count: item.clusters.length })}
+              </span>
+            }
+          >
             {/* The design's "Gewichtung in der Gruppe" is a ranked bar list at
                 every width, and it is also the only readable option here: the
                 inspector column is 356px, so a donut of a 21-cluster group is a

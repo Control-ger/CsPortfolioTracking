@@ -1,4 +1,5 @@
 import { resolveAccessBaseUrl } from "./serverConfig.js";
+import { translate } from "./i18n/index.js";
 
 // ═══════════════════════════════════════════════════════════════════
 // Cloudflare Access (renderer side, single owner)
@@ -106,7 +107,7 @@ export async function ensureCloudflareAccessLogin(serverBaseUrl, options = {}) {
 
   const accessBaseUrl = resolveAccessBaseUrl(serverBaseUrl || (await resolveConfiguredServerBase()));
   if (!accessBaseUrl) {
-    return { ok: false, error: "Keine Server-URL konfiguriert." };
+    return { ok: false, error: translate("common:runtimeErrors.noServerUrl") };
   }
 
   const force = options.force === true;

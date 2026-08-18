@@ -62,7 +62,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
               className="flex-1"
               data-keyboard-cancel
             >
-              Abbrechen
+              {t("actions.cancel", { ns: "common" })}
             </Button>
           </div>
         </div>

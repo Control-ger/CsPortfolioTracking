@@ -185,7 +185,7 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
               CS Updates
             </h1>
             <p className="text-sm text-muted-foreground sm:text-base">
-              Live Patchnotes und KI-Einschaetzung.
+              {t("subtitle")}
             </p>
           </div>
           <div className={`flex items-center gap-2 ${useDesktopSidebarShell ? "lg:hidden" : ""}`}>

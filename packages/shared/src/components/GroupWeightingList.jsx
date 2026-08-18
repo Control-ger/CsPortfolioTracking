@@ -8,13 +8,16 @@ import { ItemName } from "./ui/item-name.jsx";
 const TOP_COUNT = 5;
 
 /**
- * Ranked share-of-group list for a portfolio group's clusters.
+ * Ranked share-of-group list for a portfolio group's clusters — the design's
+ * "Gewichtung in der Gruppe" band.
  *
- * The mobile counterpart of the `Cluster-Gewichtung` donut: a donut splits a
- * 380px-wide group into hairline slivers and reads as empty, which is the same
- * problem the dashboard allocation bar already solved. Bars also carry the two
- * figures the donut cannot show at once — the euro value and the per-cluster
- * ROI — which is what makes the block worth tapping into on a phone.
+ * Replaces the donut this block used to carry at desktop width: the inspector
+ * column is 356px, so a 21-cluster group became a ring of hairline slivers.
+ * Bars also carry the three figures the donut could not show at once — share,
+ * euro value and per-cluster ROI.
+ *
+ * Renders flush, with no card chrome or heading of its own: it sits inside an
+ * `InspectorBlock`, which supplies the label and the cluster count.
  *
  * Long tail is collapsed into one "Rest" row rather than scrolled: a group with
  * 40 members otherwise buries the toggle below a full screen of 6px bars.
@@ -46,14 +49,7 @@ export function GroupWeightingList({ clusters, className }) {
   const formatPercent = (value) => formatPercentLocale(value, 1);
 
   return (
-    <div className={cn("rounded-2xl border border-border-soft bg-surface-1 p-3.5", className)}>
-      <div className="flex items-baseline justify-between gap-2.5">
-        <span className="text-xs font-extrabold">{t("detail.weightingInGroup")}</span>
-        <span className="shrink-0 text-[10.5px] text-muted-foreground">
-          {t("detail.clusters", { count: ranked.length })}
-        </span>
-      </div>
-
+    <div className={className}>
       <div
         className={cn(
           "mt-3.5 flex flex-col gap-3",
@@ -131,13 +127,13 @@ export function GroupWeightingList({ clusters, className }) {
           onClick={() => setShowAll((current) => !current)}
           className="mt-3.5 h-8 w-full rounded-[9px] border border-border bg-transparent text-[11.5px] font-bold transition-colors hover:bg-surface-2"
         >
-          {showAll ? `Nur Top ${TOP_COUNT} zeigen` : `Alle ${ranked.length} Cluster zeigen`}
+          {showAll ? t("detail.showTopOnly", { count: TOP_COUNT }) : t("detail.showAllClusters", { count: ranked.length })}
         </button>
       ) : null}
 
       <p className="mt-3 text-[10.5px] text-muted-foreground">
         {ranked.length > TOP_COUNT
-          ? `Top ${TOP_COUNT} = ${topShare.toFixed(0)} % des Gruppenwerts · `
+          ? t("detail.topShare", { count: TOP_COUNT, share: formatPercentLocale(topShare, 0) })
           : ""}
         Anteil am Live-Wert, ROI je Cluster
       </p>

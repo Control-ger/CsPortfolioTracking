@@ -398,7 +398,7 @@ export function YearWrappedPage() {
                 onClick={handleClose}
                 className="mx-auto rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                Zurueck zum Dashboard
+                {t("outro.backToDashboard")}
               </button>
             </div>
           ) : (
@@ -420,7 +420,7 @@ export function YearWrappedPage() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-card/70 px-4 py-2 text-sm font-medium text-foreground transition-opacity disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <ChevronLeft className="h-4 w-4" />
-              Zurueck
+              {t("controls.back")}
             </button>
             <span className="text-xs tabular-nums text-muted-foreground">
               {activeIndex + 1} / {slideCount}

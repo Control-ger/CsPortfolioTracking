@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { translate } from "@shared/lib/i18n/index.js";
 import { Button } from "./ui/button";
 import { Callout } from "./ui/callout.jsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -17,15 +19,15 @@ function formatSteamInventoryError(error) {
   const raw = String(error?.message || error?.error?.message || error || "");
   const upper = raw.toUpperCase();
   if (upper.includes("INVENTORY_ACCESS_DENIED")) {
-    return "Steam-Inventar ist nicht oeffentlich erreichbar. Stelle in Steam Profil und Inventar auf oeffentlich und versuche es erneut.";
+    return translate("common:steamLogin.inventoryAccessDenied");
   }
   if (upper.includes("RATE") || upper.includes("429")) {
-    return "Steam hat den Zugriff temporaer begrenzt. Bitte in einigen Minuten erneut versuchen.";
+    return translate("common:steamLogin.inventoryRateLimit");
   }
   if (upper.includes("INVALID RESPONSE") || upper.includes("JSON")) {
-    return "Steam hat keine gueltige Inventarantwort geliefert. Bitte spaeter erneut versuchen.";
+    return translate("common:steamLogin.inventoryInvalidResponse");
   }
-  return raw || "Steam-Inventar konnte nicht importiert werden.";
+  return raw || translate("common:steamLogin.inventoryImportFailed");
 }
 
 function stableHash(value) {
@@ -346,6 +348,7 @@ export async function deriveSteamPaletteFromUser(user) {
 }
 
 export function SteamLoginPrompt({ onLoginSuccess }) {
+  const { t } = useTranslation("common");
   // The "Willkommen zurück" preparation/welcome screen (Steam inventory import,
   // multi-step progress) is a Desktop-only startup flow. On Web the inventory
   // import is not implemented (write-owner is Desktop), so this component must
@@ -575,23 +578,23 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     const hasSteamId = isDesktopRuntime && Boolean(currentUser?.steamId);
     const steps = hasSteamId
       ? [
-          { label: "Steam-Verbindung pruefen", percent: 8 },
-          { label: "Steam-Inventar abrufen", percent: 22 },
-          { label: "Inventarantwort verarbeiten", percent: 34 },
-          { label: "Marketable Items filtern", percent: 44 },
-          { label: "Import-Payload vorbereiten", percent: 56 },
-          { label: "Investments lokal synchronisieren", percent: 70 },
-          { label: "Portfolio-Positionen laden", percent: 80 },
-          { label: "Portfolio-Historie laden", percent: 88 },
-          { label: "Kennzahlen aufbereiten", percent: 95 },
-          { label: "Dashboard finalisieren", percent: 100 },
+          { label: t("steamLogin.stepCheckConnection"), percent: 8 },
+          { label: t("steamLogin.stepFetchInventory"), percent: 22 },
+          { label: t("steamLogin.stepProcessResponse"), percent: 34 },
+          { label: t("steamLogin.stepFilterMarketable"), percent: 44 },
+          { label: t("steamLogin.stepPreparePayload"), percent: 56 },
+          { label: t("steamLogin.stepSyncLocally"), percent: 70 },
+          { label: t("steamLogin.stepLoadPositions"), percent: 80 },
+          { label: t("steamLogin.stepLoadHistory"), percent: 88 },
+          { label: t("steamLogin.stepPrepareMetrics"), percent: 95 },
+          { label: t("steamLogin.stepFinalize"), percent: 100 },
         ]
       : [
-          { label: "Anmeldung pruefen", percent: 12 },
-          { label: "Portfolio-Positionen laden", percent: 52 },
-          { label: "Portfolio-Historie laden", percent: 76 },
-          { label: "Kennzahlen aufbereiten", percent: 92 },
-          { label: "Dashboard finalisieren", percent: 100 },
+          { label: t("steamLogin.stepCheckSignIn"), percent: 12 },
+          { label: t("steamLogin.stepLoadPositions"), percent: 52 },
+          { label: t("steamLogin.stepLoadHistory"), percent: 76 },
+          { label: t("steamLogin.stepPrepareMetrics"), percent: 92 },
+          { label: t("steamLogin.stepFinalize"), percent: 100 },
         ];
     let completed = 0;
 
@@ -640,36 +643,44 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
 
     if (hasSteamId) {
       startStep(1);
-      setSetupDetail(`Steam-Inventar abrufen (SteamID ${currentUser.steamId})`);
+      setSetupDetail(t("steamLogin.detailFetchInventory", { steamId: currentUser.steamId }));
       const inventoryResult = await fetchCS2Inventory(currentUser.steamId);
       finishStep(2);
 
       startStep(2);
       if (inventoryResult.success && inventoryResult.items?.length > 0) {
-        setSetupDetail(`Inventarantwort verarbeiten: ${inventoryResult.items.length} Items erhalten`);
+        setSetupDetail(t("steamLogin.detailProcessResponse", { count: inventoryResult.items.length }));
         finishStep(3);
         startStep(3);
         const marketableItems = inventoryResult.items.filter((item) => item.marketable);
-        setSetupDetail(`${marketableItems.length} marketable von ${inventoryResult.items.length} Items gefiltert`);
+        setSetupDetail(t("steamLogin.detailFiltered", { marketable: marketableItems.length, total: inventoryResult.items.length }));
         finishStep(4);
 
         startStep(4);
         const importCandidates = marketableItems.map((item) => ({ ...item }));
-        setSetupDetail(`Import-Payload für ${importCandidates.length} Items vorbereitet`);
+        setSetupDetail(t("steamLogin.detailPayloadPrepared", { count: importCandidates.length }));
         finishStep(5);
 
         startStep(5);
         if (marketableItems.length > 0) {
-          setSetupDetail(`Importiere ${importCandidates.length} Items in die lokale DB…`);
+          setSetupDetail(t("steamLogin.detailImporting", { count: importCandidates.length }));
           const importResult = await importInventoryAsInvestments(importCandidates, currentUser.id);
           setSetupDetail(
-            `Import abgeschlossen: ${importResult.imported || 0} neu · ${importResult.updated || 0} aktualisiert`,
+            t("steamLogin.detailImportDone", {
+              imported: importResult.imported || 0,
+              updated: importResult.updated || 0,
+            }),
           );
           setSyncInfo(
-            `Steam Sync: ${importResult.imported || 0} neu, ${importResult.updated || 0} aktualisiert, ${importResult.missingMarked || 0} als fehlend markiert, ${importResult.matchesSuggested || 0} Matching-Vorschlaege.`,
+            t("steamLogin.syncSummary", {
+              imported: importResult.imported || 0,
+              updated: importResult.updated || 0,
+              missing: importResult.missingMarked || 0,
+              suggested: importResult.matchesSuggested || 0,
+            }),
           );
         } else {
-          setSyncInfo("Steam Sync: Keine marketable Items im Inventar gefunden.");
+          setSyncInfo(t("steamLogin.syncNoMarketable"));
         }
       } else if (!inventoryResult.success) {
         throw new Error(inventoryResult.error || "Steam inventory request failed");
@@ -680,27 +691,27 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         startStep(4);
         finishStep(5);
         startStep(5);
-        setSyncInfo("Steam Sync: Inventar ist leer.");
+        setSyncInfo(t("steamLogin.syncEmptyInventory"));
       }
       finishStep(6);
     }
 
     const dashboardStartIndex = hasSteamId ? 6 : 1;
     startStep(dashboardStartIndex);
-    setSetupDetail("Portfolio-Positionen & Preise abfragen…");
+    setSetupDetail(t("steamLogin.detailFetchPortfolio"));
     const portfolioData = await fetchPortfolioData({ scope: "investments", rowScope: "investments" });
     finishStep(dashboardStartIndex + 1);
 
     startStep(dashboardStartIndex + 1);
     const historyPoints = Array.isArray(portfolioData?.history) ? portfolioData.history.length : 0;
-    setSetupDetail(`Portfolio-Historie laden: ${historyPoints} Punkte`);
+    setSetupDetail(t("steamLogin.detailHistoryPoints", { count: historyPoints }));
     finishStep(dashboardStartIndex + 2);
 
     startStep(dashboardStartIndex + 2);
     const positionCount = Array.isArray(portfolioData?.rows?.data) ? portfolioData.rows.data.length : 0;
-    setSetupDetail(`Kennzahlen aufbereiten: ${positionCount} Positionen`);
+    setSetupDetail(t("steamLogin.detailMetrics", { count: positionCount }));
     if (!hasSteamId) {
-      setSyncInfo(`Portfolio geladen: ${positionCount} Positionen, ${historyPoints} Historienpunkte.`);
+      setSyncInfo(t("steamLogin.portfolioLoaded", { positions: positionCount, points: historyPoints }));
     }
     finishStep(dashboardStartIndex + 3);
 
@@ -799,9 +810,11 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         data-keyboard-scope="page"
       >
         <CardHeader className="relative z-10 pb-3">
-          <CardTitle className="text-2xl tracking-tight text-foreground">Willkommen, {user.name}!</CardTitle>
+          <CardTitle className="text-2xl tracking-tight text-foreground">
+            {t("steamLogin.welcome", { name: user.name })}
+          </CardTitle>
           <CardDescription className="text-sm leading-relaxed text-muted-foreground">
-            Dein Steam-Account ist verbunden. Wir bereiten jetzt deine Daten fuer das Dashboard vor.
+            {t("steamLogin.accountConnected")}
           </CardDescription>
         </CardHeader>
         <CardContent className="relative z-10 space-y-4">
@@ -816,7 +829,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
                   muted
                   playsInline
                   className="h-14 w-14 rounded-full object-cover ring-2 ring-primary/30"
-                  aria-label={`${user.name} Steam Avatar`}
+                  aria-label={t("steamLogin.steamAvatarOf", { name: user.name })}
                 />
               ) : (
                 <img
@@ -828,13 +841,13 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
             ) : null}
             <div>
               <p className="text-lg font-semibold text-foreground">{user.name}</p>
-              <p className="text-sm text-muted-foreground">Steam verbunden</p>
+              <p className="text-sm text-muted-foreground">{t("steamLogin.steamConnected")}</p>
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{`${setupProgress.currentStep || "Vorbereitung"}${setupProgress.inProgress ? progressDots : ""}`}</span>
+              <span>{`${setupProgress.currentStep || t("steamLogin.preparing")}${setupProgress.inProgress ? progressDots : ""}`}</span>
               <span>{progressPercent}%</span>
             </div>
             <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/20">
@@ -846,7 +859,10 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Schritt {Math.min(setupProgress.completed, setupProgress.total)} von {setupProgress.total}
+              {t("steamLogin.stepOf", {
+                done: Math.min(setupProgress.completed, setupProgress.total),
+                total: setupProgress.total,
+              })}
             </p>
             {setupDetail ? (
               <p className="truncate font-mono text-[11px] text-info/80" title={setupDetail}>
@@ -856,7 +872,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
           </div>
 
           {error ? (
-            <Callout tone="danger">Vorbereitung fehlgeschlagen: {error}</Callout>
+            <Callout tone="danger">{t("steamLogin.preparationFailed", { error })}</Callout>
           ) : syncInfo ? (
             <Callout tone="success">{syncInfo}</Callout>
           ) : null}
@@ -868,7 +884,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
             onClick={() => onLoginSuccessRef.current?.(user)}
             data-keyboard-default
           >
-            {isDashboardReady ? "Zum Dashboard" : "Daten werden geladen..."}
+            {isDashboardReady ? t("steamLogin.toDashboard") : t("steamLogin.loadingData")}
           </Button>
         </CardContent>
       </Card>
@@ -878,9 +894,9 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
   return (
     <Card className="mx-auto w-full max-w-md" data-keyboard-scope="page">
       <CardHeader className="text-center">
-        <CardTitle>Welcome to CS Investor Hub</CardTitle>
+        <CardTitle>{t("steamLogin.signInTitle")}</CardTitle>
         <CardDescription>
-          Connect your Steam account to track your CS2 portfolio and investments.
+          {t("steamLogin.signInSubtitle")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -891,10 +907,10 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
         ) : null}
 
         <div className="space-y-2 text-sm text-muted-foreground">
-          <p>Secure Steam OpenID authentication</p>
-          <p>Import your CS2 inventory automatically</p>
-          <p>Track prices and portfolio value</p>
-          <p>Local-first: Your data stays on your device</p>
+          <p>{t("steamLogin.featureOpenId")}</p>
+          <p>{t("steamLogin.featureImport")}</p>
+          <p>{t("steamLogin.featurePrices")}</p>
+          <p>{t("steamLogin.featureLocalFirst")}</p>
         </div>
 
         <Button
@@ -910,14 +926,14 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              Connecting to Steam...
+              {t("steamLogin.connecting")}
             </span>
           ) : (
             <span className="flex items-center gap-2">
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.72 1.97 4.52 5.15 4.52 8.66 0 2.36-.76 4.54-2.07 6.33l-1.55-1.04z" />
               </svg>
-              Sign in with Steam
+              {t("steamLogin.signIn")}
             </span>
           )}
         </Button>

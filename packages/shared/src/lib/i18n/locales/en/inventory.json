@@ -18,6 +18,7 @@
     "live": "Live",
     "roi": "ROI",
     "change7d": "Price change over the last 7 days",
+    "trend30d": "Price trend over the last 30 days",
     "no7dHistory": "No 7-day history available"
   },
   "filters": {
@@ -80,7 +81,15 @@
     "showLess": "Show less",
     "clustersCount": "{{count}} clusters",
     "positionsCount": "{{count}} positions",
-    "piecesShort": "{{count}} pcs."
+    "piecesShort": "{{count}} pcs.",
+    "pickPosition": "Pick a position from the list,",
+    "excluded": "Excluded",
+    "noPositionHistoryShort": "No position history available.",
+    "includeInPortfolio": "Include in portfolio",
+    "excludeFromPortfolio": "Exclude from portfolio",
+    "showTopOnly": "Show top {{count}} only",
+    "showAllClusters": "Show all {{count}} clusters",
+    "topShare": "Top {{count}} = {{share}} of the group value · "
   },
   "excludeDialog": {
     "item": "Item",
@@ -122,7 +131,12 @@
     "note": "Linking does not overwrite confirmed matches and can be undone from the history.",
     "pickBothSides": "Pick one entry on each side.",
     "linking": "Linking …",
-    "link": "Link"
+    "link": "Link",
+    "intro": "Pick a Steam item on the left and a CSFloat position on the right, then link them.",
+    "steamUnassigned": "Steam items without an assignment",
+    "noOpenItemMatches": "No open item matches the search.",
+    "csfloatUnassigned": "CSFloat positions without an item",
+    "noOpenPositionMatches": "No open position matches the search."
   },
   "syncModal": {
     "csfloatTitle": "CSFloat trades sync",
@@ -143,7 +157,9 @@
     "noNewClusters": "No new clusters found to import.",
     "noNewEntries": "No new SkinBaron entries found to import.",
     "importRunning": "Import running…",
-    "startImport": "Start import"
+    "startImport": "Start import",
+    "confirmPreview": "Confirm preview",
+    "reloadPreview": "Reload preview"
   },
   "summary": "{{scope}} · {{positions}} positions{{groups}} · {{value}}",
   "groupsSuffix_one": " · {{count}} group",
@@ -177,5 +193,29 @@
     "keys": "Key",
     "tools": "Tool",
     "other": "Other"
+  },
+  "table": {
+    "sortBy": "Sort by {{label}}",
+    "ofPositions": "{{shown}} of {{total}} positions",
+    "positionsCount": "{{count}} positions",
+    "sortedByHint": "Sorted by {{current}} — tap for {{next}}",
+    "noPrice": "no price",
+    "groupsFilterHint": "Groups bundle several types and are therefore only visible without a category filter."
+  },
+  "composition": {
+    "noData": "No data available",
+    "noCsfloatValues": "No CSFloat live values yet",
+    "ofPortfolio": "of the portfolio",
+    "centerLabel": "Portfolio value"
+  },
+  "chart": {
+    "noHistory": "No history data available yet",
+    "buyIn": "Buy-in",
+    "all": "All",
+    "title": "Portfolio trend",
+    "valueLabel": "Value",
+    "investments": "Investments",
+    "rangeSummary": "Range: {{range}} — {{value}}",
+    "vsReference": "vs. {{label}}"
   }
 }

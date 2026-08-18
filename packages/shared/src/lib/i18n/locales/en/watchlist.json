@@ -89,5 +89,17 @@
   "summary": "{{shown}}{{ofTotal}} items · {{withOrders}} with buy order · prices from the server cache",
   "ofTotal": " of {{total}}",
   "emptyList": "No items in the watchlist. Use the search above and add new items.",
-  "itemsCount": "{{count}} items"
+  "itemsCount": "{{count}} items",
+  "emptyOverview": "No items in the watchlist yet",
+  "noPriceHistory": "No price history available.",
+  "distanceToTarget": "Distance to target price",
+  "watchedSince": "Watched since",
+  "noBuyorders": "You currently have no buy orders at CSFloat for this item.",
+  "pickItem": "Pick an item",
+  "pickItemHint": "to display the price history.",
+  "sortedByHint": "Sorted by {{current}} — tap for {{next}}",
+  "targetPrice": "Target price",
+  "targetPriceIn": "Target price in {{currency}}",
+  "removeFromWatchlistAction": "Remove from watchlist",
+  "noMatchingBuyorders": "No matching buy orders found for this item."
 }

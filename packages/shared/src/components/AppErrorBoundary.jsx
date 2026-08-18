@@ -1,5 +1,6 @@
 import { Component } from "react"
 import { errorToContext, sendFrontendTelemetryEvent } from "../lib/frontendTelemetry"
+import { translate } from "../lib/i18n/index.js";
 
 export class AppErrorBoundary extends Component {
   constructor(props) {
@@ -40,9 +41,9 @@ export class AppErrorBoundary extends Component {
       return (
         <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
           <div className="max-w-lg w-full rounded-xl border bg-card p-6 space-y-3 text-center">
-            <h1 className="text-xl font-semibold text-destructive">UI-Fehler</h1>
+            <h1 className="text-xl font-semibold text-destructive">{translate("common:errors.uiTitle")}</h1>
             <p className="text-sm text-muted-foreground">
-              Die Anwendung ist abgestuerzt. Bitte Seite neu laden.
+              {translate("common:errors.uiBody")}
             </p>
             {/* Debug info - shows actual error */}
             <div className="text-left text-xs text-danger bg-danger/10 rounded-md p-3 overflow-auto max-h-40">
@@ -60,7 +61,7 @@ export class AppErrorBoundary extends Component {
               onClick={this.handleReload}
               className="mt-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
             >
-              Neu laden
+              {translate("common:errors.reload")}
             </button>
           </div>
         </div>

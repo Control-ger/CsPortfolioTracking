@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { PositionCard } from "@shared/components/ui/position-card";
 import { LayeredGroupIcon } from "@shared/components/LayeredGroupIcon";
 import { ItemThumb } from "@shared/components/ui/item-thumb";
-import { RoiMeter } from "@shared/components/ui/data-display";
+import { RoiMeter, Sparkline } from "@shared/components/ui/data-display";
 import {
   GridTable,
   GridTableEmpty,
@@ -92,6 +92,7 @@ function rowIdentities(entity) {
 
 /** Sort header: same typography as the design's static labels, plus a toggle. */
 function SortHeaderButton({ label, align = "left", isActive, sortDirection, onClick }) {
+  const { t } = useTranslation("inventory");
   return (
     <button
       type="button"
@@ -99,7 +100,7 @@ function SortHeaderButton({ label, align = "left", isActive, sortDirection, onCl
         align === "right" ? "ml-auto" : ""
       } ${isActive ? "text-foreground" : ""}`}
       onClick={onClick}
-      title={`Nach ${label} sortieren`}
+      title={t("table.sortBy", { label })}
     >
       <span>{label}</span>
       {isActive ? (
@@ -326,8 +327,8 @@ export function InventoryTable({
                 onClick={() => toggleSort("livePrice")}
               />
             </span>
-            <span className="text-right" title={t("columns.change7d")}>
-              7T
+            <span className="text-right" title={t("columns.trend30d")}>
+              30T
             </span>
             <span className="text-right">
               <SortHeaderButton
@@ -403,22 +404,23 @@ export function InventoryTable({
                       formatPrice(item.livePrice)
                     ) : (
                       <span className="text-[11px] font-medium text-muted-foreground">
-                        kein Preis
+                        {t("table.noPrice")}
                       </span>
                     )}
                   </span>
 
+                  {/* The design makes this column a sparkline rather than a
+                      number: the ROI column already carries a percentage, and two
+                      percentages side by side made the row hard to scan. */}
                   <span
-                    className={`text-right text-[11.5px] font-semibold tabular-nums ${deltaClassName(
-                      Number.isFinite(change7d) ? change7d : null,
-                    )}`}
+                    className="flex items-center justify-end"
                     title={
                       Number.isFinite(change7d)
-                        ? t("columns.change7d")
-                        : t("columns.no7dHistory")
+                        ? `${t("columns.change7d")}: ${formatSignedPercentOneDecimal(change7d)}`
+                        : t("columns.trend30d")
                     }
                   >
-                    {Number.isFinite(change7d) ? formatSignedPercentOneDecimal(change7d) : "–"}
+                    <Sparkline values={item.priceSparkline} width={76} height={24} />
                   </span>
 
                   <span className="flex items-center justify-end gap-2">
@@ -496,15 +498,11 @@ export function InventoryTable({
                     {formatPrice(group.totalValue)}
                   </span>
 
-                  {/* Groups aggregate across items and carry no 7-day series of
-                      their own. Printing their absolute P/L here instead would
-                      put euros and percent in one column. */}
-                  <span
-                    className="text-right text-[11.5px] text-muted-foreground"
-                    title="Gruppen haben keine 7-Tage-Historie"
-                  >
-                    –
-                  </span>
+                  {/* Groups aggregate across many items, so there is no single
+                      price series to plot. Left empty rather than dashed: a dash
+                      in a column of graphs reads as "missing data" for that one
+                      row, when in fact the column simply does not apply. */}
+                  <span aria-hidden="true" />
 
                   <span className="flex items-center justify-end gap-2">
                     <RoiMeter value={group.roiPercent} />
@@ -559,7 +557,11 @@ export function InventoryTable({
                           {formatPrice(cluster.totalValue)}
                         </span>
 
-                        <span className="text-right text-[11.5px] text-muted-foreground">–</span>
+                        {/* A cluster is one item, so it can carry a series —
+                            `Sparkline` renders nothing when it cannot. */}
+                        <span className="flex items-center justify-end">
+                          <Sparkline values={cluster.priceSparkline} width={76} height={24} />
+                        </span>
 
                         <span className="flex items-center justify-end gap-2">
                           <RoiMeter value={cluster.roiPercent} />
@@ -579,8 +581,8 @@ export function InventoryTable({
           <GridTableFoot>
             <span>
               {unfilteredCount != null && unfilteredCount !== sortedRows.length
-                ? `${sortedRows.length} von ${unfilteredCount} Positionen`
-                : `${sortedRows.length} Positionen`}
+                ? t("table.ofPositions", { shown: sortedRows.length, total: unfilteredCount })
+                : t("table.positionsCount", { count: sortedRows.length })}
             </span>
             <span>Gesamtwert {formatPrice(visibleTotalValue)}</span>
           </GridTableFoot>
@@ -605,7 +607,7 @@ export function InventoryTable({
             type="button"
             onClick={() => toggleSort(nextSortKey)}
             className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[11px] font-semibold"
-            title={`Sortiert nach ${activeSortLabel} — tippen für ${nextSortLabel}`}
+            title={t("table.sortedByHint", { current: activeSortLabel, next: nextSortLabel })}
           >
             {activeSortLabel}
             <span aria-hidden="true" className="text-[10px] text-muted-foreground">
@@ -636,7 +638,7 @@ export function InventoryTable({
                 // `displayPrice` descends from `PricingService`'s `priceEur`, so the
                 // row is already display currency — same convention as the Ø buy
                 // price chip above and the desktop table below.
-                valueLabel={item.isLive ? formatPrice(item.currentValue) : "kein Preis"}
+                valueLabel={item.isLive ? formatPrice(item.currentValue) : t("table.noPrice")}
                 deltaLabel={
                   item.isLive && roiValue !== null ? formatSignedPercentOneDecimal(roiValue) : null
                 }

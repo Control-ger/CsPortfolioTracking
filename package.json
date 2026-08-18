@@ -30,6 +30,7 @@
     "rebuild:desktop-native": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint .",
     "docs:guard": "node scripts/docs-guard.mjs",
+    "i18n:guard": "node scripts/i18n-guard.mjs",
     "preview": "vite preview",
     "release:beta": "node scripts/release-beta.mjs",
     "release:beta:codebase": "node scripts/release-beta.mjs refactor/codebase-decomposition"
@@ -136,6 +137,7 @@
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9.39.1",
+    "eslint-plugin-i18next": "^6.1.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",

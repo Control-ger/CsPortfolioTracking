@@ -3,6 +3,7 @@ import {
   sendFrontendTelemetryEvent,
 } from "../frontendTelemetry";
 import { getCurrentUser, getSession } from "../auth.js";
+import { translate } from "../i18n/index.js";
 import { ensureCloudflareAccessLogin, notifyCloudflareAccessHealthy } from "../cloudflareAccess.js";
 import * as localCache from "../localCache.js";
 import { unwrapLocalStoreResult } from "../localStoreResult.js";
@@ -187,7 +188,7 @@ export async function resolveCurrentUserQuery(options = {}) {
 function buildApiError(path, response, payload, apiBase = API_BASE) {
   const message =
     payload?.error?.message ||
-    `API-Fehler (${response.status}) fuer ${apiBase}${path}`;
+    translate("common:runtimeErrors.apiError", { status: response.status, url: `${apiBase}${path}` });
   const error = new Error(message);
   error.status = response.status;
   error.code = payload?.error?.code || "API_REQUEST_FAILED";

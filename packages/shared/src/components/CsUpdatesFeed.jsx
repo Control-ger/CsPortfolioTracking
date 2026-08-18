@@ -23,29 +23,29 @@ function toTimestamp(value) {
 function formatRelativeTime(value) {
   const timestamp = toTimestamp(value);
   if (timestamp === null) {
-    return "unbekannt";
+    return translate("common:units.unknownLower");
   }
 
   const diffMs = Date.now() - timestamp;
   const absMinutes = Math.max(1, Math.round(Math.abs(diffMs) / 60000));
 
   if (absMinutes < 60) {
-    return `vor ${absMinutes}m`;
+    return translate("common:relative.minutesAgo", { count: absMinutes });
   }
 
   const absHours = Math.max(1, Math.round(absMinutes / 60));
   if (absHours < 24) {
-    return `vor ${absHours}h`;
+    return translate("common:relative.hoursAgo", { count: absHours });
   }
 
   const absDays = Math.max(1, Math.round(absHours / 24));
-  return `vor ${absDays}d`;
+  return translate("common:relative.daysAgo", { count: absDays });
 }
 
 function formatDateTime(value) {
   const timestamp = toTimestamp(value);
   if (timestamp === null) {
-    return "unbekannt";
+    return translate("common:units.unknownLower");
   }
 
   return new Intl.DateTimeFormat(getActiveIntlLocale(), {
@@ -481,7 +481,7 @@ export function CsUpdatesFeed({
 
   const lastUpdateLabel = useMemo(() => {
     if (!latestItem?.publishedAt) {
-      return "unbekannt";
+      return translate("common:units.unknownLower");
     }
     return `${formatRelativeTime(latestItem.publishedAt)} - ${formatDateTime(latestItem.publishedAt)}`;
   }, [latestItem]);

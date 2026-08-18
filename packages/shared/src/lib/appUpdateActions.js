@@ -1,3 +1,5 @@
+import { translate } from "./i18n/index.js";
+
 // Shared click behaviour for app-update notifications.
 //
 // Update availability is surfaced in three places (sidebar rail bell, CS
@@ -12,7 +14,7 @@ const FALLBACK_RELEASES_URL =
 
 function formatUpdateVersionLabel(version) {
   const normalized = String(version || "").trim();
-  return normalized ? `v${normalized}` : "Das Update";
+  return normalized ? `v${normalized}` : translate("common:appUpdate.updateGeneric");
 }
 
 export async function openAppReleasesPage(url = "") {
@@ -31,7 +33,7 @@ export async function openAppReleasesPage(url = "") {
 
 async function offerManualDownload(message, url) {
   const shouldOpen = window.confirm(
-    `${message}\n\nMoechtest du die GitHub-Releases-Seite oeffnen und die neue Version manuell herunterladen?`,
+    translate("common:appUpdate.openReleasesPrompt", { message }),
   );
   if (shouldOpen) {
     await openAppReleasesPage(url);
@@ -44,14 +46,14 @@ export async function runAppUpdateDownload({ version = "", url = "" } = {}) {
   const versionLabel = formatUpdateVersionLabel(version);
 
   if (!window.electronAPI?.updater?.download) {
-    await offerManualDownload(`${versionLabel} ist verfuegbar.`, url);
+    await offerManualDownload(translate("common:appUpdate.available", { version: versionLabel }), url);
     return;
   }
 
   const result = await window.electronAPI.updater.download();
   if (!result) {
     await offerManualDownload(
-      `${versionLabel}: Der Update-Download hat nicht geantwortet.`,
+      translate("common:appUpdate.downloadNoAnswer", { version: versionLabel }),
       url,
     );
     return;
@@ -67,17 +69,17 @@ export async function runAppUpdateDownload({ version = "", url = "" } = {}) {
   const resultUrl = result.url || url;
   if (result.reason === "no-update-info") {
     await offerManualDownload(
-      `${versionLabel}: Updater-Metadaten sind noch nicht bereit.`,
+      translate("common:appUpdate.metadataNotReady", { version: versionLabel }),
       resultUrl,
     );
     return;
   }
   if (result.reason === "not-packaged") {
-    window.alert("Updates sind nur in der installierten Desktop-App verfuegbar.");
+    window.alert(translate("common:appUpdate.installedAppOnly"));
     return;
   }
   await offerManualDownload(
-    String(result.error || "Update-Download konnte nicht gestartet werden."),
+    String(result.error || translate("common:appUpdate.downloadStartFailed")),
     resultUrl,
   );
 }
@@ -91,7 +93,7 @@ export async function runAppUpdateAction(payload = {}) {
 
   if (state === "downloaded") {
     const shouldInstallNow = window.confirm(
-      `${versionLabel} wurde heruntergeladen. Jetzt neu starten und installieren?`,
+      translate("common:appUpdate.downloadedRestart", { version: versionLabel }),
     );
     if (!shouldInstallNow || !window.electronAPI?.updater?.install) {
       return;
@@ -107,14 +109,14 @@ export async function runAppUpdateAction(payload = {}) {
     // the app keeps running until the user confirms there.
     if (result?.handoff && result?.ok) {
       window.alert(
-        `${versionLabel} wurde im System-Installer geoeffnet.\n\n`
-        + "Schliesse die App und bestaetige dort die Installation.",
+        translate("common:appUpdate.handoffOpened", { version: versionLabel })
+        + translate("common:appUpdate.handoffCloseApp"),
       );
       return;
     }
     if (result && result.ok === false) {
       await offerManualDownload(
-        String(result.error || "Das Update konnte nicht installiert werden."),
+        String(result.error || translate("common:appUpdate.installFailed")),
         result.url || url,
       );
     }
@@ -125,7 +127,7 @@ export async function runAppUpdateAction(payload = {}) {
   // unpacked build) — GitHub is the only route.
   if (state === "manual") {
     await offerManualDownload(
-      `${versionLabel} ist verfuegbar, aber diese Installation kann sich nicht selbst aktualisieren.`,
+      translate("common:appUpdate.cannotSelfUpdate", { version: versionLabel }),
       url,
     );
     return;
@@ -134,13 +136,13 @@ export async function runAppUpdateAction(payload = {}) {
   // Both are waiting on something outside the app — a Polkit prompt or the
   // system installer. Re-triggering the install would only stack prompts.
   if (state === "installing") {
-    window.alert(`${versionLabel} wird installiert. Bitte die Passwortabfrage bestaetigen.`);
+    window.alert(translate("common:appUpdate.installing", { version: versionLabel }));
     return;
   }
   if (state === "handoff") {
     window.alert(
-      `${versionLabel} wurde im System-Installer geoeffnet.\n\n`
-      + "Schliesse die App und bestaetige dort die Installation.",
+      translate("common:appUpdate.handoffOpened", { version: versionLabel })
+      + translate("common:appUpdate.handoffCloseApp"),
     );
     return;
   }
@@ -152,7 +154,7 @@ export async function runAppUpdateAction(payload = {}) {
 
   if (state === "error") {
     await offerManualDownload(
-      String(payload?.error || payload?.message || "Beim Update ist ein Fehler aufgetreten."),
+      String(payload?.error || payload?.message || translate("common:appUpdate.genericError")),
       url,
     );
   }

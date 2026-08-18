@@ -101,6 +101,31 @@ Two follow-ups from that:
 - Windows: `icon.ico` (repo root). Linux: `build/icon.png` (≥256×256, extracted from `icon.ico`;
   without it electron-builder falls back to the default icon).
 
+## Local guards
+
+Run before every push, alongside `npm run lint`:
+
+- `npm run docs:guard` — documentation governance (see `AGENTS.md`).
+- `npm run i18n:guard` — catalogue integrity. Two things neither ESLint nor the
+  build can see, because a missing translation key is not a syntax error — it
+  renders as the raw key path in the UI:
+  - a key present in one language but not the other. English is the source
+    language, so a key missing from German is a **warning** (it falls back to a
+    complete English string) while a key missing from English is an **error**
+    (there is nothing to fall back to);
+  - a `t("…")` / `translate("ns:…")` call whose key is in no catalogue. The
+    namespace is taken from the `useTranslation(...)` call in the same file, or
+    from the `ns:` prefix / the `{ ns: … }` option when either is present.
+
+  Keys built at runtime (template literals) are skipped — `resolveItemCategory`
+  and the match-reason lookup build theirs from a data key, and both fall back
+  to something usable when the key is missing.
+
+`eslint-plugin-i18next`'s `no-literal-string` runs as a **warning** over the
+component and page directories. It cannot tell a label from an acronym, a brand
+name or a unit, and this codebase legitimately renders "CSFloat", "ROI" and
+"24h" as literals — it is a prompt to check, not a gate.
+
 ## CI workflows
 
 - `.github/workflows/desktop-release.yml` — runs on every `v*` tag and on `workflow_dispatch`.

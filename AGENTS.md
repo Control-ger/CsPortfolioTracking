@@ -5,7 +5,7 @@ This file provides guidance to agents when working with code in this repository.
 ## Quickstart
 1. Read `docs/architecture-overview.md` first — it is the central architecture reference.
 2. Keep architecture/plans out of `README.md` (setup/screenshots only).
-3. Before push: run `npm run docs:guard`.
+3. Before push: run `npm run docs:guard` and `npm run i18n:guard`.
 
 ## Commands
 ```bash
@@ -15,6 +15,7 @@ npm run build:linux   # clean + fetch:php + vite build + electron-builder --linu
 npm run fetch:php     # download bundled static PHP runtime + CA bundle → resources/php/<platform>/
 npm run lint          # ESLint 9 flat config (JS/JSX only)
 npm run docs:guard    # Documentation governance check
+npm run i18n:guard    # Translation catalogue integrity (see docs/devops.md)
 npm run preview       # Vite preview
 ```
 No test suite is configured (Playwright exists as devDep but no `test` script).
@@ -68,6 +69,16 @@ Full reference: `docs/design-system.md`. Live catalogue: route `#/design`.
 - Semantic status meaning comes from the tone vocabulary in `ui/tone.js` (`success`/`warn`/`info`/`danger`/`muted`), via `toneText`/`toneFill`/`toneTint`/`toneTintSurface`. Use `toneForDelta()` for signed numbers instead of an ad-hoc `>= 0` comparison.
 - **Never hand-build a tinted message box.** `Callout` is the rounded block with prose; `SettingsBanner` is the full-bleed strip between a settings card's header and body; `EmptyState` is the standalone "nothing here" block (`GridTableEmpty`/`InspectorEmpty` fill their own container's slot instead). Writing `border-<tone>/30 bg-<tone>/10 p-3` by hand is what produced four different paddings and one missing border for the same box.
 - `index.css` must stay free of `!important`. A rule that needs one is a component that is not tokenised.
+
+### Internationalisation (i18n)
+Full reference: `docs/architecture-overview.md` §5.6.
+- **English is the source language, German is a translation of it.** A missing German key falls back to a complete English string, never to a raw key path.
+- **Never write a user-facing literal.** Components use `useTranslation(<namespace>)`; module-level pure functions use `translate("<ns>:<key>")` from `@shared/lib/i18n`, which reads the catalogue but does **not** subscribe — a component that only calls `translate` will not re-render on a language switch.
+- **Keys are semantic paths** (`dashboard.kpi.totalRoi`), not the English text. Source-as-key breaks every translation on a reword.
+- **Never format with `toFixed().replace(".", ",")` or a hardcoded `de-DE`.** All `Intl.*` calls take `getActiveIntlLocale()`; use `formatNumber`/`formatPercent`/`formatSignedPercent` from `portfolioHelpers.js`. Formatting follows the *UI language*, not the OS.
+- **Never key state or grouping on a translated label.** Use `resolveItemCategoryKey`, not `resolveItemCategory(...).toLowerCase()` — a filter keyed on the label resets itself on a language switch.
+- **Counts go through i18next plurals** (`_one`/`_other`), never a hand-rolled `n === 1 ? … : …`.
+- `DesignSystemPage.jsx` (builder's tool) and `csUpdatesFeed.mock.js` (fixtures) are deliberately untranslated.
 
 ### Backend Data Rules
 - **Currency**: USD persisted, EUR computed at runtime.
@@ -178,6 +189,7 @@ Full reference: `docs/design-system.md`. Live catalogue: route `#/design`.
 - **DevOps/build** triggers (`package.json`, build config, `scripts/**`, `.github/workflows/**`, new top-level dirs like `build/`/`resources/`) → `AGENTS.md` + `docs/devops.md`.
 
 Run `npm run docs:guard` before push. CI enforces via `.github/workflows/docs-governance.yml`.
+Run `npm run i18n:guard` too — a missing translation key is not a syntax error and renders as the raw key path.
 No new `.md` files without entry in the Active Docs table (see `docs/architecture-overview.md` §7).
 
 ## Aktive Docs

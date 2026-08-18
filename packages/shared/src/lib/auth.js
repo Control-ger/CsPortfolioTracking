@@ -6,6 +6,7 @@
  */
 
 import { unwrapLocalStoreResult } from "./localStoreResult.js";
+import { translate } from "./i18n/index.js";
 import { normalizeDesktopLocalUserId } from "./userIdentity.js";
 import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
 import { fetchWithCloudflareAccess } from "./cloudflareAccess.js";
@@ -262,17 +263,17 @@ async function initiateDesktopServerSteamLogin(remoteBase) {
   );
   const loginData = unwrapApiData(await loginResponse.json());
   if (!loginResponse.ok || !loginData?.success || !loginData?.redirectUrl) {
-    throw new Error(loginData?.error || "Steam-Login konnte am Server nicht gestartet werden.");
+    throw new Error(loginData?.error || translate("common:runtimeErrors.steamLoginStartFailed"));
   }
 
   const result = await window.electronAPI.steamAuth.serverLogin(loginData.redirectUrl);
   if (!result?.ok || !result?.token) {
-    throw new Error(result?.error || "Steam-Login wurde abgebrochen.");
+    throw new Error(result?.error || translate("common:runtimeErrors.steamLoginCancelled"));
   }
 
   const validation = await validateSessionAgainst(remoteBase, result.token);
   if (!validation?.user) {
-    throw new Error("Session-Validierung am Server fehlgeschlagen.");
+    throw new Error(translate("common:runtimeErrors.sessionValidationFailed"));
   }
 
   await storeSession(result.token, validation.user);

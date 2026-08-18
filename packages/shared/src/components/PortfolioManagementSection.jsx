@@ -633,7 +633,7 @@ export function PortfolioManagementSection({
                 onClick={() => void handleToggleAutoSync()}
                 title={t("sync.toggleAutoSync")}
               >
-                Auto-Sync {autoSyncEnabled ? "an" : "aus"}
+                {t("ui.autoSync", { state: autoSyncEnabled ? t("ui.on") : t("ui.off") })}
               </StatusPill>
               <Button
                 size="sm"
@@ -699,8 +699,7 @@ export function PortfolioManagementSection({
 
           {!hasCsFloatKey && !hasSkinBaronImportReady ? (
             <p className="text-xs text-muted-foreground">
-              Kein CSFloat-Key bzw. kein gültiger SkinBaron Session-Zugriff hinterlegt.
-              Import-Buttons erscheinen automatisch nach Setup.
+              {t("ui.noKeysHint")}
             </p>
           ) : null}
 
@@ -773,7 +772,7 @@ export function PortfolioManagementSection({
                         disabled={ratesLoading || Boolean(savingPriceItemId)}
                         onClick={() => void handleAcceptSuggestionsForSelection()}
                       >
-                        Vorschläge übernehmen
+                        {t("ui.applySuggestions")}
                       </Button>
                       <Button
                         size="sm"
@@ -795,7 +794,7 @@ export function PortfolioManagementSection({
                   </p>
                 ) : filteredPriceClusters.length === 0 ? (
                   <p className="px-6 py-5 text-sm text-muted-foreground">
-                    Kein Item passt zu Suche/Filter.
+                    {t("ui.noItemMatches")}
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_330px] xl:items-start">
@@ -805,10 +804,10 @@ export function PortfolioManagementSection({
                       <div className="grid grid-cols-[36px_minmax(0,1fr)_90px_110px_110px_120px] items-center gap-3 border-b border-border px-[18px] py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                         <span />
                         <span>{t("prices.columnCluster")}</span>
-                        <span className="text-right">Menge</span>
-                        <span className="text-right">Positionen</span>
-                        <span className="text-right">Vorschlag</span>
-                        <span className="text-right">Einkauf</span>
+                        <span className="text-right">{t("prices.columnQuantity")}</span>
+                        <span className="text-right">{t("prices.columnPositions")}</span>
+                        <span className="text-right">{t("prices.columnSuggestion")}</span>
+                        <span className="text-right">{t("prices.columnBuyIn")}</span>
                       </div>
 
                       <div className="max-h-[60vh] overflow-y-auto">
@@ -840,7 +839,7 @@ export function PortfolioManagementSection({
                               >
                                 <input
                                   type="checkbox"
-                                  aria-label={`${cluster.name} auswählen`}
+                                  aria-label={t("ui.selectCluster", { name: cluster.name })}
                                   checked={isSelected}
                                   onChange={() => togglePriceClusterSelection(cluster.key)}
                                   className="size-4 accent-success"
@@ -961,7 +960,7 @@ export function PortfolioManagementSection({
                                                 </span>
                                                 <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
                                                   {resolvePositionSourceLabel(lot.source)}
-                                                  {splittable ? ` · ${lot.positions.length} Einträge` : ""}
+                                                  {splittable ? t("ui.entriesCount", { count: lot.positions.length }) : ""}
                                                 </span>
                                               </span>
                                             </div>
@@ -1182,7 +1181,10 @@ export function PortfolioManagementSection({
                             />
                             <MetaRow
                               label={t("prices.holdings")}
-                              value={`${inspectedCluster.totalQuantity} Stk. in ${inspectedLots.length} Pos.`}
+                              value={t("ui.piecesInPositions", {
+                                pieces: inspectedCluster.totalQuantity,
+                                positions: inspectedLots.length,
+                              })}
                             />
                             <MetaRow
                               label={t("prices.avgPurchase")}
@@ -1302,7 +1304,7 @@ export function PortfolioManagementSection({
                               </Button>
                             </div>
                             <span className="text-[11px] text-muted-foreground">
-                              Überschreibt bestehende Positionspreise.
+                              {t("ui.overwritesExisting")}
                             </span>
                           </div>
 
@@ -1317,19 +1319,17 @@ export function PortfolioManagementSection({
                                 )
                               }
                             >
-                              Vorschlag übernehmen
+                              {t("ui.applySuggestion")}
                             </Button>
                           ) : null}
 
                           <p className="text-[11px] leading-relaxed text-muted-foreground">
-                            Der Kurs zum Kaufzeitpunkt ist nicht rekonstruierbar — kleine
-                            Abweichungen sind normal.
+                            {t("ui.rateNotReconstructableShort")}
                           </p>
                         </>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Cluster in der Liste anklicken, um Positionen und Einkaufspreise hier zu
-                          bearbeiten.
+                          {t("ui.clickClusterHint")}
                         </p>
                       )}
                     </aside>
@@ -1347,8 +1347,7 @@ export function PortfolioManagementSection({
                   <div>
                     <CardTitle>{t("groups.title")}</CardTitle>
                     <p className="mt-1.5 text-[13px] text-muted-foreground">
-                      Ein Anzeige-Layer über den Clustern. Erst Gruppe wählen, dann Cluster
-                      zuweisen — Positionsdaten bleiben unverändert.
+                      {t("ui.groupsLayerHint")}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1385,7 +1384,7 @@ export function PortfolioManagementSection({
                           {portfolioGroupEditor ? t("groups.editGroup") : t("groups.createGroup")}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Cluster weist du danach im Gruppen-Tab zu.
+                          {t("ui.assignInGroupTab")}
                         </p>
                       </div>
                       <button
@@ -1457,8 +1456,7 @@ export function PortfolioManagementSection({
                       </div>
                     </div>
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      Gruppen ändern keine Positionsdaten. Ein Cluster kann in mehreren
-                      Gruppen liegen.
+                      {t("ui.groupsDoNotChangeData")}
                     </p>
                     {portfolioGroupMessage ? (
                       <p className="text-xs text-success">
@@ -1482,7 +1480,7 @@ export function PortfolioManagementSection({
                             )
                           }
                         >
-                          Gruppe löschen
+                          {t("ui.deleteGroup")}
                         </Button>
                       ) : null}
                       <Button
@@ -1493,7 +1491,7 @@ export function PortfolioManagementSection({
                           setGroupFormOpen(false);
                         }}
                       >
-                        Abbrechen
+                        {t("actions.cancel", { ns: "common" })}
                       </Button>
                       <Button size="sm" onClick={() => void handleSavePortfolioGroup()}>
                         {portfolioGroupEditor ? t("groups.saveChanges") : t("groups.createGroup")}
@@ -1515,7 +1513,7 @@ export function PortfolioManagementSection({
                       </div>
                     ) : portfolioGroups.length === 0 ? (
                       <p className="py-2 text-sm text-muted-foreground">
-                        Noch keine Gruppen angelegt.
+                        {t("ui.noGroupsYet")}
                       </p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
@@ -1568,8 +1566,7 @@ export function PortfolioManagementSection({
 
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-[13px] text-muted-foreground">
-                      „Cluster hinzufügen" ist nur ein Shortcut — intern werden die konkreten
-                      Positionen zugeordnet.
+                      {t("ui.addClusterShortcut")}
                     </span>
                     <span className="text-xs whitespace-nowrap text-muted-foreground">
                       {portfolioGroupEditor ? (
@@ -1600,7 +1597,7 @@ export function PortfolioManagementSection({
                             setGroupFormOpen(true);
                           }}
                         >
-                          Bearbeiten
+                          {t("ui.edit")}
                         </Button>
                         <Button
                           size="sm"
@@ -1608,7 +1605,7 @@ export function PortfolioManagementSection({
                           title={t("groups.openInInventory")}
                           onClick={() => handleOpenPortfolioGroupInInventory(portfolioGroupEditor.id)}
                         >
-                          Inventar
+                          {t("bucket.inventory")}
                         </Button>
                         <Button
                           size="sm"
@@ -1650,7 +1647,7 @@ export function PortfolioManagementSection({
                     </div>
                   ) : filteredGroupManagementClusters.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      Kein Cluster passt zur Suche.
+                      {t("ui.noClusterMatches")}
                     </p>
                   ) : (
                     <div className="flex max-h-[70vh] flex-col gap-1 overflow-y-auto pr-1">
@@ -1710,7 +1707,7 @@ export function PortfolioManagementSection({
                                     {t("groups.positions", { count: cluster.positions.length })} ·{" "}
                                     {clusterAssignment.assignmentState === "grouped" ? (
                                       <span className="font-semibold text-success">
-                                        vollständig in dieser Gruppe
+                                        {t("ui.fullyInGroup")}
                                       </span>
                                     ) : clusterAssignment.assignmentState === "partial" ? (
                                       <span className="font-semibold text-warn">
@@ -1753,7 +1750,7 @@ export function PortfolioManagementSection({
                                       )
                                     }
                                   >
-                                    Entfernen
+                                    {t("ui.remove")}
                                   </Button>
                                 ) : (
                                   <Button
@@ -1808,7 +1805,7 @@ export function PortfolioManagementSection({
                                           <span>|</span>
                                           <span>{position.bucket === "inventory" ? t("bucket.inventory") : t("bucket.investment")}</span>
                                           <span>|</span>
-                                          <span>{positionPrice > 0 ? `${positionPrice.toFixed(2)} USD Buy-in` : t("prices.withoutBuyIn")}</span>
+                                          <span>{positionPrice > 0 ? t("ui.buyInUsd", { amount: formatNumber(positionPrice, 2) }) : t("prices.withoutBuyIn")}</span>
                                           {assignedGroupName ? (
                                             <>
                                               <span>|</span>
@@ -1829,7 +1826,7 @@ export function PortfolioManagementSection({
                                             )
                                           }
                                         >
-                                          Position hinzufügen
+                                          {t("ui.addPosition")}
                                         </Button>
                                         <Button
                                           size="sm"
@@ -1842,7 +1839,7 @@ export function PortfolioManagementSection({
                                             )
                                           }
                                         >
-                                          Entfernen
+                                          {t("ui.remove")}
                                         </Button>
                                       </div>
                                     </div>
@@ -1866,7 +1863,7 @@ export function PortfolioManagementSection({
               <CardHeader>
                 <CardTitle>{t("create.title")}</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Für Items, die kein Sync erfasst — P2P-Käufe, Fehlkäufe, Off-Market-Trades.
+                  {t("ui.manualHint")}
                 </p>
               </CardHeader>
               <CardContent className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -1907,7 +1904,7 @@ export function PortfolioManagementSection({
                             {manualNameSuggestions.length} Treffer im Katalog
                           </SectionLabel>
                           <span className="text-[11px] text-muted-foreground">
-                            Klicken zum Übernehmen
+                            {t("ui.clickToApply")}
                           </span>
                         </div>
                         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1947,8 +1944,7 @@ export function PortfolioManagementSection({
                         })}
                         </div>
                         <div className="shrink-0 border-t border-border-soft px-3 py-2.5 text-[11px] text-muted-foreground">
-                          Nur Items aus dem Katalog sind wählbar. Fehlt eines, hilft ein Sync
-                          oder eine Meldung an den Katalog.
+                          {t("ui.catalogOnlyHint")}
                         </div>
                       </div>
                     ) : null}
@@ -1967,7 +1963,7 @@ export function PortfolioManagementSection({
                       : manualNameSuggestionsError
                         ? manualNameSuggestionsError
                         : manualNameSuggestionsLoading
-                          ? "Katalog wird durchsucht…"
+                          ? t("create.searching")
                           : t("create.mustPickHit")}
                   </span>
                 </div>
@@ -2030,11 +2026,11 @@ export function PortfolioManagementSection({
                     manualBuyAsUsd > 0;
                   return (
                     <p className="text-[10px] leading-snug text-muted-foreground">
-                      Preis in deiner Währung ({currency}) eingeben.{" "}
+                      {t("ui.priceInCurrency", { currency })}{" "}
                       {showManualUsd
-                        ? `Wird als ${manualBuyAsUsd.toFixed(2)} USD gespeichert (heutiger Kurs). `
+                        ? `${t("ui.savedAsUsd", { amount: formatNumber(manualBuyAsUsd, 2) })} `
                         : ""}
-                      Der Wechselkurs zum Kaufzeitpunkt lässt sich nicht rekonstruieren, daher sind kleine Kursabweichungen normal.
+                      {t("ui.exchangeRateNote")}
                     </p>
                   );
                 })()}
@@ -2102,7 +2098,7 @@ export function PortfolioManagementSection({
                       setCatalogOpen(false);
                     }}
                   >
-                    Zurücksetzen
+                    {t("ui.reset")}
                   </Button>
                 </div>
                 </div>
@@ -2157,8 +2153,7 @@ export function PortfolioManagementSection({
                         />
                       </div>
                       <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Der Kurs zum Kaufzeitpunkt lässt sich nicht rekonstruieren — kleine
-                        Abweichungen sind normal.
+                        {t("ui.rateNotReconstructable")}
                       </p>
                     </aside>
                   );
@@ -2181,7 +2176,7 @@ export function PortfolioManagementSection({
           filteredManagementClusters.length === 0 ? (
             <Card>
               <CardContent className="py-6 text-sm text-muted-foreground">
-                Keine Cluster für den gewählten Filter gefunden.
+                {t("ui.noClustersForFilter")}
               </CardContent>
             </Card>
           ) : null}
@@ -2192,7 +2187,7 @@ export function PortfolioManagementSection({
               <div>
                 <h4 className="text-base font-bold">{t("exclude.title")}</h4>
                 <p className="mt-1.5 text-[13px] text-muted-foreground">
-                  Excluded Positionen zählen nicht in Rendite und Portfolio-Wert.
+                  {t("ui.excludedHint")}
                 </p>
               </div>
               {/* Design keeps search, scope segments and the two selects on ONE
@@ -2385,7 +2380,7 @@ export function PortfolioManagementSection({
                                   ) : null}
                                 </div>
                                 <p className={`mt-[3px] text-[11px] ${position.excluded ? "text-danger" : "text-muted-foreground"}`}>
-                                  {position.type || "unbekannt"} ·{" "}
+                                  {position.type || t("ui.unknownType")} ·{" "}
                                   {position.quantity || 1}x ·{" "}
                                   {position.excluded
                                     ? "excluded"
@@ -2396,7 +2391,7 @@ export function PortfolioManagementSection({
                                     : t("prices.unknownPurchaseDate")}
                                   {" · "}
                                   {positionBuyPrice > 0
-                                    ? `${positionBuyPrice.toFixed(2)} USD Buy-in`
+                                    ? t("ui.buyInUsd", { amount: formatNumber(positionBuyPrice, 2) })
                                     : t("prices.withoutBuyIn")}
                                 </p>
                               </div>
@@ -2453,7 +2448,7 @@ export function PortfolioManagementSection({
                                 }
                                 className="text-xs"
                               >
-                                Alle excluden
+                                {t("ui.excludeAll")}
                               </Button>
                               <NativeSelect size="sm"
                                 value=""
@@ -2465,7 +2460,7 @@ export function PortfolioManagementSection({
                                 }
                               >
                                 <option value="" disabled>
-                                  Bucket für alle …
+                                  {t("ui.bucketForAll")}
                                 </option>
                                 <option value="investment">{t("bucket.investment")}</option>
                                 <option value="inventory">{t("bucket.inventory")}</option>
@@ -2500,7 +2495,7 @@ export function PortfolioManagementSection({
                           Steam ↔ CSFloat Matching
                         </span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">
-                          Jeder Vorschlag zeigt, welche Signale den Score erzeugt haben.
+                          {t("ui.signalsHint")}
                         </span>
                       </span>
                     </div>
@@ -2591,7 +2586,7 @@ export function PortfolioManagementSection({
                         : "border-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Gematchte anzeigen
+                    {t("ui.showMatched")}
                   </button>
                 </div>
               </CardHeader>
@@ -2614,8 +2609,8 @@ export function PortfolioManagementSection({
                       </p>
                       <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                         {showMatchedMatchingRows
-                          ? "Es liegen weder offene noch bestätigte Matches vor. Ein CSFloat-Sync erzeugt neue Vorschläge."
-                          : `${confirmedMatchCount} CSFloat-Käufe sind mit einem Steam-Item verknüpft. Neue Vorschläge entstehen automatisch beim nächsten Sync.`}
+                          ? t("ui.noMatchesAtAll")
+                          : t("ui.confirmedCount", { count: confirmedMatchCount })}
                       </p>
                     </div>
                     {confirmedMatchCount > 0 ? (
@@ -2625,7 +2620,7 @@ export function PortfolioManagementSection({
                             {confirmedMatchCount}
                           </span>
                           <span className="text-[11px] text-muted-foreground">
-                            bestätigte Matches
+                            {t("ui.confirmedMatches")}
                           </span>
                         </span>
                       </div>
@@ -2642,14 +2637,14 @@ export function PortfolioManagementSection({
                           variant="outline"
                           onClick={() => setShowMatchedMatchingRows(true)}
                         >
-                          Bestätigte Matches ansehen
+                          {t("ui.viewConfirmedMatches")}
                         </Button>
                       ) : null}
                     </div>
                   </div>
                 ) : filteredMatchingRows.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Kein Match passt zu den aktiven Filtern.
+                    {t("ui.noMatchForFilters")}
                   </p>
                 ) : (
                   <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
@@ -2853,7 +2848,7 @@ export function PortfolioManagementSection({
                                       )
                                     }
                                   >
-                                    Bestätigen
+                                    {t("ui.confirm")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -2880,12 +2875,12 @@ export function PortfolioManagementSection({
                                       )
                                     }
                                   >
-                                    Bestätigen
+                                    {t("ui.confirm")}
                                   </Button>
                                 </>
                               ) : (
                                 <span className="flex h-[34px] items-center justify-center rounded-[9px] border border-success/40 bg-success/10 text-[13px] font-bold leading-none text-success">
-                                  Bestätigt
+                                  {t("ui.confirmed")}
                                 </span>
                               )}
                             </div>

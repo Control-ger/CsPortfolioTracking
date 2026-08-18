@@ -11,7 +11,9 @@
     "totalSpend": "Gesamtausgaben",
     "averagePrice": "Durchschnittspreis",
     "perPiece": "pro Stück",
-    "peakMonthPurchases": "Käufe im Peak-Monat"
+    "peakMonthPurchases": "Käufe im Peak-Monat",
+    "countThisYear": "{{count}} Käufe in diesem Jahr",
+    "undatedNote": "{{count}} Position(en) ohne Kaufdatum sind hier nicht berücksichtigt."
   },
   "outliers": {
     "title": "Deine Ausreißer des Jahres",
@@ -39,7 +41,9 @@
   },
   "watchlist": {
     "title": "Was du im Blick behalten hast",
-    "newlyWatched": "Neu beobachtet"
+    "newlyWatched": "Neu beobachtet",
+    "peakMonth": "Die meisten Einträge kamen im {{month}} dazu.",
+    "shareOfHoldings": "Anteil am Bestand"
   },
   "summary": {
     "purchases": "Käufe",
@@ -60,6 +64,27 @@
     "close": "Jahresrückblick schließen",
     "calculating": "Jahresrückblick wird berechnet…",
     "done": "Fertig",
-    "next": "Weiter"
+    "next": "Weiter",
+    "back": "Zurück"
+  },
+  "intro": {
+    "subtitle": "Ein Rückblick auf zwölf Monate Portfolio.",
+    "body": "Käufe, Ausgaben, Plattformen und die Kurve deines Portfolios — Slide für Slide.",
+    "title": "Dein CS-Investment-Jahr {{year}}"
+  },
+  "monthly": {
+    "mostActive": "Im {{month}} warst du am aktivsten"
+  },
+  "curve": {
+    "coverageFrom": "Historie liegt erst ab {{date}} vor."
+  },
+  "outro": {
+    "thatWas": "Das war {{year}}",
+    "backToDashboard": "Zurück zum Dashboard"
+  },
+  "eyebrow": {
+    "eyebrowReview": "Jahresrückblick {{year}}",
+    "eyebrowBusiestMonth": "Aktivster Monat {{year}}",
+    "eyebrowConclusion": "Fazit {{year}}"
   }
 }

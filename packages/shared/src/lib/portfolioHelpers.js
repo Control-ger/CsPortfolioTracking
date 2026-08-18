@@ -392,8 +392,8 @@ export function deriveCsUpdateImpact(item) {
   if (!item || typeof item !== "object") {
     return {
       level: "unrated",
-      label: "KI Rating ausstehend",
-      actionLabel: "Noch keine Bewertung verfuegbar",
+      label: translate("updates:rating.ratingPending"),
+      actionLabel: translate("updates:rating.noRatingYet"),
       badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
     };
   }
@@ -405,8 +405,8 @@ export function deriveCsUpdateImpact(item) {
   if (aiStatus === "pending") {
     return {
       level: "pending",
-      label: "KI Rating laeuft",
-      actionLabel: "Eilmeldung jetzt pruefen",
+      label: translate("updates:rating.ratingRunning"),
+      actionLabel: translate("updates:rating.checkBreakingNow"),
       badgeClass: "border-cyan-500/30 bg-cyan-500/12 text-cyan-600 dark:text-cyan-300",
     };
   }
@@ -415,22 +415,22 @@ export function deriveCsUpdateImpact(item) {
     const aiMap = {
       none: {
         label: "Impact none",
-        actionLabel: "Kein akuter Handlungsbedarf",
+        actionLabel: translate("updates:rating.noActionNeeded"),
         badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
       },
       low: {
         label: "Impact niedrig",
-        actionLabel: "Beobachten",
+        actionLabel: translate("updates:rating.watch"),
         badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
       },
       medium: {
         label: "Impact mittel",
-        actionLabel: "Heute pruefen",
+        actionLabel: translate("updates:rating.checkToday"),
         badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-600 dark:text-amber-300",
       },
       high: {
         label: "Impact hoch",
-        actionLabel: "Schnell pruefen",
+        actionLabel: translate("updates:rating.checkQuickly"),
         badgeClass: "border-red-500/35 bg-red-500/12 text-red-600 dark:text-red-300",
       },
     };
@@ -445,15 +445,15 @@ export function deriveCsUpdateImpact(item) {
   if (aiStatus === "failed") {
     return {
       level: "failed",
-      label: "KI Rating fehlgeschlagen",
-      actionLabel: "Manuell pruefen",
+      label: translate("updates:rating.ratingFailed"),
+      actionLabel: translate("updates:rating.checkManually"),
       badgeClass: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300",
     };
   }
   return {
     level: "unrated",
-    label: "KI Rating ausstehend",
-    actionLabel: "Noch keine Bewertung verfuegbar",
+    label: translate("updates:rating.ratingPending"),
+    actionLabel: translate("updates:rating.noRatingYet"),
     badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
   };
 }
@@ -666,7 +666,8 @@ export function buildPositionLots(positions = [], resolveDate) {
 
   (Array.isArray(positions) ? positions : []).forEach((position) => {
     const date = typeof resolveDate === "function" ? resolveDate(position) : null;
-    const dayKey = date ? date.toISOString().slice(0, 10) : "unbekannt";
+    // Internal grouping key for undated lots — never rendered.
+    const dayKey = date ? date.toISOString().slice(0, 10) : "__undated__";
     const source = String(position?.platform || position?.source || "").toLowerCase();
     const key = `${dayKey}|${source}`;
 

@@ -51,3 +51,6 @@ packages/shared/ds-styles.css
 
 # Local CDP screenshot helper (see docs: Electron UI verification)
 .shot.mjs
+# Ad-hoc CDP probe scripts (see docs/devops.md); never part of the repo.
+.claude-shot.mjs
+.cc-probe.mjs

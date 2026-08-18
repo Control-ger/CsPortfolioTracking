@@ -181,7 +181,7 @@ export function ManualMatchModal({
           <div>
             <h5 className="text-base font-bold">{t("manualMatch.title")}</h5>
             <p className="mt-1 text-[12px] text-muted-foreground">
-              Links ein Steam-Item, rechts eine CSFloat-Position wählen, dann verknüpfen.
+              {t("manualMatch.intro")}
             </p>
           </div>
           <button
@@ -198,7 +198,7 @@ export function ManualMatchModal({
           <div className="flex min-w-0 flex-col gap-2.5 p-4">
             <div className="flex items-baseline justify-between gap-2.5">
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                Steam-Items ohne Zuordnung
+                {t("manualMatch.steamUnassigned")}
               </span>
               <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
                 {steamList.length} von {steamCandidates.length} offen
@@ -216,7 +216,7 @@ export function ManualMatchModal({
             <div className="flex max-h-[268px] flex-col gap-2 overflow-y-auto pr-0.5">
               {steamList.length === 0 ? (
                 <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">
-                  Kein offenes Item passt zur Suche.
+                  {t("manualMatch.noOpenItemMatches")}
                 </p>
               ) : (
                 steamList.map((item) => (
@@ -238,7 +238,7 @@ export function ManualMatchModal({
           <div className="flex min-w-0 flex-col gap-2.5 p-4">
             <div className="flex items-baseline justify-between gap-2.5">
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                CSFloat-Positionen ohne Item
+                {t("manualMatch.csfloatUnassigned")}
               </span>
               <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
                 {floatList.length} von {csfloatCandidates.length} offen
@@ -275,7 +275,7 @@ export function ManualMatchModal({
             <div className="flex max-h-[268px] flex-col gap-2 overflow-y-auto pr-0.5">
               {floatList.length === 0 ? (
                 <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">
-                  Keine offene Position passt zur Suche.
+                  {t("manualMatch.noOpenPositionMatches")}
                 </p>
               ) : (
                 floatList.map(({ item, score }) => (
@@ -309,7 +309,7 @@ export function ManualMatchModal({
               onClick={onClose}
               className="h-[38px] rounded-[10px] border border-border-strong px-3.5 text-[13px] font-semibold transition-colors hover:bg-surface-2"
             >
-              Abbrechen
+              {t("actions.cancel", { ns: "common" })}
             </button>
             <button
               type="button"

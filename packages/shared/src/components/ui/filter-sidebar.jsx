@@ -1,5 +1,5 @@
 import * as React from "react";
-import { translate } from "../../lib/i18n/index.js";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "../../lib/utils.js";
@@ -20,6 +20,7 @@ import { cn } from "../../lib/utils.js";
  * 768px viewport, and the inspector is the one that must not be dropped.
  */
 function FilterSidebar({ open, onToggle, title = "Filter", collapsed, children, className, ...props }) {
+  const { t } = useTranslation("common");
   const Chevron = open ? ChevronLeft : ChevronRight;
 
   return (
@@ -40,7 +41,7 @@ function FilterSidebar({ open, onToggle, title = "Filter", collapsed, children, 
         <button
           type="button"
           onClick={onToggle}
-          title={open ? translate("common:filters.collapseFilter") : translate("common:filters.expandFilter")}
+          title={open ? t("filters.collapseFilter") : t("filters.expandFilter")}
           aria-expanded={open}
           className="grid size-7 shrink-0 place-items-center text-muted-foreground transition-colors hover:text-foreground"
         >
@@ -92,6 +93,7 @@ function flatRowClasses(active, disabled) {
 
 /** Small "coming soon" marker for controls whose feature does not exist yet. */
 function SoonBadge({ className }) {
+  const { t } = useTranslation("common");
   return (
     <span
       className={cn(
@@ -99,7 +101,7 @@ function SoonBadge({ className }) {
         className,
       )}
     >
-      Bald
+      {t("filters.soonBadge")}
     </span>
   );
 }
@@ -112,12 +114,13 @@ function SoonBadge({ className }) {
  * the view stays visible.
  */
 function FilterScopeButton({ active = false, label, count, soon = false, className, ...props }) {
+  const { t } = useTranslation("common");
   return (
     <button
       type="button"
       aria-pressed={active}
       disabled={soon || props.disabled}
-      title={soon ? translate("common:filters.soon") : undefined}
+      title={soon ? t("filters.soon") : undefined}
       className={cn(flatRowClasses(active, soon), "h-[30px] justify-between gap-2 text-[12.5px]", className)}
       {...props}
     >
@@ -139,10 +142,11 @@ function FilterScopeButton({ active = false, label, count, soon = false, classNa
  * no abbreviation short enough for 34px tells them apart.
  */
 function FilterScopeIcon({ active = false, label, icon, soon = false, className, ...props }) {
+  const { t } = useTranslation("common");
   return (
     <button
       type="button"
-      title={soon ? `${label} — noch nicht verfügbar` : label}
+      title={soon ? t("filters.soonSuffix", { label }) : label}
       aria-label={label}
       aria-pressed={active}
       disabled={soon || props.disabled}
@@ -191,12 +195,13 @@ function FilterSortButton({
   children,
   ...props
 }) {
+  const { t } = useTranslation("common");
   return (
     <button
       type="button"
       aria-pressed={active}
       disabled={soon || props.disabled}
-      title={soon ? translate("common:filters.soon") : undefined}
+      title={soon ? t("filters.soon") : undefined}
       className={cn(flatRowClasses(active, soon), "h-7 justify-between gap-2 text-xs", className)}
       {...props}
     >

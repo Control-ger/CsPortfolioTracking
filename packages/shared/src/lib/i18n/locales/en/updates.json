@@ -33,5 +33,18 @@
   "notifications": "Notifications",
   "notice": "Notice",
   "noNotifications": "No notifications.",
-  "reload": "Reload"
+  "reload": "Reload",
+  "rating": {
+    "ratingRunning": "AI rating running",
+    "checkBreakingNow": "Check the breaking news now",
+    "noActionNeeded": "No acute action needed",
+    "watch": "Watch",
+    "checkToday": "Check today",
+    "checkQuickly": "Check quickly",
+    "ratingFailed": "AI rating failed",
+    "checkManually": "Check manually",
+    "ratingPending": "AI rating pending",
+    "noRatingYet": "No rating available yet"
+  },
+  "subtitle": "Live patch notes and AI assessment."
 }

@@ -202,7 +202,7 @@ export const WatchlistOverview = ({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Noch keine Items in der Watchlist
+            {t("emptyOverview")}
           </p>
         </CardContent>
       </Card>

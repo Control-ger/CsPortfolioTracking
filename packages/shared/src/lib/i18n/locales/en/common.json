@@ -101,7 +101,8 @@
     "daysShort": "{{count}}d",
     "underOneHour": "<1h",
     "unknown": "unknown",
-    "notAvailable": "-"
+    "notAvailable": "-",
+    "unknownLower": "unknown"
   },
   "syncHealth": {
     "noLiveQuotes": "no live quotes",
@@ -111,13 +112,20 @@
     "lagging": "lagging"
   },
   "actions": {
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "remove": "Remove",
+    "reset": "Reset",
+    "back": "Back"
   },
   "filters": {
     "filter": "Filter",
     "collapseFilter": "Collapse filter",
     "expandFilter": "Expand filter",
-    "soon": "Not available yet"
+    "soon": "Not available yet",
+    "soonSuffix": "{{label}} — not available yet",
+    "soonBadge": "Soon"
   },
   "pagination": {
     "previousPage": "Previous page",
@@ -131,5 +139,94 @@
     "fx": "Currency conversion",
     "csfloat": "External price database",
     "eur": "Currency: euro"
+  },
+  "appUpdate": {
+    "updateGeneric": "The update",
+    "openReleasesPrompt": "{{message}}\n\nWould you like to open the GitHub releases page and download the new version manually?",
+    "available": "{{version}} is available.",
+    "downloadNoAnswer": "{{version}}: the update download did not respond.",
+    "metadataNotReady": "{{version}}: updater metadata is not ready yet.",
+    "installedAppOnly": "Updates are only available in the installed desktop app.",
+    "downloadStartFailed": "Could not start the update download.",
+    "downloadedRestart": "{{version}} was downloaded. Restart and install now?",
+    "handoffOpened": "{{version}} was opened in the system installer.\n\n",
+    "handoffCloseApp": "Close the app and confirm the installation there.",
+    "installFailed": "The update could not be installed.",
+    "cannotSelfUpdate": "{{version}} is available, but this installation cannot update itself.",
+    "installing": "{{version}} is being installed. Please confirm the password prompt.",
+    "genericError": "An error occurred during the update."
+  },
+  "runtimeErrors": {
+    "endpointBuildFailed": "Could not build the sync endpoint URL.",
+    "cloudflareLoginRequired": "Cloudflare Access sign-in required — the session could not be renewed.",
+    "pushSessionRejected": "Sync push aborted: the server rejected the stored session. It was discarded — please sign in again.",
+    "pullSessionRejected": "Sync pull aborted: the server rejected the stored session. It was discarded — please sign in again.",
+    "noServerUrl": "No server URL configured.",
+    "upstreamUnavailable": "Upstream portfolio could not be loaded. Local data is active without live prices.",
+    "portfolioLoadFailed": "Error loading the portfolio data.",
+    "csUpdatesLoadFailed": "CS updates could not be loaded.",
+    "steamLoginStartFailed": "Steam sign-in could not be started on the server.",
+    "steamLoginCancelled": "Steam sign-in was cancelled.",
+    "sessionValidationFailed": "Session validation on the server failed.",
+    "apiError": "API error ({{status}}) for {{url}}",
+    "skinbaronLoginFailed": "SkinBaron sign-in could not be completed.",
+    "skinbaronBrowserDesktopOnly": "SkinBaron browser sign-in is only available in the desktop app."
+  },
+  "steamLogin": {
+    "inventoryAccessDenied": "Your Steam inventory is not publicly reachable. Set your profile and inventory to public in Steam and try again.",
+    "inventoryRateLimit": "Steam has temporarily throttled access. Please try again in a few minutes.",
+    "inventoryInvalidResponse": "Steam did not return a valid inventory response. Please try again later.",
+    "inventoryImportFailed": "Could not import the Steam inventory.",
+    "stepCheckConnection": "Check Steam connection",
+    "stepFetchInventory": "Fetch Steam inventory",
+    "stepProcessResponse": "Process inventory response",
+    "stepFilterMarketable": "Filter marketable items",
+    "stepPreparePayload": "Prepare import payload",
+    "stepSyncLocally": "Sync investments locally",
+    "stepLoadPositions": "Load portfolio positions",
+    "stepLoadHistory": "Load portfolio history",
+    "stepPrepareMetrics": "Prepare metrics",
+    "stepFinalize": "Finalise dashboard",
+    "stepCheckSignIn": "Check sign-in",
+    "detailFetchInventory": "Fetch Steam inventory (SteamID {{steamId}})",
+    "detailProcessResponse": "Process inventory response: {{count}} items received",
+    "detailFiltered": "{{marketable}} marketable of {{total}} items filtered",
+    "detailPayloadPrepared": "Import payload prepared for {{count}} items",
+    "detailImporting": "Importing {{count}} items into the local database…",
+    "detailImportDone": "Import complete: {{imported}} new · {{updated}} updated",
+    "syncSummary": "Steam sync: {{imported}} new, {{updated}} updated, {{missing}} marked missing, {{suggested}} matching suggestions.",
+    "syncNoMarketable": "Steam sync: no marketable items found in the inventory.",
+    "syncEmptyInventory": "Steam sync: the inventory is empty.",
+    "detailFetchPortfolio": "Querying portfolio positions & prices…",
+    "detailHistoryPoints": "Load portfolio history: {{count}} points",
+    "detailMetrics": "Prepare metrics: {{count}} positions",
+    "portfolioLoaded": "Portfolio loaded: {{positions}} positions, {{points}} history points.",
+    "accountConnected": "Your Steam account is connected. We are preparing your data for the dashboard now.",
+    "steamConnected": "Steam connected",
+    "toDashboard": "To the dashboard",
+    "loadingData": "Loading data…",
+    "welcome": "Welcome, {{name}}!",
+    "preparing": "Preparation",
+    "stepOf": "Step {{done}} of {{total}}",
+    "preparationFailed": "Preparation failed: {{error}}",
+    "steamAvatarOf": "{{name}} Steam avatar",
+    "signInTitle": "Welcome to CS Investor Hub",
+    "featureOpenId": "Secure Steam OpenID authentication",
+    "featureImport": "Import your CS2 inventory automatically",
+    "featurePrices": "Track prices and portfolio value",
+    "featureLocalFirst": "Local-first: your data stays on your device",
+    "connecting": "Connecting to Steam…",
+    "signIn": "Sign in with Steam",
+    "signInSubtitle": "Connect your Steam account to track your CS2 portfolio and investments."
+  },
+  "errors": {
+    "uiTitle": "UI error",
+    "uiBody": "The application crashed. Please reload the page.",
+    "reload": "Reload"
+  },
+  "relative": {
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
   }
 }

@@ -333,7 +333,7 @@ function WatchlistItemsLoadingSkeleton() {
 }
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
-  const { t } = useTranslation("watchlist");
+  const { t } = useTranslation(["watchlist", "common"]);
   const { currency, formatPrice, convertToUsd, convertFromUsd } = useCurrency();
   const validSnapshot = getLoadedWatchlistSnapshot();
   const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
@@ -1138,7 +1138,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     so without these rows neither is reachable on mobile. */}
                 {watchlistCategories.length > 1 ? (
                   <div className="no-scrollbar -mx-3.5 flex gap-1.5 overflow-x-auto px-3.5">
-                    {[{ key: WATCHLIST_ALL_CATEGORIES, label: "Alle" }, ...watchlistCategories].map(
+                    {[{ key: WATCHLIST_ALL_CATEGORIES, label: t("filters.all") }, ...watchlistCategories].map(
                       (entry) => {
                         const active = activeCategory === entry.key;
                         return (
@@ -1192,7 +1192,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     type="button"
                     onClick={() => handleSortSelect(nextMobileSort.key)}
                     className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[11px] font-semibold"
-                    title={`Sortiert nach ${activeMobileSort.label} — tippen für ${nextMobileSort.label}`}
+                    title={t("sortedByHint", { current: activeMobileSort.label, next: nextMobileSort.label })}
                   >
                     {activeMobileSort.label}
                     <span aria-hidden="true" className="text-[10px] text-muted-foreground">
@@ -1363,7 +1363,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   ) : (
                     <InspectorBlock label={t("priceTrend")}>
                       <p className="mt-2 text-[12px] text-muted-foreground">
-                        Keine Preishistorie verfuegbar.
+                        {t("noPriceHistory")}
                       </p>
                     </InspectorBlock>
                   )}
@@ -1390,7 +1390,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
 
                   <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-[9px]">
                     <span className="text-[11.5px] font-semibold text-muted-foreground">
-                      Abstand zum Zielpreis
+                      {t("distanceToTarget")}
                     </span>
                     <span
                       className={`text-[12.5px] font-extrabold tabular-nums ${
@@ -1414,7 +1414,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   {watchedSince ? (
                     <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-[9px]">
                       <span className="text-[11.5px] font-semibold text-muted-foreground">
-                        Beobachtet seit
+                        {t("watchedSince")}
                       </span>
                       <span className="text-[12.5px] font-extrabold tabular-nums">
                         {watchedSince}
@@ -1435,7 +1435,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   >
                     {selectedItemBuyOrderRows.length === 0 ? (
                       <p className="mt-2 text-[12px] text-muted-foreground">
-                        Du hast aktuell keine Buyorders bei CSFloat fuer dieses Item gesetzt.
+                        {t("noBuyorders")}
                       </p>
                     ) : (
                       <div className="mt-2.5">
@@ -1495,7 +1495,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     ) : null}
                   </InspectorBlock>
 
-                  <InspectorBlock label="Zielpreis">
+                  <InspectorBlock label={t("targetPrice")}>
                     <div className="mt-2 space-y-2">
                       {selectedItemWithBuyOrderRows.target?.hasTarget ? (
                         <TargetMeter
@@ -1514,7 +1514,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                             value={targetInput}
                             onChange={(event) => setTargetInput(event.target.value)}
                             placeholder="0,00"
-                            aria-label={`Zielpreis in ${currency}`}
+                            aria-label={t("targetPriceIn", { currency })}
                             className="h-8 w-full rounded-md border border-border bg-background px-2 pr-10 text-[12.5px] tabular-nums outline-none focus:border-primary"
                           />
                           <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[11px] font-semibold text-muted-foreground">
@@ -1527,7 +1527,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                           disabled={isSavingTarget}
                           onClick={() => void handleSaveTarget(false)}
                         >
-                          Speichern
+                          {t("actions.save", { ns: "common" })}
                         </Button>
                         {selectedItemWithBuyOrderRows.target?.hasTarget ? (
                           <Button
@@ -1537,7 +1537,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                             disabled={isSavingTarget}
                             onClick={() => void handleSaveTarget(true)}
                           >
-                            Löschen
+                            {t("actions.delete", { ns: "common" })}
                           </Button>
                         ) : null}
                       </div>
@@ -1567,7 +1567,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       className="h-8 flex-1"
                     >
                       <Trash2 className="mr-2 size-4" />
-                      Entfernen
+                      {t("actions.remove", { ns: "common" })}
                     </Button>
                     {/* t("toInvestments") needs a buy price and a purchase date the
                         watchlist does not hold — disabled until that flow exists. */}
@@ -1594,9 +1594,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                 </Inspector>
               ) : (
                 <InspectorEmpty>
-                  Wähle ein Item aus,
+                  {t("pickItem")}
                   <br />
-                  um den Preisverlauf anzuzeigen.
+                  {t("pickItemHint")}
                 </InspectorEmpty>
               )}
             </div>

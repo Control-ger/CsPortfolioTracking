@@ -222,7 +222,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
 
           {buyOrderRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Keine passenden Buyorders fuer dieses Item gefunden.
+              {t("noMatchingBuyorders")}
             </p>
           ) : (
             <div className="overflow-hidden rounded-lg border border-border/60">
@@ -268,7 +268,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
             className="h-10 w-full rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Aus Watchlist entfernen
+            {t("removeFromWatchlistAction")}
           </Button>
         </div>
       </div>
