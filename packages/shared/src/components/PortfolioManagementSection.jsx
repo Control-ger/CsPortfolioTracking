@@ -1,4 +1,5 @@
 import { Suspense, lazy, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, Info, Link2, Search } from "lucide-react";
 import { Badge } from "./ui/badge.jsx";
 import { Button } from "./ui/button.jsx";
@@ -24,9 +25,11 @@ import {
 } from "./ui/tooltip.jsx";
 import {
   formatDateSafe,
+  formatNumber,
   buildPositionLots,
   MANUAL_ITEM_TYPES,
 } from "../lib/portfolioHelpers.js";
+import { translate } from "../lib/i18n/index.js";
 import {
   uniqueInvestmentIds,
   normalizeInvestmentId,
@@ -38,43 +41,33 @@ import { resolveInvestmentDate } from "../lib/yearWrapped.js";
 // calculateSteamCsfloatMatch (see apps/desktop/src/localStore/utils.js). These are
 // the signals that earned the score, surfaced as chips so a match can be judged at a
 // glance instead of trusting a bare number.
-const MATCH_REASON_LABELS = {
-  same_type: "Typ",
-  exact_core_name: "Name exakt",
-  token_overlap_high: "Name ~hoch",
-  token_overlap_medium: "Name ~mittel",
-  token_overlap_low: "Name ~niedrig",
-  wear_exact: "Wear",
-  float_exact: "Float exakt",
-  float_near: "Float nah",
-  float_loose: "Float grob",
-  seed_exact: "Seed",
-  price_near: "Preis nah",
-  price_loose: "Preis grob",
-  time_near: "Zeit nah",
-  time_medium: "Zeit mittel",
-  time_loose: "Zeit grob",
-};
+// The reason codes are the scorer's vocabulary, so they double as the key
+// suffix — one lookup instead of a code→label→key chain that could drift.
+function matchReasonLabel(code) {
+  const key = `management:matchReason.${code}`;
+  const label = translate(key);
+  return label === key ? code : label;
+}
 
 // `accentText`/`accentBar` drive the score column: the confidence reads as a colour
 // before it reads as a word, so a card can be judged without parsing the number.
 const MATCH_CONFIDENCE_META = {
   high: {
-    label: "Hoch",
+    labelKey: "confidence.high",
     tone: "success",
     className: "border-success/40 text-success",
     accentText: "text-success",
     accentBar: "bg-success",
   },
   medium: {
-    label: "Mittel",
+    labelKey: "confidence.medium",
     tone: "warn",
     className: "border-warn/40 text-warn",
     accentText: "text-warn",
     accentBar: "bg-warn",
   },
   low: {
-    label: "Niedrig",
+    labelKey: "confidence.low",
     tone: "neutral",
     className: "border-muted-foreground/40 text-muted-foreground",
     accentText: "text-muted-foreground",
@@ -112,11 +105,11 @@ const GROUP_COLOR_TEXT = {
 
 // The five Verwaltung tabs, in the order the design presents them.
 const MANAGEMENT_TABS = [
-  { value: "matching", label: "Matching" },
-  { value: "prices", label: "Preise" },
-  { value: "exclude", label: "Exclude" },
-  { value: "groups", label: "Gruppen" },
-  { value: "create", label: "Hinzufügen" },
+  { value: "matching", labelKey: "tabs.matching" },
+  { value: "prices", labelKey: "tabs.prices" },
+  { value: "exclude", labelKey: "tabs.exclude" },
+  { value: "groups", labelKey: "tabs.groups" },
+  { value: "create", labelKey: "tabs.create" },
 ];
 
 // Point value each reason code contributes — kept in lockstep with the scorer in
@@ -145,14 +138,15 @@ const MATCH_REASON_POINTS = {
 const MATCH_CONFIDENCE_HIGH_SCORE = 88;
 const MATCH_CONFIDENCE_MEDIUM_SCORE = 68;
 
-const POSITION_SOURCE_LABELS = {
-  steam_inventory: "Steam Sync",
-  csfloat: "CSFloat",
-  skinbaron: "SkinBaron",
+const POSITION_SOURCE_KEYS = {
+  steam_inventory: "management:source.steamSync",
+  csfloat: "management:source.csfloat",
+  skinbaron: "management:source.skinbaron",
 };
 
 function resolvePositionSourceLabel(platform) {
-  return POSITION_SOURCE_LABELS[String(platform || "").toLowerCase()] || "Manuell";
+  const key = POSITION_SOURCE_KEYS[String(platform || "").toLowerCase()];
+  return translate(key || "management:source.manual");
 }
 
 // Ids (steam asset ids + csfloat investment ids) that are part of a resolved
@@ -215,12 +209,12 @@ function formatMatchMetric(code, metrics) {
     case "same_type":
       return metrics.type ? String(metrics.type) : null;
     case "exact_core_name":
-      return "Name identisch";
+      return translate("management:matchMetric.nameIdentical");
     case "token_overlap_high":
     case "token_overlap_medium":
     case "token_overlap_low":
       return Number.isFinite(metrics.overlap)
-        ? `${Math.round(metrics.overlap * 100)}% Namensüberlappung`
+        ? translate("management:matchMetric.nameOverlap", { percent: Math.round(metrics.overlap * 100) })
         : null;
     case "wear_exact":
       return metrics.wear ? String(metrics.wear).toUpperCase() : null;
@@ -232,18 +226,20 @@ function formatMatchMetric(code, metrics) {
         : null;
     case "seed_exact":
       return metrics.seed !== undefined && metrics.seed !== null
-        ? `Seed ${metrics.seed} (identisch)`
+        ? translate("management:matchMetric.seedIdentical", { seed: metrics.seed })
         : null;
     case "price_near":
     case "price_loose":
       return Number.isFinite(metrics.priceDiffRatio)
-        ? `${(metrics.priceDiffRatio * 100).toFixed(1)}% Preisabweichung`
+        ? translate("management:matchMetric.priceDeviation", {
+            percent: formatNumber(metrics.priceDiffRatio * 100, 1),
+          })
         : null;
     case "time_near":
     case "time_medium":
     case "time_loose":
       return Number.isFinite(metrics.dayDiff)
-        ? `${metrics.dayDiff.toFixed(1)} Tage Abstand`
+        ? translate("management:matchMetric.dayGap", { days: formatNumber(metrics.dayDiff, 1) })
         : null;
     default:
       return null;
@@ -263,7 +259,7 @@ function buildMatchBreakdownRows(scoreBreakdown, reasonCodes) {
       return {
         code,
         points,
-        label: MATCH_REASON_LABELS[code] || code,
+        label: matchReasonLabel(code),
         detail: formatMatchMetric(code, entry?.metrics),
       };
     });
@@ -271,7 +267,7 @@ function buildMatchBreakdownRows(scoreBreakdown, reasonCodes) {
   return reasonCodes.map((code) => ({
     code,
     points: MATCH_REASON_POINTS[code],
-    label: MATCH_REASON_LABELS[code] || code,
+    label: matchReasonLabel(code),
     detail: null,
   }));
 }
@@ -283,14 +279,23 @@ function describeMatchConfidence(confidence, score, reasonCodes) {
   const scoreLabel = Number.isFinite(score) ? score : "-";
   if (tier === "high") {
     if (reasonCodes.includes("float_exact") && reasonCodes.includes("seed_exact")) {
-      return "Float + Seed exakt → Hoch";
+      return translate("management:confidence.floatAndSeed");
     }
-    return `Score ${scoreLabel} ≥ ${MATCH_CONFIDENCE_HIGH_SCORE} → Hoch`;
+    return translate("management:confidence.scoreHigh", {
+      score: scoreLabel,
+      threshold: MATCH_CONFIDENCE_HIGH_SCORE,
+    });
   }
   if (tier === "medium") {
-    return `Score ${scoreLabel} ≥ ${MATCH_CONFIDENCE_MEDIUM_SCORE} → Mittel`;
+    return translate("management:confidence.scoreMedium", {
+      score: scoreLabel,
+      threshold: MATCH_CONFIDENCE_MEDIUM_SCORE,
+    });
   }
-  return `Score ${scoreLabel} < ${MATCH_CONFIDENCE_MEDIUM_SCORE} → Niedrig`;
+  return translate("management:confidence.scoreLow", {
+    score: scoreLabel,
+    threshold: MATCH_CONFIDENCE_MEDIUM_SCORE,
+  });
 }
 
 const CsFloatTradeSyncModal = lazy(() =>
@@ -443,6 +448,7 @@ export function PortfolioManagementSection({
   filteredPriceClusters,
   priceMissingCount,
 }) {
+  const { t } = useTranslation("management");
   const [expandedPriceClusters, setExpandedPriceClusters] = useState({});
   // Catalog dropdown visibility for the manual-investment item picker.
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -510,15 +516,15 @@ export function PortfolioManagementSection({
     if (filled.length === 0) {
       return {
         missing,
-        label: "— fehlt",
-        note: `${unitCount} ${unitCount === 1 ? "Position" : "Positionen"} offen`,
-        detail: `noch keiner gesetzt`,
+        label: t("buyIn.missing"),
+        note: t("buyIn.openPositions", { count: unitCount }),
+        detail: t("buyIn.noneSet"),
       };
     }
 
     const values = filled.map(priceOf);
     const distinct = new Set(values.map((value) => value.toFixed(2)));
-    const openNote = missing > 0 ? ` · ${missing} offen` : "";
+    const openNote = missing > 0 ? t("buyIn.openSuffix", { count: missing }) : "";
 
     if (distinct.size > 1) {
       const totalQty = filled.reduce((sum, position) => sum + qtyOf(position), 0);
@@ -528,7 +534,11 @@ export function PortfolioManagementSection({
       return {
         missing,
         label: `Ø ${average}`,
-        note: `gemischt ${formatUsdInDisplayCurrency(Math.min(...values))}–${formatUsdInDisplayCurrency(Math.max(...values))}${openNote}`,
+        note: t("buyIn.mixedRange", {
+          min: formatUsdInDisplayCurrency(Math.min(...values)),
+          max: formatUsdInDisplayCurrency(Math.max(...values)),
+          open: openNote,
+        }),
         detail: `Ø ${average}${openNote}`,
       };
     }
@@ -537,7 +547,9 @@ export function PortfolioManagementSection({
     return {
       missing,
       label: single,
-      note: openUnits > 0 ? `${openUnits} von ${unitCount} offen` : "alle Positionen gleich",
+      note: openUnits > 0
+        ? t("buyIn.someOfOpen", { open: openUnits, total: unitCount })
+        : t("buyIn.allEqual"),
       detail: `${single}${openNote}`,
     };
   };
@@ -597,11 +609,10 @@ export function PortfolioManagementSection({
       {typeof window !== "undefined" && !window.electronAPI?.localStore ? (
         <Card>
           <CardHeader>
-            <CardTitle>Cluster-Verwaltung nur im Desktop verfuegbar</CardTitle>
+            <CardTitle>{t("desktopOnlyTitle")}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Diese Detailverwaltung arbeitet auf lokalen Positionen (inkl.
-            excluded Status).
+            {t("desktopOnlyBody")}
           </CardContent>
         </Card>
       ) : (
@@ -609,10 +620,9 @@ export function PortfolioManagementSection({
           {/* Header: title + sync state + primary actions */}
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <h3 className="text-2xl font-extrabold tracking-[-0.01em]">Verwaltung</h3>
+              <h3 className="text-2xl font-extrabold tracking-[-0.01em]">{t("title")}</h3>
               <p className="mt-2 text-xs text-muted-foreground">
-                Aufgaben aus dem letzten Steam-Sync in einer Übersicht · Auto-Sync
-                läuft maximal alle 30 Minuten pro App-Instanz.
+                {t("subtitle")}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -621,7 +631,7 @@ export function PortfolioManagementSection({
                 size="default"
                 tone={autoSyncEnabled ? "success" : "muted"}
                 onClick={() => void handleToggleAutoSync()}
-                title="Auto-Sync umschalten"
+                title={t("sync.toggleAutoSync")}
               >
                 Auto-Sync {autoSyncEnabled ? "an" : "aus"}
               </StatusPill>
@@ -630,7 +640,7 @@ export function PortfolioManagementSection({
                 disabled={isSteamSyncing}
                 onClick={() => void runSteamSync({ manual: true })}
               >
-                {isSteamSyncing ? "Sync läuft…" : "Steam Sync starten"}
+                {isSteamSyncing ? t("sync.running") : t("sync.start")}
               </Button>
               {hasCsFloatKey ? (
                 <Button size="sm" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
@@ -653,6 +663,7 @@ export function PortfolioManagementSection({
               onChange={setManagementSection}
               items={MANAGEMENT_TABS.map((tab) => ({
                 ...tab,
+                label: t(tab.labelKey),
                 // Matching stays reachable only while it has something to triage
                 // or something already confirmed to look back at.
                 disabled:
@@ -706,7 +717,7 @@ export function PortfolioManagementSection({
             <Card className="overflow-hidden">
               <CardHeader className="space-y-3">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <CardTitle className="text-base">Preise setzen</CardTitle>
+                  <CardTitle className="text-base">{t("prices.title")}</CardTitle>
                   <p className="text-xs text-muted-foreground">
                     Nur nicht gematchte Steam-Inventory-Items können hier einen Einkaufspreis
                     erhalten
@@ -724,7 +735,7 @@ export function PortfolioManagementSection({
                       type="text"
                       value={priceSearchTerm}
                       onChange={(event) => setPriceSearchTerm(event.target.value)}
-                      placeholder="Nach Item suchen…"
+                      placeholder={t("prices.searchPlaceholder")}
                       className="h-[38px] w-full rounded-[10px] border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
                     />
                   </label>
@@ -744,11 +755,11 @@ export function PortfolioManagementSection({
                     value={priceSortBy}
                     onChange={(event) => setPriceSortBy(event.target.value)}
                   >
-                    <option value="name_asc">Name A–Z</option>
-                    <option value="name_desc">Name Z–A</option>
-                    <option value="price_desc">Preis ↓</option>
-                    <option value="price_asc">Preis ↑</option>
-                    <option value="qty_desc">Menge ↓</option>
+                    <option value="name_asc">{t("prices.sortNameAsc")}</option>
+                    <option value="name_desc">{t("prices.sortNameDesc")}</option>
+                    <option value="price_desc">{t("prices.sortPriceDesc")}</option>
+                    <option value="price_asc">{t("prices.sortPriceAsc")}</option>
+                    <option value="qty_desc">{t("prices.sortQuantityDesc")}</option>
                   </NativeSelect>
 
                   {selectedPriceClusters.size > 0 ? (
@@ -779,8 +790,8 @@ export function PortfolioManagementSection({
                 {rawSteamInventoryItems.length === 0 ? (
                   <p className="px-6 py-5 text-sm text-muted-foreground">
                     {steamInventoryItemsAll.length > 0
-                      ? "Alle Steam-Inventory-Items sind bereits gematcht. Keine manuellen Preise nötig."
-                      : "Noch keine Steam-Inventory-Items vorhanden."}
+                      ? t("prices.allMatched")
+                      : t("prices.noItems")}
                   </p>
                 ) : filteredPriceClusters.length === 0 ? (
                   <p className="px-6 py-5 text-sm text-muted-foreground">
@@ -793,7 +804,7 @@ export function PortfolioManagementSection({
                     <div className="min-w-0">
                       <div className="grid grid-cols-[36px_minmax(0,1fr)_90px_110px_110px_120px] items-center gap-3 border-b border-border px-[18px] py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                         <span />
-                        <span>Cluster / Position</span>
+                        <span>{t("prices.columnCluster")}</span>
                         <span className="text-right">Menge</span>
                         <span className="text-right">Positionen</span>
                         <span className="text-right">Vorschlag</span>
@@ -838,7 +849,7 @@ export function PortfolioManagementSection({
                                 <div className="flex min-w-0 items-center gap-2">
                                   <button
                                     type="button"
-                                    aria-label={isExpanded ? "Positionen einklappen" : "Positionen aufklappen"}
+                                    aria-label={isExpanded ? t("prices.collapsePositions") : t("prices.expandPositions")}
                                     aria-expanded={isExpanded}
                                     onClick={() =>
                                       setExpandedPriceClusters((current) => ({
@@ -862,7 +873,7 @@ export function PortfolioManagementSection({
                                       {cluster.name}
                                     </span>
                                     <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                                      {cluster.bucket === "inventory" ? "Inventar" : "Investment"}
+                                      {cluster.bucket === "inventory" ? t("bucket.inventory") : t("bucket.investment")}
                                     </span>
                                   </button>
                                 </div>
@@ -925,8 +936,8 @@ export function PortfolioManagementSection({
                                                   type="button"
                                                   aria-label={
                                                     lotSplit
-                                                      ? "Einzeleinträge einklappen"
-                                                      : "Position aufsplitten"
+                                                      ? t("prices.collapseEntries")
+                                                      : t("prices.splitPosition")
                                                   }
                                                   aria-expanded={lotSplit}
                                                   onClick={() =>
@@ -946,7 +957,7 @@ export function PortfolioManagementSection({
                                               )}
                                               <span className="min-w-0">
                                                 <span className="block truncate text-xs font-semibold">
-                                                  {lot.date ? formatDateSafe(lot.date) : "Datum unbekannt"}
+                                                  {lot.date ? formatDateSafe(lot.date) : t("prices.unknownDate")}
                                                 </span>
                                                 <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
                                                   {resolvePositionSourceLabel(lot.source)}
@@ -969,13 +980,13 @@ export function PortfolioManagementSection({
                                               {lot.excluded
                                                 ? "excluded"
                                                 : lot.partiallyExcluded
-                                                  ? "teils excluded"
+                                                  ? t("prices.partlyExcluded")
                                                   : "aktiv"}
                                             </span>
                                             {hasSuggestion ? (
                                               <button
                                                 type="button"
-                                                title="Vorschlag für diese Position übernehmen"
+                                                title={t("prices.applySuggestionPosition")}
                                                 disabled={lotSaving}
                                                 onClick={() =>
                                                   void handleAcceptSuggestedClusterPrice(
@@ -1075,7 +1086,7 @@ export function PortfolioManagementSection({
                                                     {hasSuggestion ? (
                                                       <button
                                                         type="button"
-                                                        title="Vorschlag nur für diesen Eintrag übernehmen"
+                                                        title={t("prices.applySuggestionEntry")}
                                                         disabled={savingPriceItemId === position.id}
                                                         onClick={() =>
                                                           void handleAcceptSuggestedPrice(
@@ -1153,16 +1164,16 @@ export function PortfolioManagementSection({
                             <div className="min-w-0">
                               <p className="truncate text-sm font-bold">{inspectedCluster.name}</p>
                               <p className="mt-0.5 text-xs text-muted-foreground">
-                                {inspectedCluster.bucket === "inventory" ? "Inventar" : "Investment"} ·{" "}
+                                {inspectedCluster.bucket === "inventory" ? t("bucket.inventory") : t("bucket.investment")} ·{" "}
                                 {inspectedLots.length}{" "}
-                                {inspectedLots.length === 1 ? "Position" : "Positionen"}
+                                {t("groups.positions", { count: inspectedLots.length })}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex flex-col gap-[7px] rounded-xl border border-border-soft bg-surface-1 p-3 text-xs">
                             <MetaRow
-                              label="Vorschlag"
+                              label={t("prices.suggestion")}
                               value={
                                 Number(inspectedCluster.suggestion?.value ?? 0) > 0
                                   ? formatUsdInDisplayCurrency(Number(inspectedCluster.suggestion.value))
@@ -1170,11 +1181,11 @@ export function PortfolioManagementSection({
                               }
                             />
                             <MetaRow
-                              label="Bestand"
+                              label={t("prices.holdings")}
                               value={`${inspectedCluster.totalQuantity} Stk. in ${inspectedLots.length} Pos.`}
                             />
                             <MetaRow
-                              label="Ø Einkauf"
+                              label={t("prices.avgPurchase")}
                               value={inspectedSummary.detail}
                               tone={inspectedSummary.missing > 0 ? "warn" : "default"}
                             />
@@ -1201,7 +1212,7 @@ export function PortfolioManagementSection({
                                 >
                                   <span className="min-w-0 flex-1">
                                     <span className="block truncate text-xs font-semibold">
-                                      {lot.date ? formatDateSafe(lot.date) : "Datum unbekannt"}
+                                      {lot.date ? formatDateSafe(lot.date) : t("prices.unknownDate")}
                                       {" · "}
                                       {lot.quantity}×
                                     </span>
@@ -1216,12 +1227,12 @@ export function PortfolioManagementSection({
                                     >
                                       {resolvePositionSourceLabel(lot.source)}
                                       {lot.excluded
-                                        ? " · excluded"
+                                        ? t("prices.excluded")
                                         : missing
-                                          ? " · kein Preis"
+                                          ? t("prices.noPrice")
                                           : lot.mixedPrices
-                                            ? " · gemischte Preise"
-                                            : " · aktiv"}
+                                            ? t("prices.mixedPrices")
+                                            : t("prices.active")}
                                     </span>
                                   </span>
                                   <input
@@ -1259,13 +1270,13 @@ export function PortfolioManagementSection({
                           <div className="h-px bg-border" />
 
                           <div className="flex flex-col gap-2">
-                            <SectionLabel>Für alle Positionen setzen</SectionLabel>
+                            <SectionLabel>{t("prices.setForAll")}</SectionLabel>
                             <div className="flex gap-2">
                               <input
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                aria-label="Preis für alle Positionen"
+                                aria-label={t("prices.priceForAll")}
                                 value={priceDrafts[`cluster:${inspectedCluster.key}`] ?? ""}
                                 onChange={(event) =>
                                   handlePriceDraftChange(
@@ -1334,7 +1345,7 @@ export function PortfolioManagementSection({
               <Card className="overflow-hidden">
                 <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
                   <div>
-                    <CardTitle>Investment-Gruppen</CardTitle>
+                    <CardTitle>{t("groups.title")}</CardTitle>
                     <p className="mt-1.5 text-[13px] text-muted-foreground">
                       Ein Anzeige-Layer über den Clustern. Erst Gruppe wählen, dann Cluster
                       zuweisen — Positionsdaten bleiben unverändert.
@@ -1353,7 +1364,7 @@ export function PortfolioManagementSection({
                         setGroupFormOpen(true);
                       }}
                     >
-                      {isGroupFormOpen ? "Formular schließen" : "Neue Gruppe"}
+                      {isGroupFormOpen ? t("groups.closeForm") : t("groups.newGroup")}
                     </Button>
                   </div>
                 </CardHeader>
@@ -1365,13 +1376,13 @@ export function PortfolioManagementSection({
                     className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-10 backdrop-blur-[3px]"
                     role="dialog"
                     aria-modal="true"
-                    aria-label={portfolioGroupEditor ? "Gruppe bearbeiten" : "Neue Gruppe anlegen"}
+                    aria-label={portfolioGroupEditor ? t("groups.editGroup") : t("groups.createGroup")}
                   >
                   <div className="w-[560px] max-w-full space-y-3 overflow-hidden rounded-2xl border border-border-strong bg-card p-5 shadow-[0_30px_70px_rgba(0,0,0,0.5)]">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-base font-bold">
-                          {portfolioGroupEditor ? "Gruppe bearbeiten" : "Neue Gruppe anlegen"}
+                          {portfolioGroupEditor ? t("groups.editGroup") : t("groups.createGroup")}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Cluster weist du danach im Gruppen-Tab zu.
@@ -1379,7 +1390,7 @@ export function PortfolioManagementSection({
                       </div>
                       <button
                         type="button"
-                        aria-label="Schließen"
+                        aria-label={t("groups.close")}
                         onClick={() => {
                           resetPortfolioGroupEditor();
                           setGroupFormOpen(false);
@@ -1402,7 +1413,7 @@ export function PortfolioManagementSection({
                             event.target.value,
                           )
                         }
-                        placeholder="z. B. Souvenir Mix Antwerp"
+                        placeholder={t("groups.namePlaceholder")}
                         className="h-[42px] w-full rounded-[11px] border border-input bg-background px-3.5 text-sm"
                       />
                     </div>
@@ -1418,12 +1429,12 @@ export function PortfolioManagementSection({
                             event.target.value,
                           )
                         }
-                        placeholder="Optional: Warum gehoeren diese Cluster zusammen?"
+                        placeholder={t("groups.thesisPlaceholder")}
                         className="min-h-[92px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Farbe</label>
+                      <label className="text-xs font-medium text-muted-foreground">{t("groups.color")}</label>
                       <div className="flex flex-wrap gap-2.5">
                         {PORTFOLIO_GROUP_COLORS.map((color) => {
                           const active =
@@ -1485,7 +1496,7 @@ export function PortfolioManagementSection({
                         Abbrechen
                       </Button>
                       <Button size="sm" onClick={() => void handleSavePortfolioGroup()}>
-                        {portfolioGroupEditor ? "Änderungen speichern" : "Gruppe anlegen"}
+                        {portfolioGroupEditor ? t("groups.saveChanges") : t("groups.createGroup")}
                       </Button>
                     </div>
                   </div>
@@ -1496,7 +1507,7 @@ export function PortfolioManagementSection({
                       list below acts on, so it reads as a filter row rather than
                       a sidebar of records. */}
                   <div className="flex flex-col gap-2">
-                    <SectionLabel>Aktive Gruppe</SectionLabel>
+                    <SectionLabel>{t("groups.activeGroup")}</SectionLabel>
                     {portfolioGroupsLoading ? (
                       <div className="flex gap-2">
                         <Skeleton className="h-12 w-48" />
@@ -1575,7 +1586,7 @@ export function PortfolioManagementSection({
                           </b>
                         </>
                       ) : (
-                        "Oben eine Gruppe wählen"
+                        t("groups.pickGroupAbove")
                       )}
                     </span>
                     {portfolioGroupEditor ? (
@@ -1583,7 +1594,7 @@ export function PortfolioManagementSection({
                         <Button
                           size="sm"
                           variant="ghost"
-                          title="Gruppe bearbeiten"
+                          title={t("groups.editGroup")}
                           onClick={() => {
                             handleEditPortfolioGroup(portfolioGroupEditor);
                             setGroupFormOpen(true);
@@ -1594,7 +1605,7 @@ export function PortfolioManagementSection({
                         <Button
                           size="sm"
                           variant="ghost"
-                          title="Gruppe im Inventar öffnen"
+                          title={t("groups.openInInventory")}
                           onClick={() => handleOpenPortfolioGroupInInventory(portfolioGroupEditor.id)}
                         >
                           Inventar
@@ -1602,7 +1613,7 @@ export function PortfolioManagementSection({
                         <Button
                           size="sm"
                           variant="ghost"
-                          title="Cluster der Gruppe anzeigen"
+                          title={t("groups.showClusters")}
                           onClick={() => handleOpenPortfolioGroupInManagement(portfolioGroupEditor.id)}
                         >
                           Cluster
@@ -1618,7 +1629,7 @@ export function PortfolioManagementSection({
                         type="text"
                         value={groupSearchTerm}
                         onChange={(event) => setGroupSearchTerm(event.target.value)}
-                        placeholder="Nach Cluster oder Gruppenname suchen..."
+                        placeholder={t("groups.searchPlaceholder")}
                         className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
                       />
                     </label>
@@ -1626,8 +1637,8 @@ export function PortfolioManagementSection({
                       value={groupSortBy}
                       onChange={(event) => setGroupSortBy(event.target.value)}
                     >
-                      <option value="name_asc">Name (A-Z)</option>
-                      <option value="updated_desc">Neueste</option>
+                      <option value="name_asc">{t("groups.sortName")}</option>
+                      <option value="updated_desc">{t("groups.sortNewest")}</option>
                     </NativeSelect>
                   </div>
 
@@ -1696,7 +1707,7 @@ export function PortfolioManagementSection({
                                       five pipe-separated fragments plus a pill. */}
                                   <p className="mt-[3px] truncate text-[11px] text-muted-foreground">
                                     {cluster.totalCount} Stk. · {cluster.positions.length}{" "}
-                                    {cluster.positions.length === 1 ? "Position" : "Positionen"} ·{" "}
+                                    {t("groups.positions", { count: cluster.positions.length })} ·{" "}
                                     {clusterAssignment.assignmentState === "grouped" ? (
                                       <span className="font-semibold text-success">
                                         vollständig in dieser Gruppe
@@ -1707,7 +1718,7 @@ export function PortfolioManagementSection({
                                         {clusterAssignment.totalCount})
                                       </span>
                                     ) : (
-                                      "nicht gruppiert"
+                                      t("groups.ungrouped")
                                     )}
                                   </p>
                                 </div>
@@ -1726,7 +1737,7 @@ export function PortfolioManagementSection({
                                     className="h-8 rounded-[9px] px-3 text-[12px] font-semibold"
                                     onClick={() => toggleExpandedGroupManagementCluster(cluster.key)}
                                   >
-                                    {isExpanded ? "Ausblenden" : "Positionen"}
+                                    {isExpanded ? t("groups.hide") : t("prices.columnPositions")}
                                   </Button>
                                 ) : null}
                                 {clusterAssignment.assignmentState === "grouped" ? (
@@ -1762,8 +1773,8 @@ export function PortfolioManagementSection({
                                     }
                                   >
                                     {clusterAssignment.assignmentState === "partial"
-                                      ? "Rest hinzufügen"
-                                      : "Cluster hinzufügen"}
+                                      ? t("groups.addRest")
+                                      : t("groups.addCluster")}
                                   </Button>
                                 )}
                               </div>
@@ -1795,9 +1806,9 @@ export function PortfolioManagementSection({
                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                                           <span>{position.quantity} Stk.</span>
                                           <span>|</span>
-                                          <span>{position.bucket === "inventory" ? "Inventar" : "Investment"}</span>
+                                          <span>{position.bucket === "inventory" ? t("bucket.inventory") : t("bucket.investment")}</span>
                                           <span>|</span>
-                                          <span>{positionPrice > 0 ? `${positionPrice.toFixed(2)} USD Buy-in` : "ohne Buy-in"}</span>
+                                          <span>{positionPrice > 0 ? `${positionPrice.toFixed(2)} USD Buy-in` : t("prices.withoutBuyIn")}</span>
                                           {assignedGroupName ? (
                                             <>
                                               <span>|</span>
@@ -1853,7 +1864,7 @@ export function PortfolioManagementSection({
           {managementSection === "create" ? (
             <Card>
               <CardHeader>
-                <CardTitle>Manuelles Investment hinzufügen</CardTitle>
+                <CardTitle>{t("create.title")}</CardTitle>
                 <p className="text-sm text-muted-foreground">
                   Für Items, die kein Sync erfasst — P2P-Käufe, Fehlkäufe, Off-Market-Trades.
                 </p>
@@ -1865,7 +1876,7 @@ export function PortfolioManagementSection({
                     dropdown that surfaces them. Only a catalog hit is a valid
                     selection, so the item resolves to a real item_id. */}
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-xs font-bold">Item aus dem Katalog wählen</span>
+                  <span className="text-xs font-bold">{t("create.pickFromCatalog")}</span>
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <input
@@ -1876,7 +1887,7 @@ export function PortfolioManagementSection({
                         setCatalogOpen(true);
                       }}
                       onFocus={() => setCatalogOpen(true)}
-                      placeholder="Item-Namen eingeben, z. B. redline"
+                      placeholder={t("create.namePlaceholder")}
                       className={`h-[42px] w-full rounded-[5px] border bg-background pl-[38px] pr-24 text-sm outline-none transition-colors ${
                         manualSelectedSuggestion ? "border-success/45" : "border-border-strong"
                       }`}
@@ -1886,7 +1897,7 @@ export function PortfolioManagementSection({
                       onClick={() => setCatalogOpen((open) => !open)}
                       className="absolute right-2 top-[7px] h-7 rounded-[8px] border border-border bg-card px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
                     >
-                      {catalogOpen ? "Schließen" : "Katalog"}
+                      {catalogOpen ? t("create.close") : t("create.catalog")}
                     </button>
 
                     {catalogOpen && manualNameSuggestions.length > 0 ? (
@@ -1952,12 +1963,12 @@ export function PortfolioManagementSection({
                     }`}
                   >
                     {manualSelectedSuggestion
-                      ? "✓ Im Katalog gefunden — Bild, Typ und Live-Preis werden übernommen"
+                      ? t("create.foundInCatalog")
                       : manualNameSuggestionsError
                         ? manualNameSuggestionsError
                         : manualNameSuggestionsLoading
                           ? "Katalog wird durchsucht…"
-                          : "Wähle einen Treffer aus der Liste. Freie Eingaben sind nicht möglich."}
+                          : t("create.mustPickHit")}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[130px_1fr_1fr]">
@@ -1980,7 +1991,7 @@ export function PortfolioManagementSection({
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Kaufdatum
+                      {t("create.purchaseDate")}
                     </label>
                     <input
                       type="date"
@@ -2039,31 +2050,31 @@ export function PortfolioManagementSection({
                     }
                     className="w-full"
                   >
-                    <option value="other">Anderes</option>
-                    <option value="weapon">Waffe</option>
-                    <option value="knife">Messer</option>
-                    <option value="gloves">Handschuhe</option>
-                    <option value="sticker">Sticker</option>
-                    <option value="agent">Agent</option>
-                    <option value="collectible">Sammlerstueck</option>
-                    <option value="container">Container</option>
-                    <option value="key">Key</option>
-                    <option value="music">Musik-Kit</option>
-                    <option value="patch">Patch</option>
-                    <option value="pin">Pin</option>
-                    <option value="graffiti">Graffiti</option>
-                    <option value="tool">Tool</option>
+                    <option value="other">{t("itemType.other")}</option>
+                    <option value="weapon">{t("itemType.weapon")}</option>
+                    <option value="knife">{t("itemType.knife")}</option>
+                    <option value="gloves">{t("itemType.gloves")}</option>
+                    <option value="sticker">{t("itemType.sticker")}</option>
+                    <option value="agent">{t("itemType.agent")}</option>
+                    <option value="collectible">{t("itemType.collectible")}</option>
+                    <option value="container">{t("itemType.container")}</option>
+                    <option value="key">{t("itemType.key")}</option>
+                    <option value="music">{t("itemType.musicKit")}</option>
+                    <option value="patch">{t("itemType.patch")}</option>
+                    <option value="pin">{t("itemType.pin")}</option>
+                    <option value="graffiti">{t("itemType.graffiti")}</option>
+                    <option value="tool">{t("itemType.tool")}</option>
                   </NativeSelect>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Bucket</label>
+                  <label className="text-xs font-medium text-muted-foreground">{t("create.bucket")}</label>
                   <SegmentedControl
                     className="h-[42px] w-full rounded-[11px] p-[3px] [&>button]:h-full [&>button]:flex-1"
                     value={manualItemDraft.bucket === "inventory" ? "inventory" : "investment"}
                     onChange={(next) => handleManualItemDraftChange("bucket", next)}
                     items={[
-                      { value: "investment", label: "Investment" },
-                      { value: "inventory", label: "Inventar" },
+                      { value: "investment", label: t("bucket.investment") },
+                      { value: "inventory", label: t("bucket.inventory") },
                     ]}
                   />
                 </div>
@@ -2073,7 +2084,7 @@ export function PortfolioManagementSection({
                     disabled={manualItemSaving || ratesLoading || !manualSelectedSuggestion}
                     onClick={() => void handleCreateManualInvestment()}
                   >
-                    {manualItemSaving ? "Speichert…" : "Investment anlegen"}
+                    {manualItemSaving ? t("create.saving") : t("create.submit")}
                   </Button>
                   <Button
                     variant="outline"
@@ -2106,7 +2117,7 @@ export function PortfolioManagementSection({
                   const entryUsd = hasEntry ? convertToUsd(entry) : 0;
                   return (
                     <aside className="flex flex-col gap-3.5 rounded-2xl border border-border bg-background p-4">
-                      <SectionLabel>Vorschau</SectionLabel>
+                      <SectionLabel>{t("create.preview")}</SectionLabel>
                       <div className="flex items-center gap-3">
                         <ItemThumb
                           src={manualSelectedSuggestion?.iconUrl}
@@ -2115,21 +2126,21 @@ export function PortfolioManagementSection({
                         />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-bold">
-                            {manualSelectedSuggestion?.displayName || "Noch kein Item gewählt"}
+                            {manualSelectedSuggestion?.displayName || t("create.noItemPicked")}
                           </p>
                           <p className="mt-0.5 truncate text-xs text-muted-foreground">
                             {manualSelectedSuggestion
                               ? [manualSelectedSuggestion.itemTypeLabel, manualSelectedSuggestion.wearLabel]
                                   .filter(Boolean)
                                   .join(" · ")
-                              : "Wähle einen Treffer aus dem Katalog"}
+                              : t("create.pickCatalogHit")}
                           </p>
                         </div>
                       </div>
                       <div className="flex flex-col gap-2 text-[13px]">
-                        <MetaRow label="Menge" value={`${qty}×`} />
+                        <MetaRow label={t("create.quantity")} value={`${qty}×`} />
                         <MetaRow
-                          label="Kaufdatum"
+                          label={t("create.purchaseDate")}
                           value={
                             manualItemDraft.purchaseDate
                               ? formatDateSafe(manualItemDraft.purchaseDate)
@@ -2137,11 +2148,11 @@ export function PortfolioManagementSection({
                           }
                         />
                         <MetaRow
-                          label="Einstand"
+                          label={t("create.costBasis")}
                           value={hasEntry ? `${entry.toFixed(2)} ${currencySymbol}` : "—"}
                         />
                         <MetaRow
-                          label="Gespeichert als"
+                          label={t("create.savedAs")}
                           value={hasEntry ? `${entryUsd.toFixed(2)} USD` : "—"}
                         />
                       </div>
@@ -2179,7 +2190,7 @@ export function PortfolioManagementSection({
             <Card className="overflow-hidden">
               <CardHeader className="space-y-3">
               <div>
-                <h4 className="text-base font-bold">Positionen ein- und ausschließen</h4>
+                <h4 className="text-base font-bold">{t("exclude.title")}</h4>
                 <p className="mt-1.5 text-[13px] text-muted-foreground">
                   Excluded Positionen zählen nicht in Rendite und Portfolio-Wert.
                 </p>
@@ -2195,7 +2206,7 @@ export function PortfolioManagementSection({
                     onChange={(event) =>
                       setManagementSearchTerm(event.target.value)
                     }
-                    placeholder="Item oder Trade-ID…"
+                    placeholder={t("exclude.searchPlaceholder")}
                     className="h-[38px] w-full rounded-[10px] border border-border bg-background pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-border-strong"
                   />
                 </label>
@@ -2204,9 +2215,9 @@ export function PortfolioManagementSection({
                   value={managementFilter}
                   onChange={setManagementFilter}
                   items={[
-                    { value: "all", label: "Alle" },
-                    { value: "active", label: "Nur aktiv" },
-                    { value: "excluded", label: "Nur excluded" },
+                    { value: "all", label: t("exclude.filterAll") },
+                    { value: "active", label: t("exclude.filterActiveOnly") },
+                    { value: "excluded", label: t("exclude.filterExcludedOnly") },
                   ]}
                 />
                 <NativeSelect size="default"
@@ -2215,7 +2226,7 @@ export function PortfolioManagementSection({
                     setManagementTypeFilter(event.target.value)
                   }
                 >
-                  <option value="all">Typ: Alle</option>
+                  <option value="all">{t("exclude.typeAll")}</option>
                   {managementTypeOptions.map((type) => (
                     <option key={type} value={type}>
                       Typ: {type}
@@ -2228,16 +2239,16 @@ export function PortfolioManagementSection({
                     setManagementBucketFilter(event.target.value)
                   }
                 >
-                  <option value="all">Bucket: Alle</option>
-                  <option value="investment">Bucket: Investment</option>
-                  <option value="inventory">Bucket: Inventar</option>
+                  <option value="all">{t("exclude.bucketAll")}</option>
+                  <option value="investment">{t("exclude.bucketInvestment")}</option>
+                  <option value="inventory">{t("exclude.bucketInventory")}</option>
                 </NativeSelect>
                 <NativeSelect size="default"
                   value={managementSortBy}
                   onChange={(event) => setManagementSortBy(event.target.value)}
                 >
-                  <option value="name_asc">Sortierung: Name A-Z</option>
-                  <option value="name_desc">Sortierung: Name Z-A</option>
+                  <option value="name_asc">{t("exclude.sortNameAsc")}</option>
+                  <option value="name_desc">{t("exclude.sortNameDesc")}</option>
                   <option value="qty_desc">
                     Sortierung: Menge absteigend
                   </option>
@@ -2289,22 +2300,22 @@ export function PortfolioManagementSection({
                         />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[13px] font-bold">
-                            {cluster.name || "Unbenannter Cluster"}
+                            {cluster.name || t("exclude.unnamedCluster")}
                           </p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
                             {visiblePositions.length}{" "}
-                            {visiblePositions.length === 1 ? "Position" : "Positionen"} ·{" "}
+                            {t("groups.positions", { count: visiblePositions.length })} ·{" "}
                             {excludedCount > 0 ? (
                               <span className="font-semibold text-danger">
                                 {excludedCount} excluded
                               </span>
                             ) : (
-                              <span className="font-semibold text-success">alle aktiv</span>
+                              <span className="font-semibold text-success">{t("exclude.allActive")}</span>
                             )}
                           </p>
                         </div>
                         <span className="inline-flex h-[22px] shrink-0 items-center rounded-[6px] bg-surface-2 px-[9px] text-[11px] font-bold">
-                          {cluster.bucket === "inventory" ? "Inventar" : "Investment"}
+                          {cluster.bucket === "inventory" ? t("bucket.inventory") : t("bucket.investment")}
                         </span>
                         <button
                           type="button"
@@ -2322,7 +2333,7 @@ export function PortfolioManagementSection({
                               : "border-border-strong text-foreground hover:bg-surface-2"
                           }`}
                         >
-                          {isExpanded ? "Ausblenden" : "Positionen"}
+                          {isExpanded ? t("groups.hide") : t("prices.columnPositions")}
                         </button>
                       </div>
 
@@ -2361,7 +2372,7 @@ export function PortfolioManagementSection({
                               <div className={`min-w-0 flex-1 ${position.excluded ? "opacity-70" : ""}`}>
                                 <div className="flex min-w-0 flex-wrap items-center gap-[7px]">
                                   <p className="truncate text-[13px] font-semibold">
-                                    {position.name || "Unbekannt"}
+                                    {position.name || t("exclude.unknown")}
                                   </p>
                                   <span className="inline-flex h-[19px] shrink-0 items-center rounded-[5px] border border-border-strong px-[7px] text-[10px] text-muted-foreground">
                                     {resolvePositionSourceLabel(position.platform)}
@@ -2382,11 +2393,11 @@ export function PortfolioManagementSection({
                                   {" · "}
                                   {positionPurchasedAt
                                     ? `Kauf: ${positionPurchasedAt}`
-                                    : "Kaufdatum unbekannt"}
+                                    : t("prices.unknownPurchaseDate")}
                                   {" · "}
                                   {positionBuyPrice > 0
                                     ? `${positionBuyPrice.toFixed(2)} USD Buy-in`
-                                    : "ohne Buy-in"}
+                                    : t("prices.withoutBuyIn")}
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center gap-2">
@@ -2403,8 +2414,8 @@ export function PortfolioManagementSection({
                                     }
                                     className="bg-card"
                                   >
-                                    <option value="investment">Investment</option>
-                                    <option value="inventory">Inventar</option>
+                                    <option value="investment">{t("bucket.investment")}</option>
+                                    <option value="inventory">{t("bucket.inventory")}</option>
                                   </NativeSelect>
                                 )}
                                 <Button
@@ -2421,8 +2432,8 @@ export function PortfolioManagementSection({
                                   className="h-[30px] rounded-[8px] px-3 text-[12px] font-bold"
                                 >
                                   {position.excluded
-                                    ? "Ent-excluden"
-                                    : "Excluden"}
+                                    ? t("exclude.unExclude")
+                                    : t("exclude.exclude")}
                                 </Button>
                               </div>
                             </div>
@@ -2456,8 +2467,8 @@ export function PortfolioManagementSection({
                                 <option value="" disabled>
                                   Bucket für alle …
                                 </option>
-                                <option value="investment">Investment</option>
-                                <option value="inventory">Inventar</option>
+                                <option value="investment">{t("bucket.investment")}</option>
+                                <option value="inventory">{t("bucket.inventory")}</option>
                               </NativeSelect>
                             </div>
                           ) : null}
@@ -2505,7 +2516,7 @@ export function PortfolioManagementSection({
                         <span className="text-[19px] font-extrabold tabular-nums text-success">
                           {confirmedMatchCount}
                         </span>
-                        <span className="text-[11px] text-muted-foreground">bestätigt</span>
+                        <span className="text-[11px] text-muted-foreground">{t("matching.confirmed")}</span>
                       </span>
                       {autoMatchShare !== null ? (
                         <>
@@ -2547,7 +2558,7 @@ export function PortfolioManagementSection({
                       onChange={(event) =>
                         setMatchingSearchTerm(event.target.value)
                       }
-                      placeholder="Suche nach Steam/CSFloat Item..."
+                      placeholder={t("matching.searchPlaceholder")}
                       className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
                     />
                   </label>
@@ -2557,18 +2568,18 @@ export function PortfolioManagementSection({
                       setMatchingConfidenceFilter(event.target.value)
                     }
                   >
-                    <option value="all">Konfidenz: Alle</option>
-                    <option value="high">Hoch</option>
-                    <option value="medium">Mittel</option>
-                    <option value="low">Niedrig</option>
+                    <option value="all">{t("confidence.filterAll")}</option>
+                    <option value="high">{t("confidence.high")}</option>
+                    <option value="medium">{t("confidence.medium")}</option>
+                    <option value="low">{t("confidence.low")}</option>
                   </NativeSelect>
                   <NativeSelect size="default"
                     value={matchingSortBy}
                     onChange={(event) => setMatchingSortBy(event.target.value)}
                   >
-                    <option value="score_desc">Score ↓</option>
-                    <option value="score_asc">Score ↑</option>
-                    <option value="newest">Neueste zuerst</option>
+                    <option value="score_desc">{t("matching.sortScoreDesc")}</option>
+                    <option value="score_asc">{t("matching.sortScoreAsc")}</option>
+                    <option value="newest">{t("matching.sortNewest")}</option>
                   </NativeSelect>
                   <button
                     type="button"
@@ -2598,8 +2609,8 @@ export function PortfolioManagementSection({
                     <div className="max-w-[480px]">
                       <p className="text-[15px] font-bold">
                         {showMatchedMatchingRows
-                          ? "Keine Matching-Einträge vorhanden"
-                          : "Alle Positionen sind zugeordnet"}
+                          ? t("matching.emptyTitle")
+                          : t("matching.emptyBody")}
                       </p>
                       <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                         {showMatchedMatchingRows
@@ -2666,10 +2677,10 @@ export function PortfolioManagementSection({
                       // resolves through, so fall back to it before the placeholder.
                       const steamDisplayName =
                         String(row?.steamItemName || steamItem?.name || "").trim() ||
-                        "Steam Item";
+                        t("matching.steamItem");
                       const csfloatDisplayName =
                         String(row?.csfloatItemName || csfloatItem?.name || "").trim() ||
-                        "CSFloat Item";
+                        t("matching.csfloatItem");
                       const matchScore = Number(row.matchScore);
                       const createdAtLabel = formatDateSafe(
                         row?.createdAt || null,
@@ -2740,7 +2751,7 @@ export function PortfolioManagementSection({
                                   className={`grid place-items-center ${
                                     matchResolved ? "text-success" : "text-muted-foreground"
                                   }`}
-                                  title={matchResolved ? "Gematcht" : "Vorschlag"}
+                                  title={matchResolved ? t("matching.matched") : t("matching.suggestion")}
                                 >
                                   <Link2 className="size-5" />
                                 </div>
@@ -2808,7 +2819,7 @@ export function PortfolioManagementSection({
                                 <span
                                   className={`text-[11px] font-bold uppercase tracking-[0.08em] ${confidenceMeta.accentText}`}
                                 >
-                                  {confidenceMeta.label}
+                                  {t(confidenceMeta.labelKey)}
                                 </span>
                                 <span className="text-xl font-extrabold tabular-nums text-foreground">
                                   {breakdownSum}

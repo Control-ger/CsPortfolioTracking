@@ -574,7 +574,11 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     [enrichedInvestments, metricsScope],
   );
   const portfolioMovers = useMemo(
-    () => selectPortfolioMovers(enrichedInvestments, { scope: metricsScope, limit: 3 }),
+    // 5, not the design's 3: on desktop the movers sit under the allocation
+    // legend in the wide column, and three rows leave that column visibly
+    // shorter than the activity timeline next to it. The mobile card still
+    // shows three — there the block is on its own, with nothing to balance.
+    () => selectPortfolioMovers(enrichedInvestments, { scope: metricsScope, limit: 5 }),
     [enrichedInvestments, metricsScope],
   );
   const { modals, openModal, closeModal } = useModal();

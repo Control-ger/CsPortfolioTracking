@@ -159,7 +159,11 @@ export function PortfolioOverviewSection({
   const rangeDeltaPercent = Number(chartTrendData?.deltaPercent);
   const hasRangeDelta = Number.isFinite(rangeDeltaValue) && Number.isFinite(rangeDeltaPercent);
   const rangeDeltaPositive = hasRangeDelta && rangeDeltaValue >= 0;
-  const shownMovers = moverTab === "gainers" ? portfolioMovers.gainers : portfolioMovers.losers;
+  // The selector hands over five per side for the desktop band; the mobile card
+  // shows one side at a time in a tabbed box and stays at three.
+  const shownMovers = (
+    moverTab === "gainers" ? portfolioMovers.gainers : portfolioMovers.losers
+  ).slice(0, 3);
   const bestItemName = portfolioMovers.gainers[0]?.name || null;
   const bestItemChange = portfolioMovers.gainers[0]?.changePercent;
 
@@ -757,7 +761,7 @@ export function PortfolioOverviewSection({
                       {column.label}
                     </span>
                     {column.rows.length > 0 ? (
-                      column.rows.slice(0, 3).map((mover) => (
+                      column.rows.slice(0, 5).map((mover) => (
                         <div
                           key={mover.id}
                           className="flex items-center justify-between gap-4 border-b border-border-soft py-[11px]"

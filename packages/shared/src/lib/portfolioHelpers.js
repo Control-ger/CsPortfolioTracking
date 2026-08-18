@@ -22,6 +22,17 @@ export function formatSignedPercent(value, decimals = 1) {
   return `${number >= 0 ? "+" : "−"}${magnitude} %`;
 }
 
+/**
+ * Plain number in the active locale's format. Use instead of `toFixed`, which
+ * always emits a `.` decimal point regardless of locale.
+ */
+export function formatNumber(value, decimals = 1) {
+  return new Intl.NumberFormat(getActiveIntlLocale(), {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(Number(value) || 0);
+}
+
 /** Unsigned percentage in the active locale's number format. */
 export function formatPercent(value, decimals = 1) {
   return `${new Intl.NumberFormat(getActiveIntlLocale(), {
