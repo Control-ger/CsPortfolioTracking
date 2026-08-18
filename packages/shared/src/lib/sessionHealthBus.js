@@ -1,3 +1,5 @@
+import { translate } from "./i18n/index.js";
+
 // Session health signal.
 //
 // Two failure modes previously stayed invisible and turned a one-off login
@@ -22,16 +24,17 @@ export const SESSION_HEALTH_REJECTED = "rejected";
 let state = { status: SESSION_HEALTH_OK, reason: null };
 const listeners = new Set();
 
-const NOTIFICATION_TEXT = {
+// Keys, not text: these are persisted into `sync_notifications`, so the row
+// outlives the language it was written in. The rendered text is stored
+// alongside as the fallback for a reader that has no catalogue.
+const NOTIFICATION_KEYS = {
   [SESSION_HEALTH_LOCAL_ONLY]: {
-    title: "Sync inaktiv",
-    message:
-      "Die Anmeldung am Server ist fehlgeschlagen. Die App läuft lokal weiter — deine Änderungen bleiben auf diesem Gerät, bis du dich erneut anmeldest.",
+    titleKey: "common:notifications.sessionLocalOnlyTitle",
+    messageKey: "common:notifications.sessionLocalOnlyMessage",
   },
   [SESSION_HEALTH_REJECTED]: {
-    title: "Sitzung abgelaufen",
-    message:
-      "Der Server hat die gespeicherte Anmeldung abgelehnt und sie wurde entfernt. Melde dich neu an, damit deine Daten wieder synchronisiert werden.",
+    titleKey: "common:notifications.sessionExpiredTitle",
+    messageKey: "common:notifications.sessionExpiredMessage",
   },
 };
 
@@ -40,9 +43,9 @@ const NOTIFICATION_TEXT = {
 // is where those entries live. Best-effort — a failing notification must never
 // break the sync path that reports the state.
 async function persistNotification(status, reason) {
-  const text = NOTIFICATION_TEXT[status];
+  const keys = NOTIFICATION_KEYS[status];
   const store = typeof window !== "undefined" ? window.electronAPI?.localStore : null;
-  if (!text || !store || typeof store.createNotification !== "function") {
+  if (!keys || !store || typeof store.createNotification !== "function") {
     return;
   }
 
@@ -58,8 +61,10 @@ async function persistNotification(status, reason) {
     await store.createNotification({
       userId,
       category: "session_health",
-      title: text.title,
-      message: text.message,
+      titleKey: keys.titleKey,
+      messageKey: keys.messageKey,
+      title: translate(keys.titleKey),
+      message: translate(keys.messageKey),
       payload: { status, reason: reason || null },
       // Sync retries every 60s; without this the centre would fill up with
       // identical entries within minutes.

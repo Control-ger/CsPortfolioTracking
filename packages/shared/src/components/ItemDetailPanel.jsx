@@ -18,7 +18,6 @@ import {
 import { ExcludeInvestmentDialog } from "./ExcludeInvestmentDialog";
 import { toggleExcludeInvestment } from "../lib/apiClient";
 import { PortfolioChart } from "./PortfolioChart";
-import { PortfolioCompositionChart } from "./PortfolioCompositionChart";
 import { GroupWeightingList } from "./GroupWeightingList";
 import { resolveItemCategorySingular } from "../lib/portfolioCalculations.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
@@ -251,20 +250,12 @@ export const ItemDetailPanel = ({
         .join(" · ")
     : null;
 
-  // Cluster weighting for the group composition donut. Values follow the group's
-  // display-currency convention (see buildGroupDetailSelection), so the donut is
-  // fed with valuesAreUsd={false} to match the group's stat rows/table row.
-  const clusterCompositionData =
-    isGroupSelection && Array.isArray(item?.clusters)
-      ? item.clusters
-          .map((cluster) => ({
-            name: cluster?.name || "Cluster",
-            value: Number(cluster?.totalValue || 0),
-            count: Number(cluster?.quantity || 0),
-            type: cluster?.type || "cluster",
-          }))
-          .filter((row) => Number.isFinite(row.value) && row.value > 0)
-      : [];
+  // Guard for the weighting block: a group whose clusters are all unpriced has
+  // no shares to rank, and would render as a stack of empty tracks.
+  const hasWeightableClusters =
+    isGroupSelection &&
+    Array.isArray(item?.clusters) &&
+    item.clusters.some((cluster) => Number(cluster?.totalValue) > 0);
 
   return (
     <>
@@ -339,23 +330,15 @@ export const ItemDetailPanel = ({
           </InspectorBlock>
         ) : null}
 
-        {isGroupSelection && clusterCompositionData.length > 0 ? (
+        {hasWeightableClusters ? (
           <InspectorBlock label={t("detail.clusterWeighting")}>
-            {/* Two renderings of the same clusters, one per breakpoint. The donut
-                is unreadable at phone width (a group of 20 becomes hairline
-                slivers), and the bar list wastes the horizontal room the desktop
-                panel has. */}
-            <GroupWeightingList clusters={item.clusters} className="mt-2 sm:hidden" />
-            <div className="mt-2 hidden sm:block">
-              <PortfolioCompositionChart
-                data={clusterCompositionData}
-                valuesAreUsd={false}
-                totalValueOverride={Number(item?.totalValue ?? item?.currentValue ?? 0)}
-                centerLabel={t("detail.groupValue")}
-                shareSuffix={t("detail.ofTheGroup")}
-                assetCountLabel="Cluster"
-              />
-            </div>
+            {/* The design's "Gewichtung in der Gruppe" is a ranked bar list at
+                every width, and it is also the only readable option here: the
+                inspector column is 356px, so a donut of a 21-cluster group is a
+                ring of hairline slivers. Bars additionally carry the share, the
+                euro value and the per-cluster ROI at once, which the donut
+                cannot. */}
+            <GroupWeightingList clusters={item.clusters} className="mt-2" />
           </InspectorBlock>
         ) : null}
 

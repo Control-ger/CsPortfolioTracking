@@ -158,7 +158,10 @@ function runMigrations(db) {
       message TEXT NOT NULL,
       payload TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL,
-      read_at TEXT
+      read_at TEXT,
+      title_key TEXT,
+      message_key TEXT,
+      params_json TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_investments_user_deleted
@@ -199,6 +202,14 @@ function runMigrations(db) {
   // real column: payload-only scoping cannot see delete ops, which never carried
   // a userId, and cannot be indexed.
   ensureColumn("operations_log", "user_id", "TEXT");
+  // Notifications are persisted, so their text outlives the language it was
+  // written in. New rows store the catalogue key plus its interpolation params
+  // and are rendered at display time; `title`/`message` stay populated as the
+  // fallback for rows written before this existed (and for any writer that has
+  // no key to give). See docs/local-db-schema.md §7.
+  ensureColumn("sync_notifications", "title_key", "TEXT");
+  ensureColumn("sync_notifications", "message_key", "TEXT");
+  ensureColumn("sync_notifications", "params_json", "TEXT");
   // `json_valid` guards the backfill: json_extract raises on malformed JSON, and
   // this runs on every startup — one bad payload would leave the app unable to
   // open its database at all.

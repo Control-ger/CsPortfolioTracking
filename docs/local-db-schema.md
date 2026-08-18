@@ -43,10 +43,35 @@ Relevant fields:
 - `payload` (json as text)
 - `created_at`
 - `read_at` (nullable)
+- `title_key` (nullable)
+- `message_key` (nullable)
+- `params_json` (nullable, json as text)
 
 Read-state behavior:
 - single notification can be marked read
 - category-wide or global "mark all as read" is supported
+
+### 3.1 Localised notification text
+
+Rows are persisted, so their text outlives the language it was written in. A
+writer therefore stores **both**: the catalogue key (`title_key`,
+`message_key`) plus its interpolation values (`params_json`), *and* the
+rendered `title`/`message`.
+
+- `resolveNotificationText` (`packages/shared/src/lib/notificationText.js`)
+  prefers the key, so a language switch retranslates the whole history instead
+  of leaving every row in whichever language happened to be active when it was
+  written.
+- `title`/`message` stay populated as the fallback. That is what rows written
+  before these columns existed carry, and it is why the columns are additive
+  rather than a replacement.
+- **Dedupe keys on `title_key`/`message_key` + `params_json` when a key is
+  present**, on `title`/`message` otherwise. Matching on the rendered text
+  alone would treat the same notification written before and after a language
+  switch as two different ones.
+
+The columns are added by `ensureColumn` in `apps/desktop/src/localStore/index.js`,
+so an existing database picks them up on the next start.
 
 ## 4. Core Rules
 

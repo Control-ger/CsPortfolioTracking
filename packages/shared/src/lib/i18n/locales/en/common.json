@@ -85,7 +85,14 @@
     "dismiss": "Remove",
     "downloading": "Downloading {{version}}",
     "updateFallbackVersion": "Update",
-    "progressOf": "{{transferred}} of {{total}}"
+    "progressOf": "{{transferred}} of {{total}}",
+    "sessionLocalOnlyTitle": "Sync inactive",
+    "sessionLocalOnlyMessage": "Signing in to the server failed. The app keeps running locally — your changes stay on this device until you sign in again.",
+    "sessionExpiredTitle": "Session expired",
+    "sessionExpiredMessage": "The server rejected the stored sign-in and it was removed. Sign in again so your data syncs once more.",
+    "targetReachedTitle": "Target price reached",
+    "targetReachedAbove": "{{item}} is at or above your target price.",
+    "targetReachedBelow": "{{item}} is at or below your target price."
   },
   "units": {
     "secondsShort": "{{count}}s",

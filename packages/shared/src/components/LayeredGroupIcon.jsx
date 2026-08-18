@@ -19,7 +19,7 @@ export function LayeredGroupIcon({ visuals = [], fallbackLabel, size = "md" }) {
     <div className={`relative shrink-0 ${frameClass}`}>
       {items.length === 0 ? (
         <div
-          className={`flex items-center justify-center rounded-xl border border-border/70 bg-card/70 text-[11px] font-semibold text-muted-foreground ${tileClass}`}
+          className={`flex items-center justify-center rounded-[8px] border border-border/70 bg-card/70 text-[11px] font-semibold text-muted-foreground ${tileClass}`}
         >
           {String(fallbackLabel || "Group").slice(0, 2).toUpperCase()}
         </div>
@@ -33,7 +33,7 @@ export function LayeredGroupIcon({ visuals = [], fallbackLabel, size = "md" }) {
         return (
           <div
             key={item.id || `${item.name}-${index}`}
-            className={`absolute ${offsetClass} flex items-center justify-center overflow-hidden rounded-xl border border-border/80 ${cardToneClass} p-1 transition-transform ${tileClass}`}
+            className={`absolute ${offsetClass} flex items-center justify-center overflow-hidden rounded-[8px] border border-border/80 ${cardToneClass} p-1 transition-transform ${tileClass}`}
           >
             {item.imageUrl ? (
               <img

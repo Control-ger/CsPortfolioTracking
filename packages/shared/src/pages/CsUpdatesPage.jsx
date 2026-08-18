@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { resolveNotificationText } from "@shared/lib/notificationText.js";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Cog, Eye, FolderCog, LayoutGrid, Newspaper, Package } from "lucide-react";
@@ -267,8 +268,12 @@ export default function CsUpdatesPage({ useExternalDesktopSidebarShell = false }
                               onClick={() => void handleNotificationClick(entry)}
                               className="w-full rounded-md p-2 text-left text-xs transition-colors hover:bg-accent"
                             >
-                              <p className="font-semibold text-foreground">{entry.title || t("notice")}</p>
-                              <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
+                              <p className="font-semibold text-foreground">
+                                {resolveNotificationText(entry).title || t("notice")}
+                              </p>
+                              <p className="mt-1 line-clamp-2 text-muted-foreground">
+                                {resolveNotificationText(entry).message}
+                              </p>
                               <p className="mt-1 text-[11px] text-muted-foreground">
                                 {entry.createdAt ? new Date(entry.createdAt).toLocaleString(getActiveIntlLocale()) : ""}
                               </p>

@@ -85,7 +85,14 @@
     "dismiss": "Entfernen",
     "downloading": "{{version}} wird heruntergeladen",
     "updateFallbackVersion": "Update",
-    "progressOf": "{{transferred}} von {{total}}"
+    "progressOf": "{{transferred}} von {{total}}",
+    "sessionLocalOnlyTitle": "Sync inaktiv",
+    "sessionLocalOnlyMessage": "Die Anmeldung am Server ist fehlgeschlagen. Die App läuft lokal weiter — deine Änderungen bleiben auf diesem Gerät, bis du dich erneut anmeldest.",
+    "sessionExpiredTitle": "Sitzung abgelaufen",
+    "sessionExpiredMessage": "Der Server hat die gespeicherte Anmeldung abgelehnt und sie wurde entfernt. Melde dich neu an, damit deine Daten wieder synchronisiert werden.",
+    "targetReachedTitle": "Zielpreis erreicht",
+    "targetReachedAbove": "{{item}} liegt bei oder über deinem Zielpreis.",
+    "targetReachedBelow": "{{item}} liegt bei oder unter deinem Zielpreis."
   },
   "units": {
     "secondsShort": "{{count}}s",

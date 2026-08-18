@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { resolveNotificationText } from "@shared/lib/notificationText.js";
 import { IconCircleButton } from "@shared/components/ui/icon-circle-button";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Bell, Cog, Eye, FolderCog, Info, LayoutGrid, Newspaper, Package, Search, TrendingDown, TrendingUp } from "lucide-react";
@@ -2900,7 +2901,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           await window.electronAPI.localStore.createNotification({
             userId,
             category: "cs_updates",
-            title: t("notifications.banWaveTitle"),
+            titleKey: "portfolio:notifications.banWaveTitle",
+          messageKey: "portfolio:notifications.banWaveMessage",
+          title: t("notifications.banWaveTitle"),
             message: itemTitle,
             payload: { source: "ban_wave", itemId },
             createdAt: itemPublishedAt,
@@ -3482,6 +3485,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           await localStore.createNotification({
             userId,
             category: "action_match",
+            titleKey: "portfolio:actions.matchingTitle",
+            messageKey: "portfolio:actions.matchingMessage",
+            params: { count: matchingSuggestedCount },
             title: t("actions.matchingTitle"),
             message: t("actions.matchingMessage", { count: matchingSuggestedCount }),
             payload: { count: matchingSuggestedCount },
@@ -3491,6 +3497,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           await localStore.createNotification({
             userId,
             category: "action_price",
+            titleKey: "portfolio:actions.priceTitle",
+            messageKey: "portfolio:actions.priceMessage",
+            params: { count: priceMissingCount },
             title: t("actions.priceTitle"),
             message: t("actions.priceMessage", { count: priceMissingCount }),
             payload: { count: priceMissingCount },
@@ -4055,14 +4064,16 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                     className="w-full rounded-md border px-2 py-1 text-left hover:bg-accent"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{entry.title}</p>
+                      <p className="text-sm font-medium">{resolveNotificationText(entry).title}</p>
                       {Number(entry?.payload?.count) > 0 ? (
                         <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                           {formatCompactNewCount(entry.payload.count)}
                         </span>
                       ) : null}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">{entry.message}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {resolveNotificationText(entry).message}
+                    </p>
                   </button>
               ))}
             </div>

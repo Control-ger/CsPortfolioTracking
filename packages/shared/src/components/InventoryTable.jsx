@@ -359,10 +359,13 @@ export function InventoryTable({
                   onClick={() => onSelectItem(item)}
                 >
                   <div className="flex min-w-0 items-center gap-[11px]">
+                    {/* 8px, per the design's `thumbStyle`. `rounded-lg` is 14px
+                        in this theme (--radius: 14px), which on a 34px tile
+                        reads as a circle. */}
                     <ItemThumb
                       src={item.imageUrl}
                       alt={item.name}
-                      className="size-[34px] rounded-lg"
+                      className="size-[34px] rounded-[8px]"
                     />
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-bold">{item.name}</span>
@@ -529,7 +532,7 @@ export function InventoryTable({
                           <ItemThumb
                             src={cluster.imageUrl}
                             alt={cluster.name}
-                            className="size-[30px] rounded-lg"
+                            className="size-[30px] rounded-[8px]"
                           />
                           <span className="min-w-0">
                             <span className="block truncate text-[12.5px] font-semibold">

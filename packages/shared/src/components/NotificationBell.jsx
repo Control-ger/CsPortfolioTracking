@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { resolveNotificationText } from "@shared/lib/notificationText.js";
 import { AlertTriangle, Bell, Download, Target, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -411,9 +412,11 @@ export function NotificationBell({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className={`font-semibold ${isError ? "text-destructive" : "text-foreground"}`}>
-                        {entry.title || t("notifications.entryFallbackTitle")}
+                        {resolveNotificationText(entry).title || t("notifications.entryFallbackTitle")}
                       </p>
-                      <p className="mt-1 line-clamp-2 text-muted-foreground">{entry.message || ""}</p>
+                      <p className="mt-1 line-clamp-2 text-muted-foreground">
+                        {resolveNotificationText(entry).message}
+                      </p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         {entry.createdAt ? new Date(entry.createdAt).toLocaleString(getActiveIntlLocale()) : ""}
                       </p>

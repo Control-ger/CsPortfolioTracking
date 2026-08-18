@@ -13,8 +13,14 @@ export function mapNotification(row) {
     id: row.id,
     userId: row.user_id,
     category: row.category,
+    // The stored text is the fallback; the renderer prefers the key when one is
+    // present, so a language switch retranslates the row instead of leaving the
+    // language it happened to be written in.
     title: row.title,
     message: row.message,
+    titleKey: row.title_key || null,
+    messageKey: row.message_key || null,
+    params: deserialize(row.params_json, null),
     payload: deserialize(row.payload, {}),
     createdAt: row.created_at,
     readAt: row.read_at,
@@ -31,8 +37,11 @@ export function createNotificationStore(
       const id = String(input.id || randomUUID());
       const userId = normalizeLocalUserId(input.userId);
       const category = String(input.category || "steam_sync");
-      const title = String(input.title || "Neue Synchronisation");
+      const title = String(input.title || "");
       const message = String(input.message || "");
+      const titleKey = input.titleKey ? String(input.titleKey) : null;
+      const messageKey = input.messageKey ? String(input.messageKey) : null;
+      const params = input.params ? serialize(input.params) : null;
       const createdAt = input.createdAt || nowIso();
       const payloadObject = input.payload || {};
       const payload = serialize(payloadObject);
@@ -43,15 +52,28 @@ export function createNotificationStore(
           : 24 * 60 * 60 * 1000;
 
       const incomingPayloadStable = stableSerialize(payloadObject);
-      const existingRows = db
-        .prepare(
-          `SELECT *
-           FROM sync_notifications
-           WHERE user_id = ? AND category = ? AND title = ? AND message = ?
-           ORDER BY created_at DESC
-           LIMIT 50`,
-        )
-        .all(userId, category, title, message);
+      // Dedupe on the key when there is one, on the rendered text otherwise.
+      // Matching on the text alone would treat the same notification written
+      // before and after a language switch as two different ones.
+      const existingRows = titleKey
+        ? db
+            .prepare(
+              `SELECT *
+               FROM sync_notifications
+               WHERE user_id = ? AND category = ? AND title_key IS ? AND message_key IS ?
+               ORDER BY created_at DESC
+               LIMIT 50`,
+            )
+            .all(userId, category, titleKey, messageKey)
+        : db
+            .prepare(
+              `SELECT *
+               FROM sync_notifications
+               WHERE user_id = ? AND category = ? AND title = ? AND message = ?
+               ORDER BY created_at DESC
+               LIMIT 50`,
+            )
+            .all(userId, category, title, message);
 
       for (const row of existingRows) {
         const existingCreatedAtMs = Date.parse(String(row.created_at || ""));
@@ -65,16 +87,30 @@ export function createNotificationStore(
         const existingPayloadStable = stableSerialize(
           deserialize(row.payload, {}),
         );
-        if (existingPayloadStable === incomingPayloadStable) {
-          return mapNotification(row);
+        if (existingPayloadStable !== incomingPayloadStable) {
+          continue;
         }
+        // For keyed rows the params carry the varying figures (a price, a
+        // count), so two rows with the same key but different params are
+        // genuinely different notifications.
+        if (titleKey) {
+          const existingParamsStable = stableSerialize(deserialize(row.params_json, null));
+          if (existingParamsStable !== stableSerialize(input.params ?? null)) {
+            continue;
+          }
+        }
+        return mapNotification(row);
       }
 
       db.prepare(
         `INSERT INTO sync_notifications (
-          id, user_id, category, title, message, payload, created_at, read_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-      ).run(id, userId, category, title, message, payload, createdAt);
+          id, user_id, category, title, message, payload, created_at, read_at,
+          title_key, message_key, params_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+      ).run(
+        id, userId, category, title, message, payload, createdAt,
+        titleKey, messageKey, params,
+      );
 
       const row = db
         .prepare("SELECT * FROM sync_notifications WHERE id = ? LIMIT 1")

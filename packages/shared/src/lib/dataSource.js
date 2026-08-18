@@ -20,6 +20,7 @@ import {
 } from "./apiClient.js";
 
 import { getCurrentUser, isAuthenticated } from "./auth.js";
+import { translate } from "./i18n/index.js";
 import { runDesktopSyncNowIfDue } from "./desktopSync.js";
 import { notifyWatchlistMutated } from "./watchlistMutationBus.js";
 import * as localCache from "./localCache.js";
@@ -155,11 +156,21 @@ async function applyWatchlistTargetAlerts(items, { localStore, userId }) {
         await localStore.createNotification({
           userId,
           category: "price_target",
-          title: "Zielpreis erreicht",
-          message:
+          // Persisted row: the key + params are what a later language switch
+          // retranslates; the rendered text is the fallback.
+          titleKey: "common:notifications.targetReachedTitle",
+          messageKey:
             target.direction === "above"
-              ? `${item.name} liegt bei oder über deinem Zielpreis.`
-              : `${item.name} liegt bei oder unter deinem Zielpreis.`,
+              ? "common:notifications.targetReachedAbove"
+              : "common:notifications.targetReachedBelow",
+          params: { item: item.name },
+          title: translate("common:notifications.targetReachedTitle"),
+          message: translate(
+            target.direction === "above"
+              ? "common:notifications.targetReachedAbove"
+              : "common:notifications.targetReachedBelow",
+            { item: item.name },
+          ),
           payload: {
             watchlistItemId: item.id,
             itemName: item.name || null,

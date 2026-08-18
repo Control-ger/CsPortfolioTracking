@@ -2,12 +2,15 @@ import * as React from "react";
 
 import { cn } from "../../lib/utils.js";
 
+// Radii are explicit brackets, never the `rounded-*` scale: this project sets
+// `--radius` to 14px, so `rounded-lg` is 14px and `rounded-xl` is 18px — on a
+// 30px tile that is almost a circle. See docs/design-system.md §2.
 const SIZES = {
   xs: "size-[28px] rounded-[7px]",
-  sm: "size-[30px] rounded-lg",
+  sm: "size-[30px] rounded-[8px]",
   md: "size-9 rounded-[9px]",
   lg: "size-10 rounded-[10px]",
-  xl: "size-14 rounded-xl",
+  xl: "size-14 rounded-[12px]",
 };
 
 /**
