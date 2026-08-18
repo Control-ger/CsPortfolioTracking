@@ -10,6 +10,7 @@ import {
 } from './ui/alert-dialog';
 import { Callout } from './ui/callout.jsx';
 import { AlertCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export function ExcludeInvestmentDialog({
   isOpen,
@@ -18,9 +19,12 @@ export function ExcludeInvestmentDialog({
   onConfirm,
   isLoading = false
 }) {
-  const itemName = investment?.name || 'Item';
+  const { t } = useTranslation(['inventory', 'common']);
+  const itemName = investment?.name || t('excludeDialog.item');
   const isCurrentlyExcluded = investment?.excluded || false;
-  const action = isCurrentlyExcluded ? 'wieder eingeschlossen' : 'ausgeschlossen';
+  const action = isCurrentlyExcluded
+    ? t('excludeDialog.reIncluded')
+    : t('excludeDialog.excluded');
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
@@ -29,32 +33,32 @@ export function ExcludeInvestmentDialog({
           <div className="flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-warn" />
             <AlertDialogTitle>
-              {isCurrentlyExcluded ? 'Item wieder einschliessen?' : 'Item ausschliessen?'}
+              {isCurrentlyExcluded
+                ? t('excludeDialog.titleInclude')
+                : t('excludeDialog.titleExclude')}
             </AlertDialogTitle>
           </div>
         </AlertDialogHeader>
 
         <AlertDialogDescription className="space-y-3 text-sm">
-          <p>
-            <strong>{itemName}</strong> wird {action}.
-          </p>
+          <p>{t('excludeDialog.lead', { item: itemName, action })}</p>
 
           {!isCurrentlyExcluded && (
-            <Callout tone="warn" title="Folgen:">
+            <Callout tone="warn" title={t('excludeDialog.consequences')}>
               <ul className="mt-1 list-inside list-disc space-y-1">
-                <li>Item verschwindet aus dem Portfolio</li>
-                <li>Wird nicht in Gewinn/Verlust berechnet</li>
-                <li>Bleibt in der Datenbank gespeichert (nicht geloescht)</li>
-                <li>Kann spaeter wieder eingeschlossen werden</li>
+                <li>{t('excludeDialog.excludeBullet1')}</li>
+                <li>{t('excludeDialog.excludeBullet2')}</li>
+                <li>{t('excludeDialog.excludeBullet3')}</li>
+                <li>{t('excludeDialog.excludeBullet4')}</li>
               </ul>
             </Callout>
           )}
 
           {isCurrentlyExcluded && (
-            <Callout tone="info" title="Das Item wird:">
+            <Callout tone="info" title={t('excludeDialog.includeLead')}>
               <ul className="mt-1 list-inside list-disc space-y-1">
-                <li>Wieder im Portfolio angezeigt</li>
-                <li>Wieder in Statistiken beruecksichtigt</li>
+                <li>{t('excludeDialog.includeBullet1')}</li>
+                <li>{t('excludeDialog.includeBullet2')}</li>
               </ul>
             </Callout>
           )}
@@ -62,7 +66,7 @@ export function ExcludeInvestmentDialog({
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>
-            Abbrechen
+            {t('actions.cancel', { ns: 'common' })}
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={() => onConfirm(!isCurrentlyExcluded)}
@@ -73,7 +77,11 @@ export function ExcludeInvestmentDialog({
                 : 'bg-warn text-primary-foreground hover:bg-warn/90'
             }`}
           >
-            {isLoading ? 'Wird gespeichert...' : isCurrentlyExcluded ? 'Einschliessen' : 'Ausschliessen'}
+            {isLoading
+              ? t('excludeDialog.saving')
+              : isCurrentlyExcluded
+                ? t('excludeDialog.include')
+                : t('excludeDialog.exclude')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { cn } from "../lib/utils.js";
+import { formatPercent as formatPercentLocale } from "../lib/portfolioHelpers.js";
 import { ItemName } from "./ui/item-name.jsx";
 
 const TOP_COUNT = 5;
@@ -18,6 +20,7 @@ const TOP_COUNT = 5;
  * 40 members otherwise buries the toggle below a full screen of 6px bars.
  */
 export function GroupWeightingList({ clusters, className }) {
+  const { t } = useTranslation("inventory");
   const { formatPrice } = useCurrency();
   const [showAll, setShowAll] = useState(false);
 
@@ -40,15 +43,14 @@ export function GroupWeightingList({ clusters, className }) {
 
   const topShare = sumShare(ranked.slice(0, TOP_COUNT));
 
-  const formatPercent = (value) =>
-    `${(Number(value) || 0).toFixed(1).replace(".", ",")} %`;
+  const formatPercent = (value) => formatPercentLocale(value, 1);
 
   return (
     <div className={cn("rounded-2xl border border-border-soft bg-surface-1 p-3.5", className)}>
       <div className="flex items-baseline justify-between gap-2.5">
-        <span className="text-xs font-extrabold">Gewichtung in der Gruppe</span>
+        <span className="text-xs font-extrabold">{t("detail.weightingInGroup")}</span>
         <span className="shrink-0 text-[10.5px] text-muted-foreground">
-          {ranked.length} Cluster
+          {t("detail.clusters", { count: ranked.length })}
         </span>
       </div>
 
@@ -74,7 +76,7 @@ export function GroupWeightingList({ clusters, className }) {
                   )}
                 >
                   {roi >= 0 ? "+" : "−"}
-                  {Math.abs(roi).toFixed(1).replace(".", ",")} %
+                  {formatPercentLocale(Math.abs(roi), 1)}
                 </span>
               </div>
               <div className="flex items-center gap-2">

@@ -3240,7 +3240,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       return leftDistance - rightDistance;
     });
 
-    const rows = sorted.slice(0, 4).map(({ item, target }) => {
+    // 3, matching the activity timeline above it: the two blocks share the
+    // narrow column and a fourth row pushed it past the movers band on the left.
+    // `activeCount` still counts every alarm, so the badge stays honest.
+    const rows = sorted.slice(0, 3).map(({ item, target }) => {
       const targetLabel = formatPrice(target.targetPriceUsd, {
         useUsd: true,
         buyPriceUsd: target.targetPriceUsd,

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { translate } from "../lib/i18n/index.js";
+import { useTranslation } from "react-i18next";
 import { FieldLabel } from "@shared/components/ui/data-display";
 
 import { BaseModal } from "@shared/components/BaseModal";
@@ -44,6 +46,7 @@ function Stat({ label, value, tone = "muted" }) {
 }
 
 export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
+  const { t } = useTranslation("inventory");
   const { formatPrice } = useCurrency();
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -58,7 +61,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
       const response = await fetchSkinBaronTradeSyncPreview({ limit: 100, maxPages: 10 });
       setPreview(response?.data || null);
     } catch (requestError) {
-      setError(requestError.message || "Preview konnte nicht geladen werden.");
+      setError(requestError.message || translate("inventory:syncModal.previewLoadFailed"));
     } finally {
       setLoadingPreview(false);
     }
@@ -128,7 +131,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
       await onSynced?.(payload);
       onClose();
     } catch (requestError) {
-      setError(requestError.message || "Import konnte nicht ausgefuehrt werden.");
+      setError(requestError.message || translate("inventory:syncModal.importFailed"));
     } finally {
       setExecuting(false);
     }
@@ -138,7 +141,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title="SkinBaron Purchases Sync"
+      title={t("syncModal.skinbaronTitle")}
       size="full"
       className="p-0"
     >
@@ -148,13 +151,13 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
         ) : null}
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <Stat label="Rohdaten" value={preview ? preview.totalFetched : "-"} />
-          <Stat label="Normalisiert" value={preview ? preview.normalizedCount : "-"} />
-          <Stat label="Importierbar" value={preview ? preview.insertable : "-"} tone="positive" />
-          <Stat label="Aktualisiert" value={preview ? (preview.updated ?? updatedCount) : "-"} tone="positive" />
-          <Stat label="Duplikate" value={preview ? preview.duplicates : "-"} tone="negative" />
-          <Stat label="Seiten" value={preview ? preview.pagesFetched : "-"} />
-          <Stat label="Uebersprungen" value={preview ? preview.skipped ?? 0 : "-"} />
+          <Stat label={t("syncModal.rawData")} value={preview ? preview.totalFetched : "-"} />
+          <Stat label={t("syncModal.normalized")} value={preview ? preview.normalizedCount : "-"} />
+          <Stat label={t("syncModal.importable")} value={preview ? preview.insertable : "-"} tone="positive" />
+          <Stat label={t("syncModal.updated")} value={preview ? (preview.updated ?? updatedCount) : "-"} tone="positive" />
+          <Stat label={t("syncModal.duplicates")} value={preview ? preview.duplicates : "-"} tone="negative" />
+          <Stat label={t("syncModal.pages")} value={preview ? preview.pagesFetched : "-"} />
+          <Stat label={t("syncModal.skipped")} value={preview ? preview.skipped ?? 0 : "-"} />
         </div>
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -248,7 +251,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
               Preview neu laden
             </Button>
             <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !previewConfirmed} data-keyboard-default>
-              {executing ? "Import laeuft..." : "Import starten"}
+              {executing ? t("syncModal.importRunning") : t("syncModal.startImport")}
             </Button>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { translate } from "../../lib/i18n/index.js";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "../../lib/utils.js";
@@ -39,7 +40,7 @@ function FilterSidebar({ open, onToggle, title = "Filter", collapsed, children, 
         <button
           type="button"
           onClick={onToggle}
-          title={open ? "Filter einklappen" : "Filter ausklappen"}
+          title={open ? translate("common:filters.collapseFilter") : translate("common:filters.expandFilter")}
           aria-expanded={open}
           className="grid size-7 shrink-0 place-items-center text-muted-foreground transition-colors hover:text-foreground"
         >
@@ -116,7 +117,7 @@ function FilterScopeButton({ active = false, label, count, soon = false, classNa
       type="button"
       aria-pressed={active}
       disabled={soon || props.disabled}
-      title={soon ? "Noch nicht verfügbar" : undefined}
+      title={soon ? translate("common:filters.soon") : undefined}
       className={cn(flatRowClasses(active, soon), "h-[30px] justify-between gap-2 text-[12.5px]", className)}
       {...props}
     >
@@ -195,7 +196,7 @@ function FilterSortButton({
       type="button"
       aria-pressed={active}
       disabled={soon || props.disabled}
-      title={soon ? "Noch nicht verfügbar" : undefined}
+      title={soon ? translate("common:filters.soon") : undefined}
       className={cn(flatRowClasses(active, soon), "h-7 justify-between gap-2 text-xs", className)}
       {...props}
     >

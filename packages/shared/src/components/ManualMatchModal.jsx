@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { translate } from "../lib/i18n/index.js";
 import { Link2, Search, X } from "lucide-react";
 
 // Manual Steam<->CSFloat linking. The scorer only ever proposes pairs it is
@@ -61,7 +63,7 @@ function formatMeta(item) {
   const buyPrice = Number(item?.buyPriceUsd ?? item?.buyPrice ?? 0);
   if (buyPrice > 0) parts.push(`${buyPrice.toFixed(2)} USD`);
   if (item?.externalTradeId) parts.push(`#${item.externalTradeId}`);
-  return parts.join(" · ") || "Keine Zusatzdaten";
+  return parts.join(" · ") || translate("inventory:manualMatch.noExtraData");
 }
 
 function CandidateRow({ item, selected, onSelect, score }) {
@@ -77,7 +79,7 @@ function CandidateRow({ item, selected, onSelect, score }) {
     >
       <span className="min-w-0">
         <span className="block truncate text-[13px] font-bold text-foreground">
-          {item.name || item.marketHashName || "Unbenannt"}
+          {item.name || item.marketHashName || translate("inventory:manualMatch.unnamed")}
         </span>
         <span className="mt-[3px] block truncate text-[11px] text-muted-foreground">
           {formatMeta(item)}
@@ -116,6 +118,7 @@ export function ManualMatchModal({
   csfloatCandidates = [],
   onConfirm,
 }) {
+  const { t } = useTranslation("inventory");
   const [steamQuery, setSteamQuery] = useState("");
   const [floatQuery, setFloatQuery] = useState("");
   const [selectedSteamId, setSelectedSteamId] = useState(null);
@@ -168,7 +171,7 @@ export function ManualMatchModal({
       className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6 backdrop-blur-[3px]"
       role="dialog"
       aria-modal="true"
-      aria-label="Manuelles Matching"
+      aria-label={t("manualMatch.title")}
     >
       {/* bg-card, not the design's raw --bg2: that token has no registered
           utility, and an unregistered class renders NO background at all —
@@ -176,7 +179,7 @@ export function ManualMatchModal({
       <div className="flex max-h-full w-[900px] max-w-full flex-col overflow-hidden rounded-[18px] border border-border-strong bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
-            <h5 className="text-base font-bold">Manuelles Matching</h5>
+            <h5 className="text-base font-bold">{t("manualMatch.title")}</h5>
             <p className="mt-1 text-[12px] text-muted-foreground">
               Links ein Steam-Item, rechts eine CSFloat-Position wählen, dann verknüpfen.
             </p>
@@ -184,7 +187,7 @@ export function ManualMatchModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Schließen"
+            aria-label={t("manualMatch.close")}
             className="grid size-[30px] flex-none place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground"
           >
             <X className="size-3.5" />
@@ -206,7 +209,7 @@ export function ManualMatchModal({
               <input
                 value={steamQuery}
                 onChange={(event) => setSteamQuery(event.target.value)}
-                placeholder="Item, Float, Pattern, Datum …"
+                placeholder={t("manualMatch.searchSteam")}
                 className="h-9 w-full rounded-[10px] border border-border-strong bg-background pl-8 pr-3 text-[12.5px] outline-none"
               />
             </label>
@@ -246,14 +249,14 @@ export function ManualMatchModal({
               <input
                 value={floatQuery}
                 onChange={(event) => setFloatQuery(event.target.value)}
-                placeholder="Position, Preis, CSFloat-ID …"
+                placeholder={t("manualMatch.searchCsfloat")}
                 className="h-9 w-full rounded-[10px] border border-border-strong bg-background pl-8 pr-3 text-[12.5px] outline-none"
               />
             </label>
             <div className="flex items-center gap-1.5">
               {[
-                { value: "score", label: "Bester Treffer" },
-                { value: "date", label: "Kaufdatum" },
+                { value: "score", label: t("manualMatch.bestMatch") },
+                { value: "date", label: t("manualMatch.purchaseDate") },
               ].map((option) => (
                 <button
                   key={option.value}
@@ -288,8 +291,8 @@ export function ManualMatchModal({
             </div>
             <span className="text-[11px] text-muted-foreground">
               {selectedSteam
-                ? "Beste Treffer zum gewählten Item zuerst"
-                : "Wähle links ein Item, dann werden Treffer bewertet"}
+                ? t("manualMatch.bestMatchesFirst")
+                : t("manualMatch.pickLeftFirst")}
             </span>
           </div>
         </div>
@@ -297,8 +300,8 @@ export function ManualMatchModal({
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-surface-1 px-5 py-3">
           <span className={`text-[12px] ${both ? "text-muted-foreground" : "text-warn"}`}>
             {both
-              ? "Verknüpfung überschreibt keine bestätigten Matches und ist im Verlauf widerrufbar."
-              : "Wähle auf beiden Seiten je einen Eintrag."}
+              ? t("manualMatch.note")
+              : t("manualMatch.pickBothSides")}
           </span>
           <span className="flex items-center gap-2">
             <button
@@ -318,7 +321,7 @@ export function ManualMatchModal({
                   : "cursor-not-allowed bg-surface-2 text-muted-foreground"
               }`}
             >
-              {saving ? "Verknüpfe …" : "Verknüpfen"}
+              {saving ? t("manualMatch.linking") : t("manualMatch.link")}
             </button>
           </span>
         </div>

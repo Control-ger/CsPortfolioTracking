@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { resolveItemCategorySingular } from "../lib/portfolioCalculations.js";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { PositionCard } from "@shared/components/ui/position-card";
@@ -23,10 +24,10 @@ import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 const COLUMNS = "minmax(0,1fr) 54px 92px 100px 76px 116px";
 
 const SORT_OPTIONS = [
-  { key: "roi", label: "ROI" },
-  { key: "value", label: "Positionswert" },
-  { key: "quantity", label: "Menge" },
-  { key: "item", label: "Name" },
+  { key: "roi", labelKey: "sort.roi" },
+  { key: "value", labelKey: "sort.positionValue" },
+  { key: "quantity", labelKey: "sort.quantity" },
+  { key: "item", labelKey: "sort.name" },
 ];
 
 function formatSignedCurrency(value, formatPrice) {
@@ -123,6 +124,7 @@ export function InventoryTable({
   // mobile line names positions and groups separately.
   unfilteredItemCount = null,
 }) {
+  const { t } = useTranslation("inventory");
   const { formatPrice } = useCurrency();
   const [expandedGroupIds, setExpandedGroupIds] = useState({});
 
@@ -285,9 +287,9 @@ export function InventoryTable({
     0,
     SORT_OPTIONS.findIndex((entry) => entry.key === sortKey),
   );
-  const activeSortLabel = SORT_OPTIONS[activeSortIndex].label;
+  const activeSortLabel = t(SORT_OPTIONS[activeSortIndex].labelKey);
   const nextSortKey = SORT_OPTIONS[(activeSortIndex + 1) % SORT_OPTIONS.length].key;
-  const nextSortLabel = SORT_OPTIONS[(activeSortIndex + 1) % SORT_OPTIONS.length].label;
+  const nextSortLabel = t(SORT_OPTIONS[(activeSortIndex + 1) % SORT_OPTIONS.length].labelKey);
 
   const selectionKey = String(selectedId ?? "").trim();
   const isSelected = (entity) =>
@@ -300,36 +302,36 @@ export function InventoryTable({
         <GridTable>
           <GridTableHead columns={COLUMNS}>
             <SortHeaderButton
-              label="Position"
+              label={t("columns.position")}
               isActive={sortKey === "item"}
               sortDirection={sortDirection}
               onClick={() => toggleSort("item")}
             />
             <span className="text-right">
               <SortHeaderButton
-                label="Menge"
+                label={t("columns.quantity")}
                 align="right"
                 isActive={sortKey === "quantity"}
                 sortDirection={sortDirection}
                 onClick={() => toggleSort("quantity")}
               />
             </span>
-            <span className="text-right">Einkauf</span>
+            <span className="text-right">{t("columns.purchase")}</span>
             <span className="text-right">
               <SortHeaderButton
-                label="Live"
+                label={t("columns.live")}
                 align="right"
                 isActive={sortKey === "livePrice"}
                 sortDirection={sortDirection}
                 onClick={() => toggleSort("livePrice")}
               />
             </span>
-            <span className="text-right" title="Preisänderung der letzten 7 Tage">
+            <span className="text-right" title={t("columns.change7d")}>
               7T
             </span>
             <span className="text-right">
               <SortHeaderButton
-                label="ROI"
+                label={t("columns.roi")}
                 align="right"
                 isActive={sortKey === "roi"}
                 sortDirection={sortDirection}
@@ -339,7 +341,7 @@ export function InventoryTable({
           </GridTableHead>
 
           {sortedRows.length === 0 ? (
-            <GridTableEmpty>Keine Positionen für diese Filter.</GridTableEmpty>
+            <GridTableEmpty>{t("empty")}</GridTableEmpty>
           ) : null}
 
           {sortedRows.map((row) => {
@@ -409,8 +411,8 @@ export function InventoryTable({
                     )}`}
                     title={
                       Number.isFinite(change7d)
-                        ? "Preisänderung der letzten 7 Tage"
-                        : "Keine 7-Tage-Historie vorhanden"
+                        ? t("columns.change7d")
+                        : t("columns.no7dHistory")
                     }
                   >
                     {Number.isFinite(change7d) ? formatSignedPercentOneDecimal(change7d) : "–"}

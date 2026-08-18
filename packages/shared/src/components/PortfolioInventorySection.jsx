@@ -1,4 +1,5 @@
 import { Suspense, lazy, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { List, Package, TrendingUp } from "lucide-react";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { SegmentedControl } from "./ui/segmented-control.jsx";
@@ -39,16 +40,16 @@ const ItemDetailPanel = lazy(() =>
 const SCOPES = [
   // The collapsed rail shows icons, not initials — "Investments" and "Inventar"
   // share a first syllable, so no short abbreviation distinguishes them.
-  { key: "investment", label: "Investments", Icon: TrendingUp },
-  { key: "inventory", label: "Inventar", Icon: Package },
-  { key: "all", label: "Alles", Icon: List },
+  { key: "investment", labelKey: "scope.investments", Icon: TrendingUp },
+  { key: "inventory", labelKey: "scope.inventory", Icon: Package },
+  { key: "all", labelKey: "scope.everything", Icon: List },
 ];
 
 const SORTS = [
-  { key: "roi", label: "ROI" },
-  { key: "value", label: "Positionswert" },
-  { key: "quantity", label: "Menge" },
-  { key: "item", label: "Name" },
+  { key: "roi", labelKey: "sort.roi" },
+  { key: "value", labelKey: "sort.positionValue" },
+  { key: "quantity", labelKey: "sort.quantity" },
+  { key: "item", labelKey: "sort.name" },
 ];
 
 const ALL_CATEGORIES = "__all__";
@@ -105,6 +106,7 @@ export function PortfolioInventorySection({
   enrichedInvestments,
   inventoryBuyOrderSummary,
 }) {
+  const { t } = useTranslation("inventory");
   const { formatPrice } = useCurrency();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [category, setCategory] = useState(ALL_CATEGORIES);
@@ -165,7 +167,8 @@ export function PortfolioInventorySection({
   const visibleGroups = activeCategory === ALL_CATEGORIES ? scopedGroups : [];
 
   const selectedId = selectedItem?.id ?? null;
-  const scopeLabel = SCOPES.find((entry) => entry.key === inventoryScope)?.label ?? "Inventar";
+  const scopeEntry = SCOPES.find((entry) => entry.key === inventoryScope);
+  const scopeLabel = scopeEntry ? t(scopeEntry.labelKey) : t("scope.inventory");
 
   const handleSortChange = (nextKey, nextDirection) => {
     setSortKey(nextKey);
@@ -200,7 +203,7 @@ export function PortfolioInventorySection({
             {SCOPES.map((scope) => (
               <FilterScopeIcon
                 key={scope.key}
-                label={scope.label}
+                label={t(scope.labelKey)}
                 icon={<scope.Icon className="size-[17px]" />}
                 active={inventoryScope === scope.key}
                 onClick={() => onInventoryScopeChange(scope.key)}
@@ -209,12 +212,12 @@ export function PortfolioInventorySection({
           </div>
         }
       >
-        <FilterGroup label="Bereich">
+        <FilterGroup label={t("filters.range")}>
           <div className="flex flex-col">
             {SCOPES.map((scope) => (
               <FilterScopeButton
                 key={scope.key}
-                label={scope.label}
+                label={t(scope.labelKey)}
                 count={scopeCounts[scope.key]}
                 active={inventoryScope === scope.key}
                 onClick={() => onInventoryScopeChange(scope.key)}
@@ -224,13 +227,13 @@ export function PortfolioInventorySection({
         </FilterGroup>
 
         {categories.length > 1 ? (
-          <FilterGroup label="Kategorie">
+          <FilterGroup label={t("filters.category")}>
             <div className="flex flex-wrap gap-1">
               <FilterChip
                 active={activeCategory === ALL_CATEGORIES}
                 onClick={() => setCategory(ALL_CATEGORIES)}
               >
-                Alle
+                {t("filters.all")}
               </FilterChip>
               {categories.map((entry) => (
                 <FilterChip
@@ -246,7 +249,7 @@ export function PortfolioInventorySection({
           </FilterGroup>
         ) : null}
 
-        <FilterGroup label="Sortierung">
+        <FilterGroup label={t("filters.sorting")}>
           <div className="flex flex-col">
             {SORTS.map((sort) => (
               <FilterSortButton
@@ -255,7 +258,7 @@ export function PortfolioInventorySection({
                 direction={sortDirection}
                 onClick={() => handleSortSelect(sort.key)}
               >
-                {sort.label}
+                {t(sort.labelKey)}
               </FilterSortButton>
             ))}
           </div>
@@ -271,13 +274,17 @@ export function PortfolioInventorySection({
       <div className="min-w-0 flex-1 space-y-4 lg:px-5 lg:py-[18px]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h3 className="text-xl font-extrabold tracking-[-0.01em] sm:text-2xl">Inventar</h3>
+            <h3 className="text-xl font-extrabold tracking-[-0.01em] sm:text-2xl">{t("title")}</h3>
             <p className="mt-[7px] text-xs text-muted-foreground">
-              {scopeLabel} · {filteredItems.length} Positionen
-              {visibleGroups.length > 0
-                ? ` · ${visibleGroups.length} ${visibleGroups.length === 1 ? "Gruppe" : "Gruppen"}`
-                : ""}{" "}
-              · {formatPrice(totalScopeValue)}
+              {t("summary", {
+                scope: scopeLabel,
+                positions: filteredItems.length,
+                groups:
+                  visibleGroups.length > 0
+                    ? t("groupsSuffix", { count: visibleGroups.length })
+                    : "",
+                value: formatPrice(totalScopeValue),
+              })}
             </p>
           </div>
 
@@ -289,7 +296,7 @@ export function PortfolioInventorySection({
             onChange={onInventoryScopeChange}
             items={SCOPES.map((scope) => ({
               value: scope.key,
-              label: scope.label,
+              label: t(scope.labelKey),
               count: scopeCounts[scope.key],
             }))}
           />
@@ -301,7 +308,7 @@ export function PortfolioInventorySection({
             cannot push the list off the first screen. */}
         {categories.length > 1 ? (
           <div className="no-scrollbar -mx-3.5 flex gap-1.5 overflow-x-auto px-3.5 lg:hidden">
-            {[{ key: ALL_CATEGORIES, label: "Alle" }, ...categories].map((entry) => {
+            {[{ key: ALL_CATEGORIES, label: t("filters.all") }, ...categories].map((entry) => {
               const active = activeCategory === entry.key;
               return (
                 <button
@@ -323,12 +330,12 @@ export function PortfolioInventorySection({
                 `fundingMode`, but nothing filters on it yet on any surface.
                 Marked rather than dropped, so the planned filter set stays
                 visible — same call as the `soon` rows in the watchlist. */}
-            {["Wallet", "Cash-In"].map((label) => (
+            {[t("filters.wallet"), t("filters.cashIn")].map((label) => (
               <button
                 key={label}
                 type="button"
                 disabled
-                title="Filter nach Finanzierung ist noch nicht verfügbar"
+                title={t("filters.fundingSoon")}
                 className="inline-flex h-7 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-full border border-border-soft px-2.5 text-[11px] font-semibold text-muted-foreground opacity-45"
               >
                 {label}

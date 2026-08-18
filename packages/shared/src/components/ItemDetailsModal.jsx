@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FieldLabel, StatTile } from "@shared/components/ui/data-display";
 import { BaseModal } from "@shared/components/BaseModal";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
@@ -113,6 +114,7 @@ export function ItemDetailsModal({
   onBucketChange,
   canToggleExclude = true,
 }) {
+  const { t } = useTranslation("inventory");
   const { currency, formatPrice } = useCurrency();
   const [showAbsolute, setShowAbsolute] = useState(false);
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
@@ -205,14 +207,14 @@ export function ItemDetailsModal({
               {item.type}
             </p>
             <p className="text-sm">
-              <strong>Condition:</strong> {item.wearName || "N/A"}
+              <strong>{t("detail.condition")}</strong> {item.wearName || "N/A"}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
-                Bucket: {String(item?.bucket || "investment").toLowerCase() === "inventory" ? "Inventar" : "Investment"}
+                Bucket: {String(item?.bucket || "investment").toLowerCase() === "inventory" ? t("detail.inventory") : t("detail.investment")}
               </Badge>
               <Badge variant="outline">
-                Funding: {item.fundingMode === "cash_in" ? "Cash-In" : "Wallet"}
+                Funding: {item.fundingMode === "cash_in" ? t("detail.cashIn") : t("detail.wallet")}
               </Badge>
               <Badge variant="outline" className={freshnessBadgeClass(item.freshnessStatus)}>
                 {item.freshnessLabel || "unbekannt"}
@@ -229,13 +231,13 @@ export function ItemDetailsModal({
           </StatTile>
 
           <StatTile>
-            <FieldLabel>Live</FieldLabel>
+            <FieldLabel>{t("detail.live")}</FieldLabel>
             <p
               className={`mt-2 text-sm font-bold ${item.isLive ? "text-primary" : "text-muted-foreground"}`}
             >
-              {item.livePrice !== null ? formatPrice(item.livePrice) : "Kein Preis verfuegbar"}
+              {item.livePrice !== null ? formatPrice(item.livePrice) : t("detail.noPrice")}
             </p>
-            <p className="mt-1 text-[10px] text-muted-foreground">{item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{item.lastPriceUpdateAt || item.freshnessLabel || t("detail.unknown")}</p>
             {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
               <p className="mt-1 inline-flex items-center gap-1 rounded border border-info/30 bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info">
                 Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
@@ -254,7 +256,7 @@ export function ItemDetailsModal({
             <p className="mt-2 text-sm font-bold">
               {formatPrice(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}
             </p>
-            <p className="mt-1 text-[10px] text-muted-foreground">inkl. Seller + Withdrawal + FX Fees</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{t("detail.breakEvenHint")}</p>
           </StatTile>
 
           <StatTile>
@@ -263,7 +265,7 @@ export function ItemDetailsModal({
               {item.isLive ? formatPrice(item.currentValue) : "N/A"}
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              {item.isLive ? `${item.quantity}x ${formatPrice(item.displayPrice)}` : "Kein csfloat-Preis vorhanden"}
+              {item.isLive ? `${item.quantity}x ${formatPrice(item.displayPrice)}` : t("detail.noCsfloatPrice")}
             </p>
           </StatTile>
 
@@ -288,7 +290,7 @@ export function ItemDetailsModal({
           </StatTile>
 
           <StatTile>
-            <FieldLabel>Price Change</FieldLabel>
+            <FieldLabel>{t("detail.priceChange")}</FieldLabel>
             <div className="mt-2 space-y-1">
               <ChangeMetric
                 label="24h"
@@ -346,12 +348,12 @@ export function ItemDetailsModal({
             <PortfolioChart
               history={history}
               isLoading={historyLoading}
-              title="Positionsentwicklung"
-              emptyLabel="Noch keine Positionshistorie verfuegbar"
-              valueLabel="Positionswert"
+              title={t("detail.positionTrend")}
+              emptyLabel={t("detail.noPositionHistory")}
+              valueLabel={t("detail.positionValue")}
               showAbsolute={showAbsolute}
               referenceLineValue={buyInReferenceValue}
-              referenceLineLabel="Buy-In"
+              referenceLineLabel={t("detail.buyIn")}
               referenceLineTimestamp={buyInReferenceTimestamp}
               disableDarkGlass
             />
@@ -395,8 +397,8 @@ export function ItemDetailsModal({
                 className="mt-2 flex h-10 w-full items-center justify-center rounded-xl border border-border/75 bg-card/70 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent/70"
               >
                 {String(item?.bucket || "investment").toLowerCase() === "inventory"
-                  ? "Zu Investments verschieben"
-                  : "Zum Inventar verschieben"}
+                  ? t("detail.moveToInvestments")
+                  : t("detail.moveToInventory")}
               </button>
             ) : null}
           </div>

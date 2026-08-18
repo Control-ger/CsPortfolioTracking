@@ -261,9 +261,11 @@ export function PortfolioOverviewSection({
   const alertRows = Array.isArray(watchlistAlerts?.rows) ? watchlistAlerts.rows : [];
   const alertActiveCount = Number(watchlistAlerts?.activeCount) || 0;
 
-  // 4 → 8, as the design has it. The loader fetches 12; showing all of them
+  // 3 → 8. The design collapses to 4, but the timeline is the tallest block in
+  // the narrow column and outran the movers next to it; three rows plus the
+  // expand button balance the band. The loader fetches 12; showing all of them
   // would let one busy afternoon's edits run past the composition chart below.
-  const visibleActivity = recentActivity.slice(0, activityExpanded ? 8 : 4);
+  const visibleActivity = recentActivity.slice(0, activityExpanded ? 8 : 3);
 
   return (
     <div className="space-y-5 sm:space-y-5 lg:space-y-4 lg:pb-6">
@@ -830,7 +832,7 @@ export function PortfolioOverviewSection({
                   ))}
                 </div>
               )}
-              {recentActivity.length > 4 ? (
+              {recentActivity.length > 3 ? (
                 <button
                   type="button"
                   onClick={() => setActivityExpanded((current) => !current)}

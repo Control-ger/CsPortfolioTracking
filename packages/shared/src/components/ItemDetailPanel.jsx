@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { translate } from "../lib/i18n/index.js";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 import { Button } from "./ui/button";
@@ -115,8 +117,12 @@ function resolvePurchaseUnitDisplay(item, formatPrice) {
  * "GROUP · INVESTMENT · WALLET" — three words, none of them true.
  */
 function buildMetaLine(item) {
+  // Module-level, so this reads through `translate` rather than the hook — the
+  // same escape hatch the other pure formatters use.
   const bucketLabel =
-    String(item?.bucket || "investment").toLowerCase() === "inventory" ? "Inventar" : "Investment";
+    String(item?.bucket || "investment").toLowerCase() === "inventory"
+      ? translate("inventory:detail.inventory")
+      : translate("inventory:detail.investment");
 
   if (item?.__detailKind === "group") {
     const clusterCount = Array.isArray(item?.clusters) ? item.clusters.length : 0;
@@ -124,9 +130,9 @@ function buildMetaLine(item) {
       ? item.sourceInvestmentIds.length
       : 0;
     return [
-      "Gruppe",
-      clusterCount > 0 ? `${clusterCount} Cluster` : null,
-      memberCount > 0 ? `${memberCount} Positionen` : null,
+      translate("inventory:detail.group"),
+      clusterCount > 0 ? translate("inventory:detail.clustersCount", { count: clusterCount }) : null,
+      memberCount > 0 ? translate("inventory:detail.positionsCount", { count: memberCount }) : null,
       bucketLabel,
     ]
       .filter(Boolean)
@@ -134,10 +140,17 @@ function buildMetaLine(item) {
   }
 
   if (item?.__detailKind === "group-cluster") {
-    return ["Cluster", `${Number(item?.quantity || 0)} Stk.`, bucketLabel].join(" · ");
+    return [
+      translate("inventory:detail.cluster"),
+      translate("inventory:detail.piecesShort", { count: Number(item?.quantity || 0) }),
+      bucketLabel,
+    ].join(" · ");
   }
 
-  const fundingLabel = item?.fundingMode === "cash_in" ? "Cash-In" : "Wallet";
+  const fundingLabel =
+    item?.fundingMode === "cash_in"
+      ? translate("inventory:detail.cashIn")
+      : translate("inventory:detail.wallet");
   return [item?.type, bucketLabel, fundingLabel].filter(Boolean).join(" · ");
 }
 
@@ -152,6 +165,7 @@ export const ItemDetailPanel = ({
   // so the two capabilities are gated separately.
   canToggleBucket = canToggleExclude,
 }) => {
+  const { t } = useTranslation("inventory");
   const { currency, formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
@@ -278,12 +292,12 @@ export const ItemDetailPanel = ({
         <InspectorPrice
           value={
             !item.isLive
-              ? "Kein Preis"
+              ? t("detail.noPriceShort")
               : isAggregateSelection
                 ? formatPrice(item.currentValue)
                 : item.livePrice !== null
                   ? formatPrice(item.livePrice)
-                  : "Kein Preis"
+                  : t("detail.noPriceShort")
           }
           delta={headlineDelta}
           tone={profitTone}
@@ -291,13 +305,13 @@ export const ItemDetailPanel = ({
 
         {Array.isArray(history) && history.length > 0 ? (
           <InspectorBlock
-            label="Preisentwicklung"
+            label={t("detail.priceTrend")}
             aside={
               <button
                 type="button"
                 onClick={() => setShowAbsolute((current) => !current)}
                 className="font-extrabold uppercase tracking-[0.12em] transition-colors hover:text-foreground"
-                title="Zwischen Absolutwert und Wachstum umschalten"
+                title={t("detail.toggleAbsoluteGrowth")}
               >
                 {showAbsolute ? currency : "%"}
               </button>
@@ -306,12 +320,12 @@ export const ItemDetailPanel = ({
             <PortfolioChart
               history={history}
               title=""
-              valueLabel="Preis"
-              emptyLabel="Noch keine Preishistorie verfügbar"
+              valueLabel={t("detail.price")}
+              emptyLabel={t("detail.noPriceHistory")}
               isLoading={historyLoading}
               showAbsolute={showAbsolute}
               referenceLineValue={buyInReferenceValue}
-              referenceLineLabel="Buy-In"
+              referenceLineLabel={t("detail.buyIn")}
               referenceLineTimestamp={buyInReferenceTimestamp}
               flat
             />
@@ -319,7 +333,7 @@ export const ItemDetailPanel = ({
         ) : null}
 
         {isGroupSelection && clusterCompositionData.length > 0 ? (
-          <InspectorBlock label="Cluster-Gewichtung">
+          <InspectorBlock label={t("detail.clusterWeighting")}>
             {/* Two renderings of the same clusters, one per breakpoint. The donut
                 is unreadable at phone width (a group of 20 becomes hairline
                 slivers), and the bar list wastes the horizontal room the desktop
@@ -330,8 +344,8 @@ export const ItemDetailPanel = ({
                 data={clusterCompositionData}
                 valuesAreUsd={false}
                 totalValueOverride={Number(item?.totalValue ?? item?.currentValue ?? 0)}
-                centerLabel="Gruppenwert"
-                shareSuffix="der Gruppe"
+                centerLabel={t("detail.groupValue")}
+                shareSuffix={t("detail.ofTheGroup")}
                 assetCountLabel="Cluster"
               />
             </div>
@@ -339,11 +353,11 @@ export const ItemDetailPanel = ({
         ) : null}
 
         <InspectorStat
-          label="Einkauf"
+          label={t("detail.purchase")}
           value={`${item.quantity}x ${purchaseUnitDisplay}`}
         />
         <InspectorStat
-          label="Break-even"
+          label={t("detail.breakEven")}
           value={formatPrice(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}
         />
         {/* For aggregates the headline already *is* the position value, so this
@@ -351,7 +365,7 @@ export const ItemDetailPanel = ({
             fields are EUR like the Break-even and Cost-Basis tiles around them —
             see the headline note above. */}
         <InspectorStat
-          label={isAggregateSelection ? "Ø Live-Preis" : "Positionswert"}
+          label={isAggregateSelection ? t("detail.avgLivePrice") : t("detail.positionValue")}
           value={
             !item.isLive
               ? "N/A"
@@ -359,13 +373,13 @@ export const ItemDetailPanel = ({
           }
         />
         <InspectorStat
-          label="Cost Basis"
+          label={t("detail.costBasis")}
           value={
             typeof item.costBasisTotal === "number" ? formatPrice(item.costBasisTotal) : "N/A"
           }
         />
         <InspectorStat
-          label="Gewinn / Verlust"
+          label={t("detail.profitLoss")}
           tone={profitTone}
           value={
             item.isLive
@@ -374,12 +388,12 @@ export const ItemDetailPanel = ({
           }
         />
         <InspectorStat
-          label="Freshness"
-          value={item.lastPriceUpdateAt || item.freshnessLabel || "Unbekannt"}
+          label={t("detail.freshness")}
+          value={item.lastPriceUpdateAt || item.freshnessLabel || t("detail.unknown")}
         />
 
         {hasBuyOrder ? (
-          <InspectorBlock label="Meine Buyorder · CSFloat" aside={buyOrderDisplay}>
+          <InspectorBlock label={t("detail.myBuyorder")} aside={buyOrderDisplay}>
             <p className="mt-2 text-[11px] text-muted-foreground">
               {Number(item.buyOrderCount || 0)} Order
               {Number(item.buyOrderCount || 0) === 1 ? "" : "s"}
@@ -391,7 +405,7 @@ export const ItemDetailPanel = ({
         ) : null}
 
         {stats6m?.length > 0 ? (
-          <InspectorBlock label="Trends · 6 Monate">
+          <InspectorBlock label={t("detail.trends6m")}>
             <div className="mt-2 h-32 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={stats6m}>
@@ -432,7 +446,7 @@ export const ItemDetailPanel = ({
                 onClick={() => setExcludeDialogOpen(true)}
                 className="h-8 flex-1"
               >
-                {item.excluded ? "Einschließen" : "Ausschließen"}
+                {item.excluded ? t("detail.include") : t("detail.exclude")}
               </Button>
             ) : null}
             {bucketToggleEnabled ? (
@@ -443,8 +457,8 @@ export const ItemDetailPanel = ({
                 className="h-8 flex-1"
               >
                 {String(item?.bucket || "investment").toLowerCase() === "inventory"
-                  ? "Zu Investments"
-                  : "Zum Inventar"}
+                  ? t("detail.toInvestments")
+                  : t("detail.toInventory")}
               </Button>
             ) : null}
           </InspectorFooter>

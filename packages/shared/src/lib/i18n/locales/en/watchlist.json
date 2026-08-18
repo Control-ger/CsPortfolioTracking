@@ -1,1 +1,93 @@
-{}
+{
+  "title": "Watchlist",
+  "scope": {
+    "all": "All",
+    "withAlert": "With alert",
+    "buyorders": "Buy orders"
+  },
+  "range": {
+    "d7": "7 days",
+    "d30": "30 days",
+    "d90": "90 days",
+    "h24": "24 hours"
+  },
+  "sort": {
+    "change7d": "7d change",
+    "change24h": "24h change",
+    "change30d": "30d change",
+    "price": "Price",
+    "distanceToTarget": "Distance to target",
+    "nameAsc": "Name A–Z"
+  },
+  "columns": {
+    "item": "Item",
+    "live": "Live",
+    "history": "History",
+    "targetPrice": "Target price",
+    "change24h": "Price change over the last 24 hours",
+    "change7d": "Price change over the last 7 days",
+    "change30d": "Price change over the last 30 days"
+  },
+  "filters": {
+    "view": "View",
+    "category": "Category",
+    "period": "Period",
+    "sorting": "Sorting",
+    "all": "All"
+  },
+  "empty": "No items for these filters.",
+  "atTarget": "at target",
+  "targetReached": "Target reached",
+  "noPrice": "No price",
+  "openBuyorder": "Open CSFloat buy order",
+  "importing": "Importing…",
+  "importCsfloat": "Import CSFloat",
+  "priceTrend": "Price trend",
+  "toggleAbsoluteGrowth": "Toggle between absolute value and growth",
+  "price": "Price",
+  "buyorders": "Buy orders · CSFloat",
+  "buyorderColumns": {
+    "price": "Price",
+    "orders": "Orders",
+    "quantity": "Quantity"
+  },
+  "targetAboveHint": "Notify as soon as the price reaches or exceeds the target.",
+  "targetBelowHint": "Notify as soon as the price falls to the target or below.",
+  "noTargetSet": "No target price set yet.",
+  "toInvestments": "To investments",
+  "notAvailableYet": "Not available yet",
+  "removeFromWatchlist": "remove from your watchlist",
+  "errors": {
+    "loadFailed": "Error loading the watchlist.",
+    "loadFailedPrefix": "Error loading the watchlist:",
+    "removeFailed": "Error removing the watchlist item.",
+    "csfloatImportFailed": "CSFloat import failed.",
+    "targetGreaterZero": "Please enter a target price greater than 0.",
+    "targetSaveFailed": "Could not save target price.",
+    "syncFallbackTitle": "Live sync limited",
+    "syncFallbackBody": "The watchlist was loaded without a live sync. Please try again later."
+  },
+  "overview": {
+    "topGainers": "Top gainers (7 days)",
+    "topLosers": "Top losers (7 days)",
+    "moreItems": "More items"
+  },
+  "modal": {
+    "currentPrice": "Current price",
+    "current": "Current",
+    "lastPrice": "Last price",
+    "highest": "Highest",
+    "lowest": "Lowest",
+    "average": "Average",
+    "priceRange": "Price range",
+    "priceTrend": "Price trend",
+    "watchlistTrend": "Watchlist trend",
+    "price": "Price",
+    "noHistory": "No price history available yet",
+    "buyorders": "Buy orders (CSFloat)"
+  },
+  "summary": "{{shown}}{{ofTotal}} items · {{withOrders}} with buy order · prices from the server cache",
+  "ofTotal": " of {{total}}",
+  "emptyList": "No items in the watchlist. Use the search above and add new items.",
+  "itemsCount": "{{count}} items"
+}

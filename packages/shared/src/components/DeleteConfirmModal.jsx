@@ -1,9 +1,12 @@
 import { Button } from "@shared/components/ui/button";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, X } from "lucide-react";
 import { useClickOutside } from "@shared/hooks/useClickOutside";
 import { useModalKeyboard } from "@shared/hooks/useKeyboard";
 
-export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, itemName, title = "Item entfernen?", description }) {
+export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, itemName, title, description }) {
+  const { t } = useTranslation(["inventory", "common"]);
+  const resolvedTitle = title ?? t("deleteDialog.title");
   const modalRef = useClickOutside(!isDeleting ? onClose : null, isOpen);
   useModalKeyboard(!isDeleting ? onClose : null, isOpen);
   
@@ -26,7 +29,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
           className="absolute right-3 top-3 p-1 text-muted-foreground hover:text-foreground"
           disabled={isDeleting}
           data-keyboard-cancel
-          aria-label="Schliessen"
+          aria-label={t("deleteDialog.close")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -36,10 +39,10 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
             <AlertTriangle className="h-6 w-6 text-warn" />
           </div>
 
-          <h3 className="mb-2 text-lg font-semibold">{title}</h3>
+          <h3 className="mb-2 text-lg font-semibold">{resolvedTitle}</h3>
 
           <p className="mb-4 text-sm text-muted-foreground">
-            Möchtest du <span className="font-medium text-foreground">{itemName}</span> wirklich {description}?
+            {t("deleteDialog.confirmLead", { item: itemName, description })}
           </p>
 
           <div className="flex w-full gap-3">
@@ -50,7 +53,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, isDeleting, ite
               className="flex-1"
               data-keyboard-default
             >
-              {isDeleting ? "Wird entfernt..." : "Ja, entfernen"}
+              {isDeleting ? t("deleteDialog.removing") : t("deleteDialog.confirm")}
             </Button>
             <Button
               variant="outline"

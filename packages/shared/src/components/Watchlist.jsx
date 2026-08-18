@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Callout } from "./ui/callout.jsx";
 import { Card, CardContent } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
@@ -72,7 +73,7 @@ import {
 } from "@shared/lib/watchlistViewSnapshot.js";
 
 
-import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
+import { getActiveIntlLocale, translate } from "@shared/lib/i18n/index.js";
 function resolveBuyOrderItemName(row) {
   return String(
     row?.marketHashName ||
@@ -157,25 +158,25 @@ const WATCHLIST_ALL_CATEGORIES = "__all__";
 
 /** Sidebar "Ansicht" filters. */
 const WATCHLIST_SCOPES = [
-  { key: "all", label: "Alle", Icon: List },
-  { key: "alerts", label: "Mit Alarm", Icon: Bell },
-  { key: "orders", label: "Buyorders", Icon: AlignLeft },
+  { key: "all", labelKey: "scope.all", Icon: List },
+  { key: "alerts", labelKey: "scope.withAlert", Icon: Bell },
+  { key: "orders", labelKey: "scope.buyorders", Icon: AlignLeft },
 ];
 
 /** Trailing window for the row sparkline and the detail chart. */
 const WATCHLIST_RANGES = [
-  { key: 7, label: "7 Tage" },
-  { key: 30, label: "30 Tage" },
-  { key: 90, label: "90 Tage" },
+  { key: 7, labelKey: "range.d7" },
+  { key: 30, labelKey: "range.d30" },
+  { key: 90, labelKey: "range.d90" },
 ];
 
 const WATCHLIST_SORT_OPTIONS = [
-  { key: "d7", label: "7T-Veränderung" },
-  { key: "d1", label: "24h-Veränderung" },
-  { key: "d30", label: "30T-Veränderung" },
-  { key: "price", label: "Preis" },
-  { key: "target", label: "Abstand zum Ziel" },
-  { key: "name", label: "Name A–Z" },
+  { key: "d7", labelKey: "sort.change7d" },
+  { key: "d1", labelKey: "sort.change24h" },
+  { key: "d30", labelKey: "sort.change30d" },
+  { key: "price", labelKey: "sort.price" },
+  { key: "target", labelKey: "sort.distanceToTarget" },
+  { key: "name", labelKey: "sort.nameAsc" },
 ];
 
 function getWatchlistSortValue(item, key) {
@@ -266,7 +267,7 @@ function formatTargetDistance(distancePercent) {
   }
   const rounded = Math.abs(distancePercent);
   if (rounded < 0.05) {
-    return "am Ziel";
+    return translate("watchlist:atTarget");
   }
   return `${distancePercent >= 0 ? "+" : "−"}${rounded.toFixed(1)} %`;
 }
@@ -305,13 +306,13 @@ function WatchlistItemsLoadingSkeleton() {
   return (
     <GridTable>
       <GridTableHead columns={WATCHLIST_COLUMNS}>
-        <span>Item</span>
-        <span className="text-right">Live</span>
+        <span>{translate("watchlist:columns.item")}</span>
+        <span className="text-right">{translate("watchlist:columns.live")}</span>
         <span className="text-right">24h</span>
         <span className="text-right">7T</span>
         <span className="text-right">30T</span>
-        <span className="text-right">Verlauf</span>
-        <span className="text-right">Zielpreis</span>
+        <span className="text-right">{translate("watchlist:columns.history")}</span>
+        <span className="text-right">{translate("watchlist:columns.targetPrice")}</span>
       </GridTableHead>
       {[1, 2, 3, 4, 5].map((entry) => (
         <div
@@ -328,6 +329,7 @@ function WatchlistItemsLoadingSkeleton() {
 }
 
 export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
+  const { t } = useTranslation("watchlist");
   const { currency, formatPrice, convertToUsd, convertFromUsd } = useCurrency();
   const validSnapshot = getLoadedWatchlistSnapshot();
   const [watchlistItems, setWatchlistItems] = useState(() => validSnapshot?.items || []);
@@ -609,27 +611,27 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
             warnings: [
               {
                 code: "WATCHLIST_SYNC_FALLBACK",
-                label: "Live-Sync eingeschraenkt",
-                message: "Watchlist wurde ohne Live-Sync geladen. Bitte spaeter erneut versuchen.",
+                label: t("errors.syncFallbackTitle"),
+                message: t("errors.syncFallbackBody"),
               },
             ],
           });
           setWarnings([
             {
               code: "WATCHLIST_SYNC_FALLBACK",
-              label: "Live-Sync eingeschraenkt",
-              message: "Watchlist wurde ohne Live-Sync geladen. Bitte spaeter erneut versuchen.",
+              label: t("errors.syncFallbackTitle"),
+              message: t("errors.syncFallbackBody"),
             },
           ]);
           return;
         } catch (fallbackError) {
-          setError(fallbackError.message || "Fehler beim Laden der Watchlist.");
+          setError(fallbackError.message || t("errors.loadFailed"));
           setWarnings([]);
           return;
         }
       }
 
-      setError(requestError.message || "Fehler beim Laden der Watchlist.");
+      setError(requestError.message || t("errors.loadFailed"));
       setBuyOrderSummary([]);
       setBuyOrderOrders([]);
       setBuyOrderDebug({
@@ -647,7 +649,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     } finally {
       setLoading(false);
     }
-  }, [isDesktopRuntime]);
+  }, [isDesktopRuntime, t]);
 
   useEffect(() => {
     // Fresh snapshot (e.g. from the startup prefetch): serve it as-is, no
@@ -724,7 +726,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       await loadWatchlistData();
     } catch (requestError) {
       setError(
-        requestError.message || "Fehler beim Entfernen des Watchlist-Items."
+        requestError.message || t("errors.removeFailed")
       );
     } finally {
       setIsDeleting(false);
@@ -739,7 +741,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       await importCsFloatWatchlistData({ force: true });
       await loadWatchlistData({ showLoading: false });
     } catch (importError) {
-      setError(importError?.message || "CSFloat-Import fehlgeschlagen.");
+      setError(importError?.message || t("errors.csfloatImportFailed"));
     } finally {
       setIsImportingCsFloat(false);
     }
@@ -779,7 +781,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
     if (!clear) {
       const parsed = Number(String(targetInput).replace(",", "."));
       if (!Number.isFinite(parsed) || parsed <= 0) {
-        setTargetError("Bitte einen Zielpreis groesser 0 angeben.");
+        setTargetError(t("errors.targetGreaterZero"));
         return;
       }
       alertPriceUsd = Number(convertToUsd(parsed).toFixed(2));
@@ -799,7 +801,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         setTargetInput("");
       }
     } catch (saveError) {
-      setTargetError(saveError?.message || "Zielpreis konnte nicht gespeichert werden.");
+      setTargetError(saveError?.message || t("errors.targetSaveFailed"));
     } finally {
       setIsSavingTarget(false);
     }
@@ -857,12 +859,12 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           </div>
         }
       >
-        <FilterGroup label="Ansicht">
+        <FilterGroup label={t("filters.view")}>
           <div className="flex flex-col">
             {WATCHLIST_SCOPES.map((entry) => (
               <FilterScopeButton
                 key={entry.key}
-                label={entry.label}
+                label={t(entry.labelKey)}
                 soon={entry.soon}
                 count={
                   entry.key === "all"
@@ -879,20 +881,20 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
         </FilterGroup>
 
         {watchlistCategories.length > 1 ? (
-          <FilterGroup label="Kategorie">
+          <FilterGroup label={t("filters.category")}>
             <div className="flex flex-wrap gap-1">
               <FilterChip
                 active={activeCategory === WATCHLIST_ALL_CATEGORIES}
                 onClick={() => setCategory(WATCHLIST_ALL_CATEGORIES)}
               >
-                Alle
+                {t("filters.all")}
               </FilterChip>
               {watchlistCategories.map((entry) => (
                 <FilterChip
                   key={entry.key}
                   active={activeCategory === entry.key}
                   onClick={() => setCategory(entry.key)}
-                  title={`${entry.count} Items`}
+                  title={t("itemsCount", { count: entry.count })}
                 >
                   {entry.label}
                 </FilterChip>
@@ -901,7 +903,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           </FilterGroup>
         ) : null}
 
-        <FilterGroup label="Zeitraum">
+        <FilterGroup label={t("filters.period")}>
           <div className="flex flex-col">
             {WATCHLIST_RANGES.map((entry) => (
               <FilterSortButton
@@ -909,13 +911,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                 active={range === entry.key}
                 onClick={() => setRange(entry.key)}
               >
-                {entry.label}
+                {t(entry.labelKey)}
               </FilterSortButton>
             ))}
           </div>
         </FilterGroup>
 
-        <FilterGroup label="Sortierung">
+        <FilterGroup label={t("filters.sorting")}>
           <div className="flex flex-col">
             {WATCHLIST_SORT_OPTIONS.map((option) => (
               <FilterSortButton
@@ -925,7 +927,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                 soon={option.soon}
                 onClick={() => handleSortSelect(option.key)}
               >
-                {option.label}
+                {t(option.labelKey)}
               </FilterSortButton>
             ))}
           </div>
@@ -935,13 +937,16 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
       <div className="min-w-0 flex-1 space-y-4 lg:px-5 lg:py-[18px]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-extrabold tracking-[-0.01em] sm:text-2xl">Watchlist</h2>
+            <h2 className="text-xl font-extrabold tracking-[-0.01em] sm:text-2xl">{t("title")}</h2>
             <p className="mt-[7px] text-xs text-muted-foreground">
-              {sortedWatchlistItems.length}
-              {sortedWatchlistItems.length === decoratedItems.length
-                ? ""
-                : ` von ${decoratedItems.length}`}{" "}
-              Items · {buyOrderItemCount} mit Buyorder · Preise aus dem Server-Cache
+              {t("summary", {
+                shown: sortedWatchlistItems.length,
+                ofTotal:
+                  sortedWatchlistItems.length === decoratedItems.length
+                    ? ""
+                    : t("ofTotal", { total: decoratedItems.length }),
+                withOrders: buyOrderItemCount,
+              })}
             </p>
           </div>
           {isDesktopRuntime ? (
@@ -952,7 +957,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
               disabled={isImportingCsFloat}
               onClick={() => void handleImportCsFloatWatchlist()}
             >
-              {isImportingCsFloat ? "Importiere…" : "CSFloat importieren"}
+              {isImportingCsFloat ? t("importing") : t("importCsfloat")}
             </Button>
           ) : null}
         </div>
@@ -965,7 +970,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
           <Card>
             <CardContent className="p-4 text-center text-muted-foreground sm:p-8">
               <p className="text-sm">
-                Keine Items in der Watchlist. Nutze die Suche oben und fuege neue Items hinzu.
+                {t("emptyList")}
               </p>
             </CardContent>
           </Card>
@@ -976,23 +981,23 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
               <div className="hidden md:block">
                 <GridTable>
                   <GridTableHead columns={WATCHLIST_COLUMNS}>
-                    <span>Item</span>
-                    <span className="text-right">Live</span>
-                    <span className="text-right" title="Preisänderung der letzten 24 Stunden">
+                    <span>{t("columns.item")}</span>
+                    <span className="text-right">{t("columns.live")}</span>
+                    <span className="text-right" title={t("columns.change24h")}>
                       24h
                     </span>
-                    <span className="text-right" title="Preisänderung der letzten 7 Tage">
+                    <span className="text-right" title={t("columns.change7d")}>
                       7T
                     </span>
-                    <span className="text-right" title="Preisänderung der letzten 30 Tage">
+                    <span className="text-right" title={t("columns.change30d")}>
                       30T
                     </span>
-                    <span className="text-right">Verlauf</span>
-                    <span className="text-right">Zielpreis</span>
+                    <span className="text-right">{t("columns.history")}</span>
+                    <span className="text-right">{t("columns.targetPrice")}</span>
                   </GridTableHead>
 
                   {sortedWatchlistItems.length === 0 ? (
-                    <GridTableEmpty>Keine Items für diese Filter.</GridTableEmpty>
+                    <GridTableEmpty>{t("empty")}</GridTableEmpty>
                   ) : null}
 
                   {sortedWatchlistItems.map((item) => {
@@ -1030,7 +1035,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                               <span className="truncate">{resolveItemCategorySingular(item)}</span>
                               {hasItemBuyOrder ? (
                                 <span
-                                  title="Offene CSFloat-Buyorder"
+                                  title={t("openBuyorder")}
                                   className="shrink-0 bg-info/16 px-1.5 py-px text-[9px] font-extrabold tracking-[0.04em] text-info"
                                 >
                                   BO{" "}
@@ -1270,7 +1275,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                               }`}
                             >
                               {item.target.reached
-                                ? "Ziel erreicht"
+                                ? t("targetReached")
                                 : formatTargetDistance(item.target.distancePercent)}
                             </span>
                           </span>
@@ -1309,7 +1314,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     value={
                       hasFiniteNumber(selectedItemWithBuyOrderRows.currentPrice)
                         ? formatPrice(Number(selectedItemWithBuyOrderRows.currentPrice))
-                        : "Kein Preis"
+                        : t("noPrice")
                     }
                     delta={
                       Number.isFinite(selectedD1)
@@ -1327,13 +1332,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
 
                   {Array.isArray(selectedChartHistory) && selectedChartHistory.length > 0 ? (
                     <InspectorBlock
-                      label="Preisentwicklung"
+                      label={t("priceTrend")}
                       aside={
                         <button
                           type="button"
                           onClick={() => setShowAbsolute((current) => !current)}
                           className="font-extrabold uppercase tracking-[0.12em] transition-colors hover:text-foreground"
-                          title="Zwischen Absolutwert und Wachstum umschalten"
+                          title={t("toggleAbsoluteGrowth")}
                         >
                           {showAbsolute ? currency : "%"}
                         </button>
@@ -1351,7 +1356,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       />
                     </InspectorBlock>
                   ) : (
-                    <InspectorBlock label="Preisentwicklung">
+                    <InspectorBlock label={t("priceTrend")}>
                       <p className="mt-2 text-[12px] text-muted-foreground">
                         Keine Preishistorie verfuegbar.
                       </p>
@@ -1359,9 +1364,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   )}
 
                   {[
-                    { label: "24 Stunden", value: selectedItemWithBuyOrderRows.d1 },
-                    { label: "7 Tage", value: selectedItemWithBuyOrderRows.d7 },
-                    { label: "30 Tage", value: selectedItemWithBuyOrderRows.d30 },
+                    { label: t("range.h24"), value: selectedItemWithBuyOrderRows.d1 },
+                    { label: t("range.d7"), value: selectedItemWithBuyOrderRows.d7 },
+                    { label: t("range.d30"), value: selectedItemWithBuyOrderRows.d30 },
                   ].map((entry) => (
                     <div
                       key={entry.label}
@@ -1394,7 +1399,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       {!selectedItemWithBuyOrderRows.target?.hasTarget
                         ? "–"
                         : selectedItemWithBuyOrderRows.target.reached
-                          ? "Ziel erreicht"
+                          ? t("targetReached")
                           : formatTargetDistance(
                               selectedItemWithBuyOrderRows.target.distancePercent,
                             )}
@@ -1413,7 +1418,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   ) : null}
 
                   <InspectorBlock
-                    label="Buyorders · CSFloat"
+                    label={t("buyorders")}
                     aside={
                       selectedBestBuyOrder
                         ? formatPrice(Number(selectedBestBuyOrder.priceUsd), {
@@ -1541,9 +1546,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                               target that will never fire. */}
                           {selectedItemWithBuyOrderRows.target?.hasTarget
                             ? selectedItemWithBuyOrderRows.target.direction === "above"
-                              ? "Meldung, sobald der Preis das Ziel erreicht oder übersteigt."
-                              : "Meldung, sobald der Preis auf das Ziel oder darunter fällt."
-                            : "Noch kein Zielpreis gesetzt."}
+                              ? t("targetAboveHint")
+                              : t("targetBelowHint")
+                            : t("noTargetSet")}
                         </p>
                       )}
                     </div>
@@ -1559,13 +1564,13 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       <Trash2 className="mr-2 size-4" />
                       Entfernen
                     </Button>
-                    {/* "Zu Investments" needs a buy price and a purchase date the
+                    {/* t("toInvestments") needs a buy price and a purchase date the
                         watchlist does not hold — disabled until that flow exists. */}
                     <Button
                       variant="outline"
                       size="sm"
                       disabled
-                      title="Noch nicht verfügbar"
+                      title={t("notAvailableYet")}
                       className="h-8 flex-1 gap-1.5"
                     >
                       Zu Investments
@@ -1579,7 +1584,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     onConfirm={handleConfirmDelete}
                     isDeleting={isDeleting}
                     itemName={selectedItem?.name}
-                    description="aus deiner Watchlist entfernen"
+                    description={t("removeFromWatchlist")}
                   />
                 </Inspector>
               ) : (

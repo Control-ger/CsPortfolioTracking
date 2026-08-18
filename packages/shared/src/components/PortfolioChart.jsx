@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis } from "recharts";
+import { Area, ComposedChart, Line, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
@@ -318,7 +318,14 @@ export const PortfolioChart = ({
       };
     });
   }, [visibleHistory, showAbsolute]);
-  const normalizedReferenceLineValue = Number(referenceLineValue);
+  // Number(null) is 0, and 0 is finite — with the bare Number() every caller that
+  // passes no buy-in (the dashboard) claimed one at 0, i.e. a line at −100 %. It
+  // stayed invisible only because the stroke was an invalid paint; guard the
+  // absent value here so fixing the colour does not paint a phantom line.
+  const normalizedReferenceLineValue =
+    referenceLineValue === null || referenceLineValue === undefined || referenceLineValue === ""
+      ? Number.NaN
+      : Number(referenceLineValue);
   const normalizedReferenceLineTimestamp = Number(referenceLineTimestamp);
   // Number(null) is 0, so a missing timestamp must be detected via > 0.
   const hasReferenceTimestamp =
@@ -620,14 +627,23 @@ export const PortfolioChart = ({
                   <stop offset="100%" stopColor={trendStats.lineColor} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.45} />
+              {/* No CartesianGrid: the design draws the plot bare, with the dashed
+                  zero line as the only rule. It used to sit here but painted
+                  nothing — `hsl(var(--border))` resolved to `hsl(oklch(…))`, an
+                  invalid paint the renderer drops. Same reason the zero line was
+                  invisible; hence `var(--…)` unwrapped below. */}
               {!showAbsolute ? (
-                <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.8} strokeDasharray="3 3" />
+                <ReferenceLine
+                  y={0}
+                  stroke="var(--border-strong)"
+                  strokeDasharray="5 5"
+                  ifOverflow="hidden"
+                />
               ) : null}
               {showReferenceLine ? (
                 <ReferenceLine
                   y={referenceDisplayValue}
-                  stroke="hsl(var(--muted-foreground))"
+                  stroke="var(--muted-foreground)"
                   strokeOpacity={0.65}
                   strokeDasharray="4 4"
                   ifOverflow="extendDomain"

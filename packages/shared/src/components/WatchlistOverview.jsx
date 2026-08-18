@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { ItemListRow } from "./ItemListRow";
@@ -115,6 +116,7 @@ export const WatchlistOverview = ({
   allowExpand = true,
   onWarningsChange,
 }) => {
+  const { t } = useTranslation("watchlist");
   const { formatPrice } = useCurrency();
   const validSnapshot = getValidWatchlistOverviewSnapshot();
   const [allWatchlistItems, setAllWatchlistItems] = useState(() => validSnapshot?.items || []);
@@ -138,7 +140,7 @@ export const WatchlistOverview = ({
           updatedAt: Date.now(),
         };
       } catch (err) {
-        console.error("Fehler beim Laden der Watchlist:", err);
+        console.error(t("errors.loadFailedPrefix"), err);
         setWarnings([]);
       } finally {
         setLoading(false);
@@ -146,7 +148,7 @@ export const WatchlistOverview = ({
     };
 
     loadWatchlistData();
-  }, [maxItems]);
+  }, [maxItems, t]);
 
   useEffect(() => {
     onWarningsChange?.(warnings);
@@ -252,7 +254,7 @@ export const WatchlistOverview = ({
             <div className="space-y-2">
                 <div className="flex items-center gap-2 text-success">
                 <TrendingUp className="h-4 w-4" />
-                <h3 className="text-xs font-semibold uppercase tracking-wide">Top Gewinner (7 Tage)</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide">{t("overview.topGainers")}</h3>
               </div>
               <div className="space-y-2">
                 {gainers.map((item) => (
@@ -273,7 +275,7 @@ export const WatchlistOverview = ({
             <div className="space-y-2">
                 <div className="flex items-center gap-2 text-danger">
                 <TrendingDown className="h-4 w-4" />
-                <h3 className="text-xs font-semibold uppercase tracking-wide">Top Verlierer (7 Tage)</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide">{t("overview.topLosers")}</h3>
               </div>
               <div className="space-y-2">
                 {losers.map((item) => (
@@ -296,7 +298,7 @@ export const WatchlistOverview = ({
                 <div className="w-full border-t border-muted" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-[10px] uppercase text-muted-foreground">Weitere Items</span>
+                <span className="bg-card px-2 text-[10px] uppercase text-muted-foreground">{t("overview.moreItems")}</span>
               </div>
             </div>
           )}

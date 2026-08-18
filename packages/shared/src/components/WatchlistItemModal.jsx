@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BaseModal } from "@shared/components/BaseModal";
 import { PortfolioChart } from "@shared/components/PortfolioChart";
 import { Badge } from "@shared/components/ui/badge";
@@ -8,6 +9,7 @@ import { Trash2 } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
 export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
+  const { t } = useTranslation("watchlist");
   const { currency, formatPrice: formatCurrencyPrice } = useCurrency();
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -198,9 +200,9 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
             </div>
             <PortfolioChart
               history={item.priceHistory}
-              title="Watchlist Entwicklung"
-              valueLabel="Preis"
-              emptyLabel="Noch keine Preishistorie verfuegbar"
+              title={t("modal.watchlistTrend")}
+              valueLabel={t("modal.price")}
+              emptyLabel={t("modal.noHistory")}
               showAbsolute={showAbsolute}
               disableDarkGlass
             />
@@ -277,7 +279,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
         onConfirm={handleConfirmDelete}
         isDeleting={isDeleting}
         itemName={item.name}
-        description="aus deiner Watchlist entfernen"
+        description={t("removeFromWatchlist")}
       />
     </BaseModal>
   );

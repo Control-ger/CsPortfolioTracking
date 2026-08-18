@@ -102,5 +102,14 @@
     "onSchedule": "im Plan",
     "delayed": "verzögert",
     "lagging": "Nachlauf"
+  },
+  "actions": {
+    "cancel": "Abbrechen"
+  },
+  "filters": {
+    "filter": "Filter",
+    "collapseFilter": "Filter einklappen",
+    "expandFilter": "Filter ausklappen",
+    "soon": "Noch nicht verfügbar"
   }
 }

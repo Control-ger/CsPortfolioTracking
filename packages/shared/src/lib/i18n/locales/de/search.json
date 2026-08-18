@@ -1,1 +1,64 @@
-{}
+{
+  "categories": {
+    "all": "Alle",
+    "skins": "Skins",
+    "cases": "Cases",
+    "stickers": "Sticker",
+    "agents": "Agents",
+    "capsules": "Capsules",
+    "patches": "Patches",
+    "musicKits": "Music Kits",
+    "charms": "Charms",
+    "everythingElse": "Alles andere"
+  },
+  "conditions": {
+    "all": "Alle Conditions",
+    "factoryNew": "Factory New",
+    "minimalWear": "Minimal Wear",
+    "fieldTested": "Field-Tested",
+    "wellWorn": "Well-Worn",
+    "battleScarred": "Battle-Scarred"
+  },
+  "sort": {
+    "relevance": "Relevanz",
+    "nameAsc": "Name A–Z",
+    "nameDesc": "Name Z–A",
+    "priceAsc": "Preis aufsteigend",
+    "priceDesc": "Preis absteigend"
+  },
+  "columns": {
+    "item": "Item",
+    "price": "Preis",
+    "condition": "Condition",
+    "action": "Aktion"
+  },
+  "filters": {
+    "title": "Filter",
+    "conditionSkinsOnly": "Zustand gilt nur für Skins",
+    "priceFrom": "Preis von",
+    "priceTo": "Preis bis",
+    "ownedOnly": "Nur Items im Bestand"
+  },
+  "priceFollows": "Preis folgt",
+  "watchlist": "Watchlist",
+  "addToWatchlist": "Zur Watchlist",
+  "hint": "Gib mindestens 2 Zeichen ein und drücke Enter — oder browse direkt über die Kategorien.",
+  "running": "Suche läuft…",
+  "noResults": "Keine Treffer für diese Suche.",
+  "placeholder": "Nach Item suchen…",
+  "useTopBar": "Suche erfolgt über die obere Suchleiste.",
+  "browse": "· Browse",
+  "viewTiles": "Kacheln",
+  "viewList": "Liste",
+  "errors": {
+    "searchFailed": "Fehler bei der Item-Suche.",
+    "alreadyInWatchlist": "Dieses Item ist bereits in der Watchlist.",
+    "addFailed": "Fehler beim Hinzufügen zur Watchlist."
+  },
+  "priceChips": {
+    "priceAll": "Alle",
+    "priceUnder": "< {{amount}}",
+    "priceBetween": "{{min}}–{{max}}",
+    "priceOver": "> {{amount}}"
+  }
+}

@@ -1,4 +1,5 @@
 import { TrendingDown, TrendingUp, RotateCw, Clock } from "lucide-react";
+import { translate } from "../lib/i18n/index.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { Skeleton } from "@shared/components/ui/skeleton.jsx";
 
@@ -35,7 +36,7 @@ const formatPercent = (value, fractionDigits = 2) => {
 const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
   if (!Number.isFinite(liveItemsCount) || liveItemsCount <= 0) {
     return {
-      label: "keine live quotes",
+      label: translate("common:syncHealth.noLiveQuotes"),
       tone: "text-muted-foreground",
       iconClass: "rounded-full border border-border bg-surface-2 p-2 text-muted-foreground",
       icon: "clock",
@@ -44,7 +45,7 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
 
   if (!Number.isFinite(oldestAgeSeconds)) {
     return {
-      label: "status unbekannt",
+      label: translate("common:syncHealth.unknown"),
       tone: "text-muted-foreground",
       iconClass: "rounded-full border border-border bg-surface-2 p-2 text-muted-foreground",
       icon: "clock",
@@ -53,7 +54,7 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
 
   if (oldestAgeSeconds <= 90 * 60) {
     return {
-      label: "im plan",
+      label: translate("common:syncHealth.onSchedule"),
       tone: "text-success",
       iconClass: "rounded-full border border-success/30 bg-success/10 p-2 text-success",
       icon: "clock",
@@ -62,7 +63,7 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
 
   if (oldestAgeSeconds <= 3 * 60 * 60) {
     return {
-      label: "verzoegert",
+      label: translate("common:syncHealth.delayed"),
       tone: "text-warn",
       iconClass: "rounded-full border border-warn/30 bg-warn/10 p-2 text-warn",
       icon: "refresh",
@@ -70,7 +71,7 @@ const resolveSyncHealth = (oldestAgeSeconds, liveItemsCount) => {
   }
 
   return {
-    label: "nachlauf",
+    label: translate("common:syncHealth.lagging"),
     tone: "text-danger",
     iconClass: "rounded-full border border-danger/30 bg-danger/10 p-2 text-danger",
     icon: "refresh",

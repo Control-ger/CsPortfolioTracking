@@ -1,1 +1,93 @@
-{}
+{
+  "title": "Watchlist",
+  "scope": {
+    "all": "Alle",
+    "withAlert": "Mit Alarm",
+    "buyorders": "Buyorders"
+  },
+  "range": {
+    "d7": "7 Tage",
+    "d30": "30 Tage",
+    "d90": "90 Tage",
+    "h24": "24 Stunden"
+  },
+  "sort": {
+    "change7d": "7T-Veränderung",
+    "change24h": "24h-Veränderung",
+    "change30d": "30T-Veränderung",
+    "price": "Preis",
+    "distanceToTarget": "Abstand zum Ziel",
+    "nameAsc": "Name A–Z"
+  },
+  "columns": {
+    "item": "Item",
+    "live": "Live",
+    "history": "Verlauf",
+    "targetPrice": "Zielpreis",
+    "change24h": "Preisänderung der letzten 24 Stunden",
+    "change7d": "Preisänderung der letzten 7 Tage",
+    "change30d": "Preisänderung der letzten 30 Tage"
+  },
+  "filters": {
+    "view": "Ansicht",
+    "category": "Kategorie",
+    "period": "Zeitraum",
+    "sorting": "Sortierung",
+    "all": "Alle"
+  },
+  "empty": "Keine Items für diese Filter.",
+  "atTarget": "am Ziel",
+  "targetReached": "Ziel erreicht",
+  "noPrice": "Kein Preis",
+  "openBuyorder": "Offene CSFloat-Buyorder",
+  "importing": "Importiere…",
+  "importCsfloat": "CSFloat importieren",
+  "priceTrend": "Preisentwicklung",
+  "toggleAbsoluteGrowth": "Zwischen Absolutwert und Wachstum umschalten",
+  "price": "Preis",
+  "buyorders": "Buyorders · CSFloat",
+  "buyorderColumns": {
+    "price": "Preis",
+    "orders": "Orders",
+    "quantity": "Menge"
+  },
+  "targetAboveHint": "Meldung, sobald der Preis das Ziel erreicht oder übersteigt.",
+  "targetBelowHint": "Meldung, sobald der Preis auf das Ziel oder darunter fällt.",
+  "noTargetSet": "Noch kein Zielpreis gesetzt.",
+  "toInvestments": "Zu Investments",
+  "notAvailableYet": "Noch nicht verfügbar",
+  "removeFromWatchlist": "aus deiner Watchlist entfernen",
+  "errors": {
+    "loadFailed": "Fehler beim Laden der Watchlist.",
+    "loadFailedPrefix": "Fehler beim Laden der Watchlist:",
+    "removeFailed": "Fehler beim Entfernen des Watchlist-Items.",
+    "csfloatImportFailed": "CSFloat-Import fehlgeschlagen.",
+    "targetGreaterZero": "Bitte einen Zielpreis größer 0 angeben.",
+    "targetSaveFailed": "Zielpreis konnte nicht gespeichert werden.",
+    "syncFallbackTitle": "Live-Sync eingeschränkt",
+    "syncFallbackBody": "Watchlist wurde ohne Live-Sync geladen. Bitte später erneut versuchen."
+  },
+  "overview": {
+    "topGainers": "Top Gewinner (7 Tage)",
+    "topLosers": "Top Verlierer (7 Tage)",
+    "moreItems": "Weitere Items"
+  },
+  "modal": {
+    "currentPrice": "Aktueller Preis",
+    "current": "Aktuell",
+    "lastPrice": "Letzter Preis",
+    "highest": "Höchst",
+    "lowest": "Tiefst",
+    "average": "Durchschnitt",
+    "priceRange": "Preis-Spanne",
+    "priceTrend": "Preisentwicklung",
+    "watchlistTrend": "Watchlist Entwicklung",
+    "price": "Preis",
+    "noHistory": "Noch keine Preishistorie verfügbar",
+    "buyorders": "Buyorders (CSFloat)"
+  },
+  "summary": "{{shown}}{{ofTotal}} Items · {{withOrders}} mit Buyorder · Preise aus dem Server-Cache",
+  "ofTotal": " von {{total}}",
+  "emptyList": "Keine Items in der Watchlist. Nutze die Suche oben und füge neue Items hinzu.",
+  "itemsCount": "{{count}} Items"
+}

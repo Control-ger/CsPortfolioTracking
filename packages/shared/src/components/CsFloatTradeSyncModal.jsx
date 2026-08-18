@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { translate } from "../lib/i18n/index.js";
+import { useTranslation } from "react-i18next";
 import { FieldLabel } from "@shared/components/ui/data-display";
 
 import { BaseModal } from "@shared/components/BaseModal";
@@ -39,6 +41,7 @@ function Stat({ label, value, tone = "muted" }) {
 }
 
 export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
+  const { t } = useTranslation("inventory");
   const { formatPrice } = useCurrency();
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -53,7 +56,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
       const response = await fetchCsFloatTradeSyncPreview({ type: "buy", limit: 1000, maxPages: 10 });
       setPreview(response?.data || null);
     } catch (requestError) {
-      setError(requestError.message || "Preview konnte nicht geladen werden.");
+      setError(requestError.message || translate("inventory:syncModal.previewLoadFailed"));
     } finally {
       setLoadingPreview(false);
     }
@@ -131,7 +134,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
       await onSynced?.(payload);
       onClose();
     } catch (requestError) {
-      setError(requestError.message || "Import konnte nicht ausgefuehrt werden.");
+      setError(requestError.message || translate("inventory:syncModal.importFailed"));
     } finally {
       setExecuting(false);
     }
@@ -141,7 +144,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title="CSFloat Trades Sync"
+      title={t("syncModal.csfloatTitle")}
       size="full"
       className="p-0"
     >
@@ -151,12 +154,12 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         ) : null}
 
         {previewErrors.length > 0 ? (
-          <Callout tone="danger" title="CSFloat hat den Abruf abgelehnt:">
+          <Callout tone="danger" title={t("syncModal.csfloatRejected")}>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               {previewErrors.map((err, index) => (
                 <li key={`${err?.code || "csfloat-error"}-${index}`}>
                   {err?.statusCode ? `${err.statusCode} ` : ""}
-                  {err?.message || err?.label || err?.code || "Unbekannter CSFloat-Fehler"}
+                  {err?.message || err?.label || err?.code || t("syncModal.csfloatUnknownError")}
                   {String(err?.code || "").includes("UNAUTHORIZED") || err?.statusCode === 401
                     ? " — API-Key pruefen (Einstellungen → CSFloat)."
                     : ""}
@@ -167,13 +170,13 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
         ) : null}
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <Stat label="Rohdaten" value={preview ? preview.totalFetched : "-"} />
-          <Stat label="Normalisiert" value={preview ? preview.normalizedCount : "-"} />
-          <Stat label="Importierbar" value={preview ? preview.insertable : "-"} tone="positive" />
-          <Stat label="Aktualisiert" value={preview ? (preview.updated ?? updatedCount) : "-"} tone="positive" />
-          <Stat label="Duplikate" value={preview ? preview.duplicates : "-"} tone="negative" />
-          <Stat label="Seiten" value={preview ? preview.pagesFetched : "-"} />
-          <Stat label="Übersprungen" value={preview ? preview.skipped ?? 0 : "-"} />
+          <Stat label={t("syncModal.rawData")} value={preview ? preview.totalFetched : "-"} />
+          <Stat label={t("syncModal.normalized")} value={preview ? preview.normalizedCount : "-"} />
+          <Stat label={t("syncModal.importable")} value={preview ? preview.insertable : "-"} tone="positive" />
+          <Stat label={t("syncModal.updated")} value={preview ? (preview.updated ?? updatedCount) : "-"} tone="positive" />
+          <Stat label={t("syncModal.duplicates")} value={preview ? preview.duplicates : "-"} tone="negative" />
+          <Stat label={t("syncModal.pages")} value={preview ? preview.pagesFetched : "-"} />
+          <Stat label={t("syncModal.skipped")} value={preview ? preview.skipped ?? 0 : "-"} />
         </div>
 
         {preview?.clustering?.applied ? (
@@ -281,7 +284,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
               Preview neu laden
             </Button>
             <Button type="button" onClick={handleExecute} disabled={!hasPreview || executing || !previewConfirmed} data-keyboard-default>
-              {executing ? "Import laeuft..." : "Import starten"}
+              {executing ? t("syncModal.importRunning") : t("syncModal.startImport")}
             </Button>
           </div>
         </div>

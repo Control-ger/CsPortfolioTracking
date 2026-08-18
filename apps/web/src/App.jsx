@@ -592,7 +592,11 @@ export default function App() {
             <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-[calc(100dvh-2.5rem)] lg:justify-center lg:pt-2">
               <DesktopSidebarRail desktopRuntime={desktopRuntime} />
             </aside>
-            <main className="w-full flex-1 min-h-0 overflow-y-auto">
+            {/* lg:pr-6 mirrors the grid's lg:gap-6 on the rail side, so the content
+                column sits in an even gutter instead of running into the window
+                edge. Padding on the scroll container, not on the pages, keeps the
+                scrollbar out at the frame where it belongs. */}
+            <main className="w-full flex-1 min-h-0 overflow-y-auto lg:pr-6">
               {routeViews}
             </main>
           </div>

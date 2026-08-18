@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Check,
   LayoutGrid,
@@ -32,33 +33,33 @@ import { BaseModal } from "@shared/components/BaseModal";
  * chip here, or that filter becomes unreachable.
  */
 const CATEGORY_CHIPS = [
-  { label: "Alle", type: "all" },
-  { label: "Skins", type: "skin" },
-  { label: "Cases", type: "case" },
-  { label: "Sticker", type: "sticker" },
-  { label: "Agents", type: "agent" },
-  { label: "Capsules", type: "sticker_capsule" },
-  { label: "Patches", type: "patch" },
-  { label: "Music Kits", type: "music_kit" },
-  { label: "Charms", type: "charm" },
-  { label: "Everything else", type: "other" },
+  { labelKey: "categories.all", type: "all" },
+  { labelKey: "categories.skins", type: "skin" },
+  { labelKey: "categories.cases", type: "case" },
+  { labelKey: "categories.stickers", type: "sticker" },
+  { labelKey: "categories.agents", type: "agent" },
+  { labelKey: "categories.capsules", type: "sticker_capsule" },
+  { labelKey: "categories.patches", type: "patch" },
+  { labelKey: "categories.musicKits", type: "music_kit" },
+  { labelKey: "categories.charms", type: "charm" },
+  { labelKey: "categories.everythingElse", type: "other" },
 ];
 
 const WEAR_OPTIONS = [
-  { value: "all", label: "Alle Conditions" },
-  { value: "factory_new", label: "Factory New" },
-  { value: "minimal_wear", label: "Minimal Wear" },
-  { value: "field_tested", label: "Field-Tested" },
-  { value: "well_worn", label: "Well-Worn" },
-  { value: "battle_scarred", label: "Battle-Scarred" },
+  { value: "all", labelKey: "conditions.all" },
+  { value: "factory_new", labelKey: "conditions.factoryNew" },
+  { value: "minimal_wear", labelKey: "conditions.minimalWear" },
+  { value: "field_tested", labelKey: "conditions.fieldTested" },
+  { value: "well_worn", labelKey: "conditions.wellWorn" },
+  { value: "battle_scarred", labelKey: "conditions.battleScarred" },
 ];
 
 const SORT_OPTIONS = [
-  { value: "relevance", label: "Relevanz" },
-  { value: "name_asc", label: "Name A-Z" },
-  { value: "name_desc", label: "Name Z-A" },
-  { value: "price_asc", label: "Preis aufsteigend" },
-  { value: "price_desc", label: "Preis absteigend" },
+  { value: "relevance", labelKey: "sort.relevance" },
+  { value: "name_asc", labelKey: "sort.nameAsc" },
+  { value: "name_desc", labelKey: "sort.nameDesc" },
+  { value: "price_asc", labelKey: "sort.priceAsc" },
+  { value: "price_desc", labelKey: "sort.priceDesc" },
 ];
 
 const SEARCH_ALIASES = [
@@ -116,12 +117,14 @@ const BROWSABLE_ITEM_TYPES = new Set([
 ]);
 
 /** Quick-select ranges for the price filter, in EUR. */
+// The bounds stay literal euro amounts — they are the filter's actual values,
+// not copy, and converting them per locale would change what the chip filters.
 const PRICE_RANGE_CHIPS = [
-  { label: "Alle", min: "", max: "" },
-  { label: "< 10 €", min: "", max: "10" },
-  { label: "10–100 €", min: "10", max: "100" },
-  { label: "100–1.000 €", min: "100", max: "1000" },
-  { label: "> 1.000 €", min: "1000", max: "" },
+  { labelKey: "priceChips.priceAll", min: "", max: "" },
+  { labelKey: "priceChips.priceUnder", args: { amount: "10 €" }, min: "", max: "10" },
+  { labelKey: "priceChips.priceBetween", args: { min: "10", max: "100 €" }, min: "10", max: "100" },
+  { labelKey: "priceChips.priceBetween", args: { min: "100", max: "1.000 €" }, min: "100", max: "1000" },
+  { labelKey: "priceChips.priceOver", args: { amount: "1.000 €" }, min: "1000", max: "" },
 ];
 
 /**
@@ -166,6 +169,7 @@ export const ItemSearch = ({
   showSearchInput = true,
   submittedTerm = null,
 }) => {
+  const { t } = useTranslation("search");
   const { formatPrice } = useCurrency();
   const [searchTerm, setSearchTerm] = useState(() => String(initialSearchTerm || "").trim());
   const [submittedSearchTerm, setSubmittedSearchTerm] = useState(() =>
@@ -293,7 +297,7 @@ export const ItemSearch = ({
           setTotalPages(0);
           setBrowseMode(false);
           setWarnings([]);
-          setError(requestError?.message || "Fehler bei der Item-Suche.");
+          setError(requestError?.message || t("errors.searchFailed"));
         }
       } finally {
         if (!cancelled) {
@@ -316,6 +320,7 @@ export const ItemSearch = ({
     page,
     shouldSearch,
     sortBy,
+    t,
   ]);
 
   useEffect(() => {
@@ -339,7 +344,7 @@ export const ItemSearch = ({
     }
 
     if (existingItemNames.has(marketHashName)) {
-      setError("Dieses Item ist bereits in der Watchlist.");
+      setError(t("errors.alreadyInWatchlist"));
       return;
     }
 
@@ -351,7 +356,7 @@ export const ItemSearch = ({
         await onAddToWatchlist();
       }
     } catch (requestError) {
-      setError(requestError?.message || "Fehler beim Hinzufuegen zur Watchlist.");
+      setError(requestError?.message || t("errors.addFailed"));
     } finally {
       setSubmittingItem("");
     }
@@ -374,7 +379,7 @@ export const ItemSearch = ({
 
   const priceLabel = (candidate) => {
     const value = Number(candidate.livePriceEur);
-    return Number.isFinite(value) && value > 0 ? formatPrice(value) : "Preis folgt";
+    return Number.isFinite(value) && value > 0 ? formatPrice(value) : t("priceFollows");
   };
 
   const renderAddButton = (candidate, { compact = false } = {}) => {
@@ -401,7 +406,7 @@ export const ItemSearch = ({
         ) : (
           <Plus className="size-3.5" />
         )}
-        {alreadyAdded ? "Watchlist" : "Zur Watchlist"}
+        {alreadyAdded ? "Watchlist" : t("addToWatchlist")}
       </button>
     );
   };
@@ -469,10 +474,10 @@ export const ItemSearch = ({
       <div
         className={`hidden border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground ${LIST_COLUMNS}`}
       >
-        <span>Item</span>
-        <span className="text-right">Preis</span>
-        <span>Condition</span>
-        <span className="text-right">Aktion</span>
+        <span>{t("columns.item")}</span>
+        <span className="text-right">{t("columns.price")}</span>
+        <span>{t("columns.condition")}</span>
+        <span className="text-right">{t("columns.action")}</span>
       </div>
       {results.map((candidate) => (
         <div
@@ -549,7 +554,7 @@ export const ItemSearch = ({
                     : "border border-border-strong font-semibold text-foreground"
                 }`}
               >
-                {chip.label}
+                {t(chip.labelKey)}
               </button>
             ))}
           </div>
@@ -565,7 +570,7 @@ export const ItemSearch = ({
                 key={option.value}
                 type="button"
                 disabled={!wearEnabled}
-                title={wearEnabled ? undefined : "Zustand gilt nur für Skins"}
+                title={wearEnabled ? undefined : t("filters.conditionSkinsOnly")}
                 onClick={() => {
                   setWear(option.value);
                   setPage(1);
@@ -578,7 +583,7 @@ export const ItemSearch = ({
                       : "border border-border-strong font-semibold text-foreground"
                 }`}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
           </div>
@@ -594,7 +599,7 @@ export const ItemSearch = ({
               onChange={(event) => setPriceMin(event.target.value)}
               inputMode="decimal"
               placeholder="von"
-              aria-label="Preis von"
+              aria-label={t("filters.priceFrom")}
               className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-xs"
             />
             <span className="text-xs text-muted-foreground">bis</span>
@@ -603,7 +608,7 @@ export const ItemSearch = ({
               onChange={(event) => setPriceMax(event.target.value)}
               inputMode="decimal"
               placeholder="bis"
-              aria-label="Preis bis"
+              aria-label={t("filters.priceTo")}
               className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-xs"
             />
           </div>
@@ -612,7 +617,7 @@ export const ItemSearch = ({
               const chipActive = priceMin === chip.min && priceMax === chip.max;
               return (
                 <button
-                  key={chip.label}
+                  key={chip.labelKey + JSON.stringify(chip.args || {})}
                   type="button"
                   onClick={() => {
                     setPriceMin(chip.min);
@@ -624,7 +629,7 @@ export const ItemSearch = ({
                       : "border border-border-strong font-semibold text-foreground"
                   }`}
                 >
-                  {chip.label}
+                  {t(chip.labelKey, chip.args)}
                 </button>
               );
             })}
@@ -648,7 +653,7 @@ export const ItemSearch = ({
               Blendet alles aus, was du nicht besitzt
             </span>
           </span>
-          <Switch checked={false} disabled aria-label="Nur Items im Bestand" />
+          <Switch checked={false} disabled aria-label={t("filters.ownedOnly")} />
         </div>
 
         <div className="flex items-center gap-2.5 border-t border-border-soft pt-4">
@@ -679,12 +684,10 @@ export const ItemSearch = ({
 
   const renderResults = () => {
     if (!shouldSearch) {
-      return renderStatus(
-        "Gib mindestens 2 Zeichen ein und drücke Enter — oder browse direkt über die Kategorien.",
-      );
+      return renderStatus(t("hint"));
     }
-    if (isSearching) return renderStatus("Suche läuft…", true);
-    if (results.length === 0) return renderStatus("Keine Treffer für diese Suche.");
+    if (isSearching) return renderStatus(t("running"), true);
+    if (results.length === 0) return renderStatus(t("noResults"));
     return viewMode === "grid" ? renderGrid() : renderList();
   };
 
@@ -702,13 +705,13 @@ export const ItemSearch = ({
               ref={searchInputRef}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Nach Item suchen…"
+              placeholder={t("placeholder")}
               disabled={submittingItem !== ""}
               className="h-11 w-full rounded-xl border border-border-strong bg-card pl-[42px] pr-3.5 text-[15px] text-foreground outline-none transition-colors focus:border-success/50"
             />
           </label>
         ) : (
-          <p className="text-xs text-muted-foreground">Suche erfolgt über die obere Suchleiste.</p>
+          <p className="text-xs text-muted-foreground">{t("useTopBar")}</p>
         )}
 
         {/* Count and both selects wrapped onto three lines at 380px and pushed
@@ -751,7 +754,7 @@ export const ItemSearch = ({
             <SelectContent>
               {SORT_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -771,7 +774,7 @@ export const ItemSearch = ({
             <SelectContent>
               {WEAR_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -785,8 +788,8 @@ export const ItemSearch = ({
             value={viewMode}
             onChange={setViewMode}
             items={[
-              { value: "grid", title: "Kacheln", label: <LayoutGrid className="size-[15px]" /> },
-              { value: "list", title: "Liste", label: <List className="size-[15px]" /> },
+              { value: "grid", title: t("viewTiles"), label: <LayoutGrid className="size-[15px]" /> },
+              { value: "list", title: t("viewList"), label: <List className="size-[15px]" /> },
             ]}
           />
         </div>
@@ -811,7 +814,7 @@ export const ItemSearch = ({
                 : "border border-border-strong font-semibold text-foreground hover:bg-surface-2"
             }`}
           >
-            {chip.label}
+            {t(chip.labelKey)}
           </button>
         ))}
       </div>
