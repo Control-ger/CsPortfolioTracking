@@ -74,6 +74,12 @@ Key `data[]` fields:
 - `change24hEuro`, `change24hPercent`
 - `change7dEuro`, `change7dPercent`
 - `change30dEuro`, `change30dPercent`
+- `priceSparkline` — `float[]|null`, daily average **USD** prices over the trailing
+  30 days, oldest first, for the inventory table's sparkline column. `null` when
+  fewer than two days of history exist. Shape-only: the series is normalised
+  against its own min/max on render, so it is deliberately not FX-converted.
+  The window matches the item detail chart's default range, so the row's mini
+  curve and the chart that opens beside it show the same shape.
 - `lastPriceUpdateAt`
 - `priceAgeSeconds`
 - `freshnessStatus`

@@ -205,6 +205,67 @@ final class PriceHistoryRepository
         }
     }
 
+    /**
+     * Daily average USD price per item, for the inventory table's sparkline.
+     *
+     * Deliberately NOT `findHistoryMapByItemIds`: that returns the raw hourly
+     * rows, and even a 30-day window over a 50-item portfolio is ~36k rows to
+     * ship and re-bucket in PHP on every portfolio load. Collapsing to one point
+     * per day in SQL makes it ~30 per item, which is about what the sparkline
+     * draws anyway.
+     *
+     * USD only, no exchange-rate join: the sparkline is normalised against its
+     * own min/max and so plots shape, not magnitude. A per-row FX conversion
+     * would change nothing on screen and would cost a join over every bucket.
+     *
+     * @param int[] $itemIds
+     * @return array<int, float[]> item id => chronological daily prices
+     */
+    public function findDailyPriceSeriesMapByItemIds(array $itemIds, string $fromDate): array
+    {
+        $normalizedIds = array_values(array_unique(array_filter(array_map(
+            static fn(mixed $value): int => (int) $value,
+            $itemIds
+        ), static fn(int $value): bool => $value > 0)));
+
+        if ($normalizedIds === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($normalizedIds), '?'));
+        $sql = "SELECT ph.item_id, DATE(ph.bucket_start) AS bucket_day, AVG(ph.price_usd) AS price_usd
+                FROM " . self::TABLE_NAME . " ph
+                WHERE ph.item_id IN ({$placeholders}) AND ph.bucket_start >= ?
+                GROUP BY ph.item_id, DATE(ph.bucket_start)
+                ORDER BY ph.item_id ASC, bucket_day ASC";
+
+        $params = array_merge($normalizedIds, [$fromDate]);
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $map = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $itemId = (int) ($row['item_id'] ?? 0);
+                if ($itemId <= 0) {
+                    continue;
+                }
+                $map[$itemId] ??= [];
+                $map[$itemId][] = round((float) ($row['price_usd'] ?? 0.0), 4);
+            }
+            return $map;
+        } catch (Throwable $exception) {
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                $sql,
+                $exception,
+                ['itemIds' => count($normalizedIds), 'fromDate' => $fromDate]
+            );
+            throw $exception;
+        }
+    }
+
     public function upsertPrice(
         int $itemId,
         string $date,

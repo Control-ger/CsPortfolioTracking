@@ -69,6 +69,14 @@ final class PortfolioService
             $itemIds,
             date('Y-m-d H:i:s', strtotime('-30 days'))
         );
+        // 30-day daily series behind the inventory table's sparkline column.
+        // 30 and not 90: the range switch elsewhere in the app offers 7T/30T/1J/MAX,
+        // and the item detail chart opens on 30T — a 90-day sparkline would show a
+        // different curve shape than the chart that opens right next to it.
+        $sparklineSeries = $this->priceHistoryRepository->findDailyPriceSeriesMapByItemIds(
+            $itemIds,
+            date('Y-m-d H:i:s', strtotime('-30 days'))
+        );
 
         $feeSettings = $this->feeSettingsService->getSettings($userId);
         $rows = [];
@@ -215,6 +223,12 @@ final class PortfolioService
                 'change30dEuro' => $changeMetrics['30d']['amount'],
                 'change30dPercent' => $changeMetrics['30d']['percent'],
                 'changes' => $changeMetrics,
+                // Shape-only USD series (see findDailyPriceSeriesMapByItemIds).
+                // Two samples is the minimum that can draw a direction; a single
+                // point would render as a flat line and read as "price unchanged".
+                'priceSparkline' => count($sparklineSeries[$itemId] ?? []) >= 2
+                    ? $sparklineSeries[$itemId]
+                    : null,
                 'lastPriceUpdateAt' => $fetchedAt,
                 'priceAgeSeconds' => $priceAgeSeconds,
                 'freshnessStatus' => $freshnessStatus,

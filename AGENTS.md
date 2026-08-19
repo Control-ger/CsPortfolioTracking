@@ -87,6 +87,7 @@ Full reference: `docs/architecture-overview.md` §5.6.
 - **Exchange rates**: reference `exchange_rate_id`, never redundant `price_eur` columns.
 - **Items catalog**: `items` table is server-owned, read-only for all except CLI cron `backend/sync-prices.php` (requires `ITEMS_CATALOG_WRITE_SCOPE=cron`).
 - **No PHP→JS migration**: PHP business logic stays in `backend/src`; `packages/shared/src/lib/dataSource.js` only selects runtime/URL, never implements logic.
+- **Sparkline series**: the inventory table's `priceSparkline` is a day-bucketed USD series (`findDailyPriceSeriesMapByItemIds`), normalised against its own min/max on render. It plots shape, not magnitude — never format or FX-convert it, and never reuse it where a value is printed. See `docs/architecture-overview.md` §6.4.
 - **Item category**: never categorise on `investments.type`. That column is written by whichever importer created the row and defaults to `'skin'`, so it holds `'skin'` for one case and `'case'` for the next. The authoritative kind is the `MarketItemClassifier` key, stored as `items.item_type` and exposed on enriched rows as `catalogItemType` (`PortfolioService::getEnrichedInvestments`); `marketTypeLabel` is the coarser fallback. Frontend consumers go through `resolveItemCategory` (`portfolioCalculations.js`) — see `docs/architecture-overview.md` §5.1.
 
 ### Desktop Local-First
