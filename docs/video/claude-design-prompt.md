@@ -1,91 +1,115 @@
 # Claude Design — paste-ready prompt
 
-Everything below is self-contained. Nothing depends on fetching a URL or reading a repo path,
-because Claude Design can do neither: artifacts are private unless explicitly shared, and it has
-no access to the local filesystem.
+Self-contained: nothing depends on fetching a URL or reading a repo path, because Claude Design
+can do neither. Attach `docs/video/showcase-v1.mp4` (78 s, 1920×1080, 7.7 MB, silent) with the
+`+` button. Keep the **CS Investor Hub UI** design system and the **Animation** template.
 
-**Before pasting:** attach `docs/video/showcase-v1.mp4` with the `+` button (78 s, 1920×1080,
-7.7 MB, silent). If the upload is refused, attach `rough-cut.mp4` (4.3 MB, no text cards) or the
-individual clips from `docs/video/clips/`.
-
-Keep the **CS Investor Hub UI** design system selected and the **Animation** template.
+**Direction:** energetic app-trailer cut with an AI voiceover, text cards supporting rather than
+carrying. This deliberately overrides the restrained direction in `prompts.md` — that file
+describes the silent, card-led version that `showcase-v1.mp4` was built as.
 
 ---
 
 ## The prompt
 
-> Build a ~80-second product trailer for **CS Portfolio Tracking**, a desktop app that tracks a
-> Counter-Strike 2 skin portfolio. I have attached a finished silent cut — treat it as the
-> reference for structure, pacing and content, and rebuild the text and transitions properly.
-> The screen footage in it is final; do not regenerate or fake any UI.
+> Build a fast, energetic ~62-second product trailer for **CS Portfolio Tracking**, a desktop app
+> that tracks a Counter-Strike 2 skin portfolio. I have attached a finished 78-second silent cut.
+> Its screen footage is final — do not regenerate, recreate or fake any UI. Re-time it, add
+> motion, add a voiceover.
 >
-> **The three things the trailer must land, in this order:**
-> 1. It is a real native desktop app (Electron), not a website in a wrapper.
-> 2. API keys never leave the machine — they live in a password-gated local vault.
-> 3. There is a read-only mobile companion (PWA) so you can check the portfolio on the go.
+> **Cut it tighter than the reference.** Trim each beat to the target length below, front-loading
+> the moment that matters and dropping the approach. The reference is a slow reference edit; this
+> should feel like a real app trailer — momentum from the first frame, never resting on a static
+> screen for more than about two seconds.
 >
-> **Beat structure** (timings from the attached cut):
+> **The three things the trailer must land, in order:** it is a real native desktop app, not a
+> website in a wrapper; API keys never leave the machine; and there is a read-only mobile
+> companion so you can check the portfolio anywhere.
 >
-> | # | In | Length | What is on screen | Card |
+> ### Beats, voiceover and cards
+>
+> | # | Target | On screen | Voiceover | Card |
 > |---|---|---|---|---|
-> | 1 | 0:00 | 8.6 s | Vault lock screen, password fills, "Unlocking… 100 %" | Your CS2 portfolio. On your machine. |
-> | 2 | 0:08 | 10.3 s | Dashboard; the hero figure scrubs live as the cursor crosses the curve | Every position. One number. |
-> | 3 | 0:19 | 10.3 s | Inventory table sorted by ROI, then the item detail inspector opens | Down to the individual position. |
-> | 4 | 0:29 | 8.1 s | Search "Souvenir", 3892 results resolve into a card grid | Find anything. Track it in one click. |
-> | 5 | 0:37 | 6.5 s | Watchlist with live prices and target meters | Track what you don't own yet. |
-> | 6 | 0:44 | 7.2 s | CS2 patch feed with market-impact assessments | Every patch, read for market impact. |
-> | 7 | 0:51 | 8.7 s | Settings: masked API keys, Secret Vault card | **Your API keys never leave this machine.**<br>sub: Password-gated vault. Memory only. Locked on every restart. |
-> | 7b | 1:00 | 4.8 s | The vault locks; the app falls back to the lock screen | *(no card — let it play silent)* |
-> | 8 | 1:05 | 7.6 s | The same portfolio at phone size, drawer nav opens | And it comes with you. |
-> | 9 | 1:12 | 6.0 s | Wordmark on a drifting gradient | CS Portfolio Tracking<br>github.com/Control-ger/CsPortfolioTracking |
+> | 1 | 5 s | Vault lock screen, password fills, "Unlocking… 100 %" | *"Your CS2 portfolio. Locked to your machine."* | On your machine. |
+> | 2 | 8 s | Dashboard; the hero figure scrubs live as the cursor crosses the curve | *"Every case, every skin, every sticker — one number, live."* | One number. |
+> | 3 | 8 s | Inventory sorted by ROI, then the detail inspector opens | *"Drill into any position. Buy-in, break-even, the full price history."* | Down to the position. |
+> | 4 | 6 s | Search "Souvenir", results resolve into a card grid | *"Search thousands of items. Track one in a click."* | Track it in a click. |
+> | 5 | 5 s | Watchlist with live prices and target meters | *"Watch what you don't own yet, and see the gap to your target close."* | Before you buy. |
+> | 6 | 4 s | CS2 patch feed with impact badges | *"Every patch, read for market impact."* | Every patch. |
+> | 7 | 9 s | Settings: masked API keys, Secret Vault card | *"And your API keys? They never leave this machine. Password-gated vault. Memory only. Locked on every restart."* | **Your API keys never leave this machine.** |
+> | 7b | 3 s | The vault locks; the app falls back to the lock screen | *(silent — no VO, music drops out)* | *(no card)* |
+> | 8 | 7 s | The same portfolio at phone size, drawer nav opens | *"And it comes with you. Read-only, on your phone."* | It comes with you. |
+> | 9 | 6 s | Wordmark on a drifting gradient | *"CS Portfolio Tracking."* | CS Portfolio Tracking<br>github.com/Control-ger/CsPortfolioTracking |
 >
-> **The one cut that must not be softened:** beat 1 ends on the lock screen at "Unlocking… 100 %"
-> and beat 2 opens on the dashboard. The edit performs the reveal the app does not. Hard cut —
-> no dissolve, no hold, no card bridging the two.
+> ### Voiceover
 >
-> **Look.** Let the footage carry it. The UI is near-black `#0A0A0C` with one warm red accent
-> `#E8503A` and white type. No colour grading, no glows, no drop shadows, no 3D device frames
-> around the desktop shots. The one exception is beat 8, which should sit inside a plain thin
-> phone outline — it is already cropped to a phone aspect with no browser chrome.
+> A single AI voice. Confident and dry, a developer showing you something they built — not an
+> announcer, no hard sell, no rising infomercial cadence. Slightly forward energy to match the
+> cut. Let it breathe around beat 7: a short pause before *"And your API keys?"* so the line
+> lands, then deliver the three clauses flat and certain.
 >
-> **Type.** One card per beat, lower third, left aligned, heavy geometric sans in white. Cards
-> fade in over ~250 ms and out over ~200 ms; they never move once placed. The sub-line on beat 7
-> is one step smaller at 70 % opacity. Keep cards clear of the big currency figures — on the
-> dashboard the hero number sits upper-left, so the card belongs bottom-left.
+> Beat 7b is the only silence in the piece. Nothing said, music pulled to almost nothing, just
+> the app locking itself. Then beat 8 comes back up.
 >
-> **Cuts.** Hard cuts between beats. No wipes, no zooms, no push-ins. The only exception is a
-> ~400 ms cross-dissolve into the outro.
+> ### Motion
 >
-> **Pace.** 8–10 s per beat, accelerating slightly through the middle. Beat 7 gets the longest
-> hold — it is the argument the whole thing is making. Beat 7b plays silent right after it.
+> This is where it should feel like a trailer rather than a screen recording:
 >
-> **Music.** Restrained electronic, ~100 bpm, no drop, no build-and-release cliché. It should
-> read as a tool, not a crypto ad. Drop to near-silence under beat 7b, then bring it back for
-> beat 8.
+> - **Slow push-ins** on the static beats — roughly 2–4 % scale over the length of a beat, never
+>   a hard zoom. The dashboard and the settings beat both benefit.
+> - **Snap-cut on the beat** of the music at each transition. Whip-pans or quick directional
+>   slides between beats are fine; keep them under 150 ms so they read as energy, not as an effect.
+> - **Speed-ramp the scrolls and the typing** — the inventory scroll and the search typing are
+>   slow in the source. Ramp up through the middle of each and settle on the result.
+> - **Kinetic type**: cards slide up ~20 px as they fade in, over ~200 ms, with a slight ease-out.
+>   They hold still once placed and leave on a fast 120 ms fade. They support the voiceover, so
+>   they are shorter than the spoken line — a phrase, not a sentence.
+> - **Punch the numbers.** When the dashboard hero figure scrubs, briefly emphasise it — a subtle
+>   scale-up or a quick highlight sweep. That live rewrite is the single best moment in the
+>   footage and the reference cut undersells it.
 >
-> **Outro.** Near-black with a slow drifting gradient behind it in deep desaturated blue-grey
-> `#1E3E4A` and muted warm red `#60261C` — the colours the app derives from a Steam avatar.
-> Wordmark centred in heavy white sans, repository URL beneath at ~60 % opacity in monospace.
-> The gradient moves; nothing else does. Ends on a slow fade to black.
+> **One cut that must not be softened:** beat 1 ends on the lock screen at "Unlocking… 100 %" and
+> beat 2 opens on the dashboard. Hard cut on the downbeat — no dissolve, no transition effect.
+> The edit performs the reveal the app itself does not.
 >
-> **No voiceover. No captions beyond the cards above.**
+> ### Look
 >
-> **Two things to work around:**
-> - Beat 6's feed body text is German (it is generated content from the backend, not UI copy).
->   Frame tight on the headlines and impact badges, or cut the beat to ~4 s so the paragraphs
->   never resolve.
+> The UI is near-black `#0A0A0C` with one warm red accent `#E8503A` and white type. Do not colour
+> grade the footage, and no glows or drop shadows on the screen content. Motion and cutting carry
+> the energy, not filters. Beat 8 sits inside a plain thin phone outline — it is already cropped
+> to a phone aspect with no browser chrome. No 3D device frames anywhere else.
+>
+> Cards in a heavy geometric sans, white, lower third, left aligned, clear of the big currency
+> figures. On the dashboard the hero number sits upper-left, so the card belongs bottom-left.
+>
+> ### Music
+>
+> Driving electronic, ~120 bpm, percussive, tight low end. It should push without becoming a
+> festival build — no long riser into a drop. Cut the transitions to the beat. Pull it to near
+> silence under beat 7b, then bring it back hard for beat 8. End on the outro fade.
+>
+> ### Two things to work around
+>
+> - Beat 6's feed body text is German — it is generated content from the backend, not UI copy.
+>   Frame tight on the headlines and impact badges, and keep the beat to about four seconds so
+>   the paragraphs never resolve.
 > - Beat 7 shows the last four characters of an API key and a server hostname. Blur both.
+>
+> Do not claim the app is free, open source, or available for download — none of that is
+> established. The trailer shows what it does and ends on the repository URL.
 
 ---
 
 ## Notes for Maik, not for the prompt
 
-**The naming.** The app answers to two names: `productName` in `package.json` is "CS Investor
-Hub" (installer, process, lock screen) while the in-app titlebar renders "CS Portfolio Tracking"
-from the i18n catalogue. The trailer uses **CS Portfolio Tracking**, matching what is visible in
-every frame. The lock screen in beat 1 still says "Welcome to CS Investor Hub", so the two names
-do appear in the same video. Worth unifying in the app at some point.
+**Two names in one video.** The outro reads "CS Portfolio Tracking", matching the in-app
+titlebar, but the beat 1 lock screen says "Welcome to CS Investor Hub" — which is the
+`productName` in `package.json` and the name of the installer. Both appear in the trailer. Worth
+unifying in the app.
+
+**No licence.** There is no `LICENSE` file and `package.json` sets `"private": true`, which is
+why the prompt forbids "free" and "open source" claims.
 
 **If a vertical cut is wanted.** Beats 2, 3 and 4 are wide-layout and crop badly to 9:16 — the
-sidebar and the right-hand inspector fall outside frame. Beat 8 is already vertical. A vertical
-cut should be reshot at a narrow viewport rather than cropped from these files.
+sidebar and the right-hand inspector fall outside frame. Beat 8 is already vertical. Reshoot at
+a narrow viewport rather than cropping these files.
