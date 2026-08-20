@@ -186,11 +186,7 @@ export const ItemDetailPanel = ({
 
   if (!item) {
     return (
-      <InspectorEmpty>
-        {t("detail.pickPosition")}
-        <br />
-        um Details zu sehen.
-      </InspectorEmpty>
+      <InspectorEmpty>{t("detail.pickPosition")}</InspectorEmpty>
     );
   }
 

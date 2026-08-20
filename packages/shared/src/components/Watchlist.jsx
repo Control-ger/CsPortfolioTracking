@@ -1118,12 +1118,14 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
 
                   <GridTableFoot>
                     <span>
+                      {t("itemsCount", { count: sortedWatchlistItems.length })}
                       {sortedWatchlistItems.length === decoratedItems.length
-                        ? `${sortedWatchlistItems.length} Items`
-                        : `${sortedWatchlistItems.length} von ${decoratedItems.length} Items`}
+                        ? ""
+                        : t("ofTotal", { total: decoratedItems.length })}
                     </span>
                     <span>
-                      Verlauf: {WATCHLIST_RANGES.find((entry) => entry.key === range)?.label}
+                      {t("columns.history")}:{" "}
+                      {t(WATCHLIST_RANGES.find((entry) => entry.key === range)?.labelKey ?? "")}
                     </span>
                   </GridTableFoot>
                 </GridTable>

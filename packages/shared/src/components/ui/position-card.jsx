@@ -1,6 +1,7 @@
 import { ItemThumb } from "./item-thumb.jsx";
 import { ItemName } from "./item-name.jsx";
 import { cn } from "../../lib/utils.js";
+import { translate } from "../../lib/i18n/index.js";
 
 /**
  * Tappable inventory position, the mobile counterpart of a `GridTable` row.
@@ -58,7 +59,7 @@ export function PositionCard({
         <span className="flex min-w-0 items-center gap-1.5">
           {isGroup ? (
             <span className="shrink-0 rounded-[5px] bg-info/18 px-1.5 py-px text-[9px] font-extrabold uppercase tracking-[0.04em] text-info">
-              Gruppe
+              {translate("inventory:table.groupBadge")}
             </span>
           ) : null}
           {/* The first meta chip is the category, so a "Sticker | " prefix on

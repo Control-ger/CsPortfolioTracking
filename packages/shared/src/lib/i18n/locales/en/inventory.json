@@ -82,7 +82,7 @@
     "clustersCount": "{{count}} clusters",
     "positionsCount": "{{count}} positions",
     "piecesShort": "{{count}} pcs.",
-    "pickPosition": "Pick a position from the list,",
+    "pickPosition": "Pick a position from the list to see details.",
     "excluded": "Excluded",
     "noPositionHistoryShort": "No position history available.",
     "includeInPortfolio": "Include in portfolio",
@@ -200,7 +200,12 @@
     "positionsCount": "{{count}} positions",
     "sortedByHint": "Sorted by {{current}} — tap for {{next}}",
     "noPrice": "no price",
-    "groupsFilterHint": "Groups bundle several types and are therefore only visible without a category filter."
+    "groupsFilterHint": "Groups bundle several types and are therefore only visible without a category filter.",
+    "groupsCount_one": "{{count}} group",
+    "groupsCount_other": "{{count}} groups",
+    "groupBadge": "Group",
+    "clustersCount_one": "{{count}} cluster",
+    "clustersCount_other": "{{count}} clusters"
   },
   "composition": {
     "noData": "No data available",

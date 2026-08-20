@@ -470,10 +470,11 @@ export function InventoryTable({
                       <span className="block truncate text-[13px] font-bold">{group.name}</span>
                       <span className="mt-[3px] flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
                         <span className="rounded-[5px] border border-border px-1.5 py-px text-[9px]">
-                          Gruppe
+                          {t("table.groupBadge")}
                         </span>
                         <span className="truncate">
-                          {group.clusterCount} Cluster · {group.memberCount} Positionen
+                          {t("table.clustersCount", { count: group.clusterCount })} ·{" "}
+                          {t("table.positionsCount", { count: group.memberCount })}
                         </span>
                         {isExpanded ? (
                           <ChevronUp className="size-3 shrink-0" />
@@ -598,9 +599,12 @@ export function InventoryTable({
               combined figure reads as a contradiction next to the header's
               "39 Positionen · 1 Gruppe". */}
           <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
-            {visibleItemCount} von {unfilteredItemCount ?? visibleItemCount} Positionen
+            {t("table.ofPositions", {
+              shown: visibleItemCount,
+              total: unfilteredItemCount ?? visibleItemCount,
+            })}
             {visibleGroupCount > 0
-              ? ` · ${visibleGroupCount} ${visibleGroupCount === 1 ? "Gruppe" : "Gruppen"}`
+              ? ` · ${t("table.groupsCount", { count: visibleGroupCount })}`
               : ""}
           </span>
           <button
@@ -674,9 +678,9 @@ export function InventoryTable({
                     <h4 className="truncate text-sm font-semibold">{group.name}</h4>
                     <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
                       <span className="rounded-[5px] border border-border px-1.5 py-px text-[9px]">
-                        Gruppe
+                        {t("table.groupBadge")}
                       </span>
-                      <span>{group.clusterCount} Cluster</span>
+                      <span>{t("table.clustersCount", { count: group.clusterCount })}</span>
                       <span>|</span>
                       <span>{group.memberCount} Positionen</span>
                       <span>|</span>
