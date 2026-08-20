@@ -10,19 +10,37 @@ Captured over CDP against the running dev app (Electron 41 / `--remote-debugging
 
 | # | Beat | Clip | Length | State |
 |---|---|---|---|---|
-| 1 | Cold open — vault unlock | — | ~9 s | **needs Maik** (see below) |
+| 1 | Cold open — vault unlock | `clips/01-cold-open.mp4` | 9.0 s | done |
 | 2 | Dashboard, hero scrub | `clips/02-dashboard.mp4` | 10.1 s | done |
 | 3 | Inventory + item detail | `clips/03-inventory.mp4` | 10.3 s | done |
 | 4 | Search → add position | `clips/04-search.mp4` | 8.1 s | done |
 | 5 | Watchlist | `clips/05-watchlist.mp4` | 6.5 s | done |
 | 6 | CS updates feed | `clips/06-updates.mp4` | 7.2 s | done |
 | 7 | API keys + vault | `clips/07-apikeys.mp4` | 8.7 s | done |
-| 7b | Vault lock click | — | ~3 s | **needs Maik** |
+| 7b | Vault locks | `clips/07b-lock.mp4` | 4.8 s | done |
 | 8 | PWA / mobile | `clips/08-pwa.mp4` (518×1080)<br>`clips/08-pwa-16x9.mp4` (padded) | 7.6 s | done |
 | 9 | Outro wordmark | — | ~6 s | to build in the editor |
 
-`rough-cut.mp4` — the seven finished beats concatenated, silent, 58.5 s. Not the final
-edit; it exists so the pacing can be judged before any motion work starts.
+`rough-cut.mp4` — the nine captured beats concatenated, silent, 72.3 s. Not the final edit; it
+exists so the pacing can be judged before any motion work starts. Only the outro is missing,
+which is built in the editor rather than captured.
+
+## The vault beats
+
+Both came out of one continuous take (`clips/vault-take-full.mp4` in the scratchpad, 26.7 s),
+split afterwards so the lock and the unlock share the same framing and cursor position.
+
+There is **no "Lock now" button** — the Secret Vault card carries only status badges and the
+auto-lock toggle. An earlier draft of this list claimed otherwise. The lock is triggered through
+`window.electronAPI.secrets.lockVault()`; the fall back to the lock screen is genuine app
+behaviour, there is simply no click to film.
+
+The password was entered with a password manager, not typed, so beat 1 has no typing animation
+— the field jumps from empty to filled. The masked field means nothing sensitive is in frame.
+
+⚠️ **The unlock reveals Settings, not the Dashboard**, because the app returns to the route it
+was on. As a cold open that resolves onto a form instead of onto the portfolio. See the note at
+the end of this file.
 
 ## Beat detail
 
@@ -87,21 +105,18 @@ phone mockup frame.
 
 > **"And it comes with you."**
 
-## The two beats that need you
+## Open decision — where the cold open lands
 
-Both would lock the vault, and I do not have — and should not have — the app password to
-unlock it again. So they were deliberately left for last rather than half-shot.
+The unlock currently resolves onto the Settings page. It is truthful (the app restores the last
+route) but it is a weak payoff: the video's opening beat ends on a form full of API-key rows
+rather than on the portfolio.
 
-**Beat 1 — cold open.** Lock the vault, restart the app, and screen-record the unlock: the
-password entry, the progress pulse, the shell fading in and tinting itself from your Steam
-avatar palette. That avatar-derived gradient is the app's signature and it only appears here.
+A reshoot fixes it — navigate to the Dashboard first, then lock, then unlock, and the reveal
+lands on the hero figure and the curve. That costs one more password-manager unlock.
 
-**Beat 7b — the lock click.** At the end of the settings beat, click "Lock now" and let it fall
-back to the lock screen. Cutting that against beat 1 closes the loop: the video opens on the
-vault opening and ends on it closing.
-
-Record both at 1536×866 so they match the rest, or tell me when the vault is unlocked again
-and I will drive the capture myself.
+If a reshoot is not wanted, the edit can cut away from beat 1 roughly 400 ms after the shell
+appears, before Settings is legible, and let beat 2 supply the dashboard. That reads as a match
+cut rather than a mistake, and needs nothing further.
 
 ## Reproducing a capture
 
