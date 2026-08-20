@@ -216,6 +216,12 @@
     "valueLabel": "Value",
     "investments": "Investments",
     "rangeSummary": "Range: {{range}} — {{value}}",
-    "vsReference": "vs. {{label}}"
+    "vsReference": "vs. {{label}}",
+    "range": {
+      "d7": "7D",
+      "d30": "30D",
+      "y1": "1Y",
+      "max": "MAX"
+    }
   }
 }

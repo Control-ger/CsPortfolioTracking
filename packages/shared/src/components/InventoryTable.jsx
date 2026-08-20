@@ -328,7 +328,7 @@ export function InventoryTable({
               />
             </span>
             <span className="text-right" title={t("columns.trend30d")}>
-              30T
+              {t("chart.range.d30")}
             </span>
             <span className="text-right">
               <SortHeaderButton

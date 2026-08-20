@@ -12,11 +12,13 @@ import { parseHistoryTimestamp, resolveHistoryValueUsd } from "@shared/lib/portf
 import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
 import { useTranslation } from "react-i18next";
 import { translate } from "../lib/i18n/index.js";
+// `key` is the stable internal identifier and must not be localised — it is the
+// state value and is emitted through onTrendChange. Only `labelKey` is shown.
 const RANGE_OPTIONS = [
-  { key: "7T", label: "7T", days: 7 },
-  { key: "30T", label: "30T", days: 30 },
-  { key: "1J", label: "1J", days: 365 },
-  { key: "MAX", label: "MAX", days: null },
+  { key: "7T", labelKey: "chart.range.d7", days: 7 },
+  { key: "30T", labelKey: "chart.range.d30", days: 30 },
+  { key: "1J", labelKey: "chart.range.y1", days: 365 },
+  { key: "MAX", labelKey: "chart.range.max", days: null },
 ];
 
 
@@ -159,6 +161,12 @@ function buildAbsoluteAxisConfig(chartData = []) {
 function getRangeDays(rangeKey) {
   const range = RANGE_OPTIONS.find((entry) => entry.key === rangeKey);
   return range?.days ?? null;
+}
+
+/** Localised label for a range key, falling back to the raw key if unknown. */
+function rangeLabelFor(rangeKey, t) {
+  const range = RANGE_OPTIONS.find((entry) => entry.key === rangeKey);
+  return range ? t(range.labelKey) : rangeKey;
 }
 
 function deriveInvestedFromGrowth(value, growthPercent) {
@@ -506,7 +514,7 @@ export const PortfolioChart = ({
     const activeRange = RANGE_OPTIONS.find((option) => option.key === rangeKey) || null;
     onTrendChange({
       rangeKey,
-      rangeLabel: activeRange?.label || rangeKey,
+      rangeLabel: rangeLabelFor(rangeKey, t),
       rangeDays: activeRange?.days ?? null,
       deltaValue: trendStats.deltaValue,
       deltaPercent: trendStats.deltaPercent,
@@ -520,6 +528,7 @@ export const PortfolioChart = ({
   }, [
     onTrendChange,
     rangeKey,
+    t,
     trendStats.deltaPercent,
     trendStats.deltaValue,
     trendStats.roiGainEuro,
@@ -592,7 +601,7 @@ export const PortfolioChart = ({
                     onClick={() => setRangeKey(option.key)}
                     disabled={isLoading}
                   >
-                    {option.label}
+                    {t(option.labelKey)}
                   </button>
                 );
               })}
@@ -786,7 +795,7 @@ export const PortfolioChart = ({
               {trendStats.isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             </div>
             <div className="leading-none text-muted-foreground">
-              {t("chart.rangeSummary", { range: rangeKey, value: resolvedValueLabel })}
+              {t("chart.rangeSummary", { range: rangeLabelFor(rangeKey, t), value: resolvedValueLabel })}
             </div>
           </>
         )}

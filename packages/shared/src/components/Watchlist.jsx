@@ -313,8 +313,8 @@ function WatchlistItemsLoadingSkeleton() {
         <span>{translate("watchlist:columns.item")}</span>
         <span className="text-right">{translate("watchlist:columns.live")}</span>
         <span className="text-right">24h</span>
-        <span className="text-right">7T</span>
-        <span className="text-right">30T</span>
+        <span className="text-right">{translate("inventory:chart.range.d7")}</span>
+        <span className="text-right">{translate("inventory:chart.range.d30")}</span>
         <span className="text-right">{translate("watchlist:columns.history")}</span>
         <span className="text-right">{translate("watchlist:columns.targetPrice")}</span>
       </GridTableHead>
@@ -992,10 +992,10 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       24h
                     </span>
                     <span className="text-right" title={t("columns.change7d")}>
-                      7T
+                      {t("inventory:chart.range.d7")}
                     </span>
                     <span className="text-right" title={t("columns.change30d")}>
-                      30T
+                      {t("inventory:chart.range.d30")}
                     </span>
                     <span className="text-right">{t("columns.history")}</span>
                     <span className="text-right">{t("columns.targetPrice")}</span>
