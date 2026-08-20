@@ -33,18 +33,22 @@ below is direction for what gets laid over and between them.
 
 ## Per-beat cards
 
-Timings assume beats 1 and 9 get built; shift by ~9 s if the cold open is dropped.
+Beat 9 is the only one still to build; every other timing is measured from the captured clips.
+
+**Beat 1 → 2 is the one cut that must not be softened.** Beat 1 ends on the lock screen at
+"Unlocking… 100 %" and beat 2 opens on the dashboard — the edit performs the reveal the app
+does not. No dissolve, no hold, no card bridging the two.
 
 | # | In | Card | Sub | Placement note |
 |---|---|---|---|---|
-| 1 | 0:00 | Your CS2 portfolio. On your machine. | — | Hold until the shell finishes tinting, then out |
+| 1 | 0:00 | Your CS2 portfolio. On your machine. | — | Out before "Unlocking… 100 %"; the cut into beat 2 is the reveal |
 | 2 | 0:09 | Every position. One number. | — | Bottom left; keep clear of the hero figure |
 | 3 | 0:19 | Down to the individual position. | — | Bottom left; out before the inspector opens |
 | 4 | 0:29 | Find anything. Track it in one click. | — | Top right, over empty space, while results load |
 | 5 | 0:37 | Track what you don't own yet. | — | Bottom left |
 | 6 | 0:44 | Every patch, read for market impact. | — | Bottom left, short hold |
 | 7 | 0:51 | Your API keys never leave this machine. | Password-gated vault. Memory only. Locked on every restart. | Centre-left; longest hold of the video |
-| 7b | 1:00 | — | — | No card. Let the lock click play silent |
+| 7b | 1:00 | — | — | No card. Let the vault lock play silent |
 | 8 | 1:03 | And it comes with you. | — | Beside the phone, vertically centred |
 | 9 | 1:11 | CS Portfolio Tracker | github.com/Control-ger/CsPortfolioTracking | Wordmark centred on the palette gradient |
 

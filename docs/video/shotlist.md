@@ -10,7 +10,7 @@ Captured over CDP against the running dev app (Electron 41 / `--remote-debugging
 
 | # | Beat | Clip | Length | State |
 |---|---|---|---|---|
-| 1 | Cold open — vault unlock | `clips/01-cold-open.mp4` | 9.0 s | done |
+| 1 | Cold open — vault unlock | `clips/01-cold-open.mp4` | 8.6 s | done |
 | 2 | Dashboard, hero scrub | `clips/02-dashboard.mp4` | 10.1 s | done |
 | 3 | Inventory + item detail | `clips/03-inventory.mp4` | 10.3 s | done |
 | 4 | Search → add position | `clips/04-search.mp4` | 8.1 s | done |
@@ -21,7 +21,7 @@ Captured over CDP against the running dev app (Electron 41 / `--remote-debugging
 | 8 | PWA / mobile | `clips/08-pwa.mp4` (518×1080)<br>`clips/08-pwa-16x9.mp4` (padded) | 7.6 s | done |
 | 9 | Outro wordmark | — | ~6 s | to build in the editor |
 
-`rough-cut.mp4` — the nine captured beats concatenated, silent, 72.3 s. Not the final edit; it
+`rough-cut.mp4` — the nine captured beats concatenated, silent, 71.9 s. Not the final edit; it
 exists so the pacing can be judged before any motion work starts. Only the outro is missing,
 which is built in the editor rather than captured.
 
@@ -38,9 +38,8 @@ behaviour, there is simply no click to film.
 The password was entered with a password manager, not typed, so beat 1 has no typing animation
 — the field jumps from empty to filled. The masked field means nothing sensitive is in frame.
 
-⚠️ **The unlock reveals Settings, not the Dashboard**, because the app returns to the route it
-was on. As a cold open that resolves onto a form instead of onto the portfolio. See the note at
-the end of this file.
+The unlock reveals Settings rather than the Dashboard, because the app returns to the route it
+was on. That is handled in the cut — see the end of this file.
 
 ## Beat detail
 
@@ -105,18 +104,22 @@ phone mockup frame.
 
 > **"And it comes with you."**
 
-## Open decision — where the cold open lands
+## How the cold open resolves — resolved in the cut
 
-The unlock currently resolves onto the Settings page. It is truthful (the app restores the last
-route) but it is a weak payoff: the video's opening beat ends on a form full of API-key rows
-rather than on the portfolio.
+The app restores its last route after unlocking, so the reveal landed on Settings rather than
+the portfolio. Worse, the first frames after the transition catch the shell mid-hydration:
+the key rows read "loading …" and the vault badge briefly shows **"Locked · App password
+missing"** in red — the exact opposite of what the beat argues.
 
-A reshoot fixes it — navigate to the Dashboard first, then lock, then unlock, and the reveal
-lands on the hero figure and the curve. That costs one more password-manager unlock.
+So beat 1 ends **before** the transition, on the last lock-screen frame: the progress bar full,
+the button reading "Unlocking… 100 %". The hard cut to beat 2 supplies the dashboard.
 
-If a reshoot is not wanted, the edit can cut away from beat 1 roughly 400 ms after the shell
-appears, before Settings is legible, and let beat 2 supply the dashboard. That reads as a match
-cut rather than a mistake, and needs nothing further.
+The reveal is therefore done by the edit, not by the app — which turns out to be the stronger
+version. The beat ends at peak tension and beat 2 resolves it, instead of resolving itself onto
+a settings form. Nothing needs reshooting.
+
+**Do not extend beat 1 past 22.08 s of `vault-take-full.mp4`.** That is where the hydration
+state becomes visible.
 
 ## Reproducing a capture
 
