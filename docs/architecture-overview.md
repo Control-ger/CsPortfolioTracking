@@ -513,6 +513,7 @@ Health legend:
 | `docs/sync-api.md` | IN PROGRESS | CURRENT | Pull/push contract aligns with current routes and flow. |
 | `docs/video/shotlist.md` | IN PROGRESS | CURRENT | Showcase-video shot list; two vault beats still unshot. |
 | `docs/video/prompts.md` | IN PROGRESS | CURRENT | Motion/text direction for the final video assembly. |
+| `docs/video/claude-design-prompt.md` | IN PROGRESS | CURRENT | Self-contained prompt for the external video tool. |
 | `docs/archive/repo-restructure-plan.md` | HISTORICAL | HISTORICAL | Migration plan artifact. |
 | `docs/desktop-local-sync-plan.md` | IN PROGRESS | CURRENT | Rewritten to current sidecar + safeStorage + sync engine reality. |
 | `docs/server-scale-plan.md` | IN PROGRESS | CURRENT | Forward plan; still valid as target architecture. |

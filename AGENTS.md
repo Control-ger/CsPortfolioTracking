@@ -206,6 +206,7 @@ No new `.md` files without entry in the Active Docs table (see `docs/architectur
 | `backend/STRANGLER_ROLLOUT.md` | IN PROGRESS | Backend rollout plan |
 | `docs/video/shotlist.md` | IN PROGRESS | Showcase-video shot list + capture notes |
 | `docs/video/prompts.md` | IN PROGRESS | Motion/text direction for the video assembly |
+| `docs/video/claude-design-prompt.md` | IN PROGRESS | Paste-ready prompt for the video assembly tool |
 | `docs/archive/repo-restructure-plan.md` | ARCHIVED | Monorepo structure (historical) |
 | `docs/desktop-local-sync-plan.md` | IN PROGRESS | Sync roadmap |
 | `docs/server-scale-plan.md` | IN PROGRESS | Server scaling architecture |

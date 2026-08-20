@@ -109,10 +109,16 @@ const ChartTooltipContent = forwardRef((
     const [item] = payload
     const key = `${labelKey || item?.dataKey || item?.name || "value"}`
     const itemConfig = getPayloadConfigFromPayload(config, item, key)
-    const value =
-      !labelKey && typeof label === "string"
+    // The config lookup only makes sense for a categorical axis, where the
+    // label is a series key. On a numeric axis — a time series, say — the label
+    // is the x value itself and must pass through untouched, or `labelFormatter`
+    // receives the series' config label instead of the point it is meant to
+    // format. `labelKey` still opts into the config lookup explicitly.
+    const value = labelKey
+      ? itemConfig?.label
+      : typeof label === "string"
         ? config[label]?.label || label
-        : itemConfig?.label
+        : label
 
     if (labelFormatter) {
       return (

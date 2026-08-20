@@ -21,6 +21,10 @@ Captured over CDP against the running dev app (Electron 41 / `--remote-debugging
 | 8 | PWA / mobile | `clips/08-pwa.mp4` (518×1080)<br>`clips/08-pwa-16x9.mp4` (padded) | 7.6 s | done |
 | 9 | Outro wordmark | `clips/09-outro.mp4` | 6.0 s | done |
 
+The outro wordmark reads **CS Portfolio Tracking**, matching the in-app titlebar. Note the app
+also answers to "CS Investor Hub" (`productName` in `package.json`, and the beat 1 lock screen),
+so both names appear in the video. Worth unifying in the app.
+
 Two assembled files:
 
 - **`showcase-v1.mp4`** — 78.2 s, all ten beats with the on-screen cards burned in. Silent.
@@ -63,9 +67,10 @@ and the ROI figure follows. That live rewrite is the shot, not the static chart.
 
 > **"Every position. One number."**
 
-⚠️ The chart tooltip's heading reads **"unknown"** instead of the hovered date. It is a real
-defect in `PortfolioChart`'s `labelFormatter` / `ChartTooltipContent` wiring, not a capture
-artifact, and it is visible in this beat. Worth fixing before the video ships.
+The tooltip heading used to read "unknown" instead of the hovered date. That was a real defect
+in the shadcn chart wrapper, fixed before this beat was shot: `ChartTooltipContent` ran the
+label through a config lookup that only makes sense on a categorical axis, so `labelFormatter`
+received the series' config label rather than the timestamp. It now reads e.g. "Fri, 05/29/2026".
 
 ### 3 — Inventory *(10.3 s)*
 Sorted by ROI. Scrolls the table, then clicks a row to open the detail inspector: price-trend
