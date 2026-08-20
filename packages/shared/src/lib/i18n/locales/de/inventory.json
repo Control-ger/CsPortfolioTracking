@@ -234,7 +234,10 @@
       "d30": "30T",
       "y1": "1J",
       "max": "MAX"
-    }
+    },
+    "growth": "Zuwachs",
+    "priceIn": "Preis ({{currency}})",
+    "growthPercent": "Zuwachs (%)"
   },
   "sync": {
     "clusteringApplied": "Clustering: {{from}} → {{to}} Positionen",

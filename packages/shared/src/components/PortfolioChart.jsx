@@ -432,11 +432,11 @@ export const PortfolioChart = ({
   const chartConfig = useMemo(
     () => ({
       growthPercent: {
-        label: showAbsolute ? `Preis (${currency})` : "Zuwachs (%)",
+        label: showAbsolute ? t("chart.priceIn", { currency }) : t("chart.growthPercent"),
         color: trendStats.lineColor,
       },
     }),
-    [trendStats.lineColor, showAbsolute, currency],
+    [trendStats.lineColor, showAbsolute, currency, t],
   );
 
   const dispatchHoverChange = useCallback(
@@ -711,7 +711,7 @@ export const PortfolioChart = ({
                             </span>
                           </div>
                           <div className="flex w-full items-center justify-between gap-4">
-                            <span className="text-muted-foreground">Zuwachs</span>
+                            <span className="text-muted-foreground">{t("chart.growth")}</span>
                             <span className={`font-mono font-medium tabular-nums ${growthClassName}`}>
                               {formatSignedPercent(growth)}
                             </span>

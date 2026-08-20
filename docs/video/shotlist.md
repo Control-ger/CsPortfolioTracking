@@ -11,7 +11,7 @@ Captured over CDP against the running dev app (Electron 41 / `--remote-debugging
 | # | Beat | Clip | Length | State |
 |---|---|---|---|---|
 | 1 | Cold open — vault unlock | `clips/01-cold-open.mp4` | 8.6 s | done |
-| 2 | Dashboard, hero scrub | `clips/02-dashboard.mp4` | 10.1 s | done |
+| 2 | Dashboard, hero scrub | `clips/02-dashboard.mp4` | 10.4 s | done |
 | 3 | Inventory + item detail | `clips/03-inventory.mp4` | 10.3 s | done |
 | 4 | Search → add position | `clips/04-search.mp4` | 8.1 s | done |
 | 5 | Watchlist | `clips/05-watchlist.mp4` | 6.5 s | done |
@@ -19,11 +19,24 @@ Captured over CDP against the running dev app (Electron 41 / `--remote-debugging
 | 7 | API keys + vault | `clips/07-apikeys.mp4` | 8.7 s | done |
 | 7b | Vault locks | `clips/07b-lock.mp4` | 4.8 s | done |
 | 8 | PWA / mobile | `clips/08-pwa.mp4` (518×1080)<br>`clips/08-pwa-16x9.mp4` (padded) | 7.6 s | done |
-| 9 | Outro wordmark | — | ~6 s | to build in the editor |
+| 9 | Outro wordmark | `clips/09-outro.mp4` | 6.0 s | done |
 
-`rough-cut.mp4` — the nine captured beats concatenated, silent, 71.9 s. Not the final edit; it
-exists so the pacing can be judged before any motion work starts. Only the outro is missing,
-which is built in the editor rather than captured.
+Two assembled files:
+
+- **`showcase-v1.mp4`** — 78.2 s, all ten beats with the on-screen cards burned in. Silent.
+  Watchable end to end; only music is missing.
+- **`rough-cut.mp4`** — 72.2 s, the nine captured beats with no cards and no outro, for judging
+  pacing or re-cutting from scratch.
+
+The cards were burned with ffmpeg `drawtext` (Inter ExtraBold 46 px, sub-line Inter Medium
+30 px at 70 %, 250 ms in / 200 ms out, lower third with a `0x08080A` scrim so a card stays
+legible over any frame). That is a blunt instrument: the timing and placement are right, but
+the kerning and fade curves are not what a real motion tool would give. Treat `showcase-v1`
+as a review copy and a reference for the final pass, not as the finished piece.
+
+The outro is generated, not captured — a drifting two-blob gradient in the app's palette
+rendered with Pillow at 480×270, upscaled with lanczos and dithered with a light noise filter
+to kill banding.
 
 ## The vault beats
 
@@ -43,12 +56,16 @@ was on. That is handled in the cut — see the end of this file.
 
 ## Beat detail
 
-### 2 — Dashboard *(10.1 s)*
+### 2 — Dashboard *(10.4 s)*
 Portfolio hero on the MAX range, then the mouse glides right-to-left across the curve.
 **The hero number scrubs with the cursor** — €1,486.88 becomes the value at the hovered day,
 and the ROI figure follows. That live rewrite is the shot, not the static chart.
 
 > **"Every position. One number."**
+
+⚠️ The chart tooltip's heading reads **"unknown"** instead of the hovered date. It is a real
+defect in `PortfolioChart`'s `labelFormatter` / `ChartTooltipContent` wiring, not a capture
+artifact, and it is visible in this beat. Worth fixing before the video ships.
 
 ### 3 — Inventory *(10.3 s)*
 Sorted by ROI. Scrolls the table, then clicks a row to open the detail inspector: price-trend

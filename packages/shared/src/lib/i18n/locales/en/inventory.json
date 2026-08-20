@@ -234,7 +234,10 @@
       "d30": "30D",
       "y1": "1Y",
       "max": "MAX"
-    }
+    },
+    "growth": "Growth",
+    "priceIn": "Price ({{currency}})",
+    "growthPercent": "Growth (%)"
   },
   "sync": {
     "clusteringApplied": "Clustering: {{from}} → {{to}} positions",

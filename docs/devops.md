@@ -120,13 +120,21 @@ Run before every push, alongside `npm run lint`:
   Keys built at runtime (template literals) are skipped — `resolveItemCategory`
   and the match-reason lookup build theirs from a data key, and both fall back
   to something usable when the key is missing.
-  - German text left in the source — an **error**. English is the source
-    language, so German outside the catalogues is a string that was never
-    migrated. Comments, import paths and umlauts on their own are ignored: the
-    check requires a German function word, because item names and locale
-    identifiers carry umlauts legitimately. This catches what the ESLint rule
-    structurally cannot — German in JSX attributes, template literals and
-    JS-side fallbacks, none of which are JSX text nodes.
+  - German text left in the source. English is the source language, so German
+    outside the catalogues is a string that was never migrated. Comments, import
+    paths, `console.*` calls and umlauts on their own are ignored. This catches
+    what the ESLint rule structurally cannot — German in JSX attributes,
+    template literals and JS-side fallbacks, none of which are JSX text nodes.
+    Two signals, at two severities:
+    - a German **function word** or an umlaut is an **error**; that pattern is
+      specific enough to act on directly;
+    - a word that appears in the German catalogues but in none of the English
+      ones is a **warning**. This vocabulary is derived from the catalogues
+      themselves rather than hand-written, so it grows with the app — it is
+      what catches domain nouns like "Zuwachs" or "Einkaufspreis" that no
+      stopword list would have predicted. It is broader, so it occasionally
+      flags a property name or an English homograph, which is why it warns
+      rather than fails the build.
 
 `eslint-plugin-i18next`'s `no-literal-string` runs as a **warning** over the
 component and page directories. It cannot tell a label from an acronym, a brand

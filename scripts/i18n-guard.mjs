@@ -125,6 +125,37 @@ for (const dir of SOURCE_DIRS) {
 const GERMAN_WORD =
   /\b(?:der|die|das|den|dem|des|ein|eine|einen|einem|einer|und|oder|nicht|kein|keine|keinen|mit|für|auf|von|aus|zum|zur|im|am|ist|sind|hat|haben|wird|werden|wurde|noch|nur|bis|beim|vom|über|unter|nach|vor|seit|ohne|durch|gegen|wenn|dann|dabei|damit|diesem|dieser|diese|erst|schon|sehr|hier|dort|jede[rs]?|alle[rs]?|Treffer|Gesamtwert|Positionen|Gruppen?|Verlauf|Zielpreis|Anzahl|Menge|Gewinn|Verlust|Summe|Katalog|Auswahl|Bestand|Gekauft|Verkauft|Käufe|Kaeufe|Spanne|Zeitraum)\b/;
 
+/**
+ * Words that appear in German catalogue values but never in English ones. A
+ * hand-written stopword list only ever catches the German someone thought of;
+ * this derives the project's own vocabulary ("Zuwachs", "Einkaufspreis") from
+ * the catalogues, so it grows with the app instead of going stale.
+ */
+function germanOnlyVocabulary() {
+  const words = (catalogues) => {
+    const set = new Set();
+    for (const dir of catalogues) {
+      for (const file of fs.readdirSync(path.join(LOCALES_DIR, dir))) {
+        if (!file.endsWith(".json")) continue;
+        const walkValues = (node) => {
+          if (typeof node === "string") {
+            for (const word of node.match(/[\p{L}]{4,}/gu) || []) set.add(word.toLowerCase());
+          } else if (node && typeof node === "object") {
+            Object.values(node).forEach(walkValues);
+          }
+        };
+        walkValues(JSON.parse(fs.readFileSync(path.join(LOCALES_DIR, dir, file), "utf8")));
+      }
+    }
+    return set;
+  };
+  const german = words(["de"]);
+  const english = words(["en"]);
+  return new Set([...german].filter((word) => !english.has(word)));
+}
+
+const GERMAN_VOCAB = germanOnlyVocabulary();
+
 /** Strip comments and import paths — only user-facing text should be checked. */
 function stripNonUiText(source) {
   return source
@@ -137,10 +168,22 @@ for (const dir of SOURCE_DIRS) {
   for (const file of walk(dir)) {
     const source = stripNonUiText(fs.readFileSync(file, "utf8"));
     source.split("\n").forEach((line, index) => {
+      if (/\bconsole\.(log|warn|error|info|debug)\b/.test(line)) return; // not user-facing
+      const where = `${file}:${index + 1}: German text in source — "${line.trim().slice(0, 80)}"`;
+
       // Umlauts alone are too weak a signal (they appear in item names and in
-      // locale identifiers), so require a German function word as well.
-      if (!GERMAN_WORD.test(line)) return;
-      errors.push(`${file}:${index + 1}: German text in source — "${line.trim().slice(0, 80)}"`);
+      // locale identifiers), so an error needs a German function word.
+      if (GERMAN_WORD.test(line)) {
+        errors.push(where);
+        return;
+      }
+      // The catalogue-derived vocabulary is a broader net and occasionally
+      // catches a property name or an English homograph, so it only warns.
+      const quoted = line.match(/["'`>][^"'`<]{2,}/g) || [];
+      const vocabHit = quoted.some((chunk) =>
+        (chunk.match(/[\p{L}]{4,}/gu) || []).some((word) => GERMAN_VOCAB.has(word.toLowerCase())),
+      );
+      if (vocabHit) warnings.push(where);
     });
   }
 }
