@@ -106,7 +106,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
               Watchlist
             </p>
             <div>
-              <p className="text-xs uppercase text-muted-foreground">Aktueller Preis</p>
+              <p className="text-xs uppercase text-muted-foreground">{t("currentPrice")}</p>
               <p className="text-lg font-bold">
                 {currentPrice !== null ? formatCurrencyPrice(currentPrice) : "N/A"}
               </p>
@@ -140,7 +140,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
 
             {lastPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
-              <p className="text-xs uppercase text-muted-foreground">Letzter Preis</p>
+              <p className="text-xs uppercase text-muted-foreground">{t("lastPrice")}</p>
               <p className="text-sm font-semibold">{formatCurrencyPrice(lastPrice)}</p>
             </div>
             ) : null}
@@ -168,7 +168,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
 
             {highestPrice !== null && lowestPrice !== null ? (
               <div className="col-span-2 rounded-xl border border-border/70 bg-card/65 p-2">
-                <p className="text-xs uppercase text-muted-foreground">Preis-Spanne</p>
+                <p className="text-xs uppercase text-muted-foreground">{t("priceRange")}</p>
                 <p className="text-sm font-semibold">
                   {formatCurrencyPrice(lowestPrice)} - {formatCurrencyPrice(highestPrice)}
                 </p>
@@ -214,8 +214,10 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
             <h3 className="text-sm font-semibold">Buyorders (CSFloat)</h3>
             {buyOrderRows.length > 0 ? (
               <span className="text-xs text-muted-foreground">
-                {buyOrderRows.reduce((sum, row) => sum + Number(row.orders || 0), 0)} Orders,{" "}
-                {buyOrderRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0)} Menge
+                {t("buyorderSummary", {
+                  orders: buyOrderRows.reduce((sum, row) => sum + Number(row.orders || 0), 0),
+                  quantity: buyOrderRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+                })}
               </span>
             ) : null}
           </div>
@@ -229,9 +231,9 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
               <table className="w-full text-xs">
                 <thead className="bg-muted/30 text-left text-muted-foreground">
                   <tr>
-                    <th className="px-2.5 py-2 font-medium">Preis</th>
-                    <th className="px-2.5 py-2 font-medium">Orders</th>
-                    <th className="px-2.5 py-2 font-medium">Menge</th>
+                    <th className="px-2.5 py-2 font-medium">{t("buyorderColumns.price")}</th>
+                    <th className="px-2.5 py-2 font-medium">{t("buyorderColumns.orders")}</th>
+                    <th className="px-2.5 py-2 font-medium">{t("buyorderColumns.quantity")}</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -46,5 +46,6 @@
     "ratingPending": "AI rating pending",
     "noRatingYet": "No rating available yet"
   },
-  "subtitle": "Live patch notes and AI assessment."
+  "subtitle": "Live patch notes and AI assessment.",
+  "lastNDays": "Last {{count}} days"
 }

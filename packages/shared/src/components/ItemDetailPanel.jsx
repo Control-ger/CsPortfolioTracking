@@ -390,10 +390,9 @@ export const ItemDetailPanel = ({
         {hasBuyOrder ? (
           <InspectorBlock label={t("detail.myBuyorder")} aside={buyOrderDisplay}>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              {Number(item.buyOrderCount || 0)} Order
-              {Number(item.buyOrderCount || 0) === 1 ? "" : "s"}
+              {t("detail.ordersCount", { count: Number(item.buyOrderCount || 0) })}
               {Number(item.buyOrderQuantity || 0) > 0
-                ? ` · ${Number(item.buyOrderQuantity)} Menge`
+                ? ` · ${t("detail.orderQuantity", { count: Number(item.buyOrderQuantity) })}`
                 : ""}
             </p>
           </InspectorBlock>

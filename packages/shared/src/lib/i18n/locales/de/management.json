@@ -102,7 +102,20 @@
     "sortNameDesc": "Name Z–A",
     "sortPriceDesc": "Preis ↓",
     "sortPriceAsc": "Preis ↑",
-    "sortQuantityDesc": "Menge ↓"
+    "sortQuantityDesc": "Menge ↓",
+    "withoutPurchasePrice": "{{count}} ohne Einkaufspreis",
+    "onlyUnmatchedHint": "Nur nicht gematchte Steam-Inventory-Items können hier einen Einkaufspreis erhalten",
+    "onlyWithoutPrice": "Nur ohne Preis · {{count}}",
+    "selectedCount": "{{count}} ausgewählt",
+    "clearSelection": "Auswahl aufheben",
+    "clusterHint": "{{count}} Cluster · Cluster aufklappen, um Preise je Position zu setzen · Eingabe in {{currency}}, gespeichert in USD zum heutigen Kurs",
+    "assignTo": "Zuweisen zu",
+    "groupLabel": "Gruppe: {{name}}",
+    "catalogHits": "{{count}} Treffer im Katalog",
+    "quantity": "Menge",
+    "sortQtyDesc": "Sortierung: Menge absteigend",
+    "sortQtyAsc": "Sortierung: Menge aufsteigend",
+    "lastRun": "Letzter Lauf {{date}}"
   },
   "groups": {
     "title": "Investment-Gruppen",

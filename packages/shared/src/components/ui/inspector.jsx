@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 
 import { cn } from "../../lib/utils.js";
 import { toneText } from "./tone.js";
+import { translate } from "../../lib/i18n/index.js";
 
 /**
  * The right-hand detail column from the Inventar design.
@@ -54,7 +55,7 @@ function InspectorHeader({ thumb, title, meta, badge, onClose, className, ...pro
         <button
           type="button"
           onClick={onClose}
-          aria-label="Auswahl aufheben"
+          aria-label={translate("common:actions.clearSelection")}
           className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
         >
           <X className="size-4" />

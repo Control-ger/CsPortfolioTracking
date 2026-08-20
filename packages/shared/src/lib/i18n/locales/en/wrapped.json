@@ -86,5 +86,16 @@
     "eyebrowReview": "Year in review {{year}}",
     "eyebrowBusiestMonth": "Busiest month {{year}}",
     "eyebrowConclusion": "Conclusion {{year}}"
+  },
+  "empty": {
+    "title": "There is nothing to show for {{year}}",
+    "body": "No purchases are recorded for this year. Excluded positions do not count towards it. You can reach a different year via the address"
+  },
+  "slides": {
+    "purchasesShare": "{{count}} purchases · {{percent}} % of purchases",
+    "purchasesCount_one": "{{count}} purchase",
+    "purchasesCount_other": "{{count}} purchases",
+    "purchasesEyebrow": "Purchases {{year}}",
+    "ofCurrentEntries": "of {{count}} entries today"
   }
 }

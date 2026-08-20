@@ -181,14 +181,17 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
 
         {preview?.clustering?.applied ? (
           <div className="rounded-xl border border-border/70 bg-card/65 px-2 py-1.5 text-[10px] text-muted-foreground">
-            Clustering: {preview.clustering.baseNormalizedCount} → {preview.clustering.clusteredCount} Positionen
+            {t("sync.clusteringApplied", {
+              from: preview.clustering.baseNormalizedCount,
+              to: preview.clustering.clusteredCount,
+            })}
           </div>
         ) : null}
 
         {preview?.skipped > 0 ? (
           <Callout tone="warn">
             <div className="flex flex-wrap items-center gap-1">
-              <span className="font-semibold">{preview.skipped} übersprungen:</span>
+              <span className="font-semibold">{t("sync.skippedCount", { count: preview.skipped })}</span>
               {skipReasonEntries.slice(0, 2).map(([reason, count]) => (
                 <Badge key={reason} variant="outline" className="border-warn/30 bg-warn/10 text-[10px] text-foreground">
                   {reason}: {count}
@@ -262,7 +265,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
             )}
             {hiddenIgnoredCount > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {hiddenIgnoredCount} Duplikate/Excluded in der Preview ausgeblendet.
+                {t("sync.hiddenDuplicatesExcluded", { count: hiddenIgnoredCount })}
               </p>
             ) : null}
           </CardContent>

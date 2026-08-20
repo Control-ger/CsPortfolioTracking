@@ -201,7 +201,7 @@ export function ManualMatchModal({
                 {t("manualMatch.steamUnassigned")}
               </span>
               <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
-                {steamList.length} von {steamCandidates.length} offen
+                {t("sync.openOfTotal", { open: steamList.length, total: steamCandidates.length })}
               </span>
             </div>
             <label className="relative block">
@@ -241,7 +241,7 @@ export function ManualMatchModal({
                 {t("manualMatch.csfloatUnassigned")}
               </span>
               <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
-                {floatList.length} von {csfloatCandidates.length} offen
+                {t("sync.openOfTotal", { open: floatList.length, total: csfloatCandidates.length })}
               </span>
             </div>
             <label className="relative block">

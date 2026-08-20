@@ -190,7 +190,7 @@ Full reference: `docs/architecture-overview.md` §5.6.
 - **DevOps/build** triggers (`package.json`, build config, `scripts/**`, `.github/workflows/**`, new top-level dirs like `build/`/`resources/`) → `AGENTS.md` + `docs/devops.md`.
 
 Run `npm run docs:guard` before push. CI enforces via `.github/workflows/docs-governance.yml`.
-Run `npm run i18n:guard` too — a missing translation key is not a syntax error and renders as the raw key path.
+Run `npm run i18n:guard` too — a missing translation key is not a syntax error and renders as the raw key path. It also fails on German text left in the source: English is the source language, so untranslated German is a migration miss, not a style choice.
 No new `.md` files without entry in the Active Docs table (see `docs/architecture-overview.md` §7).
 
 ## Aktive Docs

@@ -383,11 +383,10 @@ export function YearWrappedPage() {
           ) : !hasAnyData ? (
             <div className="wrapped-slide flex w-full max-w-2xl flex-col gap-4 rounded-3xl border border-border/60 bg-card/85 p-6 text-center shadow-xl backdrop-blur-md sm:p-10">
               <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
-                Fuer {year} gibt es nichts zu zeigen
+                {t("empty.title", { year })}
               </h2>
               <p className="text-sm text-muted-foreground">
-                In diesem Jahr sind keine Kaeufe erfasst. Ausgeschlossene Positionen zaehlen dabei
-                nicht mit. Ein anderes Jahr erreichst du ueber die Adresse{" "}
+                {t("empty.body")}{" "}
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                   #/wrapped?year={year + 1}
                 </code>

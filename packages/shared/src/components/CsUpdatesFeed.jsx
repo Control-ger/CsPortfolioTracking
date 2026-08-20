@@ -535,7 +535,7 @@ export function CsUpdatesFeed({
                 </Badge>
               ) : null}
               <Badge variant="outline" className="border-border text-muted-foreground">
-                Letzte {windowDays} Tage
+                {t("lastNDays", { count: windowDays })}
               </Badge>
             </div>
           </div>

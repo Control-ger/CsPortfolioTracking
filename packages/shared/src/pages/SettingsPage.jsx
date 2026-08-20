@@ -1413,9 +1413,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           <span className="font-bold text-foreground">
             {t("ui.browserWindowHint")}
           </span>{" "}
-          Verlangt SkinBaron einen Login oder Cloudflare beim Server eine Bestätigung, startet die
-          App ein eingebettetes Chromium-Fenster. Schließe es erst, wenn die Anmeldung durch ist —
-          die Session wird danach im Vault abgelegt.
+          {t("skinbaron.embeddedBrowserHint")}
         </SettingsBanner>
         <CsFloatApiKeySection
           apiKey={apiKey}
@@ -1736,7 +1734,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
             })}
             {visibleCategories.length === 0 ? (
               <p className="px-3 py-2.5 text-[12px] text-muted-foreground">
-                Keine Kategorie passt zu „{categorySearchTerm}“.
+                {t("skinbaron.noCategoryMatch", { term: categorySearchTerm })}
               </p>
             ) : null}
           </div>

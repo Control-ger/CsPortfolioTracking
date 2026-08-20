@@ -46,5 +46,6 @@
     "ratingPending": "KI Rating ausstehend",
     "noRatingYet": "Noch keine Bewertung verfügbar"
   },
-  "subtitle": "Live Patchnotes und KI-Einschätzung."
+  "subtitle": "Live Patchnotes und KI-Einschätzung.",
+  "lastNDays": "Letzte {{count}} Tage"
 }

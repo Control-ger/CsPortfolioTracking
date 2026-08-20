@@ -131,7 +131,10 @@
     "alreadyOwned": "Bereits in deinem Bestand",
     "inWatchlist": "In Watchlist",
     "addToWatchlist": "Zur Watchlist",
-    "saving": "Speichert…"
+    "saving": "Speichert…",
+    "mobileSetupLink": "Server-Link für Mobile Setup:",
+    "searchAllProducts": "Alle Produkte durchsuchen: \"{{term}}\"",
+    "noCatalogHits": "Keine Treffer im Katalog für \"{{term}}\"."
   },
   "groups": {
     "title": "Investment Gruppen",

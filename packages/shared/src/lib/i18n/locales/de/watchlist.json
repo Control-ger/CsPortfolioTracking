@@ -101,5 +101,12 @@
   "targetPrice": "Zielpreis",
   "targetPriceIn": "Zielpreis in {{currency}}",
   "removeFromWatchlistAction": "Aus Watchlist entfernen",
-  "noMatchingBuyorders": "Keine passenden Buyorders für dieses Item gefunden."
+  "noMatchingBuyorders": "Keine passenden Buyorders für dieses Item gefunden.",
+  "currentPrice": "Aktueller Preis",
+  "lastPrice": "Letzter Preis",
+  "priceRange": "Preis-Spanne",
+  "buyorderSummary": "{{orders}} Orders · {{quantity}} Menge",
+  "moreItemsHint": "{{count}} weitere Items — Klick zum Ausklappen",
+  "targetReachedShort": "erreicht",
+  "itemsOfTotal": "{{shown}} von {{total}} Items"
 }

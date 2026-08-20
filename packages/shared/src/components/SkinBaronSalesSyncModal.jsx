@@ -224,12 +224,12 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
             )}
             {hiddenDuplicateCount > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {hiddenDuplicateCount} Duplikate in der Preview ausgeblendet.
+                {t("sync.hiddenDuplicates", { count: hiddenDuplicateCount })}
               </p>
             ) : null}
             {hiddenExcludedCount > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {hiddenExcludedCount} ausgeschlossene Eintraege in der Preview ausgeblendet.
+                {t("sync.hiddenExcluded", { count: hiddenExcludedCount })}
               </p>
             ) : null}
           </CardContent>

@@ -585,7 +585,7 @@ export function InventoryTable({
                 ? t("table.ofPositions", { shown: sortedRows.length, total: unfilteredCount })
                 : t("table.positionsCount", { count: sortedRows.length })}
             </span>
-            <span>Gesamtwert {formatPrice(visibleTotalValue)}</span>
+            <span>{t("table.totalValue", { value: formatPrice(visibleTotalValue) })}</span>
           </GridTableFoot>
         </GridTable>
       </div>
@@ -682,7 +682,7 @@ export function InventoryTable({
                       </span>
                       <span>{t("table.clustersCount", { count: group.clusterCount })}</span>
                       <span>|</span>
-                      <span>{group.memberCount} Positionen</span>
+                      <span>{t("table.positionsCount", { count: group.memberCount })}</span>
                       <span>|</span>
                       <span>{group.totalQuantity}x</span>
                     </span>

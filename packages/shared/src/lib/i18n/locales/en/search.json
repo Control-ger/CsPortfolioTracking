@@ -64,5 +64,13 @@
   "priceInEur": "Price in €",
   "knownPriceOnly": "Shows only items with a known price.",
   "ownedOnlyHint": "Hides everything you do not own",
-  "reset": "Reset"
+  "reset": "Reset",
+  "priceTo": "to",
+  "showHits_one": "Show {{count}} hit",
+  "showHits_other": "Show {{count}} hits",
+  "hitsCount_one": "{{count}} hit",
+  "hitsCount_other": "{{count}} hits",
+  "resultsPage": "{{shown}} of {{total}} hits · Page {{page}} of {{pages}}",
+  "priceFrom": "from",
+  "condition": "Condition"
 }

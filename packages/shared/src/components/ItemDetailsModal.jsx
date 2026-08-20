@@ -271,7 +271,7 @@ export function ItemDetailsModal({
           </StatTile>
 
           <StatTile>
-            <FieldLabel>Gewinn / Verlust</FieldLabel>
+            <FieldLabel>{t("detail.profitLoss")}</FieldLabel>
             <p
               className={`mt-2 text-sm font-bold ${
                 item.isProfitPositive === null

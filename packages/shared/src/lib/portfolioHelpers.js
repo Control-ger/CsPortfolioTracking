@@ -539,9 +539,9 @@ export function buildGroupDetailSelection(group) {
     sourceInvestmentIds: Array.isArray(group?.memberInvestmentIds)
       ? [...group.memberInvestmentIds]
       : [],
-    name: group?.name || "Gruppe",
-    marketHashName: group?.name || "Gruppe",
-    displayName: group?.name || "Gruppe",
+    name: group?.name || translate("inventory:table.groupFallbackName"),
+    marketHashName: group?.name || translate("inventory:table.groupFallbackName"),
+    displayName: group?.name || translate("inventory:table.groupFallbackName"),
     itemCount: totalQuantity,
     totalValue,
     totalInvested,
@@ -597,7 +597,7 @@ export function buildGroupClusterDetailSelection(group, cluster) {
     item_id: clusterItemId,
     __detailKind: "group-cluster",
     imageUrl: cluster?.imageUrl || null,
-    name: `${group?.name || "Gruppe"} > ${cluster?.name || "Cluster"}`,
+    name: `${group?.name || translate("inventory:table.groupFallbackName")} > ${cluster?.name || translate("inventory:table.clusterFallbackName")}`,
     marketHashName: cluster?.name || "Cluster",
     displayName: cluster?.name || "Cluster",
     itemCount: totalQuantity,

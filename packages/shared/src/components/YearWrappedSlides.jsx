@@ -165,7 +165,7 @@ export function WrappedPurchasesSlide({ year, purchases }) {
 
   return (
     <WrappedSlideShell
-      eyebrow={`Kaeufe ${year}`}
+      eyebrow={t("slides.purchasesEyebrow", { year })}
       title={
         purchases.count === 1
           ? t("purchases.onePurchase")
@@ -341,7 +341,7 @@ export function WrappedPlatformsSlide({ year, platforms }) {
               {formatUsd(platforms.totalSpentUsd)}
             </span>
             <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {platforms.totalCount} Kaeufe
+              {t("slides.purchasesCount", { count: platforms.totalCount })}
             </span>
           </div>
         </div>
@@ -368,7 +368,7 @@ export function WrappedPlatformsSlide({ year, platforms }) {
                   />
                 </div>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {entry.count} Kaeufe · {entry.countPercentage.toFixed(0)} % der Kaeufe
+                  {t("slides.purchasesShare", { count: entry.count, percent: entry.countPercentage.toFixed(0) })}
                 </span>
               </li>
             );
@@ -556,7 +556,7 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
           label={t("watchlist.newlyWatched")}
           countTo={watchlist.addedCount}
           format={(v) => String(Math.round(v))}
-          hint={`von aktuell ${watchlist.totalCount} Eintraegen`}
+          hint={t("slides.ofCurrentEntries", { count: watchlist.totalCount })}
           sound
         />
         <div className="flex flex-col gap-2">

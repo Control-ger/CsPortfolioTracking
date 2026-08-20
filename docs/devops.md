@@ -120,11 +120,20 @@ Run before every push, alongside `npm run lint`:
   Keys built at runtime (template literals) are skipped — `resolveItemCategory`
   and the match-reason lookup build theirs from a data key, and both fall back
   to something usable when the key is missing.
+  - German text left in the source — an **error**. English is the source
+    language, so German outside the catalogues is a string that was never
+    migrated. Comments, import paths and umlauts on their own are ignored: the
+    check requires a German function word, because item names and locale
+    identifiers carry umlauts legitimately. This catches what the ESLint rule
+    structurally cannot — German in JSX attributes, template literals and
+    JS-side fallbacks, none of which are JSX text nodes.
 
 `eslint-plugin-i18next`'s `no-literal-string` runs as a **warning** over the
 component and page directories. It cannot tell a label from an acronym, a brand
 name or a unit, and this codebase legitimately renders "CSFloat", "ROI" and
-"24h" as literals — it is a prompt to check, not a gate.
+"24h" as literals — it is a prompt to check, not a gate. Language correctness
+is gated by `i18n:guard`'s German check instead, which stays actionable
+because it ignores the ~120 legitimate English literals entirely.
 
 ## CI workflows
 

@@ -683,7 +683,7 @@ export function PortfolioManagementSection({
             <div className="flex flex-wrap items-center justify-end gap-[7px]">
               {priceMissingCount > 0 ? (
                 <StatusPill dot tone="warn" onClick={() => setManagementSection("prices")}>
-                  {priceMissingCount} ohne Einkaufspreis
+                  {t("prices.withoutPurchasePrice", { count: priceMissingCount })}
                 </StatusPill>
               ) : null}
               {matchingSuggestedCount > 0 ? (
@@ -718,8 +718,7 @@ export function PortfolioManagementSection({
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <CardTitle className="text-base">{t("prices.title")}</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Nur nicht gematchte Steam-Inventory-Items können hier einen Einkaufspreis
-                    erhalten
+                    {t("prices.onlyUnmatchedHint")}
                     {matchedSteamInventoryItemsCount > 0
                       ? ` · ${matchedSteamInventoryItemsCount} gematchte ausgeblendet`
                       : ""}
@@ -748,7 +747,7 @@ export function PortfolioManagementSection({
                         : "border-border bg-transparent text-muted-foreground hover:border-border-strong hover:text-foreground"
                     }`}
                   >
-                    Nur ohne Preis · {priceMissingCount}
+                    {t("prices.onlyWithoutPrice", { count: priceMissingCount })}
                   </button>
                   <NativeSelect size="default"
                     value={priceSortBy}
@@ -764,7 +763,7 @@ export function PortfolioManagementSection({
                   {selectedPriceClusters.size > 0 ? (
                     <div className="ml-auto flex items-center gap-2">
                       <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
-                        {selectedPriceClusters.size} ausgewählt
+                        {t("prices.selectedCount", { count: selectedPriceClusters.size })}
                       </span>
                       <Button
                         size="sm"
@@ -779,7 +778,7 @@ export function PortfolioManagementSection({
                         variant="outline"
                         onClick={() => setSelectedPriceClusters(new Set())}
                       >
-                        Auswahl aufheben
+                        {t("prices.clearSelection")}
                       </Button>
                     </div>
                   ) : null}
@@ -1144,8 +1143,7 @@ export function PortfolioManagementSection({
 
                       <div className="flex flex-wrap items-center justify-between gap-3 px-[18px] py-3">
                         <span className="text-[11px] text-muted-foreground">
-                          {filteredPriceClusters.length} Cluster · Cluster aufklappen, um Preise je
-                          Position zu setzen · Eingabe in {currency}, gespeichert in USD zum heutigen Kurs
+                          {t("prices.clusterHint", { count: filteredPriceClusters.length, currency })}
                         </span>
                       </div>
                     </div>
@@ -1571,7 +1569,7 @@ export function PortfolioManagementSection({
                     <span className="text-xs whitespace-nowrap text-muted-foreground">
                       {portfolioGroupEditor ? (
                         <>
-                          Zuweisen zu{" "}
+                          {t("prices.assignTo")}{" "}
                           <b
                             className={
                               GROUP_COLOR_TEXT[
@@ -1809,7 +1807,7 @@ export function PortfolioManagementSection({
                                           {assignedGroupName ? (
                                             <>
                                               <span>|</span>
-                                              <span>Gruppe: {assignedGroupName}</span>
+                                              <span>{t("prices.groupLabel", { name: assignedGroupName })}</span>
                                             </>
                                           ) : null}
                                         </div>
@@ -1901,7 +1899,7 @@ export function PortfolioManagementSection({
                       <div className="absolute inset-x-0 top-12 z-20 flex max-h-[320px] flex-col overflow-hidden rounded-[5px] border border-border-strong bg-card shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
                         <div className="flex shrink-0 items-center justify-between border-b border-border-soft px-3 py-2">
                           <SectionLabel className="tracking-[0.08em]">
-                            {manualNameSuggestions.length} Treffer im Katalog
+                            {t("prices.catalogHits", { count: manualNameSuggestions.length })}
                           </SectionLabel>
                           <span className="text-[11px] text-muted-foreground">
                             {t("ui.clickToApply")}
@@ -1970,7 +1968,7 @@ export function PortfolioManagementSection({
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[130px_1fr_1fr]">
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Menge
+                      {t("prices.quantity")}
                     </label>
                     <input
                       type="number"
@@ -2245,10 +2243,10 @@ export function PortfolioManagementSection({
                   <option value="name_asc">{t("exclude.sortNameAsc")}</option>
                   <option value="name_desc">{t("exclude.sortNameDesc")}</option>
                   <option value="qty_desc">
-                    Sortierung: Menge absteigend
+                    {t("prices.sortQtyDesc")}
                   </option>
                   <option value="qty_asc">
-                    Sortierung: Menge aufsteigend
+                    {t("prices.sortQtyAsc")}
                   </option>
                   <option value="updated_desc">
                     Sortierung: Zuletzt aktualisiert
@@ -2531,7 +2529,7 @@ export function PortfolioManagementSection({
                   <div className="flex items-center gap-2 self-center">
                     {syncNotification?.lastSyncedAt ? (
                       <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                        Letzter Lauf {formatDateSafe(syncNotification.lastSyncedAt)}
+                        {t("prices.lastRun", { date: formatDateSafe(syncNotification.lastSyncedAt) })}
                       </span>
                     ) : null}
                     <button

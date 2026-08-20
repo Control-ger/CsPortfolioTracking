@@ -89,7 +89,11 @@
     "excludeFromPortfolio": "Aus Portfolio ausschließen",
     "showTopOnly": "Nur Top {{count}} zeigen",
     "showAllClusters": "Alle {{count}} Cluster zeigen",
-    "topShare": "Top {{count}} = {{share}} des Gruppenwerts · "
+    "topShare": "Top {{count}} = {{share}} des Gruppenwerts · ",
+    "clusterShareHint": "Anteil am Live-Wert, ROI je Cluster",
+    "ordersCount_one": "{{count}} Order",
+    "ordersCount_other": "{{count}} Orders",
+    "orderQuantity": "{{count}} Menge"
   },
   "excludeDialog": {
     "item": "Item",
@@ -205,7 +209,10 @@
     "groupsCount_other": "{{count}} Gruppen",
     "groupBadge": "Gruppe",
     "clustersCount_one": "{{count}} Cluster",
-    "clustersCount_other": "{{count}} Cluster"
+    "clustersCount_other": "{{count}} Cluster",
+    "totalValue": "Gesamtwert {{value}}",
+    "groupFallbackName": "Gruppe",
+    "clusterFallbackName": "Cluster"
   },
   "composition": {
     "noData": "Keine Daten verfügbar",
@@ -228,5 +235,13 @@
       "y1": "1J",
       "max": "MAX"
     }
+  },
+  "sync": {
+    "clusteringApplied": "Clustering: {{from}} → {{to}} Positionen",
+    "skippedCount": "{{count}} übersprungen:",
+    "hiddenDuplicatesExcluded": "{{count}} Duplikate/Excluded in der Preview ausgeblendet.",
+    "hiddenDuplicates": "{{count}} Duplikate in der Preview ausgeblendet.",
+    "hiddenExcluded": "{{count}} ausgeschlossene Einträge in der Preview ausgeblendet.",
+    "openOfTotal": "{{open}} von {{total}} offen"
   }
 }

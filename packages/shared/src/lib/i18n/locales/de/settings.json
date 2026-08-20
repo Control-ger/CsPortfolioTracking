@@ -278,7 +278,9 @@
     "save": "Speichern",
     "importReady": "Import bereit",
     "checkedSuffix": " · geprüft {{at}}",
-    "sessionExpired": "Session abgelaufen · AUTHID …{{lastFour}}"
+    "sessionExpired": "Session abgelaufen · AUTHID …{{lastFour}}",
+    "embeddedBrowserHint": "Verlangt SkinBaron einen Login oder Cloudflare beim Server eine Bestätigung, startet die App ein eingebettetes Chromium-Fenster. Schließe es erst, wenn die Anmeldung durch ist — die Session wird danach im Vault abgelegt.",
+    "noCategoryMatch": "Keine Kategorie passt zu „{{term}}“."
   },
   "ui": {
     "watchlistLoadFailed": "CSFloat-Watchlist konnte nicht geladen werden ({{detail}}).",

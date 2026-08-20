@@ -4888,7 +4888,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       </Callout>
                       {mobileCompanionSetupUrl ? (
                         <div className="rounded-md border border-border bg-surface-1 p-3 text-xs text-foreground">
-                          Server-Link fuer Mobile Setup:{" "}
+                          {t("globalSearch.mobileSetupLink")}{" "}
                           <span className="font-mono text-[11px] text-info">{mobileCompanionSetupUrl}</span>
                         </div>
                       ) : null}
@@ -5637,7 +5637,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         }`}
                       >
                         <span className="truncate text-sm font-semibold">
-                          Alle Produkte durchsuchen: "{normalizeGlobalSearchInput(globalSearchTerm)}"
+                          {t("globalSearch.searchAllProducts", { term: normalizeGlobalSearchInput(globalSearchTerm) })}
                         </span>
                         <span className="text-xs text-muted-foreground">Enter</span>
                       </button>
@@ -5682,7 +5682,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                         <Callout tone="danger">{globalSearchCatalogError}</Callout>
                       ) : globalSearchFilteredCatalogResults.length === 0 ? (
                         <div className="rounded-md border border-border/70 p-3 text-sm text-muted-foreground">
-                          Keine Treffer im Katalog fuer "{globalSearchCommittedTerm}".
+                          {t("globalSearch.noCatalogHits", { term: globalSearchCommittedTerm })}
                         </div>
                       ) : (
                         <div className="space-y-2">

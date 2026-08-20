@@ -117,7 +117,8 @@
     "delete": "Löschen",
     "remove": "Entfernen",
     "reset": "Zurücksetzen",
-    "back": "Zurück"
+    "back": "Zurück",
+    "clearSelection": "Auswahl aufheben"
   },
   "filters": {
     "filter": "Filter",

@@ -135,7 +135,7 @@ export function GroupWeightingList({ clusters, className }) {
         {ranked.length > TOP_COUNT
           ? t("detail.topShare", { count: TOP_COUNT, share: formatPercentLocale(topShare, 0) })
           : ""}
-        Anteil am Live-Wert, ROI je Cluster
+        {t("detail.clusterShareHint")}
       </p>
     </div>
   );

@@ -562,7 +562,7 @@ export const ItemSearch = ({
 
         <div>
           <p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
-            Zustand
+            {t("condition")}
           </p>
           <div className="grid grid-cols-2 gap-[7px]">
             {WEAR_OPTIONS.map((option) => (
@@ -598,16 +598,16 @@ export const ItemSearch = ({
               value={priceMin}
               onChange={(event) => setPriceMin(event.target.value)}
               inputMode="decimal"
-              placeholder="von"
+              placeholder={t("priceFrom")}
               aria-label={t("filters.priceFrom")}
               className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-xs"
             />
-            <span className="text-xs text-muted-foreground">bis</span>
+            <span className="text-xs text-muted-foreground">{t("priceTo")}</span>
             <input
               value={priceMax}
               onChange={(event) => setPriceMax(event.target.value)}
               inputMode="decimal"
-              placeholder="bis"
+              placeholder={t("priceTo")}
               aria-label={t("filters.priceTo")}
               className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-xs"
             />
@@ -675,7 +675,7 @@ export const ItemSearch = ({
             onClick={() => setFilterSheetOpen(false)}
             className="h-[42px] flex-1 rounded-[10px] bg-primary text-[12.5px] font-extrabold text-primary-foreground"
           >
-            {totalItems} Treffer anzeigen
+            {t("showHits", { count: totalItems })}
           </button>
         </div>
       </div>
@@ -721,7 +721,8 @@ export const ItemSearch = ({
         <div className="flex w-full min-w-0 items-center gap-2.5 sm:w-auto">
         <div className="no-scrollbar -ml-3.5 flex min-w-0 flex-1 items-center gap-2.5 overflow-x-auto pl-3.5 sm:ml-0 sm:flex-none sm:flex-wrap sm:overflow-visible sm:pl-0">
           <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
-            {totalItems} Treffer{browseMode ? " · Browse" : ""}
+            {t("hitsCount", { count: totalItems })}
+            {browseMode ? " · Browse" : ""}
           </span>
 
           {/* Mobile only: from `sm` the chip row and the Condition select are
@@ -828,7 +829,12 @@ export const ItemSearch = ({
       {shouldSearch && results.length > 0 ? (
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3.5">
           <span className="text-xs tabular-nums text-muted-foreground">
-            {results.length} von {totalItems} Treffern · Seite {page} von {pageCount}
+            {t("resultsPage", {
+              shown: results.length,
+              total: totalItems,
+              page,
+              pages: pageCount,
+            })}
           </span>
           <Pagination
             page={page}

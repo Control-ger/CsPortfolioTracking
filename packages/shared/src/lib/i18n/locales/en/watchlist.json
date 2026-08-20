@@ -101,5 +101,12 @@
   "targetPrice": "Target price",
   "targetPriceIn": "Target price in {{currency}}",
   "removeFromWatchlistAction": "Remove from watchlist",
-  "noMatchingBuyorders": "No matching buy orders found for this item."
+  "noMatchingBuyorders": "No matching buy orders found for this item.",
+  "currentPrice": "Current price",
+  "lastPrice": "Last price",
+  "priceRange": "Price range",
+  "buyorderSummary": "{{orders}} orders · {{quantity}} qty",
+  "moreItemsHint": "{{count}} more items — click to expand",
+  "targetReachedShort": "reached",
+  "itemsOfTotal": "{{shown}} of {{total}} items"
 }

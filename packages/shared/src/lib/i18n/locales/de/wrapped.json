@@ -86,5 +86,16 @@
     "eyebrowReview": "Jahresrückblick {{year}}",
     "eyebrowBusiestMonth": "Aktivster Monat {{year}}",
     "eyebrowConclusion": "Fazit {{year}}"
+  },
+  "empty": {
+    "title": "Für {{year}} gibt es nichts zu zeigen",
+    "body": "In diesem Jahr sind keine Käufe erfasst. Ausgeschlossene Positionen zählen dabei nicht mit. Ein anderes Jahr erreichst du über die Adresse"
+  },
+  "slides": {
+    "purchasesShare": "{{count}} Käufe · {{percent}} % der Käufe",
+    "purchasesCount_one": "{{count}} Kauf",
+    "purchasesCount_other": "{{count}} Käufe",
+    "purchasesEyebrow": "Käufe {{year}}",
+    "ofCurrentEntries": "von aktuell {{count}} Einträgen"
   }
 }

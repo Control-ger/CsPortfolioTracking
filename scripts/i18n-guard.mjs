@@ -116,6 +116,35 @@ for (const dir of SOURCE_DIRS) {
   }
 }
 
+// 3. no German text left in the source.
+//    English is the source language, so any German outside the catalogues is a
+//    string that was never migrated. ESLint's i18next/no-literal-string sees
+//    these too, but it also flags ~120 legitimate literals (units, symbols,
+//    debug output), so the signal drowns. Looking specifically for German is
+//    the check that stays actionable.
+const GERMAN_WORD =
+  /\b(?:der|die|das|den|dem|des|ein|eine|einen|einem|einer|und|oder|nicht|kein|keine|keinen|mit|für|auf|von|aus|zum|zur|im|am|ist|sind|hat|haben|wird|werden|wurde|noch|nur|bis|beim|vom|über|unter|nach|vor|seit|ohne|durch|gegen|wenn|dann|dabei|damit|diesem|dieser|diese|erst|schon|sehr|hier|dort|jede[rs]?|alle[rs]?|Treffer|Gesamtwert|Positionen|Gruppen?|Verlauf|Zielpreis|Anzahl|Menge|Gewinn|Verlust|Summe|Katalog|Auswahl|Bestand|Gekauft|Verkauft|Käufe|Kaeufe|Spanne|Zeitraum)\b/;
+
+/** Strip comments and import paths — only user-facing text should be checked. */
+function stripNonUiText(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/^\s*import\s[\s\S]*?from\s*["'][^"']+["'];?$/gm, "");
+}
+
+for (const dir of SOURCE_DIRS) {
+  for (const file of walk(dir)) {
+    const source = stripNonUiText(fs.readFileSync(file, "utf8"));
+    source.split("\n").forEach((line, index) => {
+      // Umlauts alone are too weak a signal (they appear in item names and in
+      // locale identifiers), so require a German function word as well.
+      if (!GERMAN_WORD.test(line)) return;
+      errors.push(`${file}:${index + 1}: German text in source — "${line.trim().slice(0, 80)}"`);
+    });
+  }
+}
+
 for (const warning of warnings) console.warn(`[i18n-guard] WARN  ${warning}`);
 for (const error of errors) console.error(`[i18n-guard] ERROR ${error}`);
 

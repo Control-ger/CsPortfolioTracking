@@ -1104,7 +1104,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                                 }`}
                               >
                                 {item.target.reached
-                                  ? "erreicht"
+                                  ? t("targetReachedShort")
                                   : formatTargetDistance(item.target.distancePercent)}
                               </span>
                             </>
@@ -1188,7 +1188,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                   <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
                     {sortedWatchlistItems.length === decoratedItems.length
                       ? `${sortedWatchlistItems.length} Items`
-                      : `${sortedWatchlistItems.length} von ${decoratedItems.length} Items`}
+                      : t("itemsOfTotal", { shown: sortedWatchlistItems.length, total: decoratedItems.length })}
                   </span>
                   <button
                     type="button"
@@ -1442,9 +1442,9 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                     ) : (
                       <div className="mt-2.5">
                         <div className="grid grid-cols-[minmax(0,1fr)_52px_58px] gap-2 border-b border-border-soft pb-1.5 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
-                          <span>Preis</span>
-                          <span className="text-right">Orders</span>
-                          <span className="text-right">Menge</span>
+                          <span>{t("buyorderColumns.price")}</span>
+                          <span className="text-right">{t("buyorderColumns.orders")}</span>
+                          <span className="text-right">{t("buyorderColumns.quantity")}</span>
                         </div>
                         {selectedItemBuyOrderRows.slice(0, 12).map((row, index) => (
                           <div
@@ -1466,16 +1466,16 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                           </div>
                         ))}
                         <p className="pt-2 text-[10.5px] text-muted-foreground">
-                          {selectedItemBuyOrderRows.reduce(
-                            (sum, row) => sum + Number(row.orders || 0),
-                            0,
-                          )}{" "}
-                          Orders ·{" "}
-                          {selectedItemBuyOrderRows.reduce(
-                            (sum, row) => sum + Number(row.quantity || 0),
-                            0,
-                          )}{" "}
-                          Menge
+                          {t("buyorderSummary", {
+                            orders: selectedItemBuyOrderRows.reduce(
+                              (sum, row) => sum + Number(row.orders || 0),
+                              0,
+                            ),
+                            quantity: selectedItemBuyOrderRows.reduce(
+                              (sum, row) => sum + Number(row.quantity || 0),
+                              0,
+                            ),
+                          })}
                         </p>
                       </div>
                     )}

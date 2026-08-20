@@ -319,7 +319,7 @@ export const WatchlistOverview = ({
 
         {canExpand && hasMoreOthers && !effectiveExpanded && (
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            {others.length - displayedOthers.length} weitere Items - Klick zum Ausklappen
+            {t("moreItemsHint", { count: others.length - displayedOthers.length })}
           </p>
         )}
       </CardContent>

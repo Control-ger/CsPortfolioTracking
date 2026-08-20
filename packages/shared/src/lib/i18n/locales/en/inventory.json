@@ -48,7 +48,7 @@
     "breakEvenHint": "incl. seller + withdrawal + FX fees",
     "positionValue": "Position value",
     "noCsfloatPrice": "No CSFloat price available",
-    "profitLoss": "Profit / loss",
+    "profitLoss": "Profit / Loss",
     "priceChange": "Price change",
     "costBasis": "Cost basis",
     "priceHistory": "Price history",
@@ -89,7 +89,11 @@
     "excludeFromPortfolio": "Exclude from portfolio",
     "showTopOnly": "Show top {{count}} only",
     "showAllClusters": "Show all {{count}} clusters",
-    "topShare": "Top {{count}} = {{share}} of the group value · "
+    "topShare": "Top {{count}} = {{share}} of the group value · ",
+    "clusterShareHint": "Share of live value, ROI per cluster",
+    "ordersCount_one": "{{count}} order",
+    "ordersCount_other": "{{count}} orders",
+    "orderQuantity": "{{count}} qty"
   },
   "excludeDialog": {
     "item": "Item",
@@ -205,7 +209,10 @@
     "groupsCount_other": "{{count}} groups",
     "groupBadge": "Group",
     "clustersCount_one": "{{count}} cluster",
-    "clustersCount_other": "{{count}} clusters"
+    "clustersCount_other": "{{count}} clusters",
+    "totalValue": "Total value {{value}}",
+    "groupFallbackName": "Group",
+    "clusterFallbackName": "Cluster"
   },
   "composition": {
     "noData": "No data available",
@@ -228,5 +235,13 @@
       "y1": "1Y",
       "max": "MAX"
     }
+  },
+  "sync": {
+    "clusteringApplied": "Clustering: {{from}} → {{to}} positions",
+    "skippedCount": "{{count}} skipped:",
+    "hiddenDuplicatesExcluded": "{{count}} duplicates/excluded hidden in the preview.",
+    "hiddenDuplicates": "{{count}} duplicates hidden in the preview.",
+    "hiddenExcluded": "{{count}} excluded entries hidden in the preview.",
+    "openOfTotal": "{{open}} of {{total}} open"
   }
 }
