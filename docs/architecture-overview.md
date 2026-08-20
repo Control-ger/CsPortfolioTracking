@@ -511,6 +511,8 @@ Health legend:
 | `docs/design-system.md` | FINAL | CURRENT | UI token/primitive library + the tokens-only colour rule. |
 | `docs/local-db-schema.md` | FINAL | CURRENT | Updated to current local-store read path (no automatic server seeding). |
 | `docs/sync-api.md` | IN PROGRESS | CURRENT | Pull/push contract aligns with current routes and flow. |
+| `docs/video/shotlist.md` | IN PROGRESS | CURRENT | Showcase-video shot list; two vault beats still unshot. |
+| `docs/video/prompts.md` | IN PROGRESS | CURRENT | Motion/text direction for the final video assembly. |
 | `docs/archive/repo-restructure-plan.md` | HISTORICAL | HISTORICAL | Migration plan artifact. |
 | `docs/desktop-local-sync-plan.md` | IN PROGRESS | CURRENT | Rewritten to current sidecar + safeStorage + sync engine reality. |
 | `docs/server-scale-plan.md` | IN PROGRESS | CURRENT | Forward plan; still valid as target architecture. |
