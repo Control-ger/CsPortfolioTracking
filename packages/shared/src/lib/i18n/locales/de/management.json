@@ -23,7 +23,8 @@
   "sync": {
     "toggleAutoSync": "Auto-Sync umschalten",
     "running": "Sync läuft…",
-    "start": "Steam Sync starten"
+    "start": "Steam Sync starten",
+    "newSteamItems": "{{count}} neue Steam-Items"
   },
   "matchReason": {
     "same_type": "Typ",
@@ -115,7 +116,11 @@
     "quantity": "Menge",
     "sortQtyDesc": "Sortierung: Menge absteigend",
     "sortQtyAsc": "Sortierung: Menge aufsteigend",
-    "lastRun": "Letzter Lauf {{date}}"
+    "lastRun": "Letzter Lauf {{date}}",
+    "matchedHidden": "{{count}} gematchte ausgeblendet",
+    "perPositionTitle": "Einkaufspreise je Position ({{currency}})",
+    "applyToPositions": "Auf {{count}} Pos.",
+    "purchasedOn": "Kauf: {{date}}"
   },
   "groups": {
     "title": "Investment-Gruppen",
@@ -196,7 +201,10 @@
     "hide": "Ausblenden",
     "unknown": "Unbekannt",
     "unExclude": "Ent-excluden",
-    "exclude": "Excluden"
+    "exclude": "Excluden",
+    "excludedCount": "{{count}} ausgeschlossen",
+    "positionExcluded": "ausgeschlossen",
+    "positionActive": "aktiv"
   },
   "matching": {
     "searchPlaceholder": "Suche nach Steam/CSFloat Item…",
@@ -259,6 +267,8 @@
     "confirmedCount": "{{count}} CSFloat-Käufe sind mit einem Steam-Item verknüpft. Neue Vorschläge entstehen automatisch beim nächsten Sync.",
     "autoSync": "Auto-Sync {{state}}",
     "priceInCurrency": "Preis in deiner Währung ({{currency}}) eingeben.",
-    "exchangeRateNote": "Der Wechselkurs zum Kaufzeitpunkt lässt sich nicht rekonstruieren, daher sind kleine Kursabweichungen normal."
+    "exchangeRateNote": "Der Wechselkurs zum Kaufzeitpunkt lässt sich nicht rekonstruieren, daher sind kleine Kursabweichungen normal.",
+    "piecesCount_one": "{{count}} Stk.",
+    "piecesCount_other": "{{count}} Stk."
   }
 }

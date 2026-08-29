@@ -12,7 +12,8 @@
     "investments": "Investments",
     "inventory": "Inventory",
     "watchlist": "Watchlist",
-    "portfolio": "Portfolio"
+    "portfolio": "Portfolio",
+    "search": "Search"
   },
   "categories": {
     "all": "All",

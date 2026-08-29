@@ -692,7 +692,7 @@ export function PortfolioManagementSection({
                 </StatusPill>
               ) : null}
               <StatusPill tone="muted">
-                {syncNotification.newItemsCount} neue Steam-Items
+                {t("sync.newSteamItems", {count: syncNotification.newItemsCount})}
               </StatusPill>
             </div>
           </div>
@@ -720,7 +720,7 @@ export function PortfolioManagementSection({
                   <p className="text-xs text-muted-foreground">
                     {t("prices.onlyUnmatchedHint")}
                     {matchedSteamInventoryItemsCount > 0
-                      ? ` · ${matchedSteamInventoryItemsCount} gematchte ausgeblendet`
+                      ? ` · ${t("prices.matchedHidden", {count: matchedSteamInventoryItemsCount})}`
                       : ""}
                     .
                   </p>
@@ -976,10 +976,10 @@ export function PortfolioManagementSection({
                                               }`}
                                             >
                                               {lot.excluded
-                                                ? "excluded"
+                                                ? t("prices.positionExcluded")
                                                 : lot.partiallyExcluded
                                                   ? t("prices.partlyExcluded")
-                                                  : "aktiv"}
+                                                  : t("prices.positionActive")}
                                             </span>
                                             {hasSuggestion ? (
                                               <button
@@ -1079,7 +1079,7 @@ export function PortfolioManagementSection({
                                                           : "text-success"
                                                       }`}
                                                     >
-                                                      {position.excluded ? "excluded" : "aktiv"}
+                                                      {position.excluded ? t("exclude.positionExcluded") : t("exclude.positionActive")}
                                                     </span>
                                                     {hasSuggestion ? (
                                                       <button
@@ -1192,7 +1192,7 @@ export function PortfolioManagementSection({
                           </div>
 
                           <div className="flex flex-col gap-2">
-                            <SectionLabel>Einkaufspreise je Position ({currency})</SectionLabel>
+                            <SectionLabel>{t("prices.perPositionTitle", {currency})}</SectionLabel>
                             {inspectedLots.map((lot) => {
                               const lotDraftKey = `cluster:${lot.key}`;
                               const lotDraft =
@@ -1298,7 +1298,7 @@ export function PortfolioManagementSection({
                                 className="shrink-0 whitespace-nowrap"
                                 onClick={() => void handleSaveClusterPrice(inspectedCluster)}
                               >
-                                Auf {inspectedLots.length} Pos.
+                                {t("prices.applyToPositions", {count: inspectedLots.length})}
                               </Button>
                             </div>
                             <span className="text-[11px] text-muted-foreground">
@@ -1701,7 +1701,7 @@ export function PortfolioManagementSection({
                                   {/* Design states this as one sentence rather than
                                       five pipe-separated fragments plus a pill. */}
                                   <p className="mt-[3px] truncate text-[11px] text-muted-foreground">
-                                    {cluster.totalCount} Stk. · {cluster.positions.length}{" "}
+                                    {t("ui.piecesCount", { count: cluster.totalCount })} ·{" "}
                                     {t("groups.positions", { count: cluster.positions.length })} ·{" "}
                                     {clusterAssignment.assignmentState === "grouped" ? (
                                       <span className="font-semibold text-success">
@@ -2296,11 +2296,10 @@ export function PortfolioManagementSection({
                             {cluster.name || t("exclude.unnamedCluster")}
                           </p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            {visiblePositions.length}{" "}
                             {t("groups.positions", { count: visiblePositions.length })} ·{" "}
                             {excludedCount > 0 ? (
                               <span className="font-semibold text-danger">
-                                {excludedCount} excluded
+                                {t("exclude.excludedCount", { count: excludedCount })}
                               </span>
                             ) : (
                               <span className="font-semibold text-success">{t("exclude.allActive")}</span>
@@ -2381,11 +2380,11 @@ export function PortfolioManagementSection({
                                   {position.type || t("ui.unknownType")} ·{" "}
                                   {position.quantity || 1}x ·{" "}
                                   {position.excluded
-                                    ? "excluded"
-                                    : "aktiv"}
+                                    ? t("prices.positionExcluded")
+                                    : t("prices.positionActive")}
                                   {" · "}
                                   {positionPurchasedAt
-                                    ? `Kauf: ${positionPurchasedAt}`
+                                    ? t("prices.purchasedOn", { date: positionPurchasedAt })
                                     : t("prices.unknownPurchaseDate")}
                                   {" · "}
                                   {positionBuyPrice > 0

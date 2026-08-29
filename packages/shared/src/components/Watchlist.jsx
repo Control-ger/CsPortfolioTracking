@@ -1178,7 +1178,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                             : "border border-border-soft font-semibold text-muted-foreground"
                         }`}
                       >
-                        {entry.label}
+                        {t(entry.labelKey)}
                       </button>
                     );
                   })}
@@ -1187,16 +1187,19 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                 <div className="flex items-center justify-between gap-3">
                   <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
                     {sortedWatchlistItems.length === decoratedItems.length
-                      ? `${sortedWatchlistItems.length} Items`
+                      ? t("itemsCount", { count: sortedWatchlistItems.length })
                       : t("itemsOfTotal", { shown: sortedWatchlistItems.length, total: decoratedItems.length })}
                   </span>
                   <button
                     type="button"
                     onClick={() => handleSortSelect(nextMobileSort.key)}
                     className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[11px] font-semibold"
-                    title={t("sortedByHint", { current: activeMobileSort.label, next: nextMobileSort.label })}
+                    title={t("sortedByHint", {
+                      current: t(activeMobileSort.labelKey),
+                      next: t(nextMobileSort.labelKey),
+                    })}
                   >
-                    {activeMobileSort.label}
+                    {t(activeMobileSort.labelKey)}
                     <span aria-hidden="true" className="text-[10px] text-muted-foreground">
                       {sortDirection === "asc" ? "↑" : "↓"}
                     </span>

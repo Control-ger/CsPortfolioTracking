@@ -44,8 +44,15 @@
     "ratingFailed": "KI Rating fehlgeschlagen",
     "checkManually": "Manuell prüfen",
     "ratingPending": "KI Rating ausstehend",
-    "noRatingYet": "Noch keine Bewertung verfügbar"
+    "noRatingYet": "Noch keine Bewertung verfügbar",
+    "impactNone": "Impact keiner",
+    "impactLow": "Impact niedrig",
+    "impactMedium": "Impact mittel",
+    "impactHigh": "Impact hoch"
   },
   "subtitle": "Live Patchnotes und KI-Einschätzung.",
-  "lastNDays": "Letzte {{count}} Tage"
+  "lastNDays": "Letzte {{count}} Tage",
+  "marketImpact": "Markt-Auswirkungen",
+  "newestItem": "Neueste Meldung: {{time}}",
+  "lastUpdate": "Letztes Update: {{time}}"
 }

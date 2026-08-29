@@ -414,22 +414,22 @@ export function deriveCsUpdateImpact(item) {
   if (aiStatus === "rated" && ["none", "low", "medium", "high"].includes(aiImpactLevel)) {
     const aiMap = {
       none: {
-        label: "Impact none",
+        label: translate("updates:rating.impactNone"),
         actionLabel: translate("updates:rating.noActionNeeded"),
         badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
       },
       low: {
-        label: "Impact niedrig",
+        label: translate("updates:rating.impactLow"),
         actionLabel: translate("updates:rating.watch"),
         badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
       },
       medium: {
-        label: "Impact mittel",
+        label: translate("updates:rating.impactMedium"),
         actionLabel: translate("updates:rating.checkToday"),
         badgeClass: "border-amber-500/35 bg-amber-500/12 text-amber-600 dark:text-amber-300",
       },
       high: {
-        label: "Impact hoch",
+        label: translate("updates:rating.impactHigh"),
         actionLabel: translate("updates:rating.checkQuickly"),
         badgeClass: "border-red-500/35 bg-red-500/12 text-red-600 dark:text-red-300",
       },

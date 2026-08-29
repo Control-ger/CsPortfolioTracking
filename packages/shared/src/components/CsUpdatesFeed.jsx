@@ -381,7 +381,7 @@ export function FeedItem({ item, isOpen, isFresh, compact }) {
           {impactBullets.length > 0 ? (
             <div className="p-1">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Markt-Auswirkungen
+                {t("marketImpact")}
               </p>
               <ul className="space-y-1.5">
                 {impactBullets.map((impactLine) => (
@@ -531,7 +531,7 @@ export function CsUpdatesFeed({
               </Badge>
               {newestFreshItem ? (
                 <Badge variant="outline" className="border-border text-muted-foreground">
-                  Neueste Meldung: {formatRelativeTime(newestFreshItem.publishedAt)}
+                  {t("newestItem", {time: formatRelativeTime(newestFreshItem.publishedAt)})}
                 </Badge>
               ) : null}
               <Badge variant="outline" className="border-border text-muted-foreground">
@@ -545,7 +545,7 @@ export function CsUpdatesFeed({
               <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing ? "animate-spin" : "")} />
               {isRefreshing ? t("refreshing") : t("refresh")}
             </Button>
-            <p className="text-xs text-muted-foreground">Letztes Update: {lastUpdateLabel}</p>
+            <p className="text-xs text-muted-foreground">{t("lastUpdate", {time: lastUpdateLabel})}</p>
           </div>
         </header>
 

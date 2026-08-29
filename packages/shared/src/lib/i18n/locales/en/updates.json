@@ -44,8 +44,15 @@
     "ratingFailed": "AI rating failed",
     "checkManually": "Check manually",
     "ratingPending": "AI rating pending",
-    "noRatingYet": "No rating available yet"
+    "noRatingYet": "No rating available yet",
+    "impactNone": "Impact none",
+    "impactLow": "Impact low",
+    "impactMedium": "Impact medium",
+    "impactHigh": "Impact high"
   },
   "subtitle": "Live patch notes and AI assessment.",
-  "lastNDays": "Last {{count}} days"
+  "lastNDays": "Last {{count}} days",
+  "marketImpact": "Market impact",
+  "newestItem": "Newest item: {{time}}",
+  "lastUpdate": "Last update: {{time}}"
 }

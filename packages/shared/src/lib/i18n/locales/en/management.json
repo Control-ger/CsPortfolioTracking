@@ -23,7 +23,8 @@
   "sync": {
     "toggleAutoSync": "Toggle auto-sync",
     "running": "Sync running…",
-    "start": "Start Steam sync"
+    "start": "Start Steam sync",
+    "newSteamItems": "{{count}} new Steam items"
   },
   "matchReason": {
     "same_type": "Type",
@@ -115,7 +116,11 @@
     "quantity": "Quantity",
     "sortQtyDesc": "Sorting: quantity descending",
     "sortQtyAsc": "Sorting: quantity ascending",
-    "lastRun": "Last run {{date}}"
+    "lastRun": "Last run {{date}}",
+    "matchedHidden": "{{count}} matched hidden",
+    "perPositionTitle": "Purchase prices per position ({{currency}})",
+    "applyToPositions": "To {{count}} pos.",
+    "purchasedOn": "Bought: {{date}}"
   },
   "groups": {
     "title": "Investment groups",
@@ -196,7 +201,10 @@
     "hide": "Hide",
     "unknown": "Unknown",
     "unExclude": "Un-exclude",
-    "exclude": "Exclude"
+    "exclude": "Exclude",
+    "excludedCount": "{{count}} excluded",
+    "positionExcluded": "excluded",
+    "positionActive": "active"
   },
   "matching": {
     "searchPlaceholder": "Search Steam/CSFloat item…",
@@ -259,6 +267,8 @@
     "confirmedCount": "{{count}} CSFloat purchases are linked to a Steam item. New suggestions appear automatically on the next sync.",
     "autoSync": "Auto-sync {{state}}",
     "priceInCurrency": "Enter the price in your currency ({{currency}}).",
-    "exchangeRateNote": "The exchange rate at purchase time cannot be reconstructed, so small rate deviations are normal."
+    "exchangeRateNote": "The exchange rate at purchase time cannot be reconstructed, so small rate deviations are normal.",
+    "piecesCount_one": "{{count}} pc.",
+    "piecesCount_other": "{{count}} pcs."
   }
 }
