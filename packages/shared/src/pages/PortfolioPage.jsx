@@ -3911,6 +3911,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
   const handleWatchlistWarningsChange = useCallback((nextWarnings = []) => {
     handleUiWarningsChange("watchlist-live", t("source.watchlist"), nextWarnings);
   }, [handleUiWarningsChange, t]);
+  const handleSearchWarningsChange = useCallback((nextWarnings = []) => {
+    handleUiWarningsChange("search", t("source.search"), nextWarnings);
+  }, [handleUiWarningsChange, t]);
   const portfolioWarningNotifications = useMemo(
     () => mapWarningsToNotifications(warnings, { sourceKey: "portfolio", sourceLabel: t("source.portfolio") }),
     [warnings, t],
@@ -5287,9 +5290,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           </TabsContent>
           <TabsContent value="search" forceMount={visitedTabs.has("search") || undefined}>
           <PortfolioSearchSection
-            loadGlobalSearchWatchlistItems={loadGlobalSearchWatchlistItems}
+            onAddToWatchlist={loadGlobalSearchWatchlistItems}
             globalSearchWatchlistItems={globalSearchWatchlistItems}
-            handleUiWarningsChange={handleUiWarningsChange}
+            onWarningsChange={handleSearchWarningsChange}
             searchPageInitialTerm={searchPageInitialTerm}
           />
           </TabsContent>
@@ -5667,7 +5670,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                 : "border-border/70 bg-transparent text-foreground hover:bg-accent/55"
                             }`}
                           >
-                            {category.label}
+                            {t(category.labelKey)}
                           </button>
                         ))}
                       </div>
