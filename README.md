@@ -9,9 +9,9 @@ Dieses Projekt wurde zu Bildungs- und Portfoliozwecken erstellt.
 
 ## Video
 
-<video src="https://raw.githubusercontent.com/Control-ger/CsPortfolioTracking/main/docs/video/showcase-v1.mp4" controls muted playsinline width="100%"></video>
+<video src="https://raw.githubusercontent.com/Control-ger/CsPortfolioTracking/main/docs/video/showcase-v1-web.mp4" controls muted playsinline width="100%"></video>
 
-Falls das Video nicht direkt abspielt: [showcase-v1.mp4](docs/video/showcase-v1.mp4)
+Falls das Video nicht direkt abspielt: [showcase-v1-web.mp4](docs/video/showcase-v1-web.mp4)
 
 ## Screenshots
 
