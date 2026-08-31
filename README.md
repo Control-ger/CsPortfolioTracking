@@ -6,32 +6,40 @@ Tried Claude with Remotion for this one:
 
 ## Installation / Setup
 
-1. Abhaengigkeiten installieren:
+1. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Lokale Env-Datei anlegen:
+2. Create a local env file:
+```bash
+cp .env.example .env
+```
+On Windows PowerShell:
 ```powershell
 Copy-Item .env.example .env
 ```
 
-3. `.env` konfigurieren (mindestens relevante DB/API-Werte fuellen).
+3. Fill in `.env` (at minimum the relevant DB and API values).
 
-## npm run Befehle
+## npm run Commands
 
 ```bash
 npm run dev
 npm run build
+npm run build:linux
+npm run build:web
 npm run lint
 npm run docs:guard
+npm run i18n:guard
+npm run rebuild:desktop-native
 ```
 
 ## Desktop Builds
 
-Der Build erfolgt jeweils auf dem Zielbetriebssystem (electron-builder erkennt die
-Plattform automatisch). Das native Modul `better-sqlite3` wird dabei fuer die
-jeweilige Plattform neu kompiliert.
+Builds run on the target operating system (electron-builder detects the platform
+automatically). The native module `better-sqlite3` is recompiled for that platform
+during the build.
 
 ### Windows
 
@@ -39,7 +47,7 @@ jeweilige Plattform neu kompiliert.
 npm run build
 ```
 
-Erzeugt den NSIS-Installer (`CS-Investor-Hub-Setup-*.exe`) unter `release/`.
+Produces the NSIS installer (`CS-Investor-Hub-Setup-*.exe`) in `release/`.
 
 ### Linux (AppImage + .deb)
 
@@ -47,41 +55,37 @@ Erzeugt den NSIS-Installer (`CS-Investor-Hub-Setup-*.exe`) unter `release/`.
 npm run build:linux
 ```
 
-Erzeugt unter `release/`:
-- `CS-Investor-Hub-*.AppImage` — portabel, ohne Installation. Ausfuehrbar machen und starten:
+Produces in `release/`:
+- `CS-Investor-Hub-*.AppImage` — portable, no installation. Make it executable and run it:
   ```bash
   chmod +x release/CS-Investor-Hub-*.AppImage && ./release/CS-Investor-Hub-*.AppImage
   ```
-  Auf Ubuntu 24.04 / Zorin OS 18 ggf. `sudo apt install libfuse2t64` (nur zum Ausfuehren, nicht zum Bauen).
-- `CS-Investor-Hub-*.deb` — fuer Debian/Ubuntu-basierte Distros (inkl. Zorin OS 18):
-  Installation via `sudo apt install ./release/CS-Investor-Hub-*.deb`.
+  On Ubuntu 24.04 / Zorin OS 18 you may need `sudo apt install libfuse2t64` (only to run it, not to build it).
+- `CS-Investor-Hub-*.deb` — for Debian/Ubuntu-based distros (including Zorin OS 18):
+  install via `sudo apt install ./release/CS-Investor-Hub-*.deb`.
 
-**Kein System-PHP noetig (Windows & Linux):** Das PHP-Backend (Sidecar) wird als
-statisch gelinkte Runtime mitgeliefert. Die Build-Scripts fuehren `npm run fetch:php`
-aus, das ein fertiges statisches PHP-Binary (mit `curl`, `openssl`, `mbstring`,
-`sqlite3`, `pdo_sqlite`) plus ein CA-Bundle (`cacert.pem`) von static-php.dev nach
-`resources/php/<platform>/` laedt; electron-builder bettet es je Plattform via
-`extraResources` in die App ein. Die Binaries sind bewusst nicht im Git
-(siehe `.gitignore`) und werden bei jedem Build geholt.
+**No system PHP required (Windows & Linux):** the PHP backend (sidecar) ships as a
+statically linked runtime. The build scripts run `npm run fetch:php`, which downloads a
+prebuilt static PHP binary (with `curl`, `openssl`, `mbstring`, `sqlite3`, `pdo_sqlite`)
+plus a CA bundle (`cacert.pem`) from static-php.dev into `resources/php/<platform>/`;
+electron-builder embeds it per platform via `extraResources`. The binaries are
+deliberately not in git (see `.gitignore`) and are fetched on every build.
 
-Falls beim Start ein `better-sqlite3`-ABI-Fehler auftritt, die nativen Module gegen die
-Electron-ABI neu bauen:
+If the app fails to start with a `better-sqlite3` ABI error, rebuild the native modules
+against the Electron ABI:
 
 ```bash
 npm run rebuild:desktop-native
 ```
 
-Ein eigenes Linux-Icon kann optional als `build/icon.png` (mind. 512x512) hinterlegt werden;
-ohne diese Datei wird das Standard-Electron-Icon verwendet.
-
 ### CI
 
-Der Workflow `.github/workflows/desktop-release.yml` baut bei einem `v*`-Tag automatisch
-Windows- und Linux-Artefakte und haengt sie an das GitHub-Release.
-
+`.github/workflows/desktop-release.yml` builds Windows and Linux artifacts on a `v*` tag
+and attaches them to the GitHub release.
 
 ## Screenshots
+
 ![Year Wrapped Intro (Dark)](docs/screenshots/desktop-dark/13-year-wrapped-01.png)
-![Year Wrapped Kaeufe (Dark)](docs/screenshots/desktop-dark/13-year-wrapped-02.png)
-![Year Wrapped Fazit (Dark)](docs/screenshots/desktop-dark/13-year-wrapped-10.png)
+![Year Wrapped Purchases (Dark)](docs/screenshots/desktop-dark/13-year-wrapped-02.png)
+![Year Wrapped Summary (Dark)](docs/screenshots/desktop-dark/13-year-wrapped-10.png)
 ![Year Wrapped Intro (Light)](docs/screenshots/desktop-light/10-year-wrapped-01-light.png)
