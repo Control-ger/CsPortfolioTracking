@@ -1,14 +1,7 @@
 # CS Investor Hub
 
-## Disclaimer / Haftungsausschluss
-
-Dieses Projekt wurde zu Bildungs- und Portfoliozwecken erstellt.
-- Keine Finanzberatung: Angezeigte Daten und Berechnungen dienen nur der Information.
-- Kein Support: Das Repository wird "as-is" bereitgestellt.
-- Nutzung auf eigene Gefahr: Verwendung von API-Schnittstellen und Code erfolgt auf eigenes Risiko.
-
 ## Video
-
+Tried Claude with Remotion for this one:
 <video src="https://github.com/user-attachments/assets/18241488-2846-4a69-b66b-c7e0f512bfd3"></video>
 
 ## Screenshots
