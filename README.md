@@ -12,6 +12,7 @@ Dieses Projekt wurde zu Bildungs- und Portfoliozwecken erstellt.
 <video src="https://raw.githubusercontent.com/Control-ger/CsPortfolioTracking/main/docs/video/showcase-v1-web.mp4" controls muted playsinline width="100%"></video>
 
 Falls das Video nicht direkt abspielt: [showcase-v1-web.mp4](docs/video/showcase-v1-web.mp4)
+https://github.com/user-attachments/assets/18241488-2846-4a69-b66b-c7e0f512bfd3
 
 ## Screenshots
 
