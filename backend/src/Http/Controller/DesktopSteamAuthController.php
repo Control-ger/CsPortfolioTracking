@@ -207,6 +207,25 @@ final class DesktopSteamAuthController
         return rtrim($baseDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'csportfolio_desktop_auth_result.json';
     }
 
+    /**
+     * Drops every entry past its own expiry.
+     *
+     * Both handoff files used to be pruned only when something new was written.
+     * Desktop login prefers the server flow ("Variante C"), so that write may
+     * never happen again on a given machine — and a consumed one-shot entry,
+     * including the session token inside an auth result, then stayed on disk
+     * indefinitely (observed: a July auth result still present in September).
+     * Pruning on READ bounds every entry by its 5-minute expiry instead, without
+     * a cleanup job owning these files from the outside.
+     */
+    private static function withoutExpiredEntries(array $entries): array
+    {
+        return array_filter(
+            $entries,
+            static fn ($entry): bool => is_array($entry) && (int) ($entry['expiresAt'] ?? 0) > time()
+        );
+    }
+
     private function readStates(): array
     {
         $path = $this->stateFilePath();
@@ -215,7 +234,20 @@ final class DesktopSteamAuthController
         }
 
         $decoded = json_decode((string) file_get_contents($path), true);
-        return is_array($decoded) ? $decoded : [];
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $live = self::withoutExpiredEntries($decoded);
+        if (count($live) !== count($decoded)) {
+            try {
+                $this->writeStates($live);
+            } catch (\RuntimeException) {
+                // Best effort: an unwritable state dir must not break login.
+            }
+        }
+
+        return $live;
     }
 
     private function writeStates(array $states): void
@@ -241,7 +273,22 @@ final class DesktopSteamAuthController
         }
 
         $decoded = json_decode((string) file_get_contents($path), true);
-        return is_array($decoded) ? $decoded : [];
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        // See withoutExpiredEntries(): this file carries session tokens, so a
+        // stale entry is not just clutter.
+        $live = self::withoutExpiredEntries($decoded);
+        if (count($live) !== count($decoded)) {
+            try {
+                $this->writeAuthResults($live);
+            } catch (\RuntimeException) {
+                // Best effort: an unwritable state dir must not break login.
+            }
+        }
+
+        return $live;
     }
 
     private function writeAuthResults(array $results): void
@@ -261,10 +308,7 @@ final class DesktopSteamAuthController
 
     private function storeState(string $state, string $returnUrl): void
     {
-        $states = array_filter(
-            $this->readStates(),
-            static fn (array $entry): bool => (int) ($entry['expiresAt'] ?? 0) > time()
-        );
+        $states = $this->readStates();
         $states[$state] = [
             'returnUrl' => $returnUrl,
             'expiresAt' => time() + 300,
@@ -288,10 +332,7 @@ final class DesktopSteamAuthController
 
     private function storeAuthResult(string $state, array $result): void
     {
-        $results = array_filter(
-            $this->readAuthResults(),
-            static fn (array $entry): bool => (int) ($entry['expiresAt'] ?? 0) > time()
-        );
+        $results = $this->readAuthResults();
         $results[$state] = $result;
         $this->writeAuthResults($results);
     }
