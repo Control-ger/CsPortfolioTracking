@@ -250,15 +250,87 @@ async function validateSessionAgainst(remoteBase, token) {
   return data?.valid ? { success: true, user: data.user } : null;
 }
 
+const BROWSER_LOGIN_POLL_INTERVAL_MS = 1500;
+const BROWSER_LOGIN_TIMEOUT_MS = 300000;
+
+function randomHex(byteLength) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Wait for a login the user is completing in their system browser.
+ *
+ * The app never sees that browser's callback, so the server parks the finished
+ * session and we claim it here. `claimSecret` is what makes the state in the
+ * browser's address bar useless to anyone else.
+ */
+async function awaitBrowserLoginResult(remoteBase, state, claimSecret) {
+  const deadline = Date.now() + BROWSER_LOGIN_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, BROWSER_LOGIN_POLL_INTERVAL_MS));
+
+    let payload = null;
+    try {
+      const response = await remoteFetchWithCloudflareAccess(
+        remoteBase,
+        `/api/v1/auth/steam/result?state=${encodeURIComponent(state)}&claim=${encodeURIComponent(claimSecret)}`,
+        { method: "GET", headers: { "Content-Type": "application/json" } },
+      );
+      if (response.status === 404) {
+        // The handoff expired or was already claimed — no amount of further
+        // polling brings it back.
+        throw new Error(translate("common:runtimeErrors.steamLoginCancelled"));
+      }
+      if (!response.ok) {
+        continue; // transient: keep waiting for the user to finish in the browser
+      }
+      payload = unwrapApiData(await response.json());
+    } catch (error) {
+      if (error instanceof TypeError) {
+        continue; // network blip while the browser tab is still open
+      }
+      throw error;
+    }
+
+    if (payload?.pending) {
+      continue;
+    }
+    if (payload?.success && payload?.sessionToken) {
+      return payload.sessionToken;
+    }
+    throw new Error(payload?.error || translate("common:runtimeErrors.steamLoginCancelled"));
+  }
+
+  throw new Error(translate("common:runtimeErrors.steamLoginCancelled"));
+}
+
 /**
  * Variante C: Steam login against the remote server.
+ *
  * The server runs the OpenID flow and issues a session token it can itself
- * validate; we capture it from the cs-portfolio:// callback via the main process.
+ * validate. The login happens in the user's SYSTEM BROWSER, where a Steam
+ * session usually already exists — that turns a full password + Steam Guard
+ * round trip into one click. Because the app cannot watch that browser, the
+ * server parks the result and we poll for it.
+ *
+ * A server without the handoff endpoint reports no `handoff`, and we fall back
+ * to the in-app login window so an app update never has to wait for a deploy.
  */
 async function initiateDesktopServerSteamLogin(remoteBase) {
+  const claimSecret = randomHex(32);
+  const handoffKey = await sha256Hex(claimSecret);
+
   const loginResponse = await remoteFetchWithCloudflareAccess(
     remoteBase,
-    `/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(DESKTOP_PROTOCOL)}`,
+    `/api/v1/auth/steam/login?returnUrl=${encodeURIComponent(DESKTOP_PROTOCOL)}&handoffKey=${handoffKey}`,
     { method: "GET", headers: { "Content-Type": "application/json" } },
   );
   const loginData = unwrapApiData(await loginResponse.json());
@@ -266,7 +338,16 @@ async function initiateDesktopServerSteamLogin(remoteBase) {
     throw new Error(loginData?.error || translate("common:runtimeErrors.steamLoginStartFailed"));
   }
 
-  const result = await window.electronAPI.steamAuth.serverLogin(loginData.redirectUrl);
+  let result;
+  if (loginData.handoff === "poll" && loginData.state) {
+    await window.electronAPI.openExternal(loginData.redirectUrl);
+    const token = await awaitBrowserLoginResult(remoteBase, loginData.state, claimSecret);
+    result = { ok: true, token };
+  } else {
+    console.warn("[auth] server has no login handoff — using the in-app login window");
+    result = await window.electronAPI.steamAuth.serverLogin(loginData.redirectUrl);
+  }
+
   if (!result?.ok || !result?.token) {
     throw new Error(result?.error || translate("common:runtimeErrors.steamLoginCancelled"));
   }

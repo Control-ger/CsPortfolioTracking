@@ -19,6 +19,9 @@ final class RouteAccessPolicy
         'POST /api/v1/auth/steam/login',
         'GET /api/v1/auth/steam/login',
         'GET /api/v1/auth/steam/callback',
+        // Pickup for a browser-completed desktop login; authenticated by the
+        // per-login claim secret rather than a session that does not exist yet.
+        'GET /api/v1/auth/steam/result',
         // Validates a token itself and answers 401 on its own.
         'GET /api/v1/auth/session/validate',
         // Must stay reachable with an already-rejected token so the client can

@@ -97,6 +97,8 @@ final class RateLimitPolicy
             $this->rule('POST', '/api/v1/auth/steam/login', 'RATE_LIMIT_AUTH_LOGIN_PER_MINUTE', 20, 0, 300, true),
             $this->rule('GET', '/api/v1/auth/steam/login', 'RATE_LIMIT_AUTH_LOGIN_PER_MINUTE', 20, 0, 300, true),
             $this->rule('GET', '/api/v1/auth/steam/callback', 'RATE_LIMIT_AUTH_CALLBACK_PER_MINUTE', 40, 0, 300, true),
+            // Polled about every 1.5s for up to 5 minutes per login attempt.
+            $this->rule('GET', '/api/v1/auth/steam/result', 'RATE_LIMIT_AUTH_RESULT_PER_MINUTE', 120, 0, 2000, true),
             $this->rule('GET', '/api/v1/auth/session/validate', 'RATE_LIMIT_AUTH_VALIDATE_PER_MINUTE', 240, 0, 5000, true),
         ];
     }

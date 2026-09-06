@@ -40,6 +40,7 @@ use App\Infrastructure\External\ExchangeRateClient;
 use App\Infrastructure\External\SteamMarketClient;
 use App\Infrastructure\Persistence\DatabaseConnectionFactory;
 use App\Infrastructure\Persistence\Repository\AppSecretsRepository;
+use App\Infrastructure\Persistence\Repository\AuthLoginHandoffRepository;
 use App\Infrastructure\Persistence\Repository\InvestmentRepository;
 use App\Infrastructure\Persistence\Repository\ExchangeRateRepository;
 use App\Infrastructure\Persistence\Repository\ItemLiveCacheRepository;
@@ -748,11 +749,22 @@ try {
     $userSessionRepository = new UserSessionRepository($pdo);
     $userSessionRepository->ensureTable();
 
+    $authLoginHandoffRepository = new AuthLoginHandoffRepository($pdo);
+    try {
+        $authLoginHandoffRepository->ensureTable();
+    } catch (\Throwable $exception) {
+        // Without the table the browser login degrades to the in-app login
+        // window (the login response simply reports no handoff) — that must not
+        // take the whole request down.
+        $authLoginHandoffRepository = null;
+    }
+
     $steamAuthController = new SteamAuthController(
         $pdo,
         $userRepository,
         $userSessionRepository,
-        obs_env_flag('SESSION_LEGACY_TOKENS_ALLOWED', true)
+        obs_env_flag('SESSION_LEGACY_TOKENS_ALLOWED', true),
+        $authLoginHandoffRepository
     );
 
     // ENCRYPTION_KEY is available from here on, so the session token can be

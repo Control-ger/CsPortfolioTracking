@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controller;
 
+use App\Infrastructure\Persistence\Repository\AuthLoginHandoffRepository;
 use App\Infrastructure\Persistence\Repository\UserRepository;
 use App\Infrastructure\Persistence\Repository\UserSessionRepository;
 use PDO;
@@ -21,6 +22,7 @@ final class SteamAuthController
     private PDO $pdo;
     private UserRepository $userRepository;
     private ?UserSessionRepository $sessionRepository;
+    private ?AuthLoginHandoffRepository $handoffRepository;
     private bool $allowLegacyTokensWithoutJti;
 
     /**
@@ -34,12 +36,14 @@ final class SteamAuthController
         PDO $pdo,
         UserRepository $userRepository,
         ?UserSessionRepository $sessionRepository = null,
-        bool $allowLegacyTokensWithoutJti = true
+        bool $allowLegacyTokensWithoutJti = true,
+        ?AuthLoginHandoffRepository $handoffRepository = null
     ) {
         $this->pdo = $pdo;
         $this->userRepository = $userRepository;
         $this->sessionRepository = $sessionRepository;
         $this->allowLegacyTokensWithoutJti = $allowLegacyTokensWithoutJti;
+        $this->handoffRepository = $handoffRepository;
     }
     
     /**
@@ -74,6 +78,31 @@ final class SteamAuthController
         // Generate CSRF state token (stored in temporary session/cache)
         $state = $this->generateStateToken();
         $this->storeStateToken($state, $returnUrl);
+
+        // Desktop browser login: the app finishes this flow in the user's own
+        // browser and never sees the callback, so it asks us to park the result
+        // for pickup. `handoffKey` is the SHA-256 of a secret only the app holds
+        // — the state alone must not be enough to claim the session.
+        $handoffOpened = false;
+        $handoffKey = strtolower(trim((string) ($query['handoffKey'] ?? '')));
+        if ($handoffKey !== '' && $this->handoffRepository !== null) {
+            if (preg_match('/^[a-f0-9]{64}$/', $handoffKey) !== 1) {
+                return [
+                    'success' => false,
+                    'error' => 'Invalid handoff key',
+                    'code' => 'INVALID_HANDOFF_KEY'
+                ];
+            }
+
+            try {
+                $this->handoffRepository->begin($state, $handoffKey);
+                $handoffOpened = true;
+            } catch (\Throwable $exception) {
+                // Not fatal: without a handoff the client falls back to its
+                // in-app login window, which still completes the login.
+                error_log('[auth] failed to open login handoff: ' . $exception->getMessage());
+            }
+        }
         
         // Build OpenID request
         $openidParams = [
@@ -91,6 +120,11 @@ final class SteamAuthController
             'success' => true,
             'redirectUrl' => $redirectUrl,
             'state' => $state,
+            // The client keys its whole strategy off this: 'poll' means "finish
+            // in the system browser and pick the session up from
+            // /auth/steam/result", absent means this server cannot do that yet
+            // and the caller should open its own login window instead.
+            'handoff' => $handoffOpened ? 'poll' : null,
             'expiresIn' => 300 // 5 minutes
         ];
     }
@@ -102,6 +136,40 @@ final class SteamAuthController
      * @return array User data and session token
      */
     public function callback(array $query, array $server): array
+    {
+        $result = $this->resolveCallback($query, $server);
+
+        // Browser login: the app is not the one looking at this response — it is
+        // polling /auth/steam/result — so park the outcome (success OR failure)
+        // for pickup. A parked failure is what lets the app report "Steam login
+        // failed" straight away instead of sitting out its poll timeout.
+        $state = (string) ($query['state'] ?? '');
+        if ($state !== '' && $this->handoffRepository !== null) {
+            try {
+                if ($this->handoffRepository->complete($state, $result)) {
+                    $result['handoff'] = true;
+                }
+            } catch (\Throwable $exception) {
+                error_log('[auth] failed to park login handoff: ' . $exception->getMessage());
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Claims a parked browser login. See AuthLoginHandoffRepository::claim().
+     */
+    public function claimLoginHandoff(string $state, string $claimSecret): ?array
+    {
+        if ($this->handoffRepository === null || $state === '' || $claimSecret === '') {
+            return null;
+        }
+
+        return $this->handoffRepository->claim($state, $claimSecret);
+    }
+
+    private function resolveCallback(array $query, array $server): array
     {
         // Validate OpenID response
         if (!isset($query['openid_mode']) || $query['openid_mode'] !== 'id_res') {

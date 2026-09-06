@@ -132,8 +132,28 @@ function registerServerApiRoutes(Router $router, array $c): void
 
         if (!$result['success']) {
             http_response_code(400);
-            header('Content-Type: text/html');
+            header('Content-Type: text/html; charset=utf-8');
             echo '<h1>Authentication Failed</h1><p>' . htmlspecialchars($result['error'] ?? 'Unknown error') . '</p>';
+            return;
+        }
+
+        // Browser login (desktop): the session is parked for the app to claim,
+        // so this tab must NOT redirect into the app's custom protocol — the
+        // browser would either prompt or show an unknown-scheme error. Say the
+        // login worked and let the user close the tab. The token is deliberately
+        // absent from this page.
+        if (($result['handoff'] ?? false) === true) {
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<!doctype html><html lang="de"><head><meta charset="utf-8">'
+                . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                . '<title>Anmeldung abgeschlossen</title>'
+                . '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;'
+                . 'font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;background:#0f1115;color:#e8eaed}'
+                . 'main{max-width:32rem;padding:2rem;text-align:center}h1{font-size:1.4rem;margin:0 0 .75rem}'
+                . 'p{margin:0;color:#9aa0a6}</style></head><body><main>'
+                . '<h1>Anmeldung abgeschlossen</h1>'
+                . '<p>Du kannst dieses Fenster schlie&szlig;en und zur App zur&uuml;ckkehren.</p>'
+                . '</main></body></html>';
             return;
         }
 
@@ -152,6 +172,27 @@ function registerServerApiRoutes(Router $router, array $c): void
         $webCallbackUrl = $redirectUrl . $tokenFragment;
         header('Location: ' . $webCallbackUrl);
         exit;
+    });
+
+    // Pickup point for a login the user completed in their system browser. Public
+    // by necessity (there is no session yet) and safe because a claim needs the
+    // secret behind the login request's handoffKey, not just the state — which
+    // is visible in the browser's address bar.
+    $router->register('GET', '/api/v1/auth/steam/result', function () use ($c) {
+        $state = (string) ($_GET['state'] ?? '');
+        $claim = (string) ($_GET['claim'] ?? '');
+        if ($state === '' || $claim === '') {
+            JsonResponseFactory::error('MISSING_STATE', 'state and claim are required', [], 400);
+            return;
+        }
+
+        $result = $c['steamAuth']->claimLoginHandoff($state, $claim);
+        if ($result === null) {
+            JsonResponseFactory::error('INVALID_STATE', 'Unknown or expired login', [], 404);
+            return;
+        }
+
+        JsonResponseFactory::success($result);
     });
 
     $router->register('GET', '/api/v1/auth/steam/inventory', function () use ($c) {
