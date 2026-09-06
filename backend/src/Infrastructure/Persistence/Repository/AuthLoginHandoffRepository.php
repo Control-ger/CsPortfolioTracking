@@ -25,22 +25,63 @@ final class AuthLoginHandoffRepository
     {
     }
 
+    /**
+     * DATETIME, not TIMESTAMP, and that is the whole point.
+     *
+     * With explicit_defaults_for_timestamp=OFF (the default on MySQL 5.7 and
+     * MariaDB) the FIRST `TIMESTAMP NOT NULL` column without its own DEFAULT
+     * silently becomes `DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`.
+     * `expires_at` was that column — so the UPDATE in complete() reset the row's
+     * own expiry to "now", the row was expired the instant the login finished,
+     * and every pickup answered "unknown or expired login" one second after the
+     * browser had reported success. DATETIME carries no such magic.
+     */
     public function ensureTable(): void
     {
         $sql = "CREATE TABLE IF NOT EXISTS auth_login_handoffs (
             state       VARCHAR(64) NOT NULL PRIMARY KEY,
             claim_hash  CHAR(64)    NOT NULL,
             payload     TEXT        NULL,
-            expires_at  TIMESTAMP   NOT NULL,
-            created_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at  DATETIME    NOT NULL,
+            created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_expires (expires_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
             $this->pdo->exec($sql);
+            $this->repairSelfExpiringTimestampColumn();
         } catch (Throwable $exception) {
             error_log('Failed to create auth_login_handoffs table: ' . $exception->getMessage());
             throw $exception;
+        }
+    }
+
+    /**
+     * CREATE TABLE IF NOT EXISTS does nothing to a table that already exists, so
+     * installs created before the DATETIME fix keep the self-resetting column.
+     * Convert it once; afterwards this is a single indexed information_schema
+     * lookup per request.
+     */
+    private function repairSelfExpiringTimestampColumn(): void
+    {
+        try {
+            $stmt = $this->pdo->query(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'auth_login_handoffs'
+                   AND COLUMN_NAME = 'expires_at'"
+            );
+            $dataType = strtolower((string) ($stmt->fetchColumn() ?: ''));
+            if ($dataType !== 'timestamp') {
+                return;
+            }
+
+            $this->pdo->exec('ALTER TABLE auth_login_handoffs MODIFY expires_at DATETIME NOT NULL');
+            error_log('[auth] converted auth_login_handoffs.expires_at from TIMESTAMP to DATETIME');
+        } catch (Throwable $exception) {
+            // complete() defends itself against the auto-update anyway, so a
+            // missing ALTER privilege must not break logins.
+            error_log('[auth] could not convert expires_at column: ' . $exception->getMessage());
         }
     }
 
@@ -78,8 +119,12 @@ final class AuthLoginHandoffRepository
             return false;
         }
 
+        // `expires_at = expires_at` is not a no-op: assigning a column explicitly
+        // suppresses ON UPDATE CURRENT_TIMESTAMP. It keeps this UPDATE from
+        // resetting the row's expiry on any install where the column is still a
+        // TIMESTAMP (see repairSelfExpiringTimestampColumn).
         $sql = 'UPDATE auth_login_handoffs
-                SET payload = :payload
+                SET payload = :payload, expires_at = expires_at
                 WHERE state = :state AND payload IS NULL AND expires_at > NOW()';
 
         $stmt = $this->pdo->prepare($sql);
