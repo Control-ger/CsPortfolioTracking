@@ -2,22 +2,17 @@ import { translate } from "./i18n/index.js";
 
 // Session health signal.
 //
-// Two failure modes previously stayed invisible and turned a one-off login
-// hiccup into permanent, undiagnosable 401s:
+// A stored token the server refuses used to be reused on every start, because
+// nothing ever cleared it: the app looked logged in while every sync call was
+// rejected. It is reported here so the UI can say what is wrong instead of
+// leaving the user with a working-looking app that silently stops syncing.
 //
-//   1. `initiateDesktopSteamLogin` falls back to the local sidecar login when
-//      the server login (Variante C) fails. The sidecar signs its token with a
-//      machine-local key, so the server can never decrypt it — the app looks
-//      logged in while every sync call is rejected.
-//   2. A stored token the server refuses was reused on every start, because
-//      nothing ever cleared it.
-//
-// Both are reported here so the UI can say what is wrong instead of leaving the
-// user with a working-looking app that silently stops syncing.
+// There used to be a second state, "local-only", for the sidecar token that
+// `initiateDesktopSteamLogin` fell back to when the server login failed. That
+// fallback is gone — a token the configured server can never decrypt is not a
+// rescue — so the state has no source any more.
 
 export const SESSION_HEALTH_OK = "ok";
-/** Logged in, but the token is sidecar-signed → server sync cannot work. */
-const SESSION_HEALTH_LOCAL_ONLY = "local-only";
 /** The server actively refused the stored token; it has been cleared. */
 export const SESSION_HEALTH_REJECTED = "rejected";
 
@@ -28,10 +23,6 @@ const listeners = new Set();
 // outlives the language it was written in. The rendered text is stored
 // alongside as the fallback for a reader that has no catalogue.
 const NOTIFICATION_KEYS = {
-  [SESSION_HEALTH_LOCAL_ONLY]: {
-    titleKey: "common:notifications.sessionLocalOnlyTitle",
-    messageKey: "common:notifications.sessionLocalOnlyMessage",
-  },
   [SESSION_HEALTH_REJECTED]: {
     titleKey: "common:notifications.sessionExpiredTitle",
     messageKey: "common:notifications.sessionExpiredMessage",
@@ -107,10 +98,6 @@ export function subscribeSessionHealth(listener) {
 
 export function reportSessionHealthy() {
   emit({ status: SESSION_HEALTH_OK, reason: null });
-}
-
-export function reportSessionLocalOnly(reason) {
-  emit({ status: SESSION_HEALTH_LOCAL_ONLY, reason: reason || null });
 }
 
 export function reportSessionRejected(reason) {

@@ -87,6 +87,8 @@
     "unknownDate": "Datum unbekannt",
     "unknownPurchaseDate": "Kaufdatum unbekannt",
     "partlyExcluded": "teils excluded",
+    "positionExcluded": "excluded",
+    "positionActive": "aktiv",
     "applySuggestionPosition": "Vorschlag für diese Position übernehmen",
     "applySuggestionEntry": "Vorschlag nur für diesen Eintrag übernehmen",
     "setForAll": "Für alle Positionen setzen",

@@ -10,10 +10,7 @@ import { translate } from "./i18n/index.js";
 import { normalizeDesktopLocalUserId } from "./userIdentity.js";
 import { normalizeServerBaseUrl, resolveAccessBaseUrl } from "./serverConfig.js";
 import { fetchWithCloudflareAccess } from "./cloudflareAccess.js";
-import {
-  reportSessionHealthy,
-  reportSessionLocalOnly,
-} from "./sessionHealthBus.js";
+import { reportSessionHealthy } from "./sessionHealthBus.js";
 
 // Resolve configured API base URL - handle Electron file:// origin gracefully
 function resolveConfiguredApiBase() {
@@ -379,27 +376,20 @@ async function initiateDesktopServerSteamLogin(remoteBase) {
  */
 async function initiateDesktopSteamLogin() {
   // Variante C: when a remote server is configured, authenticate against it so
-  // the session token is valid for the protected sync endpoints. Falls back to
-  // the local sidecar login (local-only token) if the server flow fails, so the
-  // user is never locked out of the app.
+  // the session token is valid for the protected sync endpoints.
   const remoteBase = await resolveRemoteServerBase();
   if (remoteBase) {
-    try {
-      const serverResult = await initiateDesktopServerSteamLogin(remoteBase);
-      console.log("[auth] Variante C server login succeeded — token is sync-valid");
-      reportSessionHealthy();
-      return serverResult;
-    } catch (error) {
-      // Loud on purpose: a silent fallback to the sidecar token reproduces the
-      // exact original symptom (login OK, sync AUTH_REQUIRED). This line is the
-      // signal that Variante C did not complete.
-      console.error("[auth] Variante C server login FAILED — falling back to sidecar (sync will not work):", error);
-      // A console line nobody reads is not enough: the fallback token is signed
-      // with a machine-local key, so sync stays broken until the user logs in
-      // again. Surface it so the UI can say so instead of showing a healthy
-      // looking app that silently never syncs.
-      reportSessionLocalOnly(error?.message || String(error));
-    }
+    const serverResult = await initiateDesktopServerSteamLogin(remoteBase);
+    console.log("[auth] Variante C server login succeeded — token is sync-valid");
+    reportSessionHealthy();
+    return serverResult;
+    // No sidecar fallback here, deliberately. The sidecar signs with a
+    // machine-local key, so the token it issues can never authenticate against
+    // the very server the user just configured — the "rescue" produced an app
+    // that looked signed in and 401'd on every sync. Worse, it swallowed the
+    // real diagnosis: a whole evening of failing logins reported "Secret Vault
+    // ist gesperrt" (the fallback's own unrelated problem) instead of the
+    // server error that actually stopped the login. Let the real error surface.
   }
 
   return await initiateDesktopSidecarSteamLogin();

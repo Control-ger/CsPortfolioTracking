@@ -87,6 +87,8 @@
     "unknownDate": "Date unknown",
     "unknownPurchaseDate": "Purchase date unknown",
     "partlyExcluded": "partly excluded",
+    "positionExcluded": "excluded",
+    "positionActive": "active",
     "applySuggestionPosition": "Apply suggestion to this position",
     "applySuggestionEntry": "Apply suggestion to this entry only",
     "setForAll": "Set for all positions",

@@ -15,7 +15,6 @@ import {
 import { getCurrentUser, getSession, logout, validateSession } from "@shared/lib/auth"
 import {
   SESSION_HEALTH_OK,
-  SESSION_HEALTH_REJECTED,
   getSessionHealth,
   subscribeSessionHealth,
 } from "@shared/lib/sessionHealthBus"
@@ -106,11 +105,10 @@ export function UserMenu({
     user?.steamAvatar ||
     null
   const avatarIsVideo = isVideoAvatarUrl(avatarUrl)
+  // "rejected" is the only unhealthy state left since the sidecar login fallback
+  // (and with it "local-only") was removed.
   const sessionUnhealthy = sessionHealth.status !== SESSION_HEALTH_OK
-  const sessionBadgeLabel =
-    sessionHealth.status === SESSION_HEALTH_REJECTED
-      ? t("userMenu.sessionExpired")
-      : t("userMenu.sessionLocalOnly")
+  const sessionBadgeLabel = t("userMenu.sessionExpired")
 
   return (
     <DropdownMenu>
