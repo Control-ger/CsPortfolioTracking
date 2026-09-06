@@ -145,13 +145,23 @@ final class AuthLoginHandoffRepository
             // payload into "unknown login" — the session was destroyed by the
             // very request that was supposed to fetch it, and the user saw a 404
             // seconds after the browser said the login had worked.
+            // The head of the payload is the JSON envelope
+            // ({"success":true,"user":{"id":…) — no secret lives in the first
+            // few dozen characters, and seeing it is what tells truncation apart
+            // from a charset problem.
             error_log(sprintf(
-                '[auth] parked login payload is not decodable (state=%s, bytes=%d)',
+                '[auth] parked login payload is not decodable (state=%s, bytes=%d, jsonError=%s, head=%s)',
                 substr($state, 0, 8),
-                strlen((string) $payload)
+                strlen((string) $payload),
+                json_last_error_msg(),
+                substr((string) $payload, 0, 40)
             ));
 
-            return ['status' => 'corrupt'];
+            return [
+                'status' => 'corrupt',
+                'bytes' => strlen((string) $payload),
+                'jsonError' => json_last_error_msg(),
+            ];
         }
 
         // Consume only now that we know we can hand it over: a session token

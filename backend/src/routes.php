@@ -201,7 +201,12 @@ function registerServerApiRoutes(Router $router, array $c): void
                 JsonResponseFactory::error(
                     'HANDOFF_PAYLOAD_UNREADABLE',
                     'The completed login could not be read back',
-                    [],
+                    // Size and decoder verdict only — never any of the payload
+                    // itself, which carries the session token.
+                    [
+                        'bytes' => $outcome['bytes'] ?? null,
+                        'jsonError' => $outcome['jsonError'] ?? null,
+                    ],
                     500
                 );
                 return;
