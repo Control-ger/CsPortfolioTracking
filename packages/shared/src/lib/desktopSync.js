@@ -80,6 +80,22 @@ function buildSyncEndpointCandidates(serverBaseUrl, endpointPath) {
   return Array.from(new Set(candidates));
 }
 
+function isHtmlResponse(response) {
+  return String(response?.headers?.get?.("content-type") || "")
+    .toLowerCase()
+    .includes("text/html");
+}
+
+// A JSON 401/403 is the server's own verdict on the session — it carries the
+// error code handleDeadSessionResponse acts on. No other candidate URL can
+// improve on that, so it ends the search instead of being kept as a runner-up.
+function isAuthoritativeAuthFailure(response) {
+  if (!response || (response.status !== 401 && response.status !== 403)) {
+    return false;
+  }
+  return !isHtmlResponse(response);
+}
+
 async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, options) {
   const candidates = buildSyncEndpointCandidates(serverBaseUrl, endpointPath);
   if (candidates.length === 0) {
@@ -88,16 +104,30 @@ async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, option
 
   let lastResponse = null;
   let firstNon404Response = null;
+  let htmlFallbackResponse = null;
   let lastError = null;
   let sawAccessChallenge = false;
   for (const url of candidates) {
     try {
       const response = await fetchWithCloudflareAccess(url, options, serverBaseUrl);
+      // The deployed server answers every path it does not route to the API with
+      // the SPA, so `/index.php/api/v1/sync/pull` returns 200 text/html. Taking
+      // that as success threw away the authoritative 401 an earlier candidate had
+      // already produced: the sync then died with "HTML instead of JSON" on every
+      // run and the expired session was never recognised as expired, so the app
+      // 401'd forever with no way back to a login prompt. HTML is never an API
+      // answer — remember it as a last resort and keep looking.
       if (response?.ok) {
-        return response;
+        if (!isHtmlResponse(response)) {
+          return response;
+        }
+        htmlFallbackResponse = htmlFallbackResponse || response;
+        continue;
       }
       if (isCloudflareAccessChallengeResponse(response)) {
         sawAccessChallenge = true;
+      } else if (isAuthoritativeAuthFailure(response)) {
+        return response;
       }
       lastResponse = response;
       if (response && response.status !== 404 && !firstNon404Response) {
@@ -124,6 +154,9 @@ async function fetchSyncEndpointWithFallback(serverBaseUrl, endpointPath, option
   }
   if (lastResponse) {
     return lastResponse;
+  }
+  if (htmlFallbackResponse) {
+    return htmlFallbackResponse;
   }
   if (lastError) {
     throw lastError;
