@@ -18,6 +18,18 @@ final class SteamAuthController
 {
     private const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
     private const STEAM_API_KEY_ENV = 'STEAM_API_KEY';
+
+    /** In-app login window: the user is already looking at the Steam page. */
+    private const STATE_TTL_SECONDS = 300;
+
+    /**
+     * Browser login: opening the browser, signing in to Steam (password, Steam
+     * Guard) and possibly passing Cloudflare Access first does not fit into five
+     * minutes. It did not: the very first real browser login expired mid-flow,
+     * the callback was rejected as "Invalid or expired session", and the app saw
+     * nothing but a 404 on its pickup.
+     */
+    private const BROWSER_STATE_TTL_SECONDS = 900;
     
     private PDO $pdo;
     private UserRepository $userRepository;
@@ -75,27 +87,32 @@ final class SteamAuthController
             ];
         }
         
-        // Generate CSRF state token (stored in temporary session/cache)
-        $state = $this->generateStateToken();
-        $this->storeStateToken($state, $returnUrl);
-
         // Desktop browser login: the app finishes this flow in the user's own
         // browser and never sees the callback, so it asks us to park the result
         // for pickup. `handoffKey` is the SHA-256 of a secret only the app holds
         // — the state alone must not be enough to claim the session.
-        $handoffOpened = false;
         $handoffKey = strtolower(trim((string) ($query['handoffKey'] ?? '')));
-        if ($handoffKey !== '' && $this->handoffRepository !== null) {
-            if (preg_match('/^[a-f0-9]{64}$/', $handoffKey) !== 1) {
-                return [
-                    'success' => false,
-                    'error' => 'Invalid handoff key',
-                    'code' => 'INVALID_HANDOFF_KEY'
-                ];
-            }
+        if ($handoffKey !== '' && preg_match('/^[a-f0-9]{64}$/', $handoffKey) !== 1) {
+            return [
+                'success' => false,
+                'error' => 'Invalid handoff key',
+                'code' => 'INVALID_HANDOFF_KEY'
+            ];
+        }
 
+        $wantsHandoff = $handoffKey !== '' && $this->handoffRepository !== null;
+        // The handoff and the CSRF state must expire together: a callback that
+        // arrives after the state expired is rejected before it can be parked.
+        $ttlSeconds = $wantsHandoff ? self::BROWSER_STATE_TTL_SECONDS : self::STATE_TTL_SECONDS;
+
+        // Generate CSRF state token (stored in temporary session/cache)
+        $state = $this->generateStateToken();
+        $this->storeStateToken($state, $returnUrl, $ttlSeconds);
+
+        $handoffOpened = false;
+        if ($wantsHandoff) {
             try {
-                $this->handoffRepository->begin($state, $handoffKey);
+                $this->handoffRepository->begin($state, $handoffKey, $ttlSeconds);
                 $handoffOpened = true;
             } catch (\Throwable $exception) {
                 // Not fatal: without a handoff the client falls back to its
@@ -125,7 +142,7 @@ final class SteamAuthController
             // /auth/steam/result", absent means this server cannot do that yet
             // and the caller should open its own login window instead.
             'handoff' => $handoffOpened ? 'poll' : null,
-            'expiresIn' => 300 // 5 minutes
+            'expiresIn' => $ttlSeconds
         ];
     }
     
@@ -372,9 +389,12 @@ final class SteamAuthController
         return bin2hex(random_bytes(32)); // 64 character hex string
     }
     
-    private function storeStateToken(string $state, string $returnUrl): void
-    {
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+    private function storeStateToken(
+        string $state,
+        string $returnUrl,
+        int $ttlSeconds = self::STATE_TTL_SECONDS
+    ): void {
+        $expiresAt = date('Y-m-d H:i:s', time() + $ttlSeconds);
         
         $sql = "INSERT INTO auth_state_tokens (state, return_url, expires_at, created_at)
                 VALUES (:state, :return_url, :expires_at, NOW())

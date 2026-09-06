@@ -251,7 +251,10 @@ async function validateSessionAgainst(remoteBase, token) {
 }
 
 const BROWSER_LOGIN_POLL_INTERVAL_MS = 1500;
-const BROWSER_LOGIN_TIMEOUT_MS = 300000;
+// Matches the server's browser-login TTL. Five minutes did not survive contact
+// with a real login: opening the browser, signing in to Steam and clearing
+// Cloudflare Access takes longer than that more often than not.
+const BROWSER_LOGIN_TIMEOUT_MS = 900000;
 
 function randomHex(byteLength) {
   const bytes = new Uint8Array(byteLength);
@@ -286,8 +289,9 @@ async function awaitBrowserLoginResult(remoteBase, state, claimSecret) {
       );
       if (response.status === 404) {
         // The handoff expired or was already claimed — no amount of further
-        // polling brings it back.
-        throw new Error(translate("common:runtimeErrors.steamLoginCancelled"));
+        // polling brings it back. Say which, because "cancelled" sent the user
+        // looking for a mistake they did not make.
+        throw new Error(translate("common:runtimeErrors.steamLoginHandoffExpired"));
       }
       if (!response.ok) {
         continue; // transient: keep waiting for the user to finish in the browser
@@ -309,7 +313,7 @@ async function awaitBrowserLoginResult(remoteBase, state, claimSecret) {
     throw new Error(payload?.error || translate("common:runtimeErrors.steamLoginCancelled"));
   }
 
-  throw new Error(translate("common:runtimeErrors.steamLoginCancelled"));
+  throw new Error(translate("common:runtimeErrors.steamLoginHandoffExpired"));
 }
 
 /**

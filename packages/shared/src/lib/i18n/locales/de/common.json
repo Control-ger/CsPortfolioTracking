@@ -168,6 +168,7 @@
     "csUpdatesLoadFailed": "CS Updates konnten nicht geladen werden.",
     "steamLoginStartFailed": "Steam-Login konnte am Server nicht gestartet werden.",
     "steamLoginCancelled": "Steam-Login wurde abgebrochen.",
+    "steamLoginHandoffExpired": "Der Steam-Login im Browser hat zu lange gedauert oder wurde nicht abgeschlossen. Bitte erneut versuchen.",
     "sessionValidationFailed": "Session-Validierung am Server fehlgeschlagen.",
     "apiError": "API-Fehler ({{status}}) für {{url}}",
     "skinbaronLoginFailed": "SkinBaron Login konnte nicht abgeschlossen werden.",
