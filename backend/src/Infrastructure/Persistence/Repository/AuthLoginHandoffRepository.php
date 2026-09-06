@@ -105,12 +105,18 @@ final class AuthLoginHandoffRepository
     /**
      * Single-use claim.
      *
-     * Returns `['pending' => true]` while the browser is still in the flow, the
-     * stored payload exactly once, and null for an unknown, expired or
-     * wrongly-authenticated state — the three are deliberately indistinguishable
-     * to a caller that is guessing.
+     * Returns a status the caller can act on:
+     *   'pending'  — the browser is still in the flow
+     *   'ready'    — `payload` holds the finished login (consumed by this call)
+     *   'missing'  — unknown, expired, or the claim secret did not match
+     *   'corrupt'  — a parked payload that will not decode
+     *
+     * 'missing' deliberately merges "no such state" with "wrong secret" so a
+     * caller that is guessing learns nothing from the difference.
+     *
+     * @return array{status: string, payload?: array}
      */
-    public function claim(string $state, string $claimSecret): ?array
+    public function claim(string $state, string $claimSecret): array
     {
         $stmt = $this->pdo->prepare(
             'SELECT claim_hash, payload FROM auth_login_handoffs
@@ -120,25 +126,40 @@ final class AuthLoginHandoffRepository
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!is_array($row)) {
-            return null;
+            return ['status' => 'missing'];
         }
 
         if (!hash_equals((string) $row['claim_hash'], hash('sha256', $claimSecret))) {
-            return null;
+            return ['status' => 'missing'];
         }
 
         $payload = $row['payload'];
         if ($payload === null) {
-            return ['pending' => true];
+            return ['status' => 'pending'];
         }
 
-        // Consume before returning: a session token handed out twice is a token
-        // an eavesdropper on the second read gets for free.
+        $decoded = json_decode((string) $payload, true);
+        if (!is_array($decoded)) {
+            // Decode BEFORE deleting. The first version deleted the row and then
+            // returned null on a decode failure, which turned an unreadable
+            // payload into "unknown login" — the session was destroyed by the
+            // very request that was supposed to fetch it, and the user saw a 404
+            // seconds after the browser said the login had worked.
+            error_log(sprintf(
+                '[auth] parked login payload is not decodable (state=%s, bytes=%d)',
+                substr($state, 0, 8),
+                strlen((string) $payload)
+            ));
+
+            return ['status' => 'corrupt'];
+        }
+
+        // Consume only now that we know we can hand it over: a session token
+        // handed out twice is a token an eavesdropper on the second read gets
+        // for free.
         $this->delete($state);
 
-        $decoded = json_decode((string) $payload, true);
-
-        return is_array($decoded) ? $decoded : null;
+        return ['status' => 'ready', 'payload' => $decoded];
     }
 
     public function delete(string $state): void

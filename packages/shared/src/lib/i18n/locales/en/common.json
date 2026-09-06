@@ -169,6 +169,7 @@
     "steamLoginStartFailed": "Steam sign-in could not be started on the server.",
     "steamLoginCancelled": "Steam sign-in was cancelled.",
     "steamLoginHandoffExpired": "The Steam sign-in in your browser took too long or was not completed. Please try again.",
+    "steamLoginHandoffUnreadable": "The server completed the sign-in but could not hand it back to the app. Please try again.",
     "sessionValidationFailed": "Session validation on the server failed.",
     "apiError": "API error ({{status}}) for {{url}}",
     "skinbaronLoginFailed": "SkinBaron sign-in could not be completed.",

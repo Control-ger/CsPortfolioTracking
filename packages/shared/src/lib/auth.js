@@ -294,6 +294,15 @@ async function awaitBrowserLoginResult(remoteBase, state, claimSecret) {
         throw new Error(translate("common:runtimeErrors.steamLoginHandoffExpired"));
       }
       if (!response.ok) {
+        // A definitive server verdict ends the wait; anything else (a restarting
+        // container, a Cloudflare hiccup) is transient and must not abort a login
+        // the user is still completing in the browser.
+        const failure = await response.json().catch(() => null);
+        const code = failure?.error?.code || "";
+        if (code === "HANDOFF_PAYLOAD_UNREADABLE" || code === "HANDOFF_UNAVAILABLE") {
+          console.error("[auth] browser login handoff failed", { status: response.status, code });
+          throw new Error(translate("common:runtimeErrors.steamLoginHandoffUnreadable"));
+        }
         continue; // transient: keep waiting for the user to finish in the browser
       }
       payload = unwrapApiData(await response.json());

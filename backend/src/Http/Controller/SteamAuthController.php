@@ -175,12 +175,21 @@ final class SteamAuthController
     }
 
     /**
-     * Claims a parked browser login. See AuthLoginHandoffRepository::claim().
+     * Claims a parked browser login. See AuthLoginHandoffRepository::claim() for
+     * the status values; 'unavailable' means this server has no handoff store at
+     * all, which is a different problem from an unknown state and must not be
+     * reported as one.
+     *
+     * @return array{status: string, payload?: array}
      */
-    public function claimLoginHandoff(string $state, string $claimSecret): ?array
+    public function claimLoginHandoff(string $state, string $claimSecret): array
     {
-        if ($this->handoffRepository === null || $state === '' || $claimSecret === '') {
-            return null;
+        if ($this->handoffRepository === null) {
+            return ['status' => 'unavailable'];
+        }
+
+        if ($state === '' || $claimSecret === '') {
+            return ['status' => 'missing'];
         }
 
         return $this->handoffRepository->claim($state, $claimSecret);

@@ -186,13 +186,36 @@ function registerServerApiRoutes(Router $router, array $c): void
             return;
         }
 
-        $result = $c['steamAuth']->claimLoginHandoff($state, $claim);
-        if ($result === null) {
-            JsonResponseFactory::error('INVALID_STATE', 'Unknown or expired login', [], 404);
-            return;
+        $outcome = $c['steamAuth']->claimLoginHandoff($state, $claim);
+        switch ($outcome['status'] ?? '') {
+            case 'ready':
+                JsonResponseFactory::success($outcome['payload'] ?? []);
+                return;
+            case 'pending':
+                JsonResponseFactory::success(['pending' => true]);
+                return;
+            case 'corrupt':
+                // The login itself worked; only the parked copy is unreadable.
+                // Saying "unknown login" here sent a real debugging session down
+                // the wrong path for an hour.
+                JsonResponseFactory::error(
+                    'HANDOFF_PAYLOAD_UNREADABLE',
+                    'The completed login could not be read back',
+                    [],
+                    500
+                );
+                return;
+            case 'unavailable':
+                JsonResponseFactory::error(
+                    'HANDOFF_UNAVAILABLE',
+                    'This server cannot hand over browser logins',
+                    [],
+                    503
+                );
+                return;
+            default:
+                JsonResponseFactory::error('INVALID_STATE', 'Unknown or expired login', [], 404);
         }
-
-        JsonResponseFactory::success($result);
     });
 
     $router->register('GET', '/api/v1/auth/steam/inventory', function () use ($c) {
