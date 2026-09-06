@@ -5,11 +5,14 @@ import {
   DEFAULT_LANGUAGE,
   SUPPORTED_LANGUAGES,
   changeLanguage as applyLanguage,
+  clearStoredLanguage,
+  detectNavigatorLanguage,
   getActiveLanguage,
   i18next,
   initI18n,
   normalizeLanguage,
   persistLanguage,
+  readStoredLanguage,
   resolveInitialLanguage,
   resolveIntlLocale,
 } from "@shared/lib/i18n/index.js";
@@ -50,6 +53,11 @@ function buildLanguageCatalog(activeLanguage) {
 
 export function LanguageProvider({ children }) {
   const [language, setLanguageState] = useState(() => resolveInitialLanguage());
+  // Whether the active language comes from an explicit choice or from the
+  // system. The settings UI needs the difference: "German because you picked
+  // it" and "German because your system is" behave differently when the system
+  // language changes.
+  const [followsSystem, setFollowsSystem] = useState(() => !readStoredLanguage());
 
   useEffect(() => {
     // i18next is the authority once it has initialised — it may have resolved a
@@ -83,8 +91,22 @@ export function LanguageProvider({ children }) {
     // Persist before awaiting: a reload mid-switch should come back in the
     // language the user picked, not the one they left.
     persistLanguage(normalized);
+    setFollowsSystem(false);
     setLanguageState(normalized);
     await applyLanguage(normalized);
+  }, []);
+
+  /**
+   * Drop the explicit choice and follow the system language again. Note this
+   * can leave the visible language unchanged (system and choice agreed) — the
+   * behaviour that changes is what happens when the system language does.
+   */
+  const followSystemLanguage = useCallback(async () => {
+    clearStoredLanguage();
+    setFollowsSystem(true);
+    const next = detectNavigatorLanguage() || DEFAULT_LANGUAGE;
+    setLanguageState(next);
+    await applyLanguage(next);
   }, []);
 
   const value = useMemo(() => ({
@@ -92,8 +114,11 @@ export function LanguageProvider({ children }) {
     languages: buildLanguageCatalog(language),
     locale: resolveIntlLocale(language),
     setLanguage,
+    followSystemLanguage,
+    followsSystem,
+    systemLanguage: detectNavigatorLanguage(),
     defaultLanguage: DEFAULT_LANGUAGE,
-  }), [language, setLanguage]);
+  }), [language, setLanguage, followSystemLanguage, followsSystem]);
 
   return (
     <LanguageContext.Provider value={value}>

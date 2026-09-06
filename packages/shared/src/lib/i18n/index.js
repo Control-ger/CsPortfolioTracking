@@ -17,6 +17,7 @@ export {
   I18N_NAMESPACES,
   LANGUAGE_STORAGE_KEY,
   SUPPORTED_LANGUAGES,
+  clearStoredLanguage,
   detectNavigatorLanguage,
   normalizeLanguage,
   persistLanguage,

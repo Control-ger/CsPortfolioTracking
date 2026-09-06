@@ -96,6 +96,25 @@ export function persistLanguage(language) {
   }
 }
 
+/**
+ * Forget the explicit choice and follow the system again.
+ *
+ * Without this the automatic path was reachable exactly once — on a profile
+ * that had never stored anything. A stored value (even one that only ever got
+ * there by accident) shadowed the system language permanently, and with no way
+ * to clear it the app was stuck in that language for good.
+ */
+export function clearStoredLanguage() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+  } catch {
+    // Same reasoning as persistLanguage: storage failures are not fatal here.
+  }
+}
+
 export function resolveInitialLanguage() {
   return readStoredLanguage() || detectNavigatorLanguage() || DEFAULT_LANGUAGE;
 }

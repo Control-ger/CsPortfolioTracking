@@ -94,6 +94,16 @@
     "systemHint": "Folgt dem Betriebssystem ({{mode}})",
     "activeMode": "Aktiver Modus:"
   },
+  "language": {
+    "title": "Sprache",
+    "description": "Gilt für die gesamte Oberfläche, inklusive Datums- und Zahlenformaten.",
+    "uiLanguage": "Sprache der Oberfläche",
+    "systemOption": "Systemsprache",
+    "systemOptionWith": "Systemsprache ({{language}})",
+    "followingSystem": "Folgt deiner Systemsprache ({{language}}).",
+    "systemUnknown": "Deine Systemsprache wird nicht unterstützt — es wird Englisch verwendet.",
+    "explicitChoice": "Fest eingestellt. Wähle „Systemsprache“, um wieder dem System zu folgen."
+  },
   "csfloatSync": {
     "title": "CSFloat-Sync",
     "hint": "Watchlist und Buy Orders übernehmen. Es wird nur hinzugefügt, nie entfernt.",

@@ -254,6 +254,16 @@ string rather than a raw key path.
   navigator auto-detect and the document's `lang` attribute. It is the
   outermost app provider, above `AppErrorBoundary`, whose own copy is
   translated too.
+- **Resolution order: stored choice → system language (`navigator.languages`) →
+  English.** `LanguageSettingsSection` (Settings → Appearance) exposes exactly
+  that: a "System language" option that *clears* the stored value plus one entry
+  per supported language, each labelled in its own language so the option stays
+  readable to someone who cannot read the current UI language. The system option
+  is load-bearing rather than cosmetic — without a way to clear
+  `preferred_language`, a stored value that disagrees with the system pinned the
+  app to that language permanently, since nothing else in the UI could change
+  it. The setup journey deliberately does not ask: detection covers the common
+  case, and the control is one click away.
 
 **Formatting follows the UI language, not the OS.** `getActiveIntlLocale()` is
 the single source for every `Intl.*` call. It keeps the user's own region when

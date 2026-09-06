@@ -94,6 +94,16 @@
     "systemHint": "Follows the operating system ({{mode}})",
     "activeMode": "Active mode:"
   },
+  "language": {
+    "title": "Language",
+    "description": "Applies to the whole interface, including dates and number formats.",
+    "uiLanguage": "Interface language",
+    "systemOption": "System language",
+    "systemOptionWith": "System language ({{language}})",
+    "followingSystem": "Following your system language ({{language}}).",
+    "systemUnknown": "Your system language is not one of the supported languages — English is used.",
+    "explicitChoice": "Set explicitly. Pick “System language” to follow your system again."
+  },
   "csfloatSync": {
     "title": "CSFloat sync",
     "hint": "Take over watchlist and buy orders. Entries are only added, never removed.",

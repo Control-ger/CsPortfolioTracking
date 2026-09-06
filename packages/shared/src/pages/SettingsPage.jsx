@@ -55,6 +55,7 @@ import {
 } from "@shared/lib/settingsHelpers";
 import { FeeSettingsSection } from "@shared/components/FeeSettingsSection";
 import { CurrencySettingsSection } from "@shared/components/CurrencySettingsSection";
+import { LanguageSettingsSection } from "@shared/components/LanguageSettingsSection.jsx";
 import { SoundSettingsSection } from "@shared/components/SoundSettingsSection.jsx";
 import { WindowControlsSettingsSection } from "@shared/components/WindowControlsSettingsSection.jsx";
 import { PriceSourceSettingsSection } from "@shared/components/PriceSourceSettingsSection";
@@ -1101,6 +1102,8 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
           </SettingsNote>
         </SettingsCardBody>
       </SettingsCard>
+
+      <LanguageSettingsSection />
 
       <SoundSettingsSection />
 
