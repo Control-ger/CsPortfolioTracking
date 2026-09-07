@@ -96,6 +96,10 @@
     "purchasesCount_one": "{{count}} purchase",
     "purchasesCount_other": "{{count}} purchases",
     "purchasesEyebrow": "Purchases {{year}}",
-    "ofCurrentEntries": "of {{count}} entries today"
+    "ofCurrentEntries": "of {{count}} entries today",
+    "piecesTotal": "{{count}} pieces in total",
+    "portfolioCurve": "Portfolio curve {{year}}",
+    "bestDay": "Best day · {{date}}",
+    "shareOfWatchlist": "{{percent}}% of your watchlist"
   }
 }

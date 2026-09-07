@@ -65,7 +65,8 @@
     "targetGreaterZero": "Bitte einen Zielpreis größer 0 angeben.",
     "targetSaveFailed": "Zielpreis konnte nicht gespeichert werden.",
     "syncFallbackTitle": "Live-Sync eingeschränkt",
-    "syncFallbackBody": "Watchlist wurde ohne Live-Sync geladen. Bitte später erneut versuchen."
+    "syncFallbackBody": "Watchlist wurde ohne Live-Sync geladen. Bitte später erneut versuchen.",
+    "syncSlowFallback": "Live-Sync war langsam. Es wurden gespeicherte Watchlist-Preisdaten geladen."
   },
   "overview": {
     "topGainers": "Top Gewinner (7 Tage)",

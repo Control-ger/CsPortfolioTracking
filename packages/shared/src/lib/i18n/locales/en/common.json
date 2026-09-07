@@ -99,7 +99,10 @@
     "underOneHour": "<1h",
     "unknown": "unknown",
     "notAvailable": "-",
-    "unknownLower": "unknown"
+    "unknownLower": "unknown",
+    "unknownItem": "Unknown item",
+    "unknownCluster": "Unknown cluster",
+    "knivesGloves": "Knives / gloves"
   },
   "syncHealth": {
     "noLiveQuotes": "no live quotes",

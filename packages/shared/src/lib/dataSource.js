@@ -283,7 +283,7 @@ export async function fetchWatchlistData(options = {}) {
             ...(Array.isArray(upstreamMeta?.warnings) ? upstreamMeta.warnings : []),
             {
               code: "WATCHLIST_SYNC_LIVE_TIMEOUT_FALLBACK",
-              message: "Live-Sync war langsam. Es wurden gespeicherte Watchlist-Preisdaten geladen.",
+              message: translate("watchlist:errors.syncSlowFallback"),
             },
           ];
         }

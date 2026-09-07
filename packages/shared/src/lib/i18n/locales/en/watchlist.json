@@ -65,7 +65,8 @@
     "targetGreaterZero": "Please enter a target price greater than 0.",
     "targetSaveFailed": "Could not save target price.",
     "syncFallbackTitle": "Live sync limited",
-    "syncFallbackBody": "The watchlist was loaded without a live sync. Please try again later."
+    "syncFallbackBody": "The watchlist was loaded without a live sync. Please try again later.",
+    "syncSlowFallback": "Live sync was slow. Stored watchlist price data was loaded."
   },
   "overview": {
     "topGainers": "Top gainers (7 days)",

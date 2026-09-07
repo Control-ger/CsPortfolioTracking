@@ -183,7 +183,7 @@ export function WrappedPurchasesSlide({ year, purchases }) {
           label={t("purchases.totalSpend")}
           countTo={purchases.totalSpentUsd}
           format={formatUsd}
-          hint={`${Math.round(animatedPieces)} Stueck insgesamt`}
+          hint={t("slides.piecesTotal", { count: Math.round(animatedPieces) })}
         />
         <StatBlock
           label={t("purchases.averagePrice")}
@@ -387,7 +387,7 @@ export function WrappedCurveSlide({ year, curve }) {
 
   return (
     <WrappedSlideShell
-      eyebrow={`Portfolio-Kurve ${year}`}
+      eyebrow={t("slides.portfolioCurve", { year })}
       title={isPositive ? t("portfolio.grew") : t("portfolio.declined")}
       icon={isPositive ? TrendingUp : TrendingDown}
       footnote={
@@ -433,7 +433,7 @@ export function WrappedExtremesSlide({ year, extremes }) {
     <WrappedSlideShell eyebrow={`Extreme ${year}`} title={t("portfolio.bestAndWorstDay")} icon={TrendingUp}>
       <div className="grid gap-6 sm:grid-cols-2">
         <StatBlock
-          label={`Bester Tag · ${formatDateSafe(extremes.bestDay.date)}`}
+          label={t("slides.bestDay", { date: formatDateSafe(extremes.bestDay.date) })}
           value={formatUsd(extremes.bestDay.deltaUsd)}
           hint={formatPercent(extremes.bestDay.deltaPercent)}
           tone="success"
@@ -573,7 +573,7 @@ export function WrappedWatchlistSlide({ year, watchlist }) {
             />
           </div>
           <span className="text-sm tabular-nums text-muted-foreground">
-            {sharePercent.toFixed(0)} % deiner Watchlist
+            {t("slides.shareOfWatchlist", { percent: sharePercent.toFixed(0) })}
           </span>
         </div>
       </div>

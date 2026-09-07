@@ -171,7 +171,7 @@ function buildHighlightStats(datedRows) {
     const key = getItemNameKey(entry.row) || String(entry.row?.id || "");
     if (!byName.has(key)) {
       byName.set(key, {
-        name: entry.row?.name || entry.row?.marketHashName || "Unbekanntes Item",
+        name: entry.row?.name || entry.row?.marketHashName || translate("common:units.unknownItem"),
         imageUrl: entry.row?.imageUrl || null,
         count: 0,
         spentUsd: 0,
@@ -199,7 +199,7 @@ function buildHighlightStats(datedRows) {
 
   const mostExpensivePurchase = mostExpensiveEntry
     ? {
-        name: mostExpensiveEntry.row?.name || mostExpensiveEntry.row?.marketHashName || "Unbekanntes Item",
+        name: mostExpensiveEntry.row?.name || mostExpensiveEntry.row?.marketHashName || translate("common:units.unknownItem"),
         imageUrl: mostExpensiveEntry.row?.imageUrl || null,
         spentUsd: mostExpensiveEntry.spendUsd,
         quantity: mostExpensiveEntry.quantity,
@@ -327,7 +327,7 @@ function buildPerformerStats(enrichedInvestments) {
   }
 
   const mapRow = (row) => ({
-    name: row?.name || row?.marketHashName || "Unbekanntes Item",
+    name: row?.name || row?.marketHashName || translate("common:units.unknownItem"),
     imageUrl: row?.imageUrl || null,
     roi: toFiniteNumber(row?.roi, 0),
     profitUsd: toFiniteNumber(row?.profitEuro, 0),

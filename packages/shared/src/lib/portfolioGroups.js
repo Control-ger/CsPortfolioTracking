@@ -1,4 +1,4 @@
-import { getActiveIntlLocale } from "./i18n/index.js";
+import { getActiveIntlLocale, translate } from "./i18n/index.js";
 const GROUP_MEMBER_LIMIT = 5000;
 
 function normalizeText(value) {
@@ -94,7 +94,7 @@ function createEmptyClusterAggregate({ clusterKey, clusterRow, rawItem }) {
     sourceInvestmentIds: [],
     name:
       normalizeText(clusterRow?.name || clusterRow?.marketHashName || rawItem?.name || rawItem?.marketHashName) ||
-      "Unbekanntes Cluster",
+      translate("common:units.unknownCluster"),
     imageUrl: clusterRow?.imageUrl || rawItem?.imageUrl || rawItem?.iconUrl || null,
     // A cluster is one item, so it inherits that item's 30-day series for the
     // table's sparkline column. Groups deliberately get none — see InventoryTable.

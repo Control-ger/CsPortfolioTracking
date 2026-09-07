@@ -1,3 +1,6 @@
+
+import { translate } from "./i18n/index.js";
+
 /**
  * Split a canonical CS market_hash_name into its display parts.
  *
@@ -56,7 +59,7 @@ export function parseItemName(rawName) {
   const prefixes = [];
 
   if (rest.startsWith("★")) {
-    prefixes.push({ key: "star", label: "★", title: "Messer / Handschuhe" });
+    prefixes.push({ key: "star", label: "★", title: translate("common:units.knivesGloves") });
     rest = rest.slice(1).trim();
   }
   if (/^StatTrak(™|™)?\s/i.test(rest)) {
