@@ -16,7 +16,7 @@
     "apps/desktop"
   ],
   "scripts": {
-    "dev": "vite build --watch & electron .",
+    "dev": "vite build --watch --mode development & electron .",
     "electron": "electron .",
     "electron:debug": "set DEBUG=1&& electron .",
     "electron:debug:ps": "powershell -Command \"$env:DEBUG='1'; electron .\"",

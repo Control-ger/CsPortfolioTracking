@@ -32,8 +32,13 @@ export default defineConfig(({ mode }) => {
       // Output to root dist/ so Electron can find it
       outDir: path.resolve(__dirname, "./dist"),
       emptyOutDir: true,
-      // Enable sourcemaps for debugging in dev
-      sourcemap: true,
+      // Sourcemaps are a debugging aid, not a shipped artifact: a production
+      // build emitted 23 `.map` files next to the chunks, which serves the
+      // full frontend source to anyone who opens the deployed web app.
+      // `npm run dev` is `vite build --watch` without an explicit mode, so it
+      // lands in `production` too — hence the explicit `--mode development`
+      // there rather than a check that would silently drop maps in dev.
+      sourcemap: mode !== "production",
       rollupOptions: {
         output: {
           // Cache-safe deploys: hashed filenames prevent mixed old/new chunk graphs.
