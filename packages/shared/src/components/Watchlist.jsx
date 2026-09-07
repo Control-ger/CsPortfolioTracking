@@ -78,6 +78,16 @@ import {
 
 
 import { getActiveIntlLocale, translate } from "@shared/lib/i18n/index.js";
+import { isFlagEnabled } from "@shared/lib/envFlags.js";
+
+/**
+ * The buy-order inspector carries a raw diagnostic line (client/upstream source,
+ * pages fetched, error codes). It is the fastest way to tell a cache hit from a
+ * live CSFloat read when buy orders look wrong, so it stays in the tree — but it
+ * is developer output and must not reach a shipped build unasked.
+ */
+const BUYORDER_DEBUG_ENABLED = isFlagEnabled(import.meta.env.VITE_WATCHLIST_BUYORDER_DEBUG);
+
 function resolveBuyOrderItemName(row) {
   return String(
     row?.marketHashName ||
@@ -1483,7 +1493,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                       </div>
                     )}
 
-                    {isDesktopRuntime && buyOrderDebug ? (
+                    {BUYORDER_DEBUG_ENABLED && isDesktopRuntime && buyOrderDebug ? (
                       <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
                         Debug: client={buyOrderDebug.clientSource || "-"} | upstream=
                         {buyOrderDebug.upstreamSource || "-"} | pages=
