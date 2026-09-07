@@ -37,7 +37,8 @@
     "conditionSkinsOnly": "Zustand gilt nur für Skins",
     "priceFrom": "Preis von",
     "priceTo": "Preis bis",
-    "ownedOnly": "Nur Items im Bestand"
+    "ownedOnly": "Nur Items im Bestand",
+    "category": "Kategorie"
   },
   "priceFollows": "Preis folgt",
   "watchlist": "Watchlist",

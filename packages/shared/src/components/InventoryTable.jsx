@@ -16,7 +16,7 @@ import {
 
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 
-import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
+import { getActiveIntlLocale, translate } from "@shared/lib/i18n/index.js";
 /**
  * Column template of the Inventar design's table. Head, rows and nested cluster
  * rows all share it — see `GridTable`.
@@ -56,7 +56,7 @@ function formatSharePercent(value) {
   if (!Number.isFinite(numeric)) {
     return "-";
   }
-  return `${numeric.toFixed(1)}% Anteil`;
+  return translate("inventory:sharePercent", { percent: numeric.toFixed(1) });
 }
 
 function deltaClassName(value) {
@@ -377,7 +377,7 @@ export function InventoryTable({
                         </span>
                         {item.hasBuyOrder && Number(item.buyOrderBestPriceUsd) > 0 ? (
                           <span
-                            title="Offene CSFloat-Buyorder"
+                            title={translate("watchlist:openBuyorder")}
                             className="shrink-0 rounded-[5px] bg-info/16 px-1.5 py-px text-[9px] font-extrabold tracking-[0.04em] text-info"
                           >
                             BO{" "}
@@ -538,7 +538,8 @@ export function InventoryTable({
                               {cluster.name}
                             </span>
                             <span className="mt-[3px] block truncate text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                              {cluster.quantity} Stk. · {formatSharePercent(cluster.sharePercent)}
+                              {t("detail.piecesShort", { count: Number(cluster.quantity || 0) })} ·{" "}
+                              {formatSharePercent(cluster.sharePercent)}
                             </span>
                           </span>
                         </div>
@@ -728,7 +729,7 @@ export function InventoryTable({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold">{cluster.name}</p>
                           <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] uppercase tracking-tighter text-muted-foreground">
-                            <span>{cluster.quantity} Stk.</span>
+                            <span>{t("detail.piecesShort", { count: Number(cluster.quantity || 0) })}</span>
                             <span>|</span>
                             <span>{formatSharePercent(cluster.sharePercent)}</span>
                           </span>

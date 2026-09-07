@@ -5548,7 +5548,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                                     <div className="min-w-0 flex-1">
                                       <p className="truncate text-sm font-semibold">{entry.name}</p>
                                       <p className="text-xs text-muted-foreground">
-                                        {entry.sourceLabel} | {entry.quantity} Stk.
+                                        {entry.sourceLabel} |{" "}
+                                        {translate("inventory:detail.piecesShort", {
+                                          count: Number(entry.quantity || 0),
+                                        })}
                                       </p>
                                     </div>
                                     <Badge variant="secondary" className="shrink-0 text-[10px]">

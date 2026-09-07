@@ -228,5 +228,9 @@
     "minutesAgo": "vor {{count}}m",
     "hoursAgo": "vor {{count}}h",
     "daysAgo": "vor {{count}}T"
+  },
+  "metrics": {
+    "gross": "Brutto",
+    "net": "Netto"
   }
 }

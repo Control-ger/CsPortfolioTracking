@@ -316,7 +316,7 @@ export function FeedItem({ item, isOpen, isFresh, compact }) {
                 </span>
                 {isFresh ? (
                   <Badge variant="outline" className="border-primary/25 bg-primary/8 text-primary">
-                    Neu
+                    {t("badge.new")}
                   </Badge>
                 ) : null}
               </div>
@@ -351,7 +351,7 @@ export function FeedItem({ item, isOpen, isFresh, compact }) {
           {updateDescription ? (
             <div className="p-1">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Update
+                {t("section.update")}
               </p>
               <p className={cn("leading-6 text-muted-foreground", compact ? "text-xs" : "text-sm")}>
                 {updateDescription}
@@ -413,7 +413,7 @@ export function FeedItem({ item, isOpen, isFresh, compact }) {
             {item.url ? (
               <Button asChild variant="outline" size="sm" className="ml-auto">
                 <a href={item.url} target="_blank" rel="noreferrer">
-                  Original Update
+                  {t("actions.originalUpdate")}
                   <ExternalLink className="ml-2 h-4 w-4" />
                 </a>
               </Button>

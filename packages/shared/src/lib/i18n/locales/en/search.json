@@ -37,7 +37,8 @@
     "conditionSkinsOnly": "Condition applies to skins only",
     "priceFrom": "Price from",
     "priceTo": "Price to",
-    "ownedOnly": "Owned items only"
+    "ownedOnly": "Owned items only",
+    "category": "Category"
   },
   "priceFollows": "Price follows",
   "watchlist": "Watchlist",

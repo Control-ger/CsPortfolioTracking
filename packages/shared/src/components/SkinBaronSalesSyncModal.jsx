@@ -162,7 +162,7 @@ export function SkinBaronSalesSyncModal({ isOpen, onClose, onSynced }) {
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <CardHeader className="shrink-0 pb-2">
-            <CardTitle className="text-sm uppercase text-muted-foreground">Preview</CardTitle>
+            <CardTitle className="text-sm uppercase text-muted-foreground">{t("sync.preview")}</CardTitle>
           </CardHeader>
           <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             {loadingPreview ? (

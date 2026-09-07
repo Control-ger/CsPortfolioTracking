@@ -99,13 +99,16 @@ export const PortfolioHeaderCard = ({
   const Icon = effectiveIsPositive ? TrendingUp : TrendingDown;
   const trendColor = effectiveIsPositive ? "text-success" : "text-danger";
   const syncHealth = resolveSyncHealth(Number(oldestDataAgeSeconds), Number(liveItemsCount));
-  const syncTitle = `Price Sync - Live Quotes: ${liveItemsCount} | Aeltestes Cache-Alter: ${formatAge(oldestDataAgeSeconds)}`;
+  const syncTitle = translate("dashboard:header.syncTitle", {
+    live: liveItemsCount,
+    oldest: formatAge(oldestDataAgeSeconds),
+  });
 
   return (
     <div className="space-y-3 rounded-2xl border border-border/70 bg-card/65 p-3.5">
-      {/* Mobile: Brokerage als Ueberschrift */}
+      {/* Mobile only: the section heading the wide layout carries elsewhere. */}
       <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:hidden">
-        Brokerage
+        {translate("dashboard:header.brokerage")}
       </h2>
 
       {/* Hauptwert mit Trend und Frische-Indikator */}
@@ -158,15 +161,17 @@ export const PortfolioHeaderCard = ({
         )}
       </div>
 
-      {/* Zusaetzliche Infos in kleinerer Schrift */}
+      {/* Secondary line: counts and cache freshness. */}
       {isLoading ? (
         <Skeleton className="h-3 w-56" />
       ) : (
         <div className="text-xs text-muted-foreground">
-          <span>{totalQuantity} Items - </span>
-          <span className="font-medium">{liveItemsCount} live quotes</span>
-          <span>, aeltestes Cache-Alter {formatAge(oldestDataAgeSeconds)}</span>
-          <span>, letztes Update {formatAge(freshestDataAgeSeconds)}</span>
+          <span>{translate("dashboard:header.itemsCount", { count: totalQuantity })} </span>
+          <span className="font-medium">
+            {translate("dashboard:header.liveQuotes", { count: liveItemsCount })}
+          </span>
+          <span>{translate("dashboard:header.oldestCacheAge", { age: formatAge(oldestDataAgeSeconds) })}</span>
+          <span>{translate("dashboard:header.lastUpdate", { age: formatAge(freshestDataAgeSeconds) })}</span>
         </div>
       )}
     </div>

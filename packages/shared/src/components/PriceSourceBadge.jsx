@@ -1,3 +1,5 @@
+
+import { translate } from "@shared/lib/i18n/index.js";
 export const PriceSourceBadge = ({
   priceSource,
   compact = false,
@@ -14,10 +16,14 @@ export const PriceSourceBadge = ({
   const styleClass = isSteam
     ? "border-info/30 bg-info/10 text-info"
     : "border-success/30 bg-success/10 text-success";
-  const title = isSteam ? "Steam-Preisquelle" : "CSFloat-Preisquelle";
+  const title = isSteam
+    ? translate("inventory:priceSource.steamTitle")
+    : translate("inventory:priceSource.csfloatTitle");
   const label = compact
     ? (isSteam ? "Steam" : "CSFloat")
-    : (isSteam ? "Steam Preis" : "CSFloat Preis");
+    : (isSteam
+        ? translate("inventory:priceSource.steamPrice")
+        : translate("inventory:priceSource.csfloatPrice"));
 
   return (
     <span

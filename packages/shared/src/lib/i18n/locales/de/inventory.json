@@ -221,7 +221,10 @@
     "noData": "Keine Daten verfügbar",
     "noCsfloatValues": "Noch keine csfloat-Livewerte",
     "ofPortfolio": "des Portfolios",
-    "centerLabel": "Portfolio-Wert"
+    "centerLabel": "Portfolio-Wert",
+    "otherBelow": "Sonstige (<{{percent}} %)",
+    "loading": "Lädt…",
+    "available": "{{count}}x verfügbar"
   },
   "chart": {
     "noHistory": "Noch keine Historie-Daten verfügbar",
@@ -248,6 +251,18 @@
     "hiddenDuplicatesExcluded": "{{count}} Duplikate/Excluded in der Preview ausgeblendet.",
     "hiddenDuplicates": "{{count}} Duplikate in der Preview ausgeblendet.",
     "hiddenExcluded": "{{count}} ausgeschlossene Einträge in der Preview ausgeblendet.",
-    "openOfTotal": "{{open}} von {{total}} offen"
+    "openOfTotal": "{{open}} von {{total}} offen",
+    "moreCount": "+{{count}} mehr",
+    "preview": "Vorschau"
+  },
+  "sharePercent": "{{percent}} % Anteil",
+  "weighting": {
+    "moreClusters": "{{count}} weitere Cluster"
+  },
+  "priceSource": {
+    "steamTitle": "Steam-Preisquelle",
+    "csfloatTitle": "CSFloat-Preisquelle",
+    "steamPrice": "Steam Preis",
+    "csfloatPrice": "CSFloat Preis"
   }
 }

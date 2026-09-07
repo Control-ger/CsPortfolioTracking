@@ -536,7 +536,7 @@ export const ItemSearch = ({
       <div className="flex flex-col gap-5">
         <div>
           <p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
-            Kategorie
+            {t("filters.category")}
           </p>
           <div className="flex flex-wrap gap-[7px]">
             {CATEGORY_CHIPS.map((chip) => (

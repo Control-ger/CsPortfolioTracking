@@ -1369,7 +1369,7 @@ export const Watchlist = ({ focusTarget = null, onWarningsChange }) => {
                         color={
                           Number.isFinite(selectedD1) && selectedD1 < 0 ? "#ef4444" : "#22c55e"
                         }
-                        valueLabel="Preis"
+                        valueLabel={t("price")}
                         title=""
                         showAbsolute={showAbsolute}
                         flat

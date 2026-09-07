@@ -97,7 +97,7 @@ export function GroupWeightingList({ clusters, className }) {
           <div className="flex flex-col gap-1.5 border-t border-dashed border-border pt-2.5">
             <div className="flex items-baseline gap-2">
               <span className="min-w-0 flex-1 truncate text-xs font-bold text-muted-foreground">
-                {rest.length} weitere Cluster
+                {t("weighting.moreClusters", { count: rest.length })}
               </span>
               <span className="shrink-0 text-[10.5px] text-muted-foreground">
                 {sumQuantity(rest)}x

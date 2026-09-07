@@ -169,7 +169,8 @@
     "installedAppOnly": "Update-Suche ist nur in der installierten App verfügbar.",
     "unknown": "unbekannt",
     "versionSuffix": " · Version {{version}}",
-    "serverSuffix": " · Server {{server}}"
+    "serverSuffix": " · Server {{server}}",
+    "restartAndInstall": "Neustarten & installieren"
   },
   "currency": {
     "title": "Währung",

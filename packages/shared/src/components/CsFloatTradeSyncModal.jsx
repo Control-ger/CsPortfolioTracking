@@ -198,7 +198,9 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
                 </Badge>
               ))}
               {skipReasonEntries.length > 2 && (
-                <span className="text-[10px] text-warn">+{skipReasonEntries.length - 2} mehr</span>
+                <span className="text-[10px] text-warn">
+                  {t("sync.moreCount", { count: skipReasonEntries.length - 2 })}
+                </span>
               )}
             </div>
           </Callout>
@@ -206,7 +208,7 @@ export function CsFloatTradeSyncModal({ isOpen, onClose, onSynced }) {
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <CardHeader className="shrink-0 pb-2">
-            <CardTitle className="text-sm uppercase text-muted-foreground">Preview</CardTitle>
+            <CardTitle className="text-sm uppercase text-muted-foreground">{t("sync.preview")}</CardTitle>
           </CardHeader>
           <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             {loadingPreview ? (

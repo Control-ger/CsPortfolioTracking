@@ -169,7 +169,8 @@
     "installedAppOnly": "Update check is only available in the installed app.",
     "unknown": "unknown",
     "versionSuffix": " · version {{version}}",
-    "serverSuffix": " · server {{server}}"
+    "serverSuffix": " · server {{server}}",
+    "restartAndInstall": "Restart & install"
   },
   "currency": {
     "title": "Currency",

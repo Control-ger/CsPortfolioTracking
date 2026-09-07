@@ -1,6 +1,7 @@
 import { TrendingDown, TrendingUp, ArrowRight } from "lucide-react";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { Badge } from "@shared/components/ui/badge";
+import { translate } from "@shared/lib/i18n/index.js";
 
 /**
  * ItemListRow - Minimale Listenansicht fuer Items
@@ -31,7 +32,7 @@ export const ItemListRow = ({
     item.changeLabel || (Number.isFinite(derivedPercent) ? `${derivedPercent >= 0 ? "+" : ""}${derivedPercent.toFixed(1)}%` : "-");
   const hasBuyOrder = Number(item?.buyOrderCount || 0) > 0 && Number(item?.buyOrderBestPriceUsd || 0) > 0;
   const buyOrderLabel = hasBuyOrder
-    ? `Meine Buyorder ${formatPrice(item.buyOrderBestPriceUsd, { useUsd: true, buyPriceUsd: item.buyOrderBestPriceUsd })}${item.buyOrderCount > 1 ? ` x${item.buyOrderCount}` : ""}`
+    ? `${translate("inventory:detail.myBuyorder")} ${formatPrice(item.buyOrderBestPriceUsd, { useUsd: true, buyPriceUsd: item.buyOrderBestPriceUsd })}${item.buyOrderCount > 1 ? ` x${item.buyOrderCount}` : ""}`
     : "";
 
   return (

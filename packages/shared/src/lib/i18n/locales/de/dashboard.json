@@ -66,5 +66,13 @@
   "alerts": {
     "title": "Watchlist-Alarme",
     "activeCount": "{{count}} aktiv"
+  },
+  "header": {
+    "syncTitle": "Preis-Sync — Live-Quotes: {{live}} | ältestes Cache-Alter: {{oldest}}",
+    "brokerage": "Brokerage",
+    "itemsCount": "{{count}} Items —",
+    "liveQuotes": "{{count}} Live-Quotes",
+    "oldestCacheAge": ", ältestes Cache-Alter {{age}}",
+    "lastUpdate": ", letztes Update {{age}}"
   }
 }

@@ -1613,7 +1613,7 @@ export function SettingsPage({ useExternalDesktopSidebarShell = false }) {
               onClick={() => void handleInstallUpdate()}
               className="h-[34px] rounded-[9px] bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-opacity hover:opacity-90"
             >
-              Neustarten &amp; installieren
+              {t("about.restartAndInstall")}
             </button>
           ) : null}
 

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   Card,
   CardContent,
@@ -13,11 +14,14 @@ export const StatCard = ({
   subValue,
   primaryValue,
   secondaryValue,
-  primaryLabel = "Brutto",
-  secondaryLabel = "Netto",
+  primaryLabel,
+  secondaryLabel,
   isPositive,
   isLoading = false,
 }) => {
+  const { t } = useTranslation("common");
+  const primary = primaryLabel ?? t("metrics.gross");
+  const secondary = secondaryLabel ?? t("metrics.net");
   const hasStatus = isPositive !== undefined;
   const statusColor = isPositive ? "text-success" : "text-danger";
   const hasDualMetricLayout = primaryValue !== undefined || secondaryValue !== undefined;
@@ -41,7 +45,7 @@ export const StatCard = ({
         ) : hasDualMetricLayout ? (
           <div className="space-y-2">
             <div>
-              <FieldLabel>{primaryLabel}</FieldLabel>
+              <FieldLabel>{primary}</FieldLabel>
               <div className={`text-2xl font-bold ${hasStatus ? statusColor : ""}`}>
                 {mainValue}
               </div>
@@ -49,7 +53,7 @@ export const StatCard = ({
 
             {hasSideValue ? (
               <div className="border-t pt-2">
-                <FieldLabel>{secondaryLabel}</FieldLabel>
+                <FieldLabel>{secondary}</FieldLabel>
                 <div className="text-xs flex items-center mt-1">
                   {hasStatus && (
                     <span className={`font-bold mr-1 ${statusColor}`}>

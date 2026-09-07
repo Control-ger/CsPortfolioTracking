@@ -4,6 +4,7 @@ import { Skeleton } from "./ui/skeleton.jsx";
 import { BREAKPOINTS } from "../lib/constants.js";
 import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { useTranslation } from "react-i18next";
+import { translate } from "@shared/lib/i18n/index.js";
 
 const COLOR_PALETTE = ["#5ca9ff", "#4d93ee", "#3e7cdc", "#2f67ca", "#2b56b1", "#23529a", "#1b4d82", "#144168"];
 const OTHER_SLICE_COLOR = "#64748b";
@@ -50,7 +51,7 @@ function groupSmallSlices(rows, thresholdPercent = SMALL_SLICE_THRESHOLD_PERCENT
   }
 
   const groupedOtherRow = {
-    name: `Sonstige (<${thresholdPercent}%)`,
+    name: translate("inventory:composition.otherBelow", { percent: thresholdPercent }),
     type: "other",
     count: smallRows.reduce((sum, item) => sum + item.count, 0),
     value: smallRows.reduce((sum, item) => sum + item.value, 0),
@@ -106,7 +107,7 @@ export function PortfolioCompositionChart({
   }, []);
 
   if (isLoading) {
-    return <div className="flex h-96 items-center justify-center">Loading...</div>;
+    return <div className="flex h-96 items-center justify-center">{t("composition.loading")}</div>;
   }
 
   if (!data || data.length === 0) {
@@ -146,7 +147,7 @@ export function PortfolioCompositionChart({
     return (
       <div className="rounded-xl border border-border/70 bg-card/90 p-3 text-xs shadow-[0_14px_30px_rgba(0,0,0,0.3)]">
         <p className="font-semibold">{name}</p>
-        <p className="text-muted-foreground">{count}x verfuegbar</p>
+        <p className="text-muted-foreground">{t("composition.available", { count })}</p>
         <p className="font-semibold text-primary">
           {formatSliceValue(value)}
         </p>

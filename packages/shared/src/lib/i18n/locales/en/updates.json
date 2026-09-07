@@ -54,5 +54,14 @@
   "lastNDays": "Last {{count}} days",
   "marketImpact": "Market impact",
   "newestItem": "Newest item: {{time}}",
-  "lastUpdate": "Last update: {{time}}"
+  "lastUpdate": "Last update: {{time}}",
+  "badge": {
+    "new": "New"
+  },
+  "section": {
+    "update": "Update"
+  },
+  "actions": {
+    "originalUpdate": "Original update"
+  }
 }
