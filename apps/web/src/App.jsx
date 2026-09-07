@@ -13,6 +13,7 @@ import { PortfolioPage } from "@shared/pages";
 import { useGlobalKeyboardNavigation, useGlobalUiSounds } from "@shared/hooks";
 import { handleWebAuthCallback } from "@shared/lib/auth.js";
 import { startDesktopAutoSync } from "@shared/lib/desktopSync.js";
+import { isFlagEnabled } from "@shared/lib/envFlags.js";
 
 const SettingsPage = lazy(() =>
   import("@shared/pages/SettingsPage.jsx").then((module) => ({ default: module.SettingsPage })),
@@ -26,6 +27,8 @@ const DesignSystemPage = lazy(() =>
     default: module.DesignSystemPage,
   })),
 );
+
+const DESIGN_CATALOGUE_ENABLED = isFlagEnabled(import.meta.env.VITE_DESIGN_CATALOGUE);
 
 const DEFAULT_STEAM_SHELL_PALETTE = Object.freeze({
   colorA: "hsla(212, 62%, 52%, 0.24)",
@@ -559,15 +562,22 @@ export default function App() {
       {/* Living catalogue of the ui/ primitives. A builder's tool, so it is
           deliberately absent from the rail and the bottom nav — reached by URL
           (#/design) while building a new view. Lazy, so it never lands in the
-          dashboard bundle. */}
-      <Route
-        path="/design"
-        element={(
-          <Suspense fallback={routeFallback}>
-            <DesignSystemPage />
-          </Suspense>
-        )}
-      />
+          dashboard bundle.
+
+          It stays reachable in the desktop app, where the audience is whoever
+          is building the view, but not in the deployed web app, where the URL
+          was public. `VITE_DESIGN_CATALOGUE` re-opens it for a local web
+          build. */}
+      {isElectron || DESIGN_CATALOGUE_ENABLED ? (
+        <Route
+          path="/design"
+          element={(
+            <Suspense fallback={routeFallback}>
+              <DesignSystemPage />
+            </Suspense>
+          )}
+        />
+      ) : null}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
