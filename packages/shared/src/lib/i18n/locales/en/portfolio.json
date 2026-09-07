@@ -227,7 +227,10 @@
     "step7Title": "7. Management in brief",
     "step7Body": "This is where you control matching, prices and exclude logic for your items.",
     "legacyBannerLead": "Steam import is active. As the next step, connect CSFloat:",
-    "progressSteps": "Progress: {{done}}/{{total}} steps"
+    "progressSteps": "Progress: {{done}}/{{total}} steps",
+    "keyCharsDetected": "Currently detected: {{count}} characters",
+    "keyCharsSaving": "Saving {{count}} characters…",
+    "openMatchingSuggestions": "Open matching suggestions:"
   },
   "ui": {
     "clearAll": "Delete all",

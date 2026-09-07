@@ -24,7 +24,9 @@
     "toggleAutoSync": "Toggle auto-sync",
     "running": "Sync running…",
     "start": "Start Steam sync",
-    "newSteamItems": "{{count}} new Steam items"
+    "newSteamItems": "{{count}} new Steam items",
+    "csfloatSync": "CSFloat sync",
+    "skinbaronSync": "SkinBaron sync"
   },
   "matchReason": {
     "same_type": "Type",
@@ -122,7 +124,10 @@
     "matchedHidden": "{{count}} matched hidden",
     "perPositionTitle": "Purchase prices per position ({{currency}})",
     "applyToPositions": "To {{count}} pos.",
-    "purchasedOn": "Bought: {{date}}"
+    "purchasedOn": "Bought: {{date}}",
+    "entryIndex": "Entry {{index}}",
+    "mixedPlaceholder": "mixed",
+    "purchasePriceFor": "Purchase price {{label}}"
   },
   "groups": {
     "title": "Investment groups",
@@ -147,7 +152,11 @@
     "positions_one": "{{count}} position",
     "positions_other": "{{count}} positions",
     "addRest": "Add rest",
-    "addCluster": "Add cluster"
+    "addCluster": "Add cluster",
+    "name": "Name",
+    "thesis": "Thesis / note",
+    "partlyGrouped": "partly grouped ({{assigned}}/{{total}})",
+    "colorNamed": "Colour {{color}}"
   },
   "create": {
     "title": "Add manual investment",
@@ -167,7 +176,10 @@
     "purchaseDate": "Purchase date",
     "costBasis": "Cost basis",
     "savedAs": "Saved as",
-    "bucket": "Bucket"
+    "bucket": "Bucket",
+    "purchasePriceIn": "Purchase price ({{currency}})",
+    "type": "Type",
+    "today": "today"
   },
   "itemType": {
     "other": "Other",
@@ -206,7 +218,9 @@
     "exclude": "Exclude",
     "excludedCount": "{{count}} excluded",
     "positionExcluded": "excluded",
-    "positionActive": "active"
+    "positionActive": "active",
+    "typeValue": "Type: {{type}}",
+    "sortUpdatedDesc": "Sort: last updated"
   },
   "matching": {
     "searchPlaceholder": "Search Steam/CSFloat item…",
@@ -219,7 +233,16 @@
     "csfloatItem": "CSFloat item",
     "matched": "Matched",
     "suggestion": "Suggestion",
-    "confirmed": "confirmed"
+    "confirmed": "confirmed",
+    "openCount": "{{count}} matchings open",
+    "title": "Steam ↔ CSFloat matching",
+    "open": "open",
+    "autoDetected": "auto-detected",
+    "manual": "Manual matching",
+    "startCsfloatSync": "Start CSFloat sync",
+    "reject": "Reject",
+    "autoMatch": "Auto-match",
+    "createdAt": "Created: {{date}}"
   },
   "ui": {
     "noKeysHint": "No CSFloat key or valid SkinBaron session access stored. Import buttons appear automatically once one is configured.",
@@ -271,6 +294,7 @@
     "priceInCurrency": "Enter the price in your currency ({{currency}}).",
     "exchangeRateNote": "The exchange rate at purchase time cannot be reconstructed, so small rate deviations are normal.",
     "piecesCount_one": "{{count}} pc.",
-    "piecesCount_other": "{{count}} pcs."
+    "piecesCount_other": "{{count}} pcs.",
+    "cluster": "Cluster"
   }
 }

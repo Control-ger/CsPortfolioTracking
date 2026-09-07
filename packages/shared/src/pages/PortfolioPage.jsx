@@ -4334,7 +4334,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     if (normalizedKey.length < 20) {
       setJourneyApiKeyError(t("journey.keyIncomplete"));
       setJourneyApiKeySuccess("");
-      setJourneyApiKeyHelper(`Aktuell erkannt: ${normalizedKey.length} Zeichen`);
+      setJourneyApiKeyHelper(t("journey.keyCharsDetected", { count: normalizedKey.length }));
       return;
     }
 
@@ -4342,7 +4342,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       setJourneyApiKeySaving(true);
       setJourneyApiKeyError("");
       setJourneyApiKeySuccess("");
-      setJourneyApiKeyHelper(`Speichere ${normalizedKey.length} Zeichen...`);
+      setJourneyApiKeyHelper(t("journey.keyCharsSaving", { count: normalizedKey.length }));
       await updateCsFloatApiKey(normalizedKey);
       setJourneyApiKey("");
       setJourneyApiKeySuccess(t("journey.keySaved"));
@@ -4917,7 +4917,8 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
                       <div>
                         <p className="font-semibold text-foreground">{t("journey.step6Title")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Offene Matching-Vorschlaege: <span className="font-semibold">{matchingSuggestedCount}</span>
+                          {t("journey.openMatchingSuggestions")}{" "}
+                          <span className="font-semibold">{matchingSuggestedCount}</span>
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">

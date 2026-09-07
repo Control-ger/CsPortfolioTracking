@@ -644,12 +644,12 @@ export function PortfolioManagementSection({
               </Button>
               {hasCsFloatKey ? (
                 <Button size="sm" variant="outline" onClick={() => setIsCsFloatSyncOpen(true)}>
-                  CSFloat Sync
+                  {t("sync.csfloatSync")}
                 </Button>
               ) : null}
               {hasSkinBaronImportReady ? (
                 <Button size="sm" variant="outline" onClick={() => setIsSkinBaronSyncOpen(true)}>
-                  SkinBaron Sync
+                  {t("sync.skinbaronSync")}
                 </Button>
               ) : null}
             </div>
@@ -688,7 +688,7 @@ export function PortfolioManagementSection({
               ) : null}
               {matchingSuggestedCount > 0 ? (
                 <StatusPill dot tone="info" onClick={() => setManagementSection("matching")}>
-                  {matchingSuggestedCount} Matchings offen
+                  {t("matching.openCount", { count: matchingSuggestedCount })}
                 </StatusPill>
               ) : null}
               <StatusPill tone="muted">
@@ -882,7 +882,7 @@ export function PortfolioManagementSection({
                                 <span className="text-right text-[13px] tabular-nums text-muted-foreground">
                                   {clusterLots.length}
                                   {openLotCount > 0 && openLotCount < clusterLots.length
-                                    ? ` · ${openLotCount} offen`
+                                    ? t("buyIn.openSuffix", { count: openLotCount })
                                     : ""}
                                 </span>
                                 <span className="text-right text-[13px] tabular-nums">
@@ -1010,7 +1010,9 @@ export function PortfolioManagementSection({
                                                   type="number"
                                                   min="0"
                                                   step="0.01"
-                                                  aria-label={`Einkaufspreis ${cluster.name} ${lot.dayKey}`}
+                                                  aria-label={t("prices.purchasePriceFor", {
+                                                    label: `${cluster.name} ${lot.dayKey}`,
+                                                  })}
                                                   value={lotDraft}
                                                   onChange={(event) =>
                                                     handlePriceDraftChange(
@@ -1026,7 +1028,7 @@ export function PortfolioManagementSection({
                                                   }
                                                   placeholder={
                                                     lot.mixedPrices
-                                                      ? "gemischt"
+                                                      ? t("prices.mixedPlaceholder")
                                                       : hasSuggestion
                                                         ? convertFromUsd(suggestedPrice).toFixed(2)
                                                         : ""
@@ -1066,7 +1068,7 @@ export function PortfolioManagementSection({
                                                     <span />
                                                     <div className="flex min-w-0 items-center gap-2 pl-[64px]">
                                                       <span className="text-[10px] text-muted-foreground">
-                                                        Eintrag {entryIndex + 1}
+                                                        {t("prices.entryIndex", { index: entryIndex + 1 })}
                                                       </span>
                                                     </div>
                                                     <span className="text-right text-[11px] tabular-nums text-muted-foreground">
@@ -1108,7 +1110,9 @@ export function PortfolioManagementSection({
                                                           type="number"
                                                           min="0"
                                                           step="0.01"
-                                                          aria-label={`Einkaufspreis Eintrag ${entryIndex + 1}`}
+                                                          aria-label={t("prices.purchasePriceFor", {
+                                                            label: t("prices.entryIndex", { index: entryIndex + 1 }),
+                                                          })}
                                                           value={posDraft}
                                                           onChange={(event) =>
                                                             handlePriceDraftChange(
@@ -1239,7 +1243,7 @@ export function PortfolioManagementSection({
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    aria-label={`Einkaufspreis ${lot.dayKey}`}
+                                    aria-label={t("prices.purchasePriceFor", { label: lot.dayKey })}
                                     value={lotDraft}
                                     onChange={(event) =>
                                       handlePriceDraftChange(lotDraftKey, event.target.value)
@@ -1399,7 +1403,7 @@ export function PortfolioManagementSection({
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted-foreground">
-                        Name
+                        {t("groups.name")}
                       </label>
                       <input
                         type="text"
@@ -1416,7 +1420,7 @@ export function PortfolioManagementSection({
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted-foreground">
-                        These / Notiz
+                        {t("groups.thesis")}
                       </label>
                       <textarea
                         value={portfolioGroupDraft.thesis}
@@ -1440,7 +1444,7 @@ export function PortfolioManagementSection({
                             <button
                               key={color}
                               type="button"
-                              aria-label={`Farbe ${color}`}
+                              aria-label={t("groups.colorNamed", { color })}
                               aria-pressed={active}
                               onClick={() => handlePortfolioGroupDraftChange("color", color)}
                               className={`size-[30px] rounded-[9px] ${GROUP_COLOR_SWATCH[color]} ${
@@ -1611,7 +1615,7 @@ export function PortfolioManagementSection({
                           title={t("groups.showClusters")}
                           onClick={() => handleOpenPortfolioGroupInManagement(portfolioGroupEditor.id)}
                         >
-                          Cluster
+                          {t("ui.cluster")}
                         </Button>
                       </span>
                     ) : null}
@@ -1709,8 +1713,10 @@ export function PortfolioManagementSection({
                                       </span>
                                     ) : clusterAssignment.assignmentState === "partial" ? (
                                       <span className="font-semibold text-warn">
-                                        teilweise gruppiert ({clusterAssignment.assignedCount}/
-                                        {clusterAssignment.totalCount})
+                                        {t("groups.partlyGrouped", {
+                                          assigned: clusterAssignment.assignedCount,
+                                          total: clusterAssignment.totalCount,
+                                        })}
                                       </span>
                                     ) : (
                                       t("groups.ungrouped")
@@ -1799,7 +1805,7 @@ export function PortfolioManagementSection({
                                       <div className="min-w-0">
                                         <p className="truncate text-sm font-medium">{position.name}</p>
                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                          <span>{position.quantity} Stk.</span>
+                                          <span>{t("ui.piecesCount", { count: Number(position.quantity || 0) })}</span>
                                           <span>|</span>
                                           <span>{position.bucket === "inventory" ? t("bucket.inventory") : t("bucket.investment")}</span>
                                           <span>|</span>
@@ -1998,7 +2004,7 @@ export function PortfolioManagementSection({
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Einkaufspreis ({currency})
+                      {t("create.purchasePriceIn", { currency })}
                     </label>
                     <input
                       type="number"
@@ -2035,7 +2041,7 @@ export function PortfolioManagementSection({
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">
-                    Typ
+                    {t("create.type")}
                   </label>
                   <NativeSelect size="lg"
                     value={manualItemDraft.type}
@@ -2138,7 +2144,7 @@ export function PortfolioManagementSection({
                           value={
                             manualItemDraft.purchaseDate
                               ? formatDateSafe(manualItemDraft.purchaseDate)
-                              : "heute"
+                              : t("create.today")
                           }
                         />
                         <MetaRow
@@ -2222,7 +2228,7 @@ export function PortfolioManagementSection({
                   <option value="all">{t("exclude.typeAll")}</option>
                   {managementTypeOptions.map((type) => (
                     <option key={type} value={type}>
-                      Typ: {type}
+                      {t("exclude.typeValue", { type })}
                     </option>
                   ))}
                 </NativeSelect>
@@ -2249,7 +2255,7 @@ export function PortfolioManagementSection({
                     {t("prices.sortQtyAsc")}
                   </option>
                   <option value="updated_desc">
-                    Sortierung: Zuletzt aktualisiert
+                    {t("exclude.sortUpdatedDesc")}
                   </option>
                 </NativeSelect>
               </div>
@@ -2372,7 +2378,7 @@ export function PortfolioManagementSection({
                                   {positionMatched ? (
                                     <span className="inline-flex h-[19px] shrink-0 items-center gap-1 rounded-[5px] border border-success/40 px-[7px] text-[10px] text-success">
                                       <Link2 className="size-2.5" />
-                                      Gematcht
+                                      {t("matching.matched")}
                                     </span>
                                   ) : null}
                                 </div>
@@ -2489,7 +2495,7 @@ export function PortfolioManagementSection({
                       </span>
                       <span>
                         <span className="block text-[15px] font-bold">
-                          Steam ↔ CSFloat Matching
+                          {t("matching.title")}
                         </span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">
                           {t("ui.signalsHint")}
@@ -2501,7 +2507,7 @@ export function PortfolioManagementSection({
                         <span className="text-[19px] font-extrabold tabular-nums">
                           {matchingSuggestedCount}
                         </span>
-                        <span className="text-[11px] text-muted-foreground">offen</span>
+                        <span className="text-[11px] text-muted-foreground">{t("matching.open")}</span>
                       </span>
                       <span className="w-px self-stretch bg-border" />
                       <span className="flex flex-col gap-0.5">
@@ -2518,7 +2524,7 @@ export function PortfolioManagementSection({
                               {autoMatchShare} %
                             </span>
                             <span className="text-[11px] text-muted-foreground">
-                              automatisch erkannt
+                              {t("matching.autoDetected")}
                             </span>
                           </span>
                         </>
@@ -2537,7 +2543,7 @@ export function PortfolioManagementSection({
                       className="inline-flex h-[34px] shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[10px] border border-border-strong px-3.5 text-[12px] font-semibold leading-none transition-colors hover:bg-surface-2"
                     >
                       <Link2 className="size-3.5" />
-                      Manuelles Matching
+                      {t("matching.manual")}
                     </button>
                   </div>
                 </div>
@@ -2625,7 +2631,7 @@ export function PortfolioManagementSection({
                     <div className="flex flex-wrap justify-center gap-2">
                       {hasCsFloatKey ? (
                         <Button size="sm" onClick={() => setIsCsFloatSyncOpen(true)}>
-                          CSFloat Sync starten
+                          {t("matching.startCsfloatSync")}
                         </Button>
                       ) : null}
                       {!showMatchedMatchingRows && confirmedMatchCount > 0 ? (
@@ -2805,7 +2811,7 @@ export function PortfolioManagementSection({
                                 actions below the meter differ by status. */}
                             <div
                               className="flex shrink-0 flex-col gap-2 lg:w-[168px]"
-                              title={`${confidenceRationale} · Erstellt: ${createdAtLabel}`}
+                              title={`${confidenceRationale} · ${t("matching.createdAt", { date: createdAtLabel })}`}
                             >
                               <div className="flex items-baseline justify-between gap-2">
                                 <span
@@ -2854,13 +2860,13 @@ export function PortfolioManagementSection({
                                       void handleMatchStatusUpdate(row.id, "rejected")
                                     }
                                   >
-                                    Ablehnen
+                                    {t("matching.reject")}
                                   </Button>
                                 </>
                               ) : matchStatus === "auto_linked" ? (
                                 <>
                                   <span className="flex h-[34px] items-center justify-center rounded-[9px] border border-border-strong text-[13px] font-bold leading-none text-muted-foreground">
-                                    Auto-Match
+                                    {t("matching.autoMatch")}
                                   </span>
                                   <Button
                                     size="sm"
