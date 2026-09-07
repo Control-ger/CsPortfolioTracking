@@ -103,7 +103,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
           </div>
           <div className="min-w-0 flex-1 space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Watchlist
+              {t("title")}
             </p>
             <div>
               <p className="text-xs uppercase text-muted-foreground">{t("currentPrice")}</p>
@@ -133,7 +133,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
           <div className="grid grid-cols-2 gap-3">
             {currentPrice !== null ? (
               <div className="rounded-xl border border-border/70 bg-card/65 p-2">
-                <p className="text-xs uppercase text-muted-foreground">Aktuell</p>
+                <p className="text-xs uppercase text-muted-foreground">{t("modal.current")}</p>
                 <p className="text-sm font-semibold">{formatCurrencyPrice(currentPrice)}</p>
               </div>
             ) : null}
@@ -147,21 +147,21 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
 
             {highestPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
-              <p className="text-xs uppercase text-muted-foreground">Hoechst</p>
+              <p className="text-xs uppercase text-muted-foreground">{t("modal.highest")}</p>
               <p className="text-sm font-semibold">{formatCurrencyPrice(highestPrice)}</p>
             </div>
             ) : null}
 
             {lowestPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
-              <p className="text-xs uppercase text-muted-foreground">Tiefst</p>
+              <p className="text-xs uppercase text-muted-foreground">{t("modal.lowest")}</p>
               <p className="text-sm font-semibold">{formatCurrencyPrice(lowestPrice)}</p>
             </div>
             ) : null}
 
             {avgPrice !== null ? (
             <div className="rounded-xl border border-border/70 bg-card/65 p-2">
-              <p className="text-xs uppercase text-muted-foreground">Durchschnitt</p>
+              <p className="text-xs uppercase text-muted-foreground">{t("modal.average")}</p>
               <p className="text-sm font-semibold">{formatCurrencyPrice(avgPrice)}</p>
             </div>
             ) : null}
@@ -180,7 +180,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
         {Array.isArray(item.priceHistory) && item.priceHistory.length > 0 ? (
           <div className="rounded-2xl border border-border/75 bg-card/65 p-3">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Preisentwicklung</h3>
+              <h3 className="text-sm font-semibold">{t("modal.priceTrend")}</h3>
               <button
                 onClick={togglePriceDisplay}
                 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -211,7 +211,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
 
         <div className="rounded-2xl border border-border/75 bg-card/65 p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Buyorders (CSFloat)</h3>
+            <h3 className="text-sm font-semibold">{t("modal.buyorders")}</h3>
             {buyOrderRows.length > 0 ? (
               <span className="text-xs text-muted-foreground">
                 {t("buyorderSummary", {
@@ -257,7 +257,7 @@ export function WatchlistItemModal({ isOpen, onClose, item, onDelete }) {
 
         {item.updateAge !== undefined && (
           <div className="text-center text-xs text-muted-foreground">
-            Zuletzt aktualisiert: {item.updateAge}
+            {t("modal.lastUpdated", { age: item.updateAge })}
           </div>
         )}
 

@@ -84,7 +84,8 @@
     "watchlistTrend": "Watchlist trend",
     "price": "Price",
     "noHistory": "No price history available yet",
-    "buyorders": "Buy orders (CSFloat)"
+    "buyorders": "Buy orders (CSFloat)",
+    "lastUpdated": "Last updated: {{age}}"
   },
   "summary": "{{shown}}{{ofTotal}} items · {{withOrders}} with buy order · prices from the server cache",
   "ofTotal": " of {{total}}",

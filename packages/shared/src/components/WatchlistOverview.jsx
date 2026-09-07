@@ -170,7 +170,7 @@ export const WatchlistOverview = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
-            Watchlist
+            {t("title")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -197,7 +197,7 @@ export const WatchlistOverview = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
-            Watchlist
+            {t("title")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -236,7 +236,7 @@ export const WatchlistOverview = ({
         >
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
-            Watchlist ({allWatchlistItems.length})
+            {t("title")} ({allWatchlistItems.length})
           </CardTitle>
           {canExpand && hasMoreOthers && (
             effectiveExpanded ? (

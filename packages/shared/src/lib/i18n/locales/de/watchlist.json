@@ -84,7 +84,8 @@
     "watchlistTrend": "Watchlist Entwicklung",
     "price": "Preis",
     "noHistory": "Noch keine Preishistorie verfügbar",
-    "buyorders": "Buyorders (CSFloat)"
+    "buyorders": "Buyorders (CSFloat)",
+    "lastUpdated": "Zuletzt aktualisiert: {{age}}"
   },
   "summary": "{{shown}}{{ofTotal}} Items · {{withOrders}} mit Buyorder · Preise aus dem Server-Cache",
   "ofTotal": " von {{total}}",

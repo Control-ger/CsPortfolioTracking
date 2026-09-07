@@ -212,10 +212,10 @@ export function ItemDetailsModal({
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
-                Bucket: {String(item?.bucket || "investment").toLowerCase() === "inventory" ? t("detail.inventory") : t("detail.investment")}
+                {t("detail.bucket")}: {String(item?.bucket || "investment").toLowerCase() === "inventory" ? t("detail.inventory") : t("detail.investment")}
               </Badge>
               <Badge variant="outline">
-                Funding: {item.fundingMode === "cash_in" ? t("detail.cashIn") : t("detail.wallet")}
+                {t("detail.funding")}: {item.fundingMode === "cash_in" ? t("detail.cashIn") : t("detail.wallet")}
               </Badge>
               <Badge variant="outline" className={freshnessBadgeClass(item.freshnessStatus)}>
                 {item.freshnessLabel || translate("common:units.unknownLower")}
@@ -226,9 +226,11 @@ export function ItemDetailsModal({
 
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
           <StatTile>
-            <FieldLabel>Einkauf</FieldLabel>
+            <FieldLabel>{t("detail.purchase")}</FieldLabel>
             <p className="mt-2 text-sm font-bold">{purchaseUnitDisplay}</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">{item.quantity}x {purchaseUnitDisplay}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {t("detail.piecesShort", { count: Number(item.quantity || 0) })} {purchaseUnitDisplay}
+            </p>
           </StatTile>
 
           <StatTile>
@@ -241,19 +243,19 @@ export function ItemDetailsModal({
             <p className="mt-1 text-[10px] text-muted-foreground">{item.lastPriceUpdateAt || item.freshnessLabel || t("detail.unknown")}</p>
             {item?.hasBuyOrder && Number(item?.buyOrderBestPriceUsd || 0) > 0 ? (
               <p className="mt-1 inline-flex items-center gap-1 rounded border border-info/30 bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info">
-                Meine Buyorder: {formatPrice(Number(item.buyOrderBestPriceUsd), {
+                {t("detail.myBuyorder")} {formatPrice(Number(item.buyOrderBestPriceUsd), {
                   useUsd: true,
                   buyPriceUsd: Number(item.buyOrderBestPriceUsd),
                 })}
                 {Number(item?.buyOrderCount || 0) > 1
-                  ? ` (${Number(item.buyOrderCount)} Orders)`
+                  ? ` (${t("detail.ordersCount", { count: Number(item.buyOrderCount) })})`
                   : ""}
               </p>
             ) : null}
           </StatTile>
 
           <StatTile>
-            <FieldLabel>Break-even</FieldLabel>
+            <FieldLabel>{t("detail.breakEven")}</FieldLabel>
             <p className="mt-2 text-sm font-bold">
               {formatPrice(item.breakEvenPriceNet ?? item.breakEvenPrice ?? item.buyPrice)}
             </p>
@@ -261,7 +263,7 @@ export function ItemDetailsModal({
           </StatTile>
 
           <StatTile>
-            <FieldLabel>Positionswert</FieldLabel>
+            <FieldLabel>{t("detail.positionValue")}</FieldLabel>
             <p className="mt-2 text-sm font-bold">
               {item.isLive ? formatPrice(item.currentValue) : "N/A"}
             </p>
@@ -315,12 +317,12 @@ export function ItemDetailsModal({
           </StatTile>
 
           <StatTile>
-            <FieldLabel>Cost Basis</FieldLabel>
+            <FieldLabel>{t("detail.costBasis")}</FieldLabel>
             <p className="mt-2 text-sm font-bold">
               {typeof item.costBasisTotal === "number" ? formatPrice(item.costBasisTotal) : "N/A"}
             </p>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              pro Unit: {typeof item.costBasisUnit === "number" ? formatPrice(item.costBasisUnit) : "N/A"}
+              {t("detail.perUnit")}: {typeof item.costBasisUnit === "number" ? formatPrice(item.costBasisUnit) : "N/A"}
             </p>
           </StatTile>
         </div>
@@ -328,7 +330,7 @@ export function ItemDetailsModal({
         {historyLoading || (history && history.length > 0) ? (
           <div className="rounded-2xl border border-border/70 bg-card/65 p-3 sm:p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Preishistorie</h3>
+              <h3 className="text-sm font-semibold">{t("detail.priceHistory")}</h3>
               <button
                 onClick={togglePriceDisplay}
                 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
