@@ -90,11 +90,21 @@ The factor needs the **complete wallet event stream in date order**, and that
 stream does not currently exist anywhere it could be read from:
 
 - **Deposits** are not modelled at all — no table, local or server.
-- **Sales** exist only server-side. `SaleRepository` creates a `sales` table
-  (`sell_price_usd`, `sold_at`, `platform`, `external_trade_id`), but there is no
-  local SQLite `sales` table and the sync protocol does not carry the entity.
-  Desktop is the write owner for portfolio data, so the events the factor needs
-  are on the wrong side of the boundary.
+- **Sales are not tracked anywhere.** This is worse than an earlier draft of this
+  document claimed ("exists only server-side"). The truth:
+  - `SaleRepository` declares `sales` and `sale_allocations` tables, but the class
+    has **zero references** in the codebase — it is never instantiated, never
+    registered in either DI container, never routed. `ensureTable()` is never
+    called, so the tables are never even created.
+  - Both importers bring in *purchases*, not sales.
+    `DesktopSkinBaronController` reports `'type' => 'purchases'` and works on
+    `purchaseGroups` / `purchaseItems`; the component named
+    `SkinBaronSalesSyncModal` is misnamed.
+  - No frontend surface records a sale. `wrapped.json` states the consequence
+    plainly: "Unrealised performance of the positions you currently hold."
+
+So the portfolio has no concept of a closed position. Everything is an open
+holding, and every ROI figure is unrealised.
 
 **Consequence: building the factor before the stream is complete produces a
 silently wrong cost basis on every position whenever a sale is missing from the
@@ -121,9 +131,26 @@ removed from `PortfolioInventorySection`; they advertised a model this document
 retires. `funding_mode` stays in the schema and in sync: it is harmless, and the
 fee service still reads it.
 
-**Phase 1 — complete the event stream.** Bring `sales` into the local store and
-the sync protocol so the desktop owns them, matching the data-ownership rule.
-Without this, nothing downstream is trustworthy.
+**Phase 1 — sell tracking.** Not a preparatory step but a feature in its own
+right, and the largest part of this plan: capturing a sale, allocating it against
+held positions, reducing the holding, and reporting realised P&L beside the
+unrealised figure. Local table, sync entity, server table, and a capture surface
+(manual first; the CSFloat `/v1/me/trades` payload already distinguishes buy from
+sell, so an importer can follow).
+
+This is the same feature the design already anticipates, and parts of it were
+built ahead and left unused:
+
+| Built | Where | Used by |
+|---|---|---|
+| `SaleRepository` (+ `sale_allocations`) | `backend/src/Infrastructure/Persistence/Repository/` | nothing |
+| `MetricPairBlock` / `MetricPairInline` | `packages/shared/src/components/MetricPair.jsx` | the design catalogue only — its specimen is titled "Verkaufserlös" |
+| "Verkauft" filter scope | `DesignSystemPage.jsx:1036`, marked `soon` | not wired to a real view |
+| `calculateNetProceeds()` | `FeeCalculationService` | used, but only for the *hypothetical* net value of a held position |
+
+**Sequencing consequence:** the "sold" filter scope that reads as a small
+`soon` item is downstream of this phase, not independent of it — and so is the
+wallet factor, which needs sale proceeds as the denominator of its credit side.
 
 **Phase 2 — deposits as a first-class entity.** Table, sync entity, and a desktop
 entry surface (amount, date, fee, FX rate). Manual entry first; a marketplace
