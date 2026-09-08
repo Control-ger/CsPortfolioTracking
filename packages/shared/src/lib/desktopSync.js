@@ -495,6 +495,30 @@ function shouldDropRejectedOperation(operation, rejected) {
   return false;
 }
 
+/**
+ * Sync tables this server has rejected as unknown.
+ *
+ * A desktop build can be newer than the server it talks to — the app updates
+ * itself, the server is redeployed separately. When it is, the server answers a
+ * push containing an entity it does not know with a **400 for the whole batch**,
+ * so one unknown change would otherwise block every investment and watchlist
+ * change queued behind it, retrying every minute forever.
+ *
+ * Such operations must not be retired: unlike an unmappable entity type, they
+ * become valid the moment the server catches up. They are held back instead,
+ * and stay pending until then.
+ *
+ * Session-scoped on purpose: a redeployed server should be retried without
+ * requiring an app restart, and the next launch starts from a clean slate.
+ */
+const serverRejectedTables = new Set();
+
+/** `Invalid table at index 0: sales` → `sales`. */
+function readRejectedTable(body) {
+  const match = /invalid table at index \d+:\s*([a-z_]+)/i.exec(String(body || ""));
+  return match ? match[1].toLowerCase() : null;
+}
+
 async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localStore, localUserId) {
   // Sales recorded while sale sync was still off carry `dirty = 1` and no
   // operation — queueing them then would have been discarded by the retire path
@@ -563,29 +587,60 @@ async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localSt
     }
   }
 
-  const response = await fetchSyncEndpointWithFallback(serverBaseUrl, "/api/v1/sync/push", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      // Cloudflare Access strips Authorization on the way to the origin, so the
-      // server sees no token at all (observed: MISSING_TOKEN / AUTH_REQUIRED on
-      // every sync call). X-Auth-Token survives the tunnel; both the validate
-      // route and RequestUserScopeResolver already accept it as an alternative.
-      "X-Auth-Token": token,
-    },
-    body: JSON.stringify({
-      ...buildSyncIdentityPayload(syncIdentity.userId, syncIdentity.steamId),
-      changes: mapped.map((operation) => ({
-        op: operation.op,
-        table: operation.table,
-        id: operation.id,
-        payload: operation.payload,
-        idempotencyKey: operation.idempotencyKey,
-        clientRevision: operation.clientRevision,
-      })),
-    }),
-  });
+  const sendBatch = async (batch) =>
+    fetchSyncEndpointWithFallback(serverBaseUrl, "/api/v1/sync/push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        // Cloudflare Access strips Authorization on the way to the origin, so the
+        // server sees no token at all (observed: MISSING_TOKEN / AUTH_REQUIRED on
+        // every sync call). X-Auth-Token survives the tunnel; both the validate
+        // route and RequestUserScopeResolver already accept it as an alternative.
+        "X-Auth-Token": token,
+      },
+      body: JSON.stringify({
+        ...buildSyncIdentityPayload(syncIdentity.userId, syncIdentity.steamId),
+        changes: batch.map((operation) => ({
+          op: operation.op,
+          table: operation.table,
+          id: operation.id,
+          payload: operation.payload,
+          idempotencyKey: operation.idempotencyKey,
+          clientRevision: operation.clientRevision,
+        })),
+      }),
+    });
+
+  const withoutRejectedTables = (batch) =>
+    serverRejectedTables.size === 0
+      ? batch
+      : batch.filter((operation) => !serverRejectedTables.has(String(operation.table)));
+
+  mapped = withoutRejectedTables(mapped);
+  if (mapped.length === 0) {
+    return;
+  }
+
+  let response = await sendBatch(mapped);
+
+  if (response && response.status === 400) {
+    const body = await response.clone().text().catch(() => "");
+    const rejectedTable = readRejectedTable(body);
+    if (rejectedTable) {
+      // Learn it, hold those operations back — they stay pending and go through
+      // once the server understands them — and let the rest of the batch land.
+      serverRejectedTables.add(rejectedTable);
+      console.warn("[desktop-sync] server does not accept this table yet, holding it back", {
+        table: rejectedTable,
+      });
+      mapped = withoutRejectedTables(mapped);
+      if (mapped.length === 0) {
+        return;
+      }
+      response = await sendBatch(mapped);
+    }
+  }
 
   if (!response || !response.ok) {
     const status = response?.status ?? "unknown";

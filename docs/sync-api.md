@@ -102,6 +102,18 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
   (`payload_json.serverId` der Investment-Zeile). Ist die Kaufzeile noch nicht
   gesynct, wird die Zuordnung übersprungen statt der Push abgebrochen — der
   Payload behält sie, es geht also nichts verloren.
+- **Ein Client kann neuer sein als der Server.** Die App aktualisiert sich
+  selbst, der Server wird getrennt deployt. Kennt der Server eine Tabelle noch
+  nicht, beantwortet er den Push mit **400 für den gesamten Stapel**
+  (`SYNC_PUSH_INVALID_REQUEST — Invalid table at index N: <tabelle>`) — eine
+  einzelne unbekannte Änderung würde also alle Investment- und
+  Watchlist-Änderungen dahinter blockieren, im Minutentakt wiederholt.
+  `desktopSync` liest die Tabelle aus der Fehlermeldung, merkt sie sich für die
+  Sitzung und **hält nur diese Operationen zurück**; der Rest des Stapels geht
+  durch. Zurückgehalten heißt ausdrücklich *nicht* verworfen: anders als ein
+  nicht abbildbarer Entity-Typ werden sie gültig, sobald der Server nachzieht,
+  und bleiben so lange `pending`. Die Merkliste ist sitzungslokal, damit ein
+  neu deployter Server ohne App-Neustart wieder versucht wird.
 - `sale_allocations.buy_price_usd` wird beim Zuordnen kopiert, lokal wie auf dem
   Server. Die Verwaltung erlaubt, Einstandspreise nachträglich zu setzen; ein
   realisierter Gewinn darf sich dadurch nicht rückwirkend ändern.

@@ -157,6 +157,15 @@ addresses purchase rows by UUID, and the bridge is `sync_entities`
 skipped rather than failing the push — the payload keeps it, so the authoritative
 record is intact.
 
+**A push tolerates a server older than the client.** The desktop app updates
+itself; the server is redeployed separately. An unknown table makes the server
+reject the *entire* batch (`SYNC_PUSH_INVALID_REQUEST`), which would block every
+other queued change and retry every minute — observed against production the
+first time a sale reached the queue. `desktopSync` reads the table out of the
+error, remembers it for the session and holds only those operations back. They
+stay pending rather than being retired: unlike an unmappable entity type, they
+become valid the moment the server catches up.
+
 `SALE_SYNC_ENABLED` was off while only the local half existed, because
 `mapOperationToSyncChange` **retires** — marks applied and discards — any entity
 type it cannot map, precisely so unmappable ops cannot occupy the oldest-first
