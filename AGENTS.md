@@ -214,7 +214,8 @@ No new `.md` files without entry in the Active Docs table (see `docs/architectur
 | `docs/archive/repo-restructure-plan.md` | ARCHIVED | Monorepo structure (historical) |
 | `docs/desktop-local-sync-plan.md` | IN PROGRESS | Sync roadmap |
 | `docs/server-scale-plan.md` | IN PROGRESS | Server scaling architecture |
-| `docs/fee-settings-plan.md` | IN PROGRESS | Fee/Break-even features |
+| `docs/fee-settings-plan.md` | IN PROGRESS | Fee/Break-even features (its `funding_mode` model is superseded) |
+| `docs/wallet-cost-basis-plan.md` | PLANNED | Blended wallet cost factor replacing per-position `funding_mode` |
 | `docs/cs-updates-feed-plan.md` | IN PROGRESS | Updates/Feed feature |
 | `docs/archive/MONOREPO_MIGRATION_STATUS.md` | ARCHIVED | Migration status (historical) |
 | `plans/codebase-optimization-findings.md` | IN PROGRESS | Codebase optimization findings |

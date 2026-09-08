@@ -371,10 +371,7 @@ export function InventoryTable({
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-bold">{item.name}</span>
                       <span className="mt-[3px] flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                        <span className="truncate">
-                          {resolveItemCategorySingular(item)} ·{" "}
-                          {item.fundingMode === "cash_in" ? "cash_in" : "wallet"}
-                        </span>
+                        <span className="truncate">{resolveItemCategorySingular(item)}</span>
                         {item.hasBuyOrder && Number(item.buyOrderBestPriceUsd) > 0 ? (
                           <span
                             title={translate("watchlist:openBuyorder")}

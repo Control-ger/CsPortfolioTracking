@@ -25,10 +25,7 @@
     "range": "Bereich",
     "category": "Kategorie",
     "sorting": "Sortierung",
-    "all": "Alle",
-    "wallet": "Wallet",
-    "cashIn": "Cash-In",
-    "fundingSoon": "Filter nach Finanzierung ist noch nicht verfügbar"
+    "all": "Alle"
   },
   "empty": "Keine Positionen für diese Filter.",
   "groups_one": "{{count}} Gruppe",

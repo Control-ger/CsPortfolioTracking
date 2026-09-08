@@ -127,6 +127,14 @@ Acquisition/Cost-Basis:
 - `wallet_funded`: keine zusaetzlichen Deposit/FX-Aufschlaege
 - `cash_in`: Deposit/FX/Fixkosten werden auf Cost-Basis addiert
 
+> **Update (2026-09-08):** the `fundingMode` rule below is superseded. A wallet is a
+> fungible pool, so a per-investment `cash_in` / `wallet_funded` flag answers a question
+> that has no answer — and nothing can populate it (all 227 positions in a real database
+> are `wallet_funded`, and the CSFloat client has no transactions endpoint). The
+> replacement is a blended wallet cost factor; see `docs/wallet-cost-basis-plan.md`.
+> `resolveAcquisitionFees()` also multiplies the fixed deposit fee once per position
+> instead of once per deposit, which that plan corrects.
+
 ## 5. Offene Punkte (IN PROGRESS)
 
 1. API-Contract und Architekturdocs auf dieselben Feldbezeichnungen final harmonisieren (insb. interne DB-Namen vs. API-Namen).
