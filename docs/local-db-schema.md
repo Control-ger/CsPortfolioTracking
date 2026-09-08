@@ -25,6 +25,44 @@ Implemented in `apps/desktop/src/localStore/index.js`:
 - `steam_inventory_state`
 - `steam_csfloat_matches`
 - `sync_notifications`
+- `sales`
+- `sale_allocations`
+
+### 2.1 Sell tracking (`sales`, `sale_allocations`)
+
+Schema version 5. Written by `apps/desktop/src/localStore/sales.js`.
+
+**A sale consumes purchase rows; it never rewrites them.** `sale_allocations`
+records which `investments` rows a sale drew from and how much of each, so:
+
+- purchase rows stay immutable, which matters for sync — a lot that is re-priced
+  later must not silently restate a realised gain;
+- the remaining holding is **derived**: `investments.quantity` minus what
+  allocations consumed (`listConsumedQuantities`), in line with the "no
+  precomputed aggregates" rule;
+- realised P&L stays traceable to the exact lot, because `sale_allocations`
+  copies `buy_price_usd` at allocation time.
+
+Allocation is **FIFO over the oldest unsold rows**. The schema is already
+lot-level — a Steam sync writes one row per physical item with its own price and
+purchase date — so FIFO is a sort and a walk, not a split. Rationale and the
+measurements behind the choice: `docs/wallet-cost-basis-plan.md` §4.
+
+Two behaviours worth knowing:
+
+- **Over-selling is recorded, not refused.** A sale of more units than the
+  portfolio holds is stored and reports the unallocated remainder. A user may
+  sell something the portfolio never captured, and dropping the proceeds over a
+  bookkeeping gap would lose the figure the wallet factor needs.
+- **`external_trade_id` deduplicates importer re-reads**, scoped per user and
+  platform.
+
+`SALE_SYNC_ENABLED` in `sales.js` is **off**: `desktopSync.mapOperationToSyncChange`
+maps only `investment` and `watchlist_item` and *retires* (discards) anything
+else, so queueing sale ops now would throw them away. `sales.dirty` is the
+durable "not yet pushed" marker in the meantime, and `listDirtySales` — which
+deliberately includes deleted rows, because a tombstone has to reach the server
+too — is the backfill's input once the server side lands.
 
 ## 3. Notification Persistence
 
@@ -102,6 +140,8 @@ so an existing database picks them up on the next start.
 
 - `operations_log` stores pending local mutations for `/api/v1/sync/push`.
 - Pull results from `/api/v1/sync/pull` are merged back into local SQLite.
+- `sales` / `sale_allocations` are **local-only for now** — see §2.1. The server
+  does not carry the entity yet, so these rows do not leave the device.
 - Imports and sync apply paths avoid recursive re-logging of the same records.
 
 ## 7. Operations Log as Activity Feed

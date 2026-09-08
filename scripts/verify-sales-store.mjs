@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+
+/**
+ * Sell-tracking verification.
+ *
+ * The desktop store is built against better-sqlite3, which is compiled for
+ * Electron's ABI and cannot be required from plain node. `node:sqlite` has the
+ * same prepare/run/get/all shape, so the real `sales.js` runs against an
+ * in-memory database here — the SQL, the FIFO order and the derived holdings
+ * are checked without launching (or restarting) the desktop app.
+ *
+ * Run with `npm run verify:sales`.
+ */
+import { DatabaseSync } from "node:sqlite";
+import { createSalesStore } from "../apps/desktop/src/localStore/sales.js";
+
+// better-sqlite3 shim: node:sqlite has the same prepare/run/get/all shape but
+// no transaction() helper.
+function adapt(db) {
+  return {
+    prepare: (sql) => db.prepare(sql),
+    exec: (sql) => db.exec(sql),
+    transaction: (fn) => (...args) => {
+      db.exec("BEGIN");
+      try { const out = fn(...args); db.exec("COMMIT"); return out; }
+      catch (e) { db.exec("ROLLBACK"); throw e; }
+    },
+  };
+}
+
+const raw = new DatabaseSync(":memory:");
+raw.exec(`
+  CREATE TABLE investments (
+    id TEXT PRIMARY KEY, server_id INTEGER, item_id TEXT, user_id TEXT NOT NULL,
+    name TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'skin', quantity INTEGER NOT NULL DEFAULT 1,
+    buy_price_usd REAL, funding_mode TEXT NOT NULL DEFAULT 'wallet_funded',
+    payload TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL DEFAULT 1,
+    dirty INTEGER NOT NULL DEFAULT 1, deleted INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+  CREATE TABLE sales (
+    id TEXT PRIMARY KEY, server_id INTEGER, item_id TEXT, user_id TEXT NOT NULL,
+    name TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, sell_price_usd REAL,
+    platform TEXT, external_trade_id TEXT, sold_at TEXT NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL DEFAULT 1,
+    dirty INTEGER NOT NULL DEFAULT 1, deleted INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(server_id));
+  CREATE TABLE sale_allocations (
+    id TEXT PRIMARY KEY, sale_id TEXT NOT NULL, investment_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL, buy_price_usd REAL, created_at TEXT NOT NULL,
+    FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE);
+  CREATE TABLE operations_log (
+    id TEXT PRIMARY KEY, op_type TEXT NOT NULL, entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL, user_id TEXT, payload TEXT NOT NULL DEFAULT '{}',
+    idempotency_key TEXT NOT NULL, created_at TEXT NOT NULL, applied_at TEXT,
+    UNIQUE(idempotency_key));
+`);
+
+const U = "steam-76561198340948133";
+const buy = (id, qty, price, date) =>
+  raw.prepare(`INSERT INTO investments (id,item_id,user_id,name,quantity,buy_price_usd,payload,created_at,updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?)`)
+     .run(id, "item-1", U, "Fever Case", qty, price, JSON.stringify({ purchasedAt: date }), date, date);
+
+// Three lots of the same item, deliberately inserted newest-first so the test
+// proves the FIFO sort rather than insertion order.
+buy("c", 1, 3.00, "2026-03-01T00:00:00Z");
+buy("a", 2, 1.00, "2026-01-01T00:00:00Z");
+buy("b", 5, 2.00, "2026-02-01T00:00:00Z");
+
+const store = createSalesStore(adapt(raw));
+const fail = [];
+const check = (label, got, want) => {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  console.log(`${ok ? "PASS" : "FAIL"}  ${label}`);
+  if (!ok) { console.log(`      got  ${JSON.stringify(got)}\n      want ${JSON.stringify(want)}`); fail.push(label); }
+};
+
+// 1. FIFO across lots: 4 units consumes all of "a" (2) then 2 of "b".
+const r1 = store.recordSale({ userId: U, itemId: "item-1", name: "Fever Case", quantity: 4, sellPriceUsd: 5, soldAt: "2026-04-01T00:00:00Z", platform: "csfloat", externalTradeId: "T1" });
+check("sale allocates fully", [r1.allocated, r1.unallocated], [4, 0]);
+const alloc1 = store.listSaleAllocations(r1.sale.id)
+  .map((a) => [a.investmentId, a.quantity, a.buyPriceUsd])
+  .sort();
+check("FIFO order: oldest lot first", alloc1, [["a", 2, 1], ["b", 2, 2]]);
+
+// 2. Derived holdings, not rewritten purchase rows.
+check("consumed per row", store.listConsumedQuantities(U).map((r) => [r.investmentId, Number(r.consumedQuantity)]).sort(), [["a", 2], ["b", 2]]);
+check("purchase rows untouched", raw.prepare("SELECT id,quantity FROM investments ORDER BY id").all().map((r) => [r.id, r.quantity]), [["a",2],["b",5],["c",1]]);
+
+// 3. Duplicate import of the same trade is a no-op.
+const r2 = store.recordSale({ userId: U, itemId: "item-1", name: "Fever Case", quantity: 4, sellPriceUsd: 5, soldAt: "2026-04-01T00:00:00Z", platform: "csfloat", externalTradeId: "T1" });
+check("duplicate trade ignored", [r2.duplicate, store.listSales(U).length], [true, 1]);
+
+// 4. Over-selling records the sale and reports the gap instead of refusing.
+const r3 = store.recordSale({ userId: U, itemId: "item-1", name: "Fever Case", quantity: 10, sellPriceUsd: 6, soldAt: "2026-05-01T00:00:00Z", platform: "steam" });
+check("over-sale reports the gap", [r3.allocated, r3.unallocated], [4, 6]);
+
+// 5. Deleting a sale releases what it consumed.
+store.deleteSale(r3.sale.id, U);
+check("delete frees allocations", store.listConsumedQuantities(U).map((r) => [r.investmentId, Number(r.consumedQuantity)]).sort(), [["a", 2], ["b", 2]]);
+
+// 6. operations_log carries every mutation for the sync push.
+// 6. Sale ops stay out of the push queue until the server understands the
+//    entity — desktopSync retires unknown types, which would discard them.
+//    `dirty` carries the pending state instead.
+check("no sale ops queued while sync is off", raw.prepare("SELECT COUNT(*) AS n FROM operations_log").get().n, 0);
+//    Two rows: the live sale, plus the deleted one — a tombstone has to reach
+//    the server too, so the backfill must not filter deleted rows out.
+check("dirty covers live rows and tombstones", store.listDirtySales(U).length, 2);
+
+console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join(", ")}` : "\nall checks passed");
+process.exit(fail.length ? 1 : 0);

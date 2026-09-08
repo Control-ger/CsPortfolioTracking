@@ -16,6 +16,7 @@ import { createPriceStore } from "./prices.js";
 import { createSnapshotStore } from "./snapshots.js";
 import { createNotificationStore } from "./notifications.js";
 import { createSyncStore } from "./sync.js";
+import { createSalesStore } from "./sales.js";
 
 function runMigrations(db) {
   db.pragma("journal_mode = WAL");
@@ -108,6 +109,45 @@ function runMigrations(db) {
       UNIQUE(user_id, captured_at)
     );
 
+    -- A sale consumes purchase rows; it never rewrites them. Holdings are
+    -- therefore derived (row quantity minus what allocations consumed), which
+    -- keeps purchase rows immutable for sync and keeps realised P&L traceable
+    -- to the exact lot it came from. See docs/wallet-cost-basis-plan.md §4.
+    CREATE TABLE IF NOT EXISTS sales (
+      id TEXT PRIMARY KEY,
+      server_id INTEGER,
+      item_id TEXT,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      sell_price_usd REAL,
+      platform TEXT,
+      external_trade_id TEXT,
+      sold_at TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      revision INTEGER NOT NULL DEFAULT 1,
+      dirty INTEGER NOT NULL DEFAULT 1,
+      deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(server_id)
+    );
+
+    -- Which purchase rows a sale consumed, and how much of each. A row with
+    -- quantity 1 is consumed whole (184 of 227 rows in a real database), so
+    -- this exists for the partial case rather than the common one.
+    -- buy_price_usd is copied at allocation time: it is the realised cost of
+    -- that lot, and must not move if the purchase row is later re-priced.
+    CREATE TABLE IF NOT EXISTS sale_allocations (
+      id TEXT PRIMARY KEY,
+      sale_id TEXT NOT NULL,
+      investment_id TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      buy_price_usd REAL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS operations_log (
       id TEXT PRIMARY KEY,
       op_type TEXT NOT NULL,
@@ -170,6 +210,14 @@ function runMigrations(db) {
       ON watchlist_items(user_id, deleted, updated_at);
     CREATE INDEX IF NOT EXISTS idx_operations_pending
       ON operations_log(applied_at, created_at);
+    CREATE INDEX IF NOT EXISTS idx_sales_user
+      ON sales(user_id, deleted, sold_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_sales_external
+      ON sales(user_id, platform, external_trade_id);
+    CREATE INDEX IF NOT EXISTS idx_sale_allocations_investment
+      ON sale_allocations(investment_id);
+    CREATE INDEX IF NOT EXISTS idx_sale_allocations_sale
+      ON sale_allocations(sale_id);
     CREATE INDEX IF NOT EXISTS idx_steam_inventory_state_user
       ON steam_inventory_state(user_id, in_inventory, last_seen_at);
     CREATE INDEX IF NOT EXISTS idx_steam_matches_user
@@ -274,6 +322,7 @@ export function createLocalStore(userDataPath) {
   const settingsStore = createSettingsStore(db);
   const priceStore = createPriceStore(db);
   const snapshotStore = createSnapshotStore(db);
+  const salesStore = createSalesStore(db);
 
   // Sync store needs dependencies from investments and settings
   const syncStore = createSyncStore(db, {
@@ -295,6 +344,7 @@ export function createLocalStore(userDataPath) {
     ...settingsStore,
     ...priceStore,
     ...snapshotStore,
+    ...salesStore,
     ...syncStore,
     ...notificationStore,
   };

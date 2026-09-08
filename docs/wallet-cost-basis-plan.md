@@ -148,6 +148,29 @@ built ahead and left unused:
 | "Verkauft" filter scope | `DesignSystemPage.jsx:1036`, marked `soon` | not wired to a real view |
 | `calculateNetProceeds()` | `FeeCalculationService` | used, but only for the *hypothetical* net value of a held position |
 
+### Phase 1 decisions (2026-09-08)
+
+**Allocation: FIFO at row level.** The schema is already lot-level — a Steam sync
+writes one row per physical item, each carrying its own `buy_price_usd` and
+purchase date, and `buildPositionLots` bundles them for display only ("the
+underlying rows are untouched"). Measured on a real database: 227/227 rows have a
+purchase date, 211 have a price, and 184 of 227 have `quantity = 1`.
+
+FIFO is therefore *cheaper* than average cost here, inverting the usual
+trade-off: it is a sort and a walk over the oldest unsold rows, and for 81 % of
+rows needs no allocation record at all. Average cost would mean discarding
+per-row cost the database already holds, and would produce a realised figure that
+cannot be reconciled against a marketplace statement. The 43 rows with
+`quantity > 1` need a partial consumption record — which is what
+`sale_allocations` in the dead `SaleRepository` is already shaped for — and the
+management UI already carries a "split position" concept to build on.
+
+**Capture: importer-first, manual as the general fallback.** CSFloat and
+SkinBaron are the primary path (`/v1/me/trades` already returns both sides; the
+importer reads only the buy side today). A manual form covers Steam Market, P2P
+and anything else, and writes through the same path so there is one write
+strecke, not two.
+
 **Sequencing consequence:** the "sold" filter scope that reads as a small
 `soon` item is downstream of this phase, not independent of it — and so is the
 wallet factor, which needs sale proceeds as the denominator of its credit side.

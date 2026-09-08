@@ -1,7 +1,7 @@
 import path from "path";
 import { randomUUID } from "crypto";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 export const CANONICAL_LOCAL_USER_ID = "1";
 export const STEAM_ID_PATTERN = /^[1-9]\d{10,}$/;
 export const DESKTOP_STEAM_USER_ID_PATTERN = /^steam-([1-9]\d{10,})$/i;

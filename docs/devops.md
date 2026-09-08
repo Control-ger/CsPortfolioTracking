@@ -106,6 +106,15 @@ Two follow-ups from that:
 Run before every push, alongside `npm run lint`:
 
 - `npm run docs:guard` — documentation governance (see `AGENTS.md`).
+- `npm run verify:sales` — sell-tracking verification. `better-sqlite3` is
+  compiled for Electron's ABI and cannot be required from plain node, so this
+  runs the real `apps/desktop/src/localStore/sales.js` against `node:sqlite`
+  (same prepare/run/get/all shape, plus a small `transaction()` shim) on an
+  in-memory database. It checks the FIFO order across lots, that purchase rows
+  stay untouched, importer deduplication, over-sale reporting, that deleting a
+  sale releases its allocations, and that no sale op is queued while
+  `SALE_SYNC_ENABLED` is off. Exits non-zero on the first failing expectation.
+  Not part of CI yet — it is a developer command until the server side lands.
 - `npm run i18n:guard` — catalogue integrity. Two things neither ESLint nor the
   build can see, because a missing translation key is not a syntax error — it
   renders as the raw key path in the UI:

@@ -90,6 +90,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-delete-investment-silent", id),
     getInvestment: (id) =>
       ipcRenderer.invoke("local-store-get-investment", id),
+    recordSale: (payload) =>
+      ipcRenderer.invoke("local-store-record-sale", payload),
+    listSales: (userId) =>
+      ipcRenderer.invoke("local-store-list-sales", userId),
+    listSaleAllocations: (saleId) =>
+      ipcRenderer.invoke("local-store-list-sale-allocations", saleId),
+    listConsumedQuantities: (userId) =>
+      ipcRenderer.invoke("local-store-list-consumed-quantities", userId),
+    deleteSale: (id, userId) =>
+      ipcRenderer.invoke("local-store-delete-sale", id, userId),
     listWatchlist: (userId) =>
       ipcRenderer.invoke("local-store-list-watchlist", userId),
     importWatchlist: (rows, userId) =>

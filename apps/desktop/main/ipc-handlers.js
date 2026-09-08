@@ -446,6 +446,11 @@ export function registerAllIpcHandlers() {
   safeLocalStoreInvoke("local-store-delete-investment", (store, id) => store.deleteInvestment(id));
   safeLocalStoreInvoke("local-store-delete-investment-silent", (store, id) => store.deleteInvestmentSilent(id));
   safeLocalStoreInvoke("local-store-get-investment", (store, id) => store.getInvestment(id));
+  safeLocalStoreInvoke("local-store-record-sale", (store, payload) => store.recordSale(payload));
+  safeLocalStoreInvoke("local-store-list-sales", (store, userId) => store.listSales(userId));
+  safeLocalStoreInvoke("local-store-list-sale-allocations", (store, saleId) => store.listSaleAllocations(saleId));
+  safeLocalStoreInvoke("local-store-list-consumed-quantities", (store, userId) => store.listConsumedQuantities(userId));
+  safeLocalStoreInvoke("local-store-delete-sale", (store, id, userId) => store.deleteSale(id, userId));
   safeLocalStoreInvoke("local-store-list-watchlist", (store, userId) => store.listWatchlistItems(userId));
   safeLocalStoreInvoke("local-store-import-watchlist", (store, rows, userId) => store.importWatchlistItems(rows, userId));
   safeLocalStoreInvoke("local-store-upsert-watchlist-item", (store, payload) => store.upsertWatchlistItem(payload));

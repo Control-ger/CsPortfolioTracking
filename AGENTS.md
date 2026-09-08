@@ -16,6 +16,7 @@ npm run fetch:php     # download bundled static PHP runtime + CA bundle → reso
 npm run lint          # ESLint 9 flat config (JS/JSX only)
 npm run docs:guard    # Documentation governance check
 npm run i18n:guard    # Translation catalogue integrity (see docs/devops.md)
+npm run verify:sales  # Sell-tracking store checks against node:sqlite
 npm run preview       # Vite preview
 ```
 No test suite is configured (Playwright exists as devDep but no `test` script).
@@ -81,6 +82,14 @@ Full reference: `docs/architecture-overview.md` §5.6.
 - `DesignSystemPage.jsx` (builder's tool) and `csUpdatesFeed.mock.js` (fixtures) are deliberately untranslated.
 - **The sweep is complete.** `i18n:guard` reports 0 errors and only false positives as warnings (key names that read as German such as `buyorders`, internal data keys like `payload.wert`, a cache-key constant). Both guards run in CI via `.github/workflows/frontend-guards.yml`, so a regression fails the build rather than waiting for someone to run them.
 - **Do not gate UI on `import.meta.env.DEV`.** `npm run dev` is `vite build --watch` in mode `production`, so `DEV` is false there too. Developer-only output goes behind a `VITE_*` flag read through `isFlagEnabled` (`@shared/lib/envFlags`); see `docs/devops.md` → Build flags and artifacts.
+
+### Sell Tracking
+Full reference: `docs/local-db-schema.md` §2.1. Rationale: `docs/wallet-cost-basis-plan.md`.
+- **A sale consumes purchase rows, it never rewrites them.** Allocations live in `sale_allocations`; the remaining holding is derived (`quantity` minus consumed), never stored.
+- **Allocation is FIFO over the oldest unsold rows.** The schema is already lot-level, so this is a sort and a walk — do not reach for average cost, which would discard per-row cost the database already has.
+- `sale_allocations.buy_price_usd` is copied at allocation time, so a later re-price of the lot cannot restate a realised gain.
+- **Over-selling is recorded and reported, not refused** — the proceeds matter more than the bookkeeping gap.
+- `SALE_SYNC_ENABLED` stays **off** until the server carries the entity: `desktopSync` retires unknown entity types, so queueing sale ops would silently discard them. `sales.dirty` is the pending marker until then.
 
 ### Backend Data Rules
 - **Currency**: USD persisted, EUR computed at runtime.

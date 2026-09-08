@@ -110,6 +110,7 @@ This document tracks:
 | Domain | Write owner | Storage | Read clients |
 |---|---|---|---|
 | Investments + watchlist | Desktop | local SQLite + synced server DB | Desktop + Web |
+| Sales (sell tracking) | Desktop | local SQLite **only, for now** — the server does not carry the entity yet | Desktop |
 | Prices | Server workers | server DB | Web + Desktop (via sidecar/upstream) |
 | Import execution (Steam/CSFloat) | Desktop-initiated | Desktop + server processing path | Desktop |
 | Steam/CSFloat secrets | Desktop only | Local Secret Vault (app-password wrapped, main-memory unlock session) | Desktop only |
@@ -132,6 +133,25 @@ other field but drops this one, which would reset the colour on every save — s
 omits it, on both the save and the load/merge path. Fields the server does know still
 win; only a *missing* colour falls back to the local value. This guard stays correct
 once the backend ships and can be removed then.
+
+### 4.2 Sell tracking is local-only until the server carries it
+
+`sales` / `sale_allocations` (schema version 5, `apps/desktop/src/localStore/sales.js`)
+record a sale and which purchase rows it consumed. A sale **never rewrites the
+purchase rows** — the remaining holding is derived from `quantity` minus what
+allocations consumed, which keeps purchase rows immutable for sync and keeps
+realised P&L traceable to the exact lot.
+
+`SALE_SYNC_ENABLED` is off. `mapOperationToSyncChange` (`desktopSync.js`) maps
+only `investment` and `watchlist_item` and **retires** — marks applied and
+discards — everything else, precisely so unmappable ops cannot occupy the
+oldest-first push window. Queueing sale ops before the server understands them
+would therefore destroy them silently. `sales.dirty` holds the pending state
+instead, and `listDirtySales` (deleted rows included, because a tombstone has to
+travel too) is the backfill's input once the server side exists.
+
+Detail: `docs/local-db-schema.md` §2.1. Why sell tracking exists at all, and what
+it unblocks: `docs/wallet-cost-basis-plan.md`.
 
 ## 5. Frontend Route Map (current)
 
