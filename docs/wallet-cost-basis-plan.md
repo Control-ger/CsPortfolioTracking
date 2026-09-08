@@ -175,6 +175,28 @@ strecke, not two.
 `soon` item is downstream of this phase, not independent of it — and so is the
 wallet factor, which needs sale proceeds as the denominator of its credit side.
 
+### Phase 1 open item: the server read path still shows unreduced holdings
+
+The desktop reduces holdings by what sales consumed (`applySoldQuantities` in
+`desktopDataMerge.js`, applied where the local snapshot is built).
+`InvestmentRepository::findAll` — the single query behind every server-side
+portfolio read — does **not**, so a web client would show a sold position at its
+full quantity.
+
+The fix is a `LEFT JOIN` on a grouped `sale_allocations` subquery, subtracting
+`SUM(quantity)` and dropping rows that reach zero. It is small, but it carries a
+hazard that makes it a deliberate step rather than a drive-by:
+
+> `sale_allocations` only exists on a server once `ensureSalesTable()` has run,
+> which happens on the first sync push. `InvestmentRepository::ensureTable()`
+> does not create it. A `LEFT JOIN` against a missing table is a hard SQL error,
+> so shipping this without guaranteeing the table exists would break **every**
+> portfolio read on any server that has never received a sale.
+
+So it needs either an ordering guarantee (ensure the sales tables wherever
+investments are ensured) or an existence check, and it needs a live database to
+verify against — `node:sqlite` cannot stand in for MySQL here.
+
 **Phase 2 — deposits as a first-class entity.** Table, sync entity, and a desktop
 entry surface (amount, date, fee, FX rate). Manual entry first; a marketplace
 transaction import can follow where an API exposes one.

@@ -64,6 +64,13 @@ entity type it cannot map. Rows written in that window carry `dirty = 1` and no
 operation, so `enqueueDirtySaleOperations` runs once at the start of every push
 and picks them up — a no-op once none are left.
 
+**Holdings are derived, and the derivation lives on the desktop only.**
+`applySoldQuantities` (`desktopDataMerge.js`) subtracts what allocations consumed
+when the local snapshot is built, and drops rows that reach zero — a closed
+position is not a holding worth zero. The server read path
+(`InvestmentRepository::findAll`) does not do this yet; see
+`docs/wallet-cost-basis-plan.md` for why that step needs a live database.
+
 Pull applies sales through `importSales`, which is **silent**: it writes no
 operation, because a pull that re-logged what it just received would push the
 same rows straight back. Allocations come from the payload rather than being

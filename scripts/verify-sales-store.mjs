@@ -11,6 +11,7 @@
  *
  * Run with `npm run verify:sales`.
  */
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { createSalesStore } from "../apps/desktop/src/localStore/sales.js";
 
@@ -156,6 +157,20 @@ const importerShaped = {
 const imported = store.recordSale(importerShaped);
 check("importer shape records a sale", [imported.sale.name, imported.sale.sellPriceUsd, imported.sale.platform], ["Fever Case", 7.5, "csfloat"]);
 check("importer re-run deduplicates", store.recordSale(importerShaped).duplicate, true);
+
+// 12. Holdings are derived from allocations. `applySoldQuantities` is pure, but
+//     lives in desktopDataMerge.js, which imports browser-only modules — so it
+//     is extracted from source rather than imported.
+const mergeSrc = readFileSync("packages/shared/src/lib/desktopDataMerge.js", "utf8");
+const fnStart = mergeSrc.indexOf("export function applySoldQuantities");
+const { applySoldQuantities } = await import(
+  "data:text/javascript," + encodeURIComponent(mergeSrc.slice(fnStart, mergeSrc.indexOf("\n}\n", fnStart) + 3))
+);
+const heldRows = [{ id: "a", quantity: 2 }, { id: "b", quantity: 5 }, { id: "c", quantity: 1 }];
+check("no sales leaves rows untouched", applySoldQuantities(heldRows, []), heldRows);
+check("partial consumption reduces", applySoldQuantities(heldRows, [{ investmentId: "b", consumedQuantity: 2 }]).map((r) => [r.id, r.quantity]), [["a", 2], ["b", 3], ["c", 1]]);
+check("fully consumed row is dropped", applySoldQuantities(heldRows, [{ investmentId: "a", consumedQuantity: 2 }]).map((r) => r.id), ["b", "c"]);
+check("over-consumption never goes negative", applySoldQuantities(heldRows, [{ investmentId: "c", consumedQuantity: 9 }]).map((r) => r.id), ["a", "b"]);
 
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join(", ")}` : "\nall checks passed");
 process.exit(fail.length ? 1 : 0);

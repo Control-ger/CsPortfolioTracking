@@ -370,13 +370,55 @@ export function enrichDesktopWatchlistWithUpstreamMetrics(localItems = [], upstr
 }
 
 /**
+ * Reduce purchase rows by what sales have consumed.
+ *
+ * Holdings are derived, never stored: a sale allocates against purchase rows
+ * (`sale_allocations`) and leaves them untouched, so the held quantity is the
+ * row's quantity minus what allocations took. A fully consumed row is dropped —
+ * it is a closed position, not a holding worth zero, and leaving it in would
+ * put a 0× row in the inventory and drag every average it feeds.
+ *
+ * Rows no sale ever touched are returned unchanged; `listConsumedQuantities`
+ * only reports the ones that were touched.
+ */
+export function applySoldQuantities(rows = [], consumed = []) {
+  const consumedById = new Map(
+    (Array.isArray(consumed) ? consumed : []).map((entry) => [
+      String(entry?.investmentId || ""),
+      Number(entry?.consumedQuantity || 0),
+    ]),
+  );
+  if (consumedById.size === 0) {
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  const held = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const taken = consumedById.get(String(row?.id || "")) || 0;
+    if (taken <= 0) {
+      held.push(row);
+      continue;
+    }
+    const remaining = Math.max(0, Number(row?.quantity || 0) - taken);
+    if (remaining <= 0) {
+      continue;
+    }
+    held.push({ ...row, quantity: remaining, soldQuantity: taken });
+  }
+  return held;
+}
+
+/**
  * Build a local portfolio snapshot from desktop SQLite data.
  */
 export async function buildDesktopPortfolioLocalSnapshot(options = {}) {
   const localStore = getDesktopLocalStore();
-  const [rawRowsResult, snapshotsResult] = await Promise.all([
+  const [rawRowsResult, snapshotsResult, consumedResult] = await Promise.all([
     localStore.listInvestments(options.userId),
     localStore.listPortfolioSnapshots(options.userId, 365),
+    typeof localStore.listConsumedQuantities === "function"
+      ? localStore.listConsumedQuantities(options.userId)
+      : Promise.resolve([]),
   ]);
   const rawRows = unwrapLocalStoreResult(
     rawRowsResult,
@@ -386,13 +428,19 @@ export async function buildDesktopPortfolioLocalSnapshot(options = {}) {
     snapshotsResult,
     "local-store-list-portfolio-snapshots",
   );
+  const consumed = unwrapLocalStoreResult(
+    consumedResult,
+    "local-store-list-consumed-quantities",
+  );
   const displayScope = options.rowScope || "all";
-  const scopedRows = filterRowsByScope(rawRows, displayScope);
+  const heldRows = applySoldQuantities(rawRows, consumed);
+  const scopedRows = filterRowsByScope(heldRows, displayScope);
   const activeRows = scopedRows.filter((row) => !isExcludedRow(row));
   const rows = clusterDesktopInvestments(activeRows).map(enforceCsfloatOnlyRow);
   const meta = {
     source: "desktop-local",
     rawInvestmentCount: rawRows.length,
+    soldOutRowCount: rawRows.length - heldRows.length,
     scopedInvestmentCount: scopedRows.length,
     // Local rows carry no price (clusterDesktopInvestments has no live/display
     // price to work with), so every value-bearing summary field is 0 until the

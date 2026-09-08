@@ -85,7 +85,8 @@ Full reference: `docs/architecture-overview.md` §5.6.
 
 ### Sell Tracking
 Full reference: `docs/local-db-schema.md` §2.1. Rationale: `docs/wallet-cost-basis-plan.md`.
-- **A sale consumes purchase rows, it never rewrites them.** Allocations live in `sale_allocations`; the remaining holding is derived (`quantity` minus consumed), never stored.
+- **A sale consumes purchase rows, it never rewrites them.** Allocations live in `sale_allocations`; the remaining holding is derived (`quantity` minus consumed), never stored. `applySoldQuantities` (`desktopDataMerge.js`) does that on the desktop and drops rows that reach zero — a closed position is not a holding worth zero.
+- **The server read path does not subtract sold quantities yet.** `InvestmentRepository::findAll` still reports full quantities, so a web client can disagree with the desktop. Do not add the `LEFT JOIN` without first guaranteeing `sale_allocations` exists — it is only created on the first sync push, and joining a missing table breaks every portfolio read. See `docs/wallet-cost-basis-plan.md`.
 - **Allocation is FIFO over the oldest unsold rows.** The schema is already lot-level, so this is a sort and a walk — do not reach for average cost, which would discard per-row cost the database already has.
 - `sale_allocations.buy_price_usd` is copied at allocation time, so a later re-price of the lot cannot restate a realised gain.
 - **Over-selling is recorded and reported, not refused** — the proceeds matter more than the bookkeeping gap.
