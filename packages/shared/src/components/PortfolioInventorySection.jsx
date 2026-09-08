@@ -99,6 +99,7 @@ export function PortfolioInventorySection({
   isDesktopRuntime,
   onExcludeChange,
   onBucketChange,
+  onRecordSale,
   canToggleExclude,
   canToggleBucket,
   onModalExcludeToggle,
@@ -373,6 +374,7 @@ export function PortfolioInventorySection({
                 historyLoading={selectedItemHistoryLoading}
                 onExcludeChange={isDesktopRuntime ? onExcludeChange : undefined}
                 onBucketChange={isDesktopRuntime ? onBucketChange : undefined}
+                onRecordSale={isDesktopRuntime ? onRecordSale : undefined}
                 canToggleExclude={canToggleExclude}
                 canToggleBucket={canToggleBucket}
               />

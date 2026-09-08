@@ -261,5 +261,24 @@
     "csfloatTitle": "CSFloat-Preisquelle",
     "steamPrice": "Steam Preis",
     "csfloatPrice": "CSFloat Preis"
+  },
+  "recordSale": {
+    "title": "Verkauf erfassen",
+    "subtitle": "{{name}} — {{available}} im Bestand",
+    "quantity": "Menge",
+    "unitPrice": "Preis je Stück ({{currency}})",
+    "soldAt": "Verkauft am",
+    "platform": "Plattform",
+    "platformSteam": "Steam-Markt",
+    "platformOther": "Andere",
+    "submit": "Verkauf erfassen",
+    "saving": "Speichere…",
+    "errorQuantity": "Menge muss mindestens 1 sein.",
+    "errorQuantityMax": "Du hältst nur {{max}} davon.",
+    "errorPrice": "Bitte einen Verkaufspreis größer 0 angeben.",
+    "action": "Verkauf erfassen",
+    "failed": "Der Verkauf konnte nicht erfasst werden.",
+    "partial": "Erfasst. {{count}} Stück konnten keinem Kauf zugeordnet werden — das Portfolio hält sie nicht.",
+    "acknowledge": "Verstanden"
   }
 }

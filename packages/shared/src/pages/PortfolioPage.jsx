@@ -1525,6 +1525,34 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     setCompositionRefreshToken((current) => current + 1);
   };
 
+  /**
+   * Record a sale of the selected position.
+   *
+   * Desktop-only: `recordSale` writes to the local store, which is the write
+   * owner. The result is returned so the dialog can report a shortfall — a sale
+   * the portfolio cannot fully cover is still recorded, and that has to be
+   * visible rather than silently producing a realised figure computed against
+   * nothing.
+   */
+  const handleRecordSale = async (item, input) => {
+    const localStore = window.electronAPI?.localStore;
+    if (typeof localStore?.recordSale !== "function") {
+      return null;
+    }
+
+    const currentUser = await getCurrentUser();
+    const result = await localStore.recordSale({
+      ...input,
+      itemId: input.itemId || item?.itemId || null,
+      name: input.name || item?.name || "",
+      userId: resolveDesktopRuntimeUserId(currentUser),
+    });
+
+    await refreshPortfolio();
+    setCompositionRefreshToken((current) => current + 1);
+    return result?.data ?? result;
+  };
+
   const handleModalExcludeToggle = async (itemId, excluded, sourceInvestmentIds = []) => {
     await toggleExcludeInvestment(itemId, excluded, sourceInvestmentIds);
     await handleExcludeChange(itemId, excluded);
@@ -5264,6 +5292,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             isDesktopRuntime={isDesktopRuntime}
             onExcludeChange={handleExcludeChange}
             onBucketChange={handleMoveItemBucket}
+            onRecordSale={handleRecordSale}
             canToggleExclude={
               isDesktopRuntime &&
               selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&

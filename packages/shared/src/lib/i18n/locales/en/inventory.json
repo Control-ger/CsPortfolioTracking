@@ -261,5 +261,24 @@
     "csfloatTitle": "CSFloat price source",
     "steamPrice": "Steam price",
     "csfloatPrice": "CSFloat price"
+  },
+  "recordSale": {
+    "title": "Record a sale",
+    "subtitle": "{{name}} — {{available}} held",
+    "quantity": "Quantity",
+    "unitPrice": "Price per unit ({{currency}})",
+    "soldAt": "Sold on",
+    "platform": "Platform",
+    "platformSteam": "Steam Market",
+    "platformOther": "Other",
+    "submit": "Record sale",
+    "saving": "Saving…",
+    "errorQuantity": "Enter a quantity of at least 1.",
+    "errorQuantityMax": "You only hold {{max}} of these.",
+    "errorPrice": "Enter a sale price greater than 0.",
+    "action": "Record sale",
+    "failed": "The sale could not be recorded.",
+    "partial": "Recorded. {{count}} unit(s) could not be matched to a purchase — the portfolio does not hold them.",
+    "acknowledge": "Got it"
   }
 }

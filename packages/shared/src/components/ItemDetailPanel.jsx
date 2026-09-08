@@ -16,6 +16,7 @@ import {
   InspectorStat,
 } from "./ui/inspector";
 import { ExcludeInvestmentDialog } from "./ExcludeInvestmentDialog";
+import { RecordSaleDialog } from "./RecordSaleDialog";
 import { toggleExcludeInvestment } from "../lib/apiClient";
 import { PortfolioChart } from "./PortfolioChart";
 import { GroupWeightingList } from "./GroupWeightingList";
@@ -166,6 +167,10 @@ export const ItemDetailPanel = ({
   historyLoading,
   onExcludeChange,
   onBucketChange,
+  // Recording a sale writes to the local store, so it is desktop-only and the
+  // caller supplies the handler. Absent handler = no button, same as exclude.
+  onRecordSale,
+  availableQuantity,
   canToggleExclude = true,
   // Groups support the bucket toggle (moves all members) but not exclusion,
   // so the two capabilities are gated separately.
@@ -175,8 +180,16 @@ export const ItemDetailPanel = ({
   const { currency, formatPrice } = useCurrency();
   const [excludeDialogOpen, setExcludeDialogOpen] = useState(false);
   const [isExcludeLoading, setIsExcludeLoading] = useState(false);
+  const [saleDialogOpen, setSaleDialogOpen] = useState(false);
+  const [isSaleLoading, setIsSaleLoading] = useState(false);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const excludeEnabled = canToggleExclude && typeof onExcludeChange === "function";
+  // An aggregate selection spans several items, so "sell this" has no single
+  // subject — the sale is recorded on a concrete position instead.
+  const saleEnabled =
+    typeof onRecordSale === "function" &&
+    item?.__detailKind !== "group" &&
+    item?.__detailKind !== "group-cluster";
   const bucketToggleEnabled = canToggleBucket && typeof onBucketChange === "function";
   const isGroupSelection = item?.__detailKind === "group";
   // Group and cluster selections carry `livePrice` as a *weighted unit* price
@@ -431,8 +444,18 @@ export const ItemDetailPanel = ({
           </InspectorBlock>
         ) : null}
 
-        {excludeEnabled || bucketToggleEnabled ? (
+        {excludeEnabled || bucketToggleEnabled || saleEnabled ? (
           <InspectorFooter>
+            {saleEnabled ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSaleDialogOpen(true)}
+                className="h-8 flex-1"
+              >
+                {t("recordSale.action")}
+              </Button>
+            ) : null}
             {excludeEnabled ? (
               <Button
                 variant={item.excluded ? "outline" : "softWarn"}
@@ -458,6 +481,26 @@ export const ItemDetailPanel = ({
           </InspectorFooter>
         ) : null}
       </Inspector>
+
+      {saleEnabled && saleDialogOpen ? (
+        <RecordSaleDialog
+          isOpen
+          onOpenChange={setSaleDialogOpen}
+          item={item}
+          availableQuantity={availableQuantity ?? item?.quantity}
+          isLoading={isSaleLoading}
+          onConfirm={async (input) => {
+            setIsSaleLoading(true);
+            try {
+              // The dialog closes itself on a clean sale and stays open to
+              // report a shortfall, so the result has to reach it.
+              return await onRecordSale(item, input);
+            } finally {
+              setIsSaleLoading(false);
+            }
+          }}
+        />
+      ) : null}
 
       {excludeEnabled ? (
         <ExcludeInvestmentDialog
