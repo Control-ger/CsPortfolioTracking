@@ -12,6 +12,7 @@ final class SyncService
     private const ALLOWED_TABLES = [
         'investments' => true,
         'watchlist_items' => true,
+        'sales' => true,
     ];
 
     public function __construct(
@@ -59,6 +60,8 @@ final class SyncService
         $this->syncEntityService->ensureItemsTable();
         $this->syncEntityService->ensureInvestmentsTable();
         $this->syncEntityService->ensureWatchlistTable();
+        // After investments: `sales` carries foreign keys into it and into `items`.
+        $this->syncEntityService->ensureSalesTable();
 
         $normalizedChanges = $this->normalizeChanges($changes);
         $results = [];

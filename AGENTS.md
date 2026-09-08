@@ -16,7 +16,7 @@ npm run fetch:php     # download bundled static PHP runtime + CA bundle → reso
 npm run lint          # ESLint 9 flat config (JS/JSX only)
 npm run docs:guard    # Documentation governance check
 npm run i18n:guard    # Translation catalogue integrity (see docs/devops.md)
-npm run verify:sales  # Sell-tracking store checks against node:sqlite
+npm run verify:sales  # Sell-tracking store checks against node:sqlite (16 checks)
 npm run preview       # Vite preview
 ```
 No test suite is configured (Playwright exists as devDep but no `test` script).
@@ -89,7 +89,9 @@ Full reference: `docs/local-db-schema.md` §2.1. Rationale: `docs/wallet-cost-ba
 - **Allocation is FIFO over the oldest unsold rows.** The schema is already lot-level, so this is a sort and a walk — do not reach for average cost, which would discard per-row cost the database already has.
 - `sale_allocations.buy_price_usd` is copied at allocation time, so a later re-price of the lot cannot restate a realised gain.
 - **Over-selling is recorded and reported, not refused** — the proceeds matter more than the bookkeeping gap.
-- `SALE_SYNC_ENABLED` stays **off** until the server carries the entity: `desktopSync` retires unknown entity types, so queueing sale ops would silently discard them. `sales.dirty` is the pending marker until then.
+- **Sales sync as their own entity** (`sale` → table `sales`). The allocations travel *in the payload*; the pulling device applies them verbatim instead of re-running FIFO, so two devices agree on realised P&L by construction. The server-side projection of allocations is best-effort — `sale_allocations.investment_id` is an INT FK while the desktop uses UUIDs, and the bridge is `sync_entities.payload_json.serverId`.
+- `importSales` (pull) is **silent** — it logs no operation. A pull that re-logged what it received would push the same rows straight back.
+- `enqueueDirtySaleOperations` runs at the start of every push and picks up rows written while `SALE_SYNC_ENABLED` was still off. Do not remove it while any install can still hold such rows.
 
 ### Backend Data Rules
 - **Currency**: USD persisted, EUR computed at runtime.

@@ -347,7 +347,9 @@ function mapOperationToSyncChange(operation) {
       ? "investments"
       : entityType === "watchlist_item"
         ? "watchlist_items"
-        : null;
+        : entityType === "sale"
+          ? "sales"
+          : null;
   if (!table) {
     return null;
   }
@@ -384,6 +386,15 @@ async function enrichSyncChange(operation, localStore) {
         const existing = unwrapLocalStoreResult(
           await localStore.getInvestment(normalized.id),
           "local-store-get-investment",
+        );
+        const revision = Number(existing?.revision || 0);
+        if (Number.isFinite(revision) && revision > 0) {
+          normalized.clientRevision = Math.floor(revision);
+        }
+      } else if (normalized.table === "sales" && typeof localStore.getSale === "function") {
+        const existing = unwrapLocalStoreResult(
+          await localStore.getSale(normalized.id),
+          "local-store-get-sale",
         );
         const revision = Number(existing?.revision || 0);
         if (Number.isFinite(revision) && revision > 0) {
@@ -485,6 +496,17 @@ function shouldDropRejectedOperation(operation, rejected) {
 }
 
 async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localStore, localUserId) {
+  // Sales recorded while sale sync was still off carry `dirty = 1` and no
+  // operation — queueing them then would have been discarded by the retire path
+  // below. This picks them up once; it is a no-op as soon as none are left.
+  if (typeof localStore.enqueueDirtySaleOperations === "function") {
+    try {
+      await localStore.enqueueDirtySaleOperations(localUserId);
+    } catch (backfillError) {
+      console.warn("[desktop-sync] sale backfill failed", backfillError);
+    }
+  }
+
   let mapped = [];
 
   // Retiring a full window of junk ops uncovers the next window; keep fetching
@@ -655,8 +677,10 @@ async function applyPulledChanges(changes, localStore, localUserId) {
 
   const investmentUpserts = [];
   const watchlistUpserts = [];
+  const saleUpserts = [];
   const investmentDeletes = [];
   const watchlistDeletes = [];
+  const saleDeletes = [];
 
   for (const change of changes) {
     const table = String(change?.table || "");
@@ -671,6 +695,8 @@ async function applyPulledChanges(changes, localStore, localUserId) {
         investmentDeletes.push(id);
       } else if (table === "watchlist_items") {
         watchlistDeletes.push(id);
+      } else if (table === "sales") {
+        saleDeletes.push(id);
       }
       continue;
     }
@@ -691,6 +717,8 @@ async function applyPulledChanges(changes, localStore, localUserId) {
       investmentUpserts.push(normalized);
     } else if (table === "watchlist_items") {
       watchlistUpserts.push(normalized);
+    } else if (table === "sales") {
+      saleUpserts.push(normalized);
     }
   }
 
@@ -706,12 +734,26 @@ async function applyPulledChanges(changes, localStore, localUserId) {
       "local-store-import-watchlist",
     );
   }
+  if (saleUpserts.length > 0 && typeof localStore.importSales === "function") {
+    unwrapLocalStoreResult(
+      await localStore.importSales(saleUpserts, localUserId),
+      "local-store-import-sales",
+    );
+  }
 
   for (const id of investmentDeletes) {
     unwrapLocalStoreResult(
       await localStore.deleteInvestmentSilent(id),
       "local-store-delete-investment-silent",
     );
+  }
+  for (const id of saleDeletes) {
+    if (typeof localStore.deleteSaleSilent === "function") {
+      unwrapLocalStoreResult(
+        await localStore.deleteSaleSilent(id),
+        "local-store-delete-sale-silent",
+      );
+    }
   }
   for (const id of watchlistDeletes) {
     unwrapLocalStoreResult(

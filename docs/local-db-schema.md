@@ -57,12 +57,17 @@ Two behaviours worth knowing:
 - **`external_trade_id` deduplicates importer re-reads**, scoped per user and
   platform.
 
-`SALE_SYNC_ENABLED` in `sales.js` is **off**: `desktopSync.mapOperationToSyncChange`
-maps only `investment` and `watchlist_item` and *retires* (discards) anything
-else, so queueing sale ops now would throw them away. `sales.dirty` is the
-durable "not yet pushed" marker in the meantime, and `listDirtySales` — which
-deliberately includes deleted rows, because a tombstone has to reach the server
-too — is the backfill's input once the server side lands.
+`SALE_SYNC_ENABLED` in `sales.js` is **on**: the server accepts the `sales` table
+and `mapOperationToSyncChange` maps `sale` → `sales`. It was off while only the
+local half existed, because `mapOperationToSyncChange` *retires* (discards) any
+entity type it cannot map. Rows written in that window carry `dirty = 1` and no
+operation, so `enqueueDirtySaleOperations` runs once at the start of every push
+and picks them up — a no-op once none are left.
+
+Pull applies sales through `importSales`, which is **silent**: it writes no
+operation, because a pull that re-logged what it just received would push the
+same rows straight back. Allocations come from the payload rather than being
+re-derived, so a pulled sale reproduces the originating device's split exactly.
 
 ## 3. Notification Persistence
 

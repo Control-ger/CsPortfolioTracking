@@ -83,7 +83,28 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
 ## Implementierungsstand (2026-05-05)
 
 - `GET /api/v1/sync/pull` und `POST /api/v1/sync/push` sind in `backend/public/index.php` registriert.
-- Push-Validierung akzeptiert aktuell nur Tabellen `investments` und `watchlist_items`.
+- Push-Validierung akzeptiert die Tabellen `investments`, `watchlist_items` und `sales`.
+
+### Verkäufe (`sales`)
+
+- Entity-Typ im lokalen `operations_log`: `sale`; `mapOperationToSyncChange`
+  bildet ihn auf die Tabelle `sales` ab.
+- **Die Zuordnungen (`allocations`) reisen im Payload mit.** Das Desktop rechnet
+  FIFO und schickt das Ergebnis; das ziehende Gerät übernimmt es unverändert,
+  statt es neu abzuleiten. So stimmen beide Seiten beim realisierten Gewinn per
+  Konstruktion überein und nicht, weil zwei Ableitungen zufällig gleich ausgehen.
+- Identität: wie bei `investments` über `(platform, external_trade_id)`, wobei die
+  lokale UUID einspringt, wenn der Verkauf keine echte Marktplatz-Trade-ID trägt.
+  Ein erneuter Push aktualisiert damit, statt zu duplizieren.
+- Die Projektion der Zuordnungen in die Domänentabelle ist **best effort**:
+  `sale_allocations.investment_id` ist ein INT-Fremdschlüssel, das Desktop
+  adressiert Kaufzeilen aber per UUID. Die Brücke ist `sync_entities`
+  (`payload_json.serverId` der Investment-Zeile). Ist die Kaufzeile noch nicht
+  gesynct, wird die Zuordnung übersprungen statt der Push abgebrochen — der
+  Payload behält sie, es geht also nichts verloren.
+- `sale_allocations.buy_price_usd` wird beim Zuordnen kopiert, lokal wie auf dem
+  Server. Die Verwaltung erlaubt, Einstandspreise nachträglich zu setzen; ein
+  realisierter Gewinn darf sich dadurch nicht rückwirkend ändern.
 - Idempotency wird serverseitig ueber `(user_id, idempotency_key)` erzwungen.
 - Konflikte werden bei aelterer `clientRevision` als `status: "conflict"` je Change zurueckgegeben.
 - Pull liefert `serverTime`, `changes` und `count`.

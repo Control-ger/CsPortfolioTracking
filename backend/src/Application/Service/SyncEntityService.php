@@ -29,6 +29,7 @@ final class SyncEntityService
         return match ($table) {
             'investments' => $this->applyInvestmentChange($userId, $op, $entityId, $payload, $existingPayload),
             'watchlist_items' => $this->applyWatchlistChange($userId, $op, $entityId, $payload, $existingPayload),
+            'sales' => $this->applySaleChange($userId, $op, $entityId, $payload, $existingPayload),
             default => $payload,
         };
     }
@@ -304,6 +305,184 @@ final class SyncEntityService
         }
 
         return $merged;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    //  Sale changes
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Project a synced sale into the `sales` / `sale_allocations` domain tables.
+     *
+     * The authoritative copy of a sale is its payload in `sync_entities` — that
+     * is what round-trips between devices, allocations included. These domain
+     * rows exist so the server can *query* sales (realised P&L, wallet credit),
+     * and the allocation projection is therefore **best-effort**: an allocation
+     * whose purchase row has not synced yet is skipped rather than failing the
+     * push, because `sale_allocations.investment_id` is an INT foreign key while
+     * the desktop addresses purchase rows by local UUID.
+     */
+    private function applySaleChange(
+        int $userId,
+        string $op,
+        string $entityId,
+        array $payload,
+        array $existingPayload
+    ): array {
+        if ($op === 'delete') {
+            $this->deleteSaleForSync($userId, $entityId, $payload, $existingPayload);
+            return $existingPayload;
+        }
+
+        $resolvedName = trim((string) (
+            $payload['marketHashName'] ?? $payload['name'] ?? $existingPayload['name'] ?? ''
+        ));
+        if ($resolvedName === '') {
+            throw new \InvalidArgumentException('Sale sync upsert requires name or marketHashName.');
+        }
+
+        $itemId = $this->resolveItemIdForSync($payload, $resolvedName);
+        $platform = $this->normalizePlatform(
+            (string) ($payload['platform'] ?? $payload['source'] ?? $existingPayload['platform'] ?? 'desktop_sync')
+        );
+        $externalTradeId = $this->resolveExternalTradeId($entityId, $payload, $existingPayload);
+        $quantity = max(1, (int) ($payload['quantity'] ?? $existingPayload['quantity'] ?? 1));
+        $sellPriceUsd = (float) ($payload['sellPriceUsd'] ?? $existingPayload['sellPriceUsd'] ?? 0.0);
+        $soldAt = $this->normalizeDateTime((string) ($payload['soldAt'] ?? $existingPayload['soldAt'] ?? ''));
+
+        $mergedPayload = [...$existingPayload, ...$payload];
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO sales (user_id, item_id, quantity, sell_price_usd, platform, external_trade_id, sold_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                item_id = VALUES(item_id),
+                quantity = VALUES(quantity),
+                sell_price_usd = VALUES(sell_price_usd),
+                sold_at = VALUES(sold_at)'
+        );
+        $stmt->execute([$userId, $itemId, $quantity, $sellPriceUsd, $platform, $externalTradeId, $soldAt]);
+
+        $saleRow = $this->findSaleByExternalTrade($userId, $platform, $externalTradeId);
+        $serverId = $saleRow !== null ? (int) $saleRow['id'] : null;
+
+        if ($serverId !== null) {
+            $this->projectSaleAllocations($userId, $serverId, $mergedPayload);
+        }
+
+        return [
+            ...$mergedPayload,
+            'id' => $entityId,
+            'userId' => (string) $userId,
+            'itemId' => (string) $itemId,
+            'name' => $resolvedName,
+            'marketHashName' => $resolvedName,
+            'quantity' => $quantity,
+            'sellPriceUsd' => $sellPriceUsd,
+            'platform' => $platform,
+            'externalTradeId' => $externalTradeId,
+            'soldAt' => $soldAt,
+            'serverId' => $serverId,
+            'updatedAt' => gmdate('c'),
+        ];
+    }
+
+    /**
+     * Rewrite a sale's allocations from the payload the desktop computed.
+     *
+     * The desktop allocates FIFO and ships the result, so both sides agree by
+     * construction rather than by both re-deriving it. Allocations are replaced
+     * wholesale because a re-push carries the complete set.
+     */
+    private function projectSaleAllocations(int $userId, int $saleServerId, array $payload): void
+    {
+        $allocations = $payload['allocations'] ?? null;
+        if (!is_array($allocations)) {
+            return;
+        }
+
+        $this->pdo->prepare('DELETE FROM sale_allocations WHERE sale_id = ?')->execute([$saleServerId]);
+
+        $insert = $this->pdo->prepare(
+            'INSERT INTO sale_allocations (sale_id, investment_id, quantity, buy_price_usd)
+             VALUES (?, ?, ?, ?)'
+        );
+
+        foreach ($allocations as $allocation) {
+            if (!is_array($allocation)) {
+                continue;
+            }
+            $quantity = (int) ($allocation['quantity'] ?? 0);
+            $localInvestmentId = trim((string) ($allocation['investmentId'] ?? ''));
+            if ($quantity <= 0 || $localInvestmentId === '') {
+                continue;
+            }
+            $investmentServerId = $this->resolveServerInvestmentId($userId, $localInvestmentId);
+            if ($investmentServerId === null) {
+                // Purchase row not synced yet — skip rather than fail the push.
+                // The payload keeps the allocation, so nothing is lost.
+                continue;
+            }
+            $buyPriceUsd = isset($allocation['buyPriceUsd']) && is_numeric($allocation['buyPriceUsd'])
+                ? (float) $allocation['buyPriceUsd']
+                : null;
+            $insert->execute([$saleServerId, $investmentServerId, $quantity, $buyPriceUsd]);
+        }
+    }
+
+    /**
+     * Local investment UUID → server row id, via the sync ledger.
+     *
+     * `applyInvestmentChange` writes `serverId` back into the payload it returns,
+     * and SyncService stores that in `sync_entities` — so the ledger is the one
+     * place that knows both identities. Matching on `external_trade_id` would
+     * only work for rows whose trade id *is* the UUID (manual ones), not for
+     * CSFloat or SkinBaron rows that carry a real marketplace id.
+     */
+    private function resolveServerInvestmentId(int $userId, string $localInvestmentId): ?int
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT payload_json FROM sync_entities
+              WHERE user_id = ? AND entity_table = 'investments' AND entity_id = ? AND deleted = 0
+              LIMIT 1"
+        );
+        $stmt->execute([$userId, $localInvestmentId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return null;
+        }
+        $payload = $this->decodePayload((string) ($row['payload_json'] ?? '{}'));
+        return $this->extractPositiveInt($payload['serverId'] ?? null);
+    }
+
+    private function findSaleByExternalTrade(int $userId, string $platform, string $externalTradeId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, item_id, quantity, sell_price_usd, sold_at
+             FROM sales
+             WHERE user_id = ? AND platform = ? AND external_trade_id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$userId, $platform, $externalTradeId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row === false ? null : $row;
+    }
+
+    private function deleteSaleForSync(int $userId, string $entityId, array $payload, array $existingPayload): void
+    {
+        $platform = $this->normalizePlatform(
+            (string) ($payload['platform'] ?? $existingPayload['platform'] ?? 'desktop_sync')
+        );
+        $externalTradeId = $this->resolveExternalTradeId($entityId, $payload, $existingPayload);
+        // ON DELETE CASCADE clears the allocations with the sale.
+        $this->pdo
+            ->prepare('DELETE FROM sales WHERE user_id = ? AND platform = ? AND external_trade_id = ?')
+            ->execute([$userId, $platform, $externalTradeId]);
+    }
+
+    public function ensureSalesTable(): void
+    {
+        (new \App\Infrastructure\Persistence\Repository\SaleRepository($this->pdo))->ensureTable();
     }
 
     // ────────────────────────────────────────────────────────────────

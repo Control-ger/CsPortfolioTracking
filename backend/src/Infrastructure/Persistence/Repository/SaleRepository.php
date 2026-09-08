@@ -27,7 +27,11 @@ final class SaleRepository
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (item_id) REFERENCES items(id),
             INDEX idx_user_item (user_id, item_id),
-            INDEX idx_sold_at (sold_at)
+            INDEX idx_sold_at (sold_at),
+            -- Identity bridge for the sync entity, mirroring `investments`:
+            -- the desktop's local UUID lands here when a sale carries no real
+            -- marketplace trade id, so a re-push updates instead of duplicating.
+            UNIQUE KEY uq_sale_external_trade (platform, external_trade_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
@@ -54,6 +58,10 @@ final class SaleRepository
             sale_id       INT NOT NULL,
             investment_id INT NOT NULL,
             quantity      INT NOT NULL,
+            -- Captured when the allocation is made, never read back off the
+            -- purchase row: the management UI lets a lot be re-priced later, and
+            -- a realised gain must not change retroactively when it is.
+            buy_price_usd DECIMAL(10,2) NULL,
             created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (sale_id)       REFERENCES sales(id)       ON DELETE CASCADE,
             FOREIGN KEY (investment_id) REFERENCES investments(id),
@@ -97,14 +105,14 @@ final class SaleRepository
         }
     }
 
-    public function createAllocation(int $saleId, int $investmentId, int $quantity): void
+    public function createAllocation(int $saleId, int $investmentId, int $quantity, ?float $buyPriceUsd = null): void
     {
-        $sql = 'INSERT INTO sale_allocations (sale_id, investment_id, quantity)
-                VALUES (?, ?, ?)';
+        $sql = 'INSERT INTO sale_allocations (sale_id, investment_id, quantity, buy_price_usd)
+                VALUES (?, ?, ?, ?)';
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$saleId, $investmentId, $quantity]);
+            $stmt->execute([$saleId, $investmentId, $quantity, $buyPriceUsd]);
         } catch (Throwable $exception) {
             RepositoryObservability::queryFailed(
                 self::class,
@@ -146,8 +154,9 @@ final class SaleRepository
     {
         $sql = 'SELECT
                     s.sell_price_usd * s.quantity AS revenue,
-                    SUM(inv.buy_price_usd * sa.quantity) AS cost,
-                    (s.sell_price_usd * s.quantity) - SUM(inv.buy_price_usd * sa.quantity) AS pnl
+                    SUM(COALESCE(sa.buy_price_usd, inv.buy_price_usd) * sa.quantity) AS cost,
+                    (s.sell_price_usd * s.quantity)
+                        - SUM(COALESCE(sa.buy_price_usd, inv.buy_price_usd) * sa.quantity) AS pnl
                 FROM sales s
                 JOIN sale_allocations sa ON sa.sale_id = s.id
                 JOIN investments inv ON inv.id = sa.investment_id

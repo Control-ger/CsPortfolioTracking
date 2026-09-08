@@ -112,9 +112,10 @@ Run before every push, alongside `npm run lint`:
   (same prepare/run/get/all shape, plus a small `transaction()` shim) on an
   in-memory database. It checks the FIFO order across lots, that purchase rows
   stay untouched, importer deduplication, over-sale reporting, that deleting a
-  sale releases its allocations, and that no sale op is queued while
-  `SALE_SYNC_ENABLED` is off. Exits non-zero on the first failing expectation.
-  Not part of CI yet — it is a developer command until the server side lands.
+  sale releases its allocations, that the pull path applies allocations verbatim
+  without re-logging an operation, and that the dirty-row backfill enqueues once
+  and skips pulled rows. Sixteen checks; exits non-zero on the first failure.
+  Not part of CI: it needs `node:sqlite`, which is still flagged experimental.
 - `npm run i18n:guard` — catalogue integrity. Two things neither ESLint nor the
   build can see, because a missing translation key is not a syntax error — it
   renders as the raw key path in the UI:

@@ -10,17 +10,17 @@ import {
 /**
  * Whether a sale mutation is queued for the sync push.
  *
- * Off until the server understands the entity. `desktopSync.mapOperationToSyncChange`
- * maps only `investment` and `watchlist_item`; anything else is **retired** — marked
- * applied and discarded — so that a block of unmappable ops cannot occupy the
- * oldest-first push window. Queuing sales now would therefore throw them away
- * silently, and the server would never learn about sales recorded in the meantime.
+ * On since the server carries the entity: `SyncService::ALLOWED_TABLES` accepts
+ * `sales` and `SyncEntityService::applySaleChange` projects it into the domain
+ * tables. `desktopSync.mapOperationToSyncChange` maps `sale` → `sales`.
  *
- * Nothing is lost while this is off: `sales.dirty` is the durable "not yet pushed"
- * marker. Turning this on is one half of the server-side slice; the other half is a
- * one-off backfill that enqueues an op for every row still marked dirty.
+ * It was off while only the local half existed, because `mapOperationToSyncChange`
+ * **retires** — marks applied and discards — any entity type it cannot map, so
+ * queueing sales then would have destroyed them silently. Rows recorded in that
+ * window carry `dirty = 1` and no operation; `enqueueDirtySaleOperations` picks
+ * them up once, so nothing written before the server side landed is stranded.
  */
-export const SALE_SYNC_ENABLED = false;
+export const SALE_SYNC_ENABLED = true;
 
 /**
  * Sell tracking — local write path.
@@ -236,8 +236,23 @@ export function createSalesStore(db, deps = {}) {
           outstanding -= take;
         }
 
+        // Allocations travel with the sale. Re-running FIFO on the pulling
+        // device would have to reproduce this exact split from the same rows in
+        // the same order; carrying it makes both devices agree on realised P&L
+        // by construction instead of by coincidence.
+        const allocations = db
+          .prepare(
+            `SELECT investment_id AS investmentId, quantity, buy_price_usd AS buyPriceUsd
+               FROM sale_allocations WHERE sale_id = ?`,
+          )
+          .all(id);
+        db.prepare("UPDATE sales SET payload = ? WHERE id = ?").run(
+          serialize({ ...payload, allocations, unallocatedQuantity: outstanding }),
+          id,
+        );
+
         if (SALE_SYNC_ENABLED) {
-          appendOperationToLog(db, "upsert", "sale", id, { ...payload, userId, quantity, soldAt }, userId);
+          appendOperationToLog(db, "upsert", "sale", id, { ...payload, userId, quantity, soldAt, allocations, unallocatedQuantity: outstanding }, userId);
         }
         return outstanding;
       });
@@ -290,6 +305,152 @@ export function createSalesStore(db, deps = {}) {
             GROUP BY a.investment_id`,
         )
         .all(scope);
+    },
+
+    getSale(id) {
+      return mapSale(db.prepare("SELECT * FROM sales WHERE id = ? LIMIT 1").get(String(id)));
+    },
+
+    /**
+     * Apply pulled sales. Silent by design: the pull must not re-log operations
+     * it just received, or every pull would push the same rows straight back.
+     *
+     * Allocations come from the payload rather than being re-derived — see
+     * `recordSale`. A pulled sale therefore reproduces the originating device's
+     * split exactly, including one it could not fully allocate.
+     */
+    importSales(rows = [], userId = "1") {
+      const scope = normalizeLocalUserId(userId);
+      const now = nowIso();
+      const list = Array.isArray(rows) ? rows : [];
+      const write = db.transaction(() => {
+        let imported = 0;
+        for (const row of list) {
+          const id = String(row?.id || "").trim();
+          if (!id) {
+            continue;
+          }
+          db.prepare(
+            `INSERT INTO sales (
+              id, server_id, item_id, user_id, name, quantity, sell_price_usd,
+              platform, external_trade_id, sold_at, payload, revision, dirty,
+              deleted, created_at, updated_at
+            ) VALUES (
+              @id, @serverId, @itemId, @userId, @name, @quantity, @sellPriceUsd,
+              @platform, @externalTradeId, @soldAt, @payload, @revision, 0,
+              0, @createdAt, @updatedAt
+            )
+            ON CONFLICT(id) DO UPDATE SET
+              server_id = COALESCE(@serverId, sales.server_id),
+              item_id = COALESCE(@itemId, sales.item_id),
+              name = @name,
+              quantity = @quantity,
+              sell_price_usd = @sellPriceUsd,
+              platform = @platform,
+              external_trade_id = @externalTradeId,
+              sold_at = @soldAt,
+              payload = @payload,
+              revision = @revision,
+              dirty = 0,
+              deleted = 0,
+              updated_at = @updatedAt`,
+          ).run({
+            id,
+            serverId: row?.serverId ?? row?.server_id ?? null,
+            itemId: row?.itemId ? String(row.itemId) : null,
+            userId: scope,
+            name: String(row?.name || ""),
+            quantity: Math.max(1, Number(row?.quantity || 1)),
+            sellPriceUsd:
+              row?.sellPriceUsd === undefined
+                ? (row?.sellPrice ?? null)
+                : Number(row.sellPriceUsd),
+            platform: String(row?.platform || "manual").toLowerCase(),
+            externalTradeId: row?.externalTradeId ? String(row.externalTradeId) : null,
+            soldAt: String(row?.soldAt || row?.sold_at || now),
+            payload: serialize(row || {}),
+            revision: Number(row?.revision || 1),
+            createdAt: row?.createdAt || now,
+            updatedAt: row?.updatedAt || now,
+          });
+
+          db.prepare("DELETE FROM sale_allocations WHERE sale_id = ?").run(id);
+          const allocations = Array.isArray(row?.allocations) ? row.allocations : [];
+          for (const allocation of allocations) {
+            const investmentId = String(allocation?.investmentId || "").trim();
+            const quantity = Number(allocation?.quantity || 0);
+            if (!investmentId || !(quantity > 0)) {
+              continue;
+            }
+            db.prepare(
+              `INSERT INTO sale_allocations
+                 (id, sale_id, investment_id, quantity, buy_price_usd, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+            ).run(
+              randomUUID(),
+              id,
+              investmentId,
+              quantity,
+              allocation?.buyPriceUsd ?? null,
+              now,
+            );
+          }
+          imported += 1;
+        }
+        return imported;
+      });
+      return { imported: write() };
+    },
+
+    /** Delete without logging an operation — for the pull path. */
+    deleteSaleSilent(id) {
+      db.prepare(
+        "UPDATE sales SET deleted = 1, dirty = 0, updated_at = ? WHERE id = ?",
+      ).run(nowIso(), String(id));
+      return { id: String(id) };
+    },
+
+    /**
+     * Enqueue a push operation for every sale that never reached the server.
+     * Runs once when sale sync is switched on: rows recorded while it was off
+     * carry `dirty = 1` and no operation, so without this they would stay on the
+     * device forever.
+     */
+    enqueueDirtySaleOperations(userId = "1") {
+      if (!SALE_SYNC_ENABLED) {
+        return { enqueued: 0 };
+      }
+      const scope = normalizeLocalUserId(userId);
+      const rows = db
+        .prepare("SELECT * FROM sales WHERE user_id = ? AND dirty = 1 ORDER BY sold_at")
+        .all(scope);
+      const write = db.transaction(() => {
+        let enqueued = 0;
+        for (const row of rows) {
+          const pending = db
+            .prepare(
+              `SELECT 1 FROM operations_log
+                WHERE entity_type = 'sale' AND entity_id = ? AND applied_at IS NULL
+                LIMIT 1`,
+            )
+            .get(row.id);
+          if (pending) {
+            continue;
+          }
+          const sale = mapSale(row);
+          appendOperationToLog(
+            db,
+            row.deleted ? "delete" : "upsert",
+            "sale",
+            row.id,
+            { ...sale, userId: scope },
+            scope,
+          );
+          enqueued += 1;
+        }
+        return enqueued;
+      });
+      return { enqueued: write() };
     },
 
     /** Sales not yet pushed — the backfill's input once sale sync is enabled. */

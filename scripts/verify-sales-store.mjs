@@ -100,13 +100,39 @@ store.deleteSale(r3.sale.id, U);
 check("delete frees allocations", store.listConsumedQuantities(U).map((r) => [r.investmentId, Number(r.consumedQuantity)]).sort(), [["a", 2], ["b", 2]]);
 
 // 6. operations_log carries every mutation for the sync push.
-// 6. Sale ops stay out of the push queue until the server understands the
-//    entity — desktopSync retires unknown types, which would discard them.
-//    `dirty` carries the pending state instead.
-check("no sale ops queued while sync is off", raw.prepare("SELECT COUNT(*) AS n FROM operations_log").get().n, 0);
+// 6. Every mutation reaches the push queue, deletes included — a tombstone has
+//    to travel or the other device keeps a sale this one removed.
+check("mutations queue push ops", raw.prepare("SELECT op_type FROM operations_log WHERE entity_type = 'sale' ORDER BY rowid").all().map((r) => r.op_type), ["upsert", "upsert", "delete"]);
 //    Two rows: the live sale, plus the deleted one — a tombstone has to reach
 //    the server too, so the backfill must not filter deleted rows out.
 check("dirty covers live rows and tombstones", store.listDirtySales(U).length, 2);
+
+// 7. Allocations travel in the payload, so a pulling device reproduces the
+//    originating device's split instead of re-deriving it.
+const payloadOf = (id) => JSON.parse(raw.prepare("SELECT payload FROM sales WHERE id = ?").get(id).payload);
+check("payload carries the allocations", payloadOf(r1.sale.id).allocations.map((a) => [a.investmentId, a.quantity]).sort(), [["a", 2], ["b", 2]]);
+
+// 8. Sync is on now, so a mutation queues an operation for the push.
+check("recordSale queues a push op", raw.prepare("SELECT COUNT(*) AS n FROM operations_log WHERE entity_type = 'sale'").get().n > 0, true);
+
+// 9. The pull path applies a sale verbatim, allocations included, and must not
+//    re-log an operation — otherwise every pull would push the same row back.
+const opsBeforePull = raw.prepare("SELECT COUNT(*) AS n FROM operations_log").get().n;
+store.importSales([{
+  id: "pulled-1", name: "Fever Case", itemId: "item-1", quantity: 1,
+  sellPriceUsd: 9, soldAt: "2026-06-01T00:00:00Z", platform: "steam", revision: 3,
+  allocations: [{ investmentId: "c", quantity: 1, buyPriceUsd: 3 }],
+}], U);
+check("pull applies the allocation verbatim", store.listSaleAllocations("pulled-1").map((a) => [a.investmentId, a.quantity, a.buyPriceUsd]), [["c", 1, 3]]);
+check("pull logs no operation", raw.prepare("SELECT COUNT(*) AS n FROM operations_log").get().n, opsBeforePull);
+check("pulled row is not dirty", store.getSale("pulled-1").dirty, false);
+
+// 10. The backfill enqueues only rows that never reached the server, and only once.
+raw.prepare("DELETE FROM operations_log").run();
+const first = store.enqueueDirtySaleOperations(U).enqueued;
+const second = store.enqueueDirtySaleOperations(U).enqueued;
+check("backfill enqueues dirty rows once", [first > 0, second], [true, 0]);
+check("backfill skips the pulled row", raw.prepare("SELECT COUNT(*) AS n FROM operations_log WHERE entity_id = 'pulled-1'").get().n, 0);
 
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join(", ")}` : "\nall checks passed");
 process.exit(fail.length ? 1 : 0);
