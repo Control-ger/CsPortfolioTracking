@@ -134,5 +134,28 @@ const second = store.enqueueDirtySaleOperations(U).enqueued;
 check("backfill enqueues dirty rows once", [first > 0, second], [true, 0]);
 check("backfill skips the pulled row", raw.prepare("SELECT COUNT(*) AS n FROM operations_log WHERE entity_id = 'pulled-1'").get().n, 0);
 
+// 11. The importer contract: the shape `mapCsFloatPreviewTradeToSale` emits has
+//     to be exactly what `recordSale` consumes. core.js cannot be imported here
+//     (it reads `window` and `import.meta.env` at module scope), so the shape is
+//     mirrored — keep the two in step when either changes.
+const importerShaped = {
+  id: "csfloat-sale-T99",
+  name: "Fever Case",
+  marketHashName: "Fever Case",
+  quantity: 1,
+  sellPriceUsd: 7.5,
+  soldAt: "2026-07-01T00:00:00Z",
+  platform: "csfloat",
+  externalTradeId: "T99",
+  imageUrl: null,
+  floatValue: null,
+  paintSeed: null,
+  itemId: "item-1",
+  userId: U,
+};
+const imported = store.recordSale(importerShaped);
+check("importer shape records a sale", [imported.sale.name, imported.sale.sellPriceUsd, imported.sale.platform], ["Fever Case", 7.5, "csfloat"]);
+check("importer re-run deduplicates", store.recordSale(importerShaped).duplicate, true);
+
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join(", ")}` : "\nall checks passed");
 process.exit(fail.length ? 1 : 0);

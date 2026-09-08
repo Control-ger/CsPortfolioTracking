@@ -541,6 +541,43 @@ export function mapCsFloatPreviewTradeToInvestment(trade) {
   };
 }
 
+/**
+ * A `type: "sell"` preview trade → a `recordSale` input.
+ *
+ * The backend normaliser is direction-agnostic and emits buy-shaped field names
+ * for both directions: on a sell trade, `buyPriceUsd` carries the *sale* price
+ * and `purchasedAt` the *sale* date. The values are right for whichever
+ * direction was requested; only the names are misleading, which is exactly why
+ * this mapping is explicit rather than a spread.
+ */
+export function mapCsFloatPreviewTradeToSale(trade) {
+  const name = trade?.marketHashName || trade?.name || "Unknown Item";
+  const sellPriceUsd = Number(
+    trade?.sellPriceUsd ?? trade?.buyPriceUsd ?? trade?.buyPrice ?? 0,
+  );
+  const soldAt = trade?.soldAt || trade?.purchasedAt || null;
+  const fallbackKey = `fallback-${stableHash(
+    `${name}|${soldAt || ""}|${sellPriceUsd}|${Number(trade?.quantity || 1)}`,
+  )}`;
+  const stableTradeKey = String(
+    trade?.externalTradeId || trade?.id || trade?.tradeId || fallbackKey,
+  );
+
+  return {
+    id: `csfloat-sale-${stableTradeKey}`,
+    name,
+    marketHashName: name,
+    quantity: Number(trade?.quantity || 1),
+    sellPriceUsd,
+    soldAt,
+    platform: "csfloat",
+    externalTradeId: trade?.externalTradeId || stableTradeKey,
+    imageUrl: trade?.imageUrl || null,
+    floatValue: trade?.floatValue ?? trade?.float ?? null,
+    paintSeed: trade?.paintSeed ?? trade?.patternSeed ?? null,
+  };
+}
+
 export function mapSkinBaronPreviewSaleToInvestment(sale) {
   const name = sale?.marketHashName || sale?.name || "Unknown Item";
   const buyPriceUsd = Number(sale?.buyPriceUsd ?? sale?.buyPrice ?? sale?.price ?? 0);

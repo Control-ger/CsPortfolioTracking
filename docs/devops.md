@@ -114,7 +114,11 @@ Run before every push, alongside `npm run lint`:
   stay untouched, importer deduplication, over-sale reporting, that deleting a
   sale releases its allocations, that the pull path applies allocations verbatim
   without re-logging an operation, and that the dirty-row backfill enqueues once
-  and skips pulled rows. Sixteen checks; exits non-zero on the first failure.
+  and skips pulled rows, plus the importer contract (the shape
+  `mapCsFloatPreviewTradeToSale` emits is what `recordSale` consumes — that
+  shape is mirrored in the script because `core.js` reads `window` at module
+  scope and cannot be imported under node). Eighteen checks; exits non-zero
+  on the first failure.
   Not part of CI: it needs `node:sqlite`, which is still flagged experimental.
 - `npm run i18n:guard` — catalogue integrity. Two things neither ESLint nor the
   build can see, because a missing translation key is not a syntax error — it

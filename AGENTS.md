@@ -92,6 +92,8 @@ Full reference: `docs/local-db-schema.md` §2.1. Rationale: `docs/wallet-cost-ba
 - **Sales sync as their own entity** (`sale` → table `sales`). The allocations travel *in the payload*; the pulling device applies them verbatim instead of re-running FIFO, so two devices agree on realised P&L by construction. The server-side projection of allocations is best-effort — `sale_allocations.investment_id` is an INT FK while the desktop uses UUIDs, and the bridge is `sync_entities.payload_json.serverId`.
 - `importSales` (pull) is **silent** — it logs no operation. A pull that re-logged what it received would push the same rows straight back.
 - `enqueueDirtySaleOperations` runs at the start of every push and picks up rows written while `SALE_SYNC_ENABLED` was still off. Do not remove it while any install can still hold such rows.
+- **Every sale goes through `recordSale`**, importer or manual alike, so FIFO allocation, deduplication and the sync queue behave the same regardless of origin. `executeCsFloatSalesSync` is the CSFloat path.
+- The CSFloat preview normaliser is **direction-agnostic and emits buy-shaped names**: on a `type: "sell"` trade, `buyPriceUsd` holds the sale price and `purchasedAt` the sale date. `mapCsFloatPreviewTradeToSale` renames them explicitly — do not spread that payload into a sale.
 
 ### Backend Data Rules
 - **Currency**: USD persisted, EUR computed at runtime.

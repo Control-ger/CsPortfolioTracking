@@ -5,6 +5,7 @@ import {
   applyDesktopSkinBaronPreviewDeduplication,
   buildExistingInvestmentLookup,
   mapCsFloatPreviewTradeToInvestment,
+  mapCsFloatPreviewTradeToSale,
   mapSkinBaronPreviewSaleToInvestment,
   resolveExistingCsFloatInvestmentMatch,
   resolveExistingSkinBaronInvestmentMatch,
@@ -27,6 +28,71 @@ export async function fetchCsFloatTradeSyncPreview(payload = {}) {
     }),
   });
   return applyDesktopCsFloatPreviewDeduplication(previewResponse);
+}
+
+/**
+ * Import CSFloat *sales*.
+ *
+ * `/v1/me/trades` serves both directions and the backend already accepts
+ * `type: "sell"` — it simply had no consumer, because the portfolio only ever
+ * modelled purchases. Sales are recorded through the same `recordSale` path a
+ * manual entry uses, so FIFO allocation, deduplication and the sync queue behave
+ * identically no matter where a sale came from.
+ *
+ * Desktop only: `recordSale` writes to the local store, which is the write owner.
+ */
+export async function executeCsFloatSalesSync(payload = {}) {
+  const localStore = getDesktopLocalStore();
+  if (!localStore || typeof localStore.recordSale !== "function") {
+    return { success: false, error: "Sales import is only available in the desktop app." };
+  }
+
+  const preview = await fetchCsFloatTradeSyncPreview({ ...payload, type: "sell" });
+  const currentUser = await getCurrentUser();
+  const userId = resolveDesktopLocalUserId(currentUser);
+  const trades = Array.isArray(preview?.data?.importTrades)
+    ? preview.data.importTrades
+    : Array.isArray(preview?.data?.sampleTrades)
+      ? preview.data.sampleTrades
+      : [];
+
+  let recorded = 0;
+  let duplicates = 0;
+  let unallocated = 0;
+  const unmatched = [];
+
+  for (const trade of trades) {
+    if (String(trade?.status || "").toLowerCase() === "excluded") {
+      continue;
+    }
+
+    const saleInput = mapCsFloatPreviewTradeToSale(trade);
+    const result = unwrapLocalStoreResult(
+      await localStore.recordSale({ ...saleInput, userId }),
+      "local-store-record-sale",
+    );
+
+    if (result?.duplicate) {
+      duplicates += 1;
+      continue;
+    }
+    recorded += 1;
+    // A sale the portfolio cannot fully cover is kept, not dropped — the item
+    // may predate the portfolio. Report it so the UI can say so rather than
+    // silently showing a realised gain computed from nothing.
+    if (Number(result?.unallocated || 0) > 0) {
+      unallocated += Number(result.unallocated);
+      unmatched.push({ name: saleInput.name, quantity: Number(result.unallocated) });
+    }
+  }
+
+  try {
+    await runDesktopSyncNowIfDue({ force: true });
+  } catch (syncError) {
+    console.warn("[desktop-sync] csfloat sales execute sync failed", syncError);
+  }
+
+  return { success: true, recorded, duplicates, unallocated, unmatched };
 }
 
 export async function executeCsFloatTradeSync(payload = {}) {
