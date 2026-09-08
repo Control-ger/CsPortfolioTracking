@@ -220,7 +220,8 @@
     "featureLocalFirst": "Local-first: your data stays on your device",
     "connecting": "Connecting to Steam…",
     "signIn": "Sign in with Steam",
-    "signInSubtitle": "Connect your Steam account to track your CS2 portfolio and investments."
+    "signInSubtitle": "Connect your Steam account to track your CS2 portfolio and investments.",
+    "ready": "Ready"
   },
   "errors": {
     "uiTitle": "UI error",

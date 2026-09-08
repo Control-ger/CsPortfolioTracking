@@ -220,7 +220,8 @@
     "featurePrices": "Preise und Portfolio-Wert verfolgen",
     "featureLocalFirst": "Local-first: Deine Daten bleiben auf deinem Gerät",
     "connecting": "Verbinde mit Steam…",
-    "signIn": "Mit Steam anmelden"
+    "signIn": "Mit Steam anmelden",
+    "ready": "Bereit"
   },
   "errors": {
     "uiTitle": "UI-Fehler",

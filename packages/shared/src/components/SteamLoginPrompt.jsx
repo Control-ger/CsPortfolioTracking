@@ -722,7 +722,7 @@ export function SteamLoginPrompt({ onLoginSuccess }) {
     setSetupProgress({
       total: steps.length,
       completed,
-      currentStep: "Bereit",
+      currentStep: t("steamLogin.ready"),
       targetPercent: 100,
       inProgress: false,
       done: true,

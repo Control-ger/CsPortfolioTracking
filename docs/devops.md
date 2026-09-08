@@ -143,8 +143,34 @@ name or a unit, and this codebase legitimately renders "CSFloat", "ROI" and
 is gated by `i18n:guard`'s German check instead, which stays actionable
 because it ignores the ~120 legitimate English literals entirely.
 
+## Build flags and artifacts
+
+- **Sourcemaps are development-only.** `vite.config.js` sets
+  `sourcemap: mode !== "production"`. It was unconditionally `true`, so a
+  production build emitted a `.map` beside every chunk — the complete frontend
+  source, served from the deployed web app. `npm run dev` is `vite build
+  --watch`, which defaults to mode `production`, so the dev script passes
+  `--mode development` explicitly to keep its maps. Check with
+  `ls dist/assets/*.map` after `npm run build:web`: it must find nothing.
+- **Build-time feature flags** are `VITE_*` variables parsed through
+  `isFlagEnabled` (`packages/shared/src/lib/envFlags.js`), which accepts
+  `1/true/yes/on` and treats everything else as off. They are read statically at
+  each call site so Vite can inline them. `import.meta.env.DEV` is **not** usable
+  as a gate here — it is false in the dev workflow too, for the mode reason
+  above. Current flags, both defaulting to off and documented in `.env.example`:
+  - `VITE_WATCHLIST_BUYORDER_DEBUG` — the raw diagnostic line under the
+    buy-order inspector (source, pages fetched, error codes).
+  - `VITE_DESIGN_CATALOGUE` — re-opens `#/design` in a web build. The route is
+    always mounted in the desktop app.
+
 ## CI workflows
 
+- `.github/workflows/frontend-guards.yml` — runs on PRs and pushes to main, two
+  jobs. `i18n-guard` runs `npm run i18n:guard` **without** an install (the script
+  only uses `node:fs`/`node:path`), so it reports in seconds; it fails on a key
+  that resolves nowhere or is missing from English. `lint` runs `npm ci` plus
+  `npm run lint` and gates on **errors only** — `i18next/no-literal-string` is a
+  warning and still reports ~110 legitimate literals.
 - `.github/workflows/desktop-release.yml` — runs on every `v*` tag and on `workflow_dispatch`.
   Builds Windows (`build-and-release` job on `windows-2025`) and Linux (`build-linux` job on
   `ubuntu-latest`, runs after the Windows job), fetching the bundled PHP first, then attaching

@@ -63,7 +63,7 @@ All color gradients (shells, sidebar, hero, panels) MUST use the avatar-derived 
 - Static fallback gradients only when avatar data is unavailable.
 
 ### Frontend Design System
-Full reference: `docs/design-system.md`. Live catalogue: route `#/design`.
+Full reference: `docs/design-system.md`. Live catalogue: route `#/design` — mounted in the desktop app, and in a web build only behind `VITE_DESIGN_CATALOGUE`, so the deployed web app does not expose it.
 - Build views from `packages/shared/src/components/ui/` — import via the barrel (`@shared/components/ui`), not deep paths.
 - **Colour is tokens only.** No `text-slate-300`, `bg-emerald-500/12`, `border-white/15`. Tokens flip with the `dark` class, so tokenised code needs almost no `dark:` variants. The only literals allowed are modal scrims (`bg-black/70`) and dark-only elevation (`dark:shadow-*`, `dark:backdrop-blur`).
 - Semantic status meaning comes from the tone vocabulary in `ui/tone.js` (`success`/`warn`/`info`/`danger`/`muted`), via `toneText`/`toneFill`/`toneTint`/`toneTintSurface`. Use `toneForDelta()` for signed numbers instead of an ad-hoc `>= 0` comparison.
@@ -79,6 +79,8 @@ Full reference: `docs/architecture-overview.md` §5.6.
 - **Never key state or grouping on a translated label.** Use `resolveItemCategoryKey`, not `resolveItemCategory(...).toLowerCase()` — a filter keyed on the label resets itself on a language switch.
 - **Counts go through i18next plurals** (`_one`/`_other`), never a hand-rolled `n === 1 ? … : …`.
 - `DesignSystemPage.jsx` (builder's tool) and `csUpdatesFeed.mock.js` (fixtures) are deliberately untranslated.
+- **The sweep is complete.** `i18n:guard` reports 0 errors and only false positives as warnings (key names that read as German such as `buyorders`, internal data keys like `payload.wert`, a cache-key constant). Both guards run in CI via `.github/workflows/frontend-guards.yml`, so a regression fails the build rather than waiting for someone to run them.
+- **Do not gate UI on `import.meta.env.DEV`.** `npm run dev` is `vite build --watch` in mode `production`, so `DEV` is false there too. Developer-only output goes behind a `VITE_*` flag read through `isFlagEnabled` (`@shared/lib/envFlags`); see `docs/devops.md` → Build flags and artifacts.
 
 ### Backend Data Rules
 - **Currency**: USD persisted, EUR computed at runtime.

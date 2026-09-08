@@ -30,15 +30,18 @@ The following files are not present in current repo root anymore:
 
 ## 3. Residual Cleanup Items
 
-1. Remove dead frontend legacy helper:
-- `packages/shared/src/hooks/ajax.jsx` still references `/api/getPortfolioData.php` but is not used.
+1. ~~Remove dead frontend legacy helper `packages/shared/src/hooks/ajax.jsx`.~~
+   **Done** — the file no longer exists; no shared/frontend code references a
+   legacy `/api/*.php` endpoint.
 
-2. Align overpay endpoint contract:
-- frontend `apiClient` contains `/api/v1/portfolio/investments/{id}/overpay`
-- route is currently not registered in `backend/public/index.php`
-- either add backend route or remove client call path.
+2. ~~Align overpay endpoint contract.~~
+   **Done** — `PUT /api/v1/portfolio/investments/{id}/overpay` is registered in
+   `backend/src/routes.php` (the route table moved out of the front controller),
+   so the client call path and the server route match.
 
-3. Decide whether `backend/index.php` compatibility wrapper should remain permanently or be retired after deployment policy confirms no direct dependency.
+3. **Open.** Decide whether the `backend/index.php` compatibility wrapper should
+   remain permanently or be retired once deployment policy confirms no direct
+   dependency. It is still a four-line `require` of `backend/public/index.php`.
 
 ## 4. Done Criteria for this document
 

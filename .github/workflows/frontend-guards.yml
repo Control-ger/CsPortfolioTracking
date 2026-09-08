@@ -1,0 +1,50 @@
+name: Frontend Guards
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  # The catalogue guard is dependency-free (node:fs / node:path only), so it
+  # runs without an install and reports in seconds. It fails on a key that
+  # resolves nowhere or is missing from English — the two cases that render a
+  # raw key path in the UI instead of text.
+  i18n-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Run i18n guard
+        run: npm run i18n:guard
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Errors only. `i18next/no-literal-string` is configured as a warning and
+      # still reports ~110 legitimate literals (units, "N/A", symbols), so
+      # failing on warnings would gate every change on noise.
+      - name: Run ESLint
+        run: npm run lint
