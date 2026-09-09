@@ -222,14 +222,36 @@ badge call sites, then the column itself.
    i.e. the rework is a no-op until the user supplies wallet data.
 5. Gross and net figures remain available side by side on every surface.
 
-## 6. Open questions
+## 6. Decided: one factor per platform (2026-09-09)
+
+CSFloat, SkinBaron and the Steam wallet are separate pools with separate fee
+profiles, so the factor is `factor(platform, t)`, not one blended number.
+Consequences the implementation has to carry:
+
+- **Deposits carry a platform.** A deposit funds one marketplace wallet; it never
+  raises the cost of items bought elsewhere.
+- **A sale credits the wallet it happened on, and a purchase draws from the
+  wallet it happened on** — which are not always the same wallet. An item bought
+  on CSFloat and sold on SkinBaron takes its cost basis from CSFloat's factor at
+  purchase time and adds its proceeds to SkinBaron's credit side. Treating the
+  two as one pool is exactly the error this decision avoids.
+- **A platform with no recorded deposits has factor 1.0.** Unknown-but-neutral,
+  which keeps acceptance criterion 4 true: a portfolio with no wallet data has a
+  cost basis equal to `totalInvested`.
+- `investments.platform` and `sales.platform` already exist and are normalised
+  (`normalizePlatform`), so the grouping key is available on both sides.
+- The Steam wallet is a special case worth naming: it cannot be withdrawn from,
+  so money entering it is effectively spent on the platform. That does not change
+  the factor's arithmetic, but it does mean a Steam deposit is never recoverable
+  and the distinction may matter for how the figure is *presented*.
+
+## 7. Open questions
 
 1. Does the wallet balance itself need to be a tracked figure, or is the factor
    enough? A balance would let the app reconcile against the marketplace and
-   catch a missing deposit.
-2. Multi-marketplace: CSFloat, SkinBaron and the Steam wallet are separate pools
-   with separate fee profiles. One factor per platform, or one blended factor?
-   Per-platform is more accurate and matches how the fees differ.
-3. What happens to positions purchased before the first recorded deposit? Factor
-   1.0 (treat as unknown-but-neutral) is the safe default and keeps criterion 4
-   true.
+   catch a missing deposit. Per-platform factors make this more valuable, not
+   less: there are now three places a missing deposit can silently distort a
+   cost basis instead of one.
+2. Is a deposit ever *withdrawn* again? A withdrawal removes credit that was
+   paid for, so ignoring it would leave the factor overstated for everything
+   bought afterwards.
