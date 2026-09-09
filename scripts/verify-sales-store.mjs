@@ -13,6 +13,7 @@
  */
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { calculateNetProceeds, calculateRealisedPnl, summariseRealisedPnl } from "../packages/shared/src/lib/saleCalculations.js";
 import { createSalesStore } from "../apps/desktop/src/localStore/sales.js";
 
 // better-sqlite3 shim: node:sqlite has the same prepare/run/get/all shape but
@@ -199,6 +200,53 @@ check("no sales leaves rows untouched", applySoldQuantities(heldRows, []), heldR
 check("partial consumption reduces", applySoldQuantities(heldRows, [{ investmentId: "b", consumedQuantity: 2 }]).map((r) => [r.id, r.quantity]), [["a", 2], ["b", 3], ["c", 1]]);
 check("fully consumed row is dropped", applySoldQuantities(heldRows, [{ investmentId: "a", consumedQuantity: 2 }]).map((r) => r.id), ["b", "c"]);
 check("over-consumption never goes negative", applySoldQuantities(heldRows, [{ investmentId: "c", consumedQuantity: 9 }]).map((r) => r.id), ["a", "b"]);
+
+// 13. Realised P&L. Pure functions with no browser dependencies, so they are
+//     imported directly rather than extracted from source.
+const fees = { sellerFeePercent: 2, withdrawalFeePercent: 2.5 };
+
+// Seller fee first, withdrawal on what is left — the backend's order.
+check("net proceeds order", calculateNetProceeds(100, fees), 100 * 0.98 * 0.975);
+check("no fees is a pass-through", calculateNetProceeds(100, {}), 100);
+check("comma decimals are honoured", calculateNetProceeds(100, { sellerFeePercent: "2,5" }), 97.5);
+check("non-positive gross is zero", [calculateNetProceeds(0, fees), calculateNetProceeds(-5, fees)], [0, 0]);
+
+// Fully allocated: 2 units bought at 1.00, sold at 3.00.
+const full = calculateRealisedPnl(
+  { quantity: 2, sellPriceUsd: 3 },
+  [{ quantity: 2, buyPriceUsd: 1 }],
+  {},
+);
+check("fully allocated cost", full.costUsd, 2);
+check("fully allocated gross profit", full.grossProfitUsd, 4);
+check("fully allocated ROI", full.roiPercent, 200);
+
+// Fees reduce the realised gain, never the cost basis.
+const withFees = calculateRealisedPnl({ quantity: 2, sellPriceUsd: 3 }, [{ quantity: 2, buyPriceUsd: 1 }], fees);
+check("net profit is after fees", withFees.netProfitUsd, 6 * 0.98 * 0.975 - 2);
+check("cost basis is untouched by fees", withFees.costUsd, 2);
+
+// Half allocated: only the covered half may be compared against its cost.
+const partial = calculateRealisedPnl(
+  { quantity: 4, sellPriceUsd: 3 },
+  [{ quantity: 2, buyPriceUsd: 1 }],
+  {},
+);
+check("partial reports the gap", [partial.allocatedQuantity, partial.unallocatedQuantity], [2, 4 - 2]);
+check("partial compares only the covered half", partial.grossProfitUsd, 12 * 0.5 - 2);
+check("partial ROI is not inflated", partial.roiPercent, 200);
+check("partial still reports full proceeds", partial.grossUsd, 12);
+
+// No allocation at all: proceeds exist, ROI does not.
+const none = calculateRealisedPnl({ quantity: 1, sellPriceUsd: 5 }, [], {});
+check("unallocated sale has no ROI", none.roiPercent, null);
+check("unallocated sale keeps its proceeds", none.grossUsd, 5);
+
+const total = summariseRealisedPnl([full, partial, none]);
+check("summary adds proceeds", total.grossUsd, 6 + 12 + 5);
+check("summary adds cost", total.costUsd, 2 + 2);
+check("summary carries the gap", total.unallocatedQuantity, 2 + 1);
+check("empty summary has no ROI", summariseRealisedPnl([]).roiPercent, null);
 
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join(", ")}` : "\nall checks passed");
 process.exit(fail.length ? 1 : 0);

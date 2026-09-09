@@ -3,7 +3,8 @@
   "scope": {
     "investments": "Investments",
     "inventory": "Inventar",
-    "everything": "Alles"
+    "everything": "Alles",
+    "sold": "Verkauft"
   },
   "sort": {
     "positionValue": "Positionswert",
@@ -280,5 +281,19 @@
     "failed": "Der Verkauf konnte nicht erfasst werden.",
     "partial": "Erfasst. {{count}} Stück konnten keinem Kauf zugeordnet werden — das Portfolio hält sie nicht.",
     "acknowledge": "Verstanden"
+  },
+  "sold": {
+    "quantity": "Menge",
+    "costBasis": "Einstand",
+    "proceeds": "Erlös (netto)",
+    "realised": "Realisiert",
+    "soldAt": "Verkauft",
+    "empty": "Noch keine Verkäufe erfasst.",
+    "unmatched_one": "{{count}} Stück ohne Kauf",
+    "unmatched_other": "{{count}} Stück ohne Kauf",
+    "totalLabel_one": "{{count}} Verkauf",
+    "totalLabel_other": "{{count}} Verkäufe",
+    "summary_one": "{{count}} Verkauf · geschlossene Positionen",
+    "summary_other": "{{count}} Verkäufe · geschlossene Positionen"
   }
 }

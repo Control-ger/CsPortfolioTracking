@@ -119,7 +119,7 @@ Run before every push, alongside `npm run lint`:
   shape is mirrored in the script because `core.js` reads `window` at module
   scope and cannot be imported under node), and the derived-holdings helper
   `applySoldQuantities`, extracted from `desktopDataMerge.js` the same way.
-  Twenty-nine checks; exits non-zero on the first failure. Several cover
+  Forty-eight checks; exits non-zero on the first failure. Several cover
   *state transitions* rather than single operations (import → delete →
   re-import; push without a following pull) — a code review found bugs in
   exactly those sequences while every single-operation check passed.

@@ -3,7 +3,8 @@
   "scope": {
     "investments": "Investments",
     "inventory": "Inventory",
-    "everything": "Everything"
+    "everything": "Everything",
+    "sold": "Sold"
   },
   "sort": {
     "positionValue": "Position value",
@@ -280,5 +281,19 @@
     "failed": "The sale could not be recorded.",
     "partial": "Recorded. {{count}} unit(s) could not be matched to a purchase — the portfolio does not hold them.",
     "acknowledge": "Got it"
+  },
+  "sold": {
+    "quantity": "Qty",
+    "costBasis": "Cost basis",
+    "proceeds": "Proceeds (net)",
+    "realised": "Realised",
+    "soldAt": "Sold",
+    "empty": "No sales recorded yet.",
+    "unmatched_one": "{{count}} unit without a purchase",
+    "unmatched_other": "{{count}} units without a purchase",
+    "totalLabel_one": "{{count}} sale",
+    "totalLabel_other": "{{count}} sales",
+    "summary_one": "{{count}} sale · closed positions",
+    "summary_other": "{{count}} sales · closed positions"
   }
 }

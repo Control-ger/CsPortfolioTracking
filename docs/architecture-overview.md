@@ -166,6 +166,21 @@ unreported skip would leave the server's realised figure quietly short with
 nothing to notice it by. Not yet handled: such an allocation is not
 automatically retried.
 
+**The sold scope renders its own table.** `SoldPositionsTable` is reached through
+the inventory scope rail but is not a filter over investments: a closed position
+has no live price and no unrealised ROI, and showing those columns empty would
+imply the numbers exist. Its columns are cost basis, net proceeds, realised
+result and sale date, and the inspector column is hidden in that scope because it
+could never fill. Sorting and the category filter are hidden for the same reason
+— both act on investments.
+
+Realised P&L lives once, in `packages/shared/src/lib/saleCalculations.js`,
+mirroring `FeeCalculationService`. `FeeSettingsSection`'s net-proceeds preview now
+reads from it too, so the seller-then-withdrawal fee order has one definition
+rather than three. A partly allocated sale compares only its covered part against
+its cost — dividing full proceeds by an understated basis would report a return
+that never happened.
+
 **A pushed sale is marked as pushed, not merely dequeued.** `markOperationApplied`
 closes the `operations_log` entry; a sale additionally carries its own `dirty`
 marker that `enqueueDirtySaleOperations` reads, so the push success path calls

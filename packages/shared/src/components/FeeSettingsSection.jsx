@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { calculateNetProceeds } from "@shared/lib/saleCalculations.js";
 
 import { Skeleton } from "@shared/components/ui/skeleton";
 import { StatusPill } from "@shared/components/ui/status-pill";
@@ -43,11 +44,6 @@ const FEE_FIELDS = [
   },
 ];
 
-const percent = (value) => {
-  const parsed = Number(String(value ?? "").replace(",", "."));
-  return Number.isFinite(parsed) ? Math.max(0, parsed) / 100 : 0;
-};
-
 /**
  * Fees have no save button of their own — they belong to the page-level dirty
  * set and are saved from the header ("Änderungen speichern"), matching the
@@ -71,10 +67,10 @@ export function FeeSettingsSection({ form, source, loading, saving, error, succe
     );
   }
 
-  // Mirrors FeeCalculationService::calculateNetProceeds — seller fee first, the
-  // withdrawal fee on what is left. The FX and deposit fees are acquisition-side
-  // and deliberately not part of this preview.
-  const netOnHundred = 100 * (1 - percent(form.sellerFeePercent)) * (1 - percent(form.withdrawalFeePercent));
+  // Shared with the sold view and mirroring FeeCalculationService — see
+  // saleCalculations.js. Acquisition-side fees (FX, deposit) are deliberately
+  // not part of this preview.
+  const netOnHundred = calculateNetProceeds(100, form);
 
   return (
     <SettingsCard id="settings-section-fees">

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { List, Package, TrendingUp } from "lucide-react";
+import { List, Package, Receipt, TrendingUp } from "lucide-react";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { SegmentedControl } from "./ui/segmented-control.jsx";
 import {
@@ -20,6 +20,11 @@ import { useCurrency } from "@shared/contexts/CurrencyContext";
 import { resolveItemCategory, resolveItemCategoryKey } from "../lib/portfolioCalculations.js";
 
 import { getActiveIntlLocale } from "@shared/lib/i18n/index.js";
+const SoldPositionsTable = lazy(() =>
+  import("./SoldPositionsTable.jsx").then((module) => ({
+    default: module.SoldPositionsTable,
+  })),
+);
 const InventoryTable = lazy(() =>
   import("./InventoryTable.jsx").then((module) => ({
     default: module.InventoryTable,
@@ -42,6 +47,9 @@ const SCOPES = [
   { key: "investment", labelKey: "scope.investments", Icon: TrendingUp },
   { key: "inventory", labelKey: "scope.inventory", Icon: Package },
   { key: "all", labelKey: "scope.everything", Icon: List },
+  // Closed positions. Not a filter over investments but a different entity —
+  // see SoldPositionsTable for why it cannot share the inventory columns.
+  { key: "sold", labelKey: "scope.sold", Icon: Receipt },
 ];
 
 const SORTS = [
@@ -100,6 +108,9 @@ export function PortfolioInventorySection({
   onExcludeChange,
   onBucketChange,
   onRecordSale,
+  sales = [],
+  saleAllocationsBySaleId = {},
+  feeSettings = {},
   canToggleExclude,
   canToggleBucket,
   onModalExcludeToggle,
@@ -118,13 +129,18 @@ export function PortfolioInventorySection({
   // Scope counts have to come from the unfiltered rows — `inventoryTabItems` is
   // already narrowed to the active scope, so it can only ever count itself.
   const scopeCounts = useMemo(() => {
-    const counts = { investment: 0, inventory: 0, all: 0 };
+    const counts = { investment: 0, inventory: 0, all: 0, sold: 0 };
     (Array.isArray(enrichedInvestments) ? enrichedInvestments : []).forEach((item) => {
       counts.all += 1;
       counts[resolveRowBucket(item)] += 1;
     });
+    // Sales are their own entity, so they are counted separately rather than
+    // derived from the investment rows — a closed position no longer has one.
+    counts.sold = Array.isArray(sales) ? sales.length : 0;
     return counts;
-  }, [enrichedInvestments]);
+  }, [enrichedInvestments, sales]);
+
+  const showSold = inventoryScope === "sold";
 
   const scopedGroups = useMemo(
     () =>
@@ -228,7 +244,7 @@ export function PortfolioInventorySection({
           </div>
         </FilterGroup>
 
-        {categories.length > 1 ? (
+        {!showSold && categories.length > 1 ? (
           <FilterGroup label={t("filters.category")}>
             <div className="flex flex-wrap gap-1">
               <FilterChip
@@ -251,6 +267,7 @@ export function PortfolioInventorySection({
           </FilterGroup>
         ) : null}
 
+        {showSold ? null : (
         <FilterGroup label={t("filters.sorting")}>
           <div className="flex flex-col">
             {SORTS.map((sort) => (
@@ -265,6 +282,7 @@ export function PortfolioInventorySection({
             ))}
           </div>
         </FilterGroup>
+        )}
 
         {activeCategory !== ALL_CATEGORIES ? (
           <p className="text-[10.5px] leading-[1.5] text-muted-foreground">
@@ -278,15 +296,17 @@ export function PortfolioInventorySection({
           <div>
             <h3 className="text-xl font-extrabold tracking-[-0.01em] sm:text-2xl">{t("title")}</h3>
             <p className="mt-[7px] text-xs text-muted-foreground">
-              {t("summary", {
-                scope: scopeLabel,
-                positions: filteredItems.length,
-                groups:
-                  visibleGroups.length > 0
-                    ? t("groupsSuffix", { count: visibleGroups.length })
-                    : "",
-                value: formatPrice(totalScopeValue),
-              })}
+              {showSold
+                ? t("sold.summary", { count: Array.isArray(sales) ? sales.length : 0 })
+                : t("summary", {
+                    scope: scopeLabel,
+                    positions: filteredItems.length,
+                    groups:
+                      visibleGroups.length > 0
+                        ? t("groupsSuffix", { count: visibleGroups.length })
+                        : "",
+                    value: formatPrice(totalScopeValue),
+                  })}
             </p>
           </div>
 
@@ -331,7 +351,15 @@ export function PortfolioInventorySection({
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_356px]">
+        {/* The inspector belongs to held positions: it shows a live price and a
+            price trend, neither of which a closed position has. In the sold
+            scope it could never fill, so the table takes the full width
+            instead of leaving a permanently empty column. */}
+        <div
+          className={`grid grid-cols-1 items-start gap-4 ${
+            showSold ? "" : "lg:grid-cols-[minmax(0,1fr)_356px]"
+          }`}
+        >
           <div className="min-w-0">
             <Suspense
               fallback={
@@ -342,6 +370,13 @@ export function PortfolioInventorySection({
                 </div>
               }
             >
+              {showSold ? (
+                <SoldPositionsTable
+                  sales={sales}
+                  allocationsBySaleId={saleAllocationsBySaleId}
+                  feeSettings={feeSettings}
+                />
+              ) : (
               <InventoryTable
                 investments={filteredItems}
                 groups={visibleGroups}
@@ -360,13 +395,16 @@ export function PortfolioInventorySection({
                   Array.isArray(inventoryTabItems) ? inventoryTabItems.length : 0
                 }
               />
+              )}
             </Suspense>
           </div>
 
           {/* Visible from md, because that is where the mobile detail modal stops
               firing (BREAKPOINTS.MOBILE = 768). Between md and lg it sits under
               the table; from lg it becomes the right-hand column. */}
-          <div className="hidden md:block lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto">
+          <div
+            className={`${showSold ? "hidden" : "hidden md:block"} lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto`}
+          >
             <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-[14px]" />}>
               <ItemDetailPanel
                 item={selectedItemWithLiveAndBuyOrders || selectedItem}

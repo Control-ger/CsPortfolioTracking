@@ -34,7 +34,9 @@ import {
   searchWatchlistItems,
   updatePortfolioGroupsSetting,
   updateInvestmentBucket,
+  fetchFeeSettings,
 } from "../lib/apiClient";
+import { unwrapLocalStoreResult } from "@shared/lib/localStoreResult.js";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
   buildPortfolioAllocationByType,
@@ -1525,6 +1527,65 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     setCompositionRefreshToken((current) => current + 1);
   };
 
+  // Closed positions. Desktop-only, because the local store is the write owner
+  // and the server has no read path for sales.
+  const [sales, setSales] = useState([]);
+  const [saleAllocationsBySaleId, setSaleAllocationsBySaleId] = useState({});
+  const [saleFeeSettings, setSaleFeeSettings] = useState({});
+
+  const refreshSales = useCallback(async () => {
+    const localStore = window.electronAPI?.localStore;
+    if (typeof localStore?.listSales !== "function") {
+      return;
+    }
+    try {
+      const currentUser = await getCurrentUser();
+      const userId = resolveDesktopRuntimeUserId(currentUser);
+      const rows = unwrapLocalStoreResult(
+        await localStore.listSales(userId),
+        "local-store-list-sales",
+      );
+      const list = Array.isArray(rows) ? rows : [];
+      setSales(list);
+
+      // Allocations carry the lot cost captured at sale time, which is what the
+      // realised figure is computed against — never the purchase row as it
+      // stands now.
+      const byId = {};
+      for (const sale of list) {
+        byId[sale.id] = unwrapLocalStoreResult(
+          await localStore.listSaleAllocations(sale.id),
+          "local-store-list-sale-allocations",
+        );
+      }
+      setSaleAllocationsBySaleId(byId);
+    } catch (salesError) {
+      console.warn("[portfolio] sales load failed", salesError);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSales();
+  }, [refreshSales]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetchFeeSettings();
+        if (!cancelled) {
+          setSaleFeeSettings(response?.data || {});
+        }
+      } catch {
+        // Defaults (no fees) are a safe fallback: the gross figure is still
+        // right, only the net one is unreduced, and that is visible.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   /**
    * Record a sale of the selected position.
    *
@@ -1549,6 +1610,7 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
     });
 
     await refreshPortfolio();
+    await refreshSales();
     setCompositionRefreshToken((current) => current + 1);
     return result?.data ?? result;
   };
@@ -5293,6 +5355,9 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
             onExcludeChange={handleExcludeChange}
             onBucketChange={handleMoveItemBucket}
             onRecordSale={handleRecordSale}
+            sales={sales}
+            saleAllocationsBySaleId={saleAllocationsBySaleId}
+            feeSettings={saleFeeSettings}
             canToggleExclude={
               isDesktopRuntime &&
               selectedItemWithLiveAndBuyOrders?.__detailKind !== "group" &&
