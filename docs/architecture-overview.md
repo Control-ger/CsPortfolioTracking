@@ -111,7 +111,7 @@ This document tracks:
 |---|---|---|---|
 | Investments + watchlist | Desktop | local SQLite + synced server DB | Desktop + Web |
 | Sales (sell tracking) | Desktop | local SQLite + synced server DB (`sales`, `sale_allocations`) | Desktop |
-| Wallet events (deposits/withdrawals) | Desktop | local SQLite **only, for now** (`wallet_events`) | Desktop |
+| Wallet events (deposits/withdrawals) | Desktop | local SQLite + synced server DB (`wallet_events`) | Desktop |
 | Prices | Server workers | server DB | Web + Desktop (via sidecar/upstream) |
 | Import execution (Steam/CSFloat) | Desktop-initiated | Desktop + server processing path | Desktop |
 | Steam/CSFloat secrets | Desktop only | Local Secret Vault (app-password wrapped, main-memory unlock session) | Desktop only |
@@ -159,6 +159,11 @@ Three properties that shape everything downstream:
   a sale credits the wallet it happened on, and those are not always the same —
   an item bought on CSFloat and sold on SkinBaron takes its basis from one and
   credits the other.
+
+It syncs as its own entity (`wallet_event` → `wallet_events`), identified by the
+desktop's local UUID in `client_id`: unlike a sale there is no marketplace trade
+id to borrow, and the key is `(user_id, client_id)` — scoped from the start,
+unlike the one `investments` carries.
 
 **Platform values are pooled, not taken literally.** Importers write a row's
 *source*, and that vocabulary differs from how a user names a wallet: a

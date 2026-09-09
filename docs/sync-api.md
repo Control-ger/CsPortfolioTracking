@@ -83,7 +83,17 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
 ## Implementierungsstand (2026-05-05)
 
 - `GET /api/v1/sync/pull` und `POST /api/v1/sync/push` sind in `backend/public/index.php` registriert.
-- Push-Validierung akzeptiert die Tabellen `investments`, `watchlist_items` und `sales`.
+- Push-Validierung akzeptiert die Tabellen `investments`, `watchlist_items`,
+  `sales` und `wallet_events`.
+
+### Wallet-Bewegungen (`wallet_events`)
+
+- Entity-Typ im lokalen `operations_log`: `wallet_event`, abgebildet auf die
+  Tabelle `wallet_events`.
+- Eine Zeile für beide Richtungen: Einzahlung positiv, Auszahlung negativ.
+- Identität über `client_id` — die lokale UUID. Anders als bei Verkäufen gibt es
+  keine Marktplatz-Trade-ID zum Ausleihen, und anders als bei `investments` ist
+  der Schlüssel von Anfang an über `(user_id, client_id)` nutzergescoped.
 
 ### Verkäufe (`sales`)
 

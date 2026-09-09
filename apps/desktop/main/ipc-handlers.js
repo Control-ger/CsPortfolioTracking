@@ -460,6 +460,10 @@ export function registerAllIpcHandlers() {
   safeLocalStoreInvoke("local-store-record-wallet-event", (store, payload) => store.recordWalletEvent(payload));
   safeLocalStoreInvoke("local-store-list-wallet-events", (store, userId, platform) => store.listWalletEvents(userId, platform));
   safeLocalStoreInvoke("local-store-delete-wallet-event", (store, id, userId) => store.deleteWalletEvent(id, userId));
+  safeLocalStoreInvoke("local-store-import-wallet-events", (store, rows, userId) => store.importWalletEvents(rows, userId));
+  safeLocalStoreInvoke("local-store-delete-wallet-event-silent", (store, id) => store.deleteWalletEventSilent(id));
+  safeLocalStoreInvoke("local-store-mark-wallet-event-pushed", (store, id, at) => store.markWalletEventPushed(id, at));
+  safeLocalStoreInvoke("local-store-enqueue-dirty-wallet", (store, userId) => store.enqueueDirtyWalletOperations(userId));
   safeLocalStoreInvoke("local-store-list-watchlist", (store, userId) => store.listWatchlistItems(userId));
   safeLocalStoreInvoke("local-store-import-watchlist", (store, rows, userId) => store.importWatchlistItems(rows, userId));
   safeLocalStoreInvoke("local-store-upsert-watchlist-item", (store, payload) => store.upsertWatchlistItem(payload));

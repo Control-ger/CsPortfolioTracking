@@ -91,6 +91,8 @@ Full reference: `docs/wallet-cost-basis-plan.md`, `docs/architecture-overview.md
 - **Pool platform values, do not take them literally.** Importers write a row's *source* (`steam_inventory`), a user names a wallet (`steam`). `WALLET_POOLS` maps them together; without it a deposit never reaches the purchases it funded.
 - **Do not record a withdrawal fee as a wallet event fee.** It is already deducted from sale proceeds by `calculateNetProceeds`; `fee_usd` is acquisition-side only.
 - A balance the replay cannot support is clamped at zero with a neutral factor and flagged — never carried negative.
+- **Amounts persist as USD, so the conversion happens at input** — which makes "has the live rate arrived?" a precondition. The form refuses to submit while `ratesLoading`; writing against `FALLBACK_EXCHANGE_RATES` stores a number the user never typed and silently distorts every purchase the deposit funded.
+- Wallet events sync as `wallet_event` → `wallet_events`, keyed on `(user_id, client_id)` with the local UUID. `markWalletEventPushed` clears `dirty` on push success — never leave that to a pull.
 
 ### Sell Tracking
 Full reference: `docs/local-db-schema.md` §2.1. Rationale: `docs/wallet-cost-basis-plan.md`.

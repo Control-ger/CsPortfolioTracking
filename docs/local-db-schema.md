@@ -110,10 +110,11 @@ cost basis. An entry with amount 0 and a balance is a pure reconciliation point
 **Do not record a withdrawal fee here.** It is already taken off the proceeds
 side by `calculateNetProceeds`; `fee_usd` is for acquisition-side cost only.
 
-`WALLET_SYNC_ENABLED` is **off** until the server carries the entity, for the
-same reason sell tracking's flag was: `desktopSync` retires an entity type it
-cannot map, so queueing these now would discard them. `dirty` carries the
-pending state, `enqueueDirtyWalletOperations` picks it up later.
+`WALLET_SYNC_ENABLED` is **on**: the server accepts the table and
+`applyWalletEventChange` projects it. Rows written while it was off carry
+`dirty = 1` and no operation; `enqueueDirtyWalletOperations` runs at the start
+of every push and picks them up, and `markWalletEventPushed` clears the marker
+on success — never left to a pull to clear as a side effect.
 
 ## 3. Notification Persistence
 

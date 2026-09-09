@@ -31,6 +31,7 @@ final class SyncEntityService
             'investments' => $this->applyInvestmentChange($userId, $op, $entityId, $payload, $existingPayload),
             'watchlist_items' => $this->applyWatchlistChange($userId, $op, $entityId, $payload, $existingPayload),
             'sales' => $this->applySaleChange($userId, $op, $entityId, $payload, $existingPayload),
+            'wallet_events' => $this->applyWalletEventChange($userId, $op, $entityId, $payload, $existingPayload),
             default => $payload,
         };
     }
@@ -306,6 +307,87 @@ final class SyncEntityService
         }
 
         return $merged;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    //  Wallet events
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Project a synced wallet event into the `wallet_events` domain table.
+     *
+     * A deposit is a positive `amount_usd` and a withdrawal a negative one, so
+     * both directions share one row shape. Identity is the desktop's local UUID
+     * in `client_id`: unlike a sale there is no marketplace trade id to borrow,
+     * and unlike `investments` the key is scoped by user from the start.
+     */
+    private function applyWalletEventChange(
+        int $userId,
+        string $op,
+        string $entityId,
+        array $payload,
+        array $existingPayload
+    ): array {
+        if ($op === 'delete') {
+            $this->pdo
+                ->prepare('DELETE FROM wallet_events WHERE user_id = ? AND client_id = ?')
+                ->execute([$userId, $entityId]);
+            return $existingPayload;
+        }
+
+        $merged = [...$existingPayload, ...$payload];
+        $platform = $this->normalizePlatform((string) ($merged['platform'] ?? 'manual'));
+        $amountUsd = (float) ($merged['amountUsd'] ?? 0.0);
+        $feeUsd = max(0.0, (float) ($merged['feeUsd'] ?? 0.0));
+        $balanceAfter = isset($merged['balanceAfterUsd']) && is_numeric($merged['balanceAfterUsd'])
+            ? (float) $merged['balanceAfterUsd']
+            : null;
+        $occurredAt = $this->normalizeDateTime((string) ($merged['occurredAt'] ?? ''));
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO wallet_events
+                (user_id, client_id, platform, amount_usd, fee_usd, balance_after_usd, occurred_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                platform = VALUES(platform),
+                amount_usd = VALUES(amount_usd),
+                fee_usd = VALUES(fee_usd),
+                balance_after_usd = VALUES(balance_after_usd),
+                occurred_at = VALUES(occurred_at)'
+        );
+        $stmt->execute([$userId, $entityId, $platform, $amountUsd, $feeUsd, $balanceAfter, $occurredAt]);
+
+        return [
+            ...$merged,
+            'id' => $entityId,
+            'userId' => (string) $userId,
+            'platform' => $platform,
+            'amountUsd' => $amountUsd,
+            'feeUsd' => $feeUsd,
+            'balanceAfterUsd' => $balanceAfter,
+            'occurredAt' => $occurredAt,
+            'updatedAt' => gmdate('c'),
+        ];
+    }
+
+    public function ensureWalletEventsTable(): void
+    {
+        $this->pdo->exec(
+            "CREATE TABLE IF NOT EXISTS wallet_events (
+                id                INT AUTO_INCREMENT PRIMARY KEY,
+                user_id           INT           NOT NULL,
+                client_id         VARCHAR(191)  NOT NULL,
+                platform          VARCHAR(64)   NOT NULL,
+                amount_usd        DECIMAL(12,4) NOT NULL,
+                fee_usd           DECIMAL(12,4) NOT NULL DEFAULT 0,
+                balance_after_usd DECIMAL(12,4) NULL,
+                occurred_at       TIMESTAMP     NOT NULL,
+                created_at        TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_wallet_events_replay (user_id, platform, occurred_at),
+                UNIQUE KEY uq_wallet_event_client (user_id, client_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
     }
 
     // ────────────────────────────────────────────────────────────────

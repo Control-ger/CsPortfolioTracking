@@ -13,6 +13,7 @@ final class SyncService
         'investments' => true,
         'watchlist_items' => true,
         'sales' => true,
+        'wallet_events' => true,
     ];
 
     public function __construct(
@@ -62,6 +63,7 @@ final class SyncService
         $this->syncEntityService->ensureWatchlistTable();
         // After investments: `sales` carries foreign keys into it and into `items`.
         $this->syncEntityService->ensureSalesTable();
+        $this->syncEntityService->ensureWalletEventsTable();
 
         $normalizedChanges = $this->normalizeChanges($changes);
         $results = [];

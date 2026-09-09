@@ -10,13 +10,12 @@ import {
 /**
  * Whether a wallet-event mutation is queued for the sync push.
  *
- * Off until the server carries the entity. `desktopSync.mapOperationToSyncChange`
- * **retires** — marks applied and discards — any entity type it cannot map, so
- * queueing these now would destroy them silently. `wallet_events.dirty` is the
- * durable pending marker meanwhile, and `enqueueDirtyWalletOperations` picks
- * them up once the server side lands. Same shape as sell tracking took.
+ * On since the server carries the entity: `SyncService::ALLOWED_TABLES` accepts
+ * `wallet_events` and `applyWalletEventChange` projects it. Rows written while
+ * this was off carry `dirty = 1` and no operation, and
+ * `enqueueDirtyWalletOperations` picks them up on the next push.
  */
-export const WALLET_SYNC_ENABLED = false;
+export const WALLET_SYNC_ENABLED = true;
 
 /** Amounts below this are treated as zero — a pure reconciliation entry. */
 const AMOUNT_EPSILON = 1e-9;
@@ -169,6 +168,76 @@ export function createWalletStore(db) {
         return true;
       });
       return { id: String(id), deleted: remove() };
+    },
+
+    /**
+     * Apply pulled events. Silent: a pull that re-logged what it received would
+     * push the same rows straight back.
+     */
+    importWalletEvents(rows = [], userId = "1") {
+      const scope = normalizeLocalUserId(userId);
+      const now = nowIso();
+      const write = db.transaction(() => {
+        let imported = 0;
+        for (const row of Array.isArray(rows) ? rows : []) {
+          const id = String(row?.id || "").trim();
+          if (!id) {
+            continue;
+          }
+          db.prepare(
+            `INSERT INTO wallet_events (
+              id, server_id, user_id, platform, amount_usd, fee_usd,
+              balance_after_usd, note, occurred_at, payload, revision, dirty,
+              deleted, created_at, updated_at
+            ) VALUES (
+              @id, @serverId, @userId, @platform, @amountUsd, @feeUsd,
+              @balanceAfterUsd, @note, @occurredAt, @payload, @revision, 0,
+              0, @createdAt, @updatedAt
+            )
+            ON CONFLICT(id) DO UPDATE SET
+              server_id = COALESCE(@serverId, wallet_events.server_id),
+              platform = @platform,
+              amount_usd = @amountUsd,
+              fee_usd = @feeUsd,
+              balance_after_usd = @balanceAfterUsd,
+              note = @note,
+              occurred_at = @occurredAt,
+              payload = @payload,
+              revision = @revision,
+              dirty = 0,
+              deleted = 0,
+              updated_at = @updatedAt`,
+          ).run({
+            id,
+            serverId: row?.serverId ?? null,
+            userId: scope,
+            platform: String(row?.platform || "manual").toLowerCase(),
+            amountUsd: Number(row?.amountUsd || 0),
+            feeUsd: Math.max(0, Number(row?.feeUsd || 0)),
+            balanceAfterUsd:
+              row?.balanceAfterUsd === undefined || row?.balanceAfterUsd === null
+                ? null
+                : Number(row.balanceAfterUsd),
+            note: row?.note ? String(row.note) : null,
+            occurredAt: String(row?.occurredAt || now),
+            payload: serialize(row || {}),
+            revision: Number(row?.revision || 1),
+            createdAt: row?.createdAt || now,
+            updatedAt: row?.updatedAt || now,
+          });
+          imported += 1;
+        }
+        return imported;
+      });
+      return { imported: write() };
+    },
+
+    /** Delete without logging an operation — for the pull path. */
+    deleteWalletEventSilent(id) {
+      db.prepare(
+        "UPDATE wallet_events SET deleted = 1, dirty = 0, updated_at = ? WHERE id = ?",
+      ).run(nowIso(), String(id));
+      return { id: String(id) };
     },
 
     /** Clear the pending marker once the server has accepted the event. */
