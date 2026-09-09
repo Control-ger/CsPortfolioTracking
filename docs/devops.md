@@ -129,7 +129,8 @@ Run before every push, alongside `npm run lint`:
   `docs/wallet-cost-basis-plan.md` §2.1, including the two the superseded
   cumulative formula got wrong — a deposit fee reaching the item's basis, and a
   drain-and-refill at a changed fee rate — which are pinned so the correction
-  cannot silently regress.
+  cannot silently regress. Also pins the platform pooling, without which a
+  Steam deposit would never reach a `steam_inventory` purchase.
 - `npm run i18n:guard` — catalogue integrity. Two things neither ESLint nor the
   build can see, because a missing translation key is not a syntax error — it
   renders as the raw key path in the UI:

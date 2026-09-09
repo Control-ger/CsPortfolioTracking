@@ -160,6 +160,12 @@ Three properties that shape everything downstream:
   an item bought on CSFloat and sold on SkinBaron takes its basis from one and
   credits the other.
 
+**Platform values are pooled, not taken literally.** Importers write a row's
+*source*, and that vocabulary differs from how a user names a wallet: a
+Steam-imported purchase carries `steam_inventory` while someone recording a
+Steam deposit picks `steam`. `WALLET_POOLS` maps them onto one pool, without
+which the deposit would never reach the purchases it funded.
+
 A balance the replay cannot support (a missing deposit) is clamped at zero with
 a neutral factor and flagged, rather than carried negative into figures that
 would be nonsensical rather than merely incomplete.

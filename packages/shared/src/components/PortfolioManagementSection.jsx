@@ -1,5 +1,6 @@
 import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { WalletEventsSection } from "./WalletEventsSection.jsx";
 import { Check, Info, Link2, Search } from "lucide-react";
 import { Badge } from "./ui/badge.jsx";
 import { Button } from "./ui/button.jsx";
@@ -103,13 +104,16 @@ const GROUP_COLOR_TEXT = {
   muted: "text-muted-foreground",
 };
 
-// The five Verwaltung tabs, in the order the design presents them.
+// The Verwaltung tabs, in the order the design presents them.
 const MANAGEMENT_TABS = [
   { value: "matching", labelKey: "tabs.matching" },
   { value: "prices", labelKey: "tabs.prices" },
   { value: "exclude", labelKey: "tabs.exclude" },
   { value: "groups", labelKey: "tabs.groups" },
   { value: "create", labelKey: "tabs.create" },
+  // Wallet events sit here because they are portfolio bookkeeping, not a
+  // setting: they change what purchases cost. See docs/wallet-cost-basis-plan.md.
+  { value: "wallet", labelKey: "tabs.wallet" },
 ];
 
 // Point value each reason code contributes — kept in lockstep with the scorer in
@@ -317,6 +321,10 @@ const SkinBaronSalesSyncModal = lazy(() =>
  * Accepts all state and callbacks from PortfolioPage.jsx as props.
  */
 export function PortfolioManagementSection({
+  walletEvents = [],
+  walletFactors = {},
+  onRecordWalletEvent,
+  onDeleteWalletEvent,
   // Render control
   forceMount,
 
@@ -1862,6 +1870,15 @@ export function PortfolioManagementSection({
           ) : null}
 
           {/* === CREATE (MANUAL ITEM) SECTION === */}
+          {managementSection === "wallet" ? (
+            <WalletEventsSection
+              events={walletEvents}
+              factors={walletFactors}
+              onRecord={onRecordWalletEvent}
+              onDelete={onDeleteWalletEvent}
+            />
+          ) : null}
+
           {managementSection === "create" ? (
             <Card>
               <CardHeader>

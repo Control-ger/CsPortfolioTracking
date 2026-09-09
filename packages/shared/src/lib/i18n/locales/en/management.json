@@ -8,7 +8,8 @@
     "prices": "Prices",
     "exclude": "Exclude",
     "groups": "Groups",
-    "create": "Add"
+    "create": "Add",
+    "wallet": "Wallet"
   },
   "source": {
     "steamSync": "Steam sync",

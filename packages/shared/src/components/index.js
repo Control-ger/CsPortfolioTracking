@@ -13,6 +13,7 @@ export { ExcludeInvestmentDialog } from './ExcludeInvestmentDialog.jsx';
 export { FeeSettingsSection } from './FeeSettingsSection.jsx';
 export { InventoryTable } from './InventoryTable.jsx';
 export { SoldPositionsTable } from './SoldPositionsTable.jsx';
+export { WalletEventsSection } from './WalletEventsSection.jsx';
 export { ItemDetailPanel } from './ItemDetailPanel.jsx';
 export { ItemDetailsModal } from './ItemDetailsModal.jsx';
 export { ItemListRow } from './ItemListRow.jsx';

@@ -17,8 +17,23 @@ function toNumber(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+/**
+ * The wallet pool a platform value belongs to.
+ *
+ * Importers write the *source* of a row, not the wallet it was paid from, and
+ * the two are not the same vocabulary: a Steam-imported purchase carries
+ * `steam_inventory` while a user recording a Steam deposit naturally picks
+ * `steam`. Left unmapped those are separate pools, and the deposit would never
+ * reach the purchases it funded.
+ */
+const WALLET_POOLS = {
+  steam_inventory: "steam",
+  steam_market: "steam",
+};
+
 function normalizePlatform(value) {
-  return String(value || "manual").trim().toLowerCase();
+  const key = String(value || "manual").trim().toLowerCase();
+  return WALLET_POOLS[key] || key;
 }
 
 /** Sortable instant; unparseable dates sort last rather than crashing the fold. */

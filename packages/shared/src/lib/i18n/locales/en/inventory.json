@@ -295,5 +295,32 @@
     "totalLabel_other": "{{count}} sales",
     "summary_one": "{{count}} sale · closed positions",
     "summary_other": "{{count}} sales · closed positions"
+  },
+  "wallet": {
+    "title": "Wallet events",
+    "hint": "Deposits and withdrawals per marketplace. They set what your purchases actually cost — a deposit fee is part of the price of what it funded.",
+    "platform": "Platform",
+    "direction": "Direction",
+    "deposit": "Deposit",
+    "withdrawal": "Withdrawal",
+    "reconciliation": "Balance check",
+    "amount": "Amount ({{currency}})",
+    "amountShort": "Amount",
+    "fee": "Fee ({{currency}})",
+    "feeSuffix": "+{{value}} fee",
+    "feeWithdrawalHint": "A withdrawal fee is already deducted from sale proceeds.",
+    "balanceAfter": "Balance afterwards ({{currency}})",
+    "balanceShort": "Balance",
+    "optional": "optional",
+    "occurredAt": "Date",
+    "submit": "Record event",
+    "saving": "Saving…",
+    "empty": "No wallet events recorded yet.",
+    "balance": "Balance {{value}}",
+    "missingDeposit": "Deposit missing",
+    "errorAmount": "Enter an amount of 0 or more.",
+    "errorZeroNeedsBalance": "A zero amount only makes sense as a balance check — enter the balance.",
+    "errorBalance": "Enter a balance of 0 or more.",
+    "errorSaveFailed": "The event could not be saved. Restart the desktop app if it was just updated."
   }
 }

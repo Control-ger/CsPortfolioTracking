@@ -115,5 +115,14 @@ const sameInstant = run({
 });
 check("a deposit settles before its purchase", costBasisByPurchaseId(sameInstant).p1.costUsd, 110);
 
+// Importers write the row's source, not the wallet it was paid from. A Steam
+// deposit must reach purchases the Steam importer labelled `steam_inventory`.
+const pooled = run({
+  walletEvents: [{ id: "d1", platform: "steam", amountUsd: 100, feeUsd: 10, occurredAt: D(1) }],
+  purchases: [{ id: "p1", platform: "steam_inventory", totalUsd: 100, purchasedAt: D(2) }],
+});
+check("steam_inventory shares the steam wallet", costBasisByPurchaseId(pooled).p1.costUsd, 110);
+check("it does not open a second pool", Object.keys(pooled), ["steam"]);
+
 console.log(fail.length ? `\n${fail.length} FAILING` : "\nall checks passed");
 process.exit(fail.length ? 1 : 0);

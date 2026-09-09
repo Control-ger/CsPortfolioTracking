@@ -84,6 +84,14 @@ Full reference: `docs/architecture-overview.md` §5.6.
 - **The sweep is complete.** `i18n:guard` reports 0 errors and only false positives as warnings (key names that read as German such as `buyorders`, internal data keys like `payload.wert`, a cache-key constant). Both guards run in CI via `.github/workflows/frontend-guards.yml`, so a regression fails the build rather than waiting for someone to run them.
 - **Do not gate UI on `import.meta.env.DEV`.** `npm run dev` is `vite build --watch` in mode `production`, so `DEV` is false there too. Developer-only output goes behind a `VITE_*` flag read through `isFlagEnabled` (`@shared/lib/envFlags`); see `docs/devops.md` → Build flags and artifacts.
 
+### Wallet Cost Factor
+Full reference: `docs/wallet-cost-basis-plan.md`, `docs/architecture-overview.md` §4.2.
+- **It is a running balance, not a cumulative ratio.** Carry `balance` and `balanceCost` per platform; `factor = balanceCost / balance`. A cumulative sum never lets spent credit leave the denominator and can drive the factor below 1.0, which cannot happen.
+- **Purchases take part in the replay** — a purchase is what removes credit. Deposits and sales alone were the flaw in the superseded model.
+- **Pool platform values, do not take them literally.** Importers write a row's *source* (`steam_inventory`), a user names a wallet (`steam`). `WALLET_POOLS` maps them together; without it a deposit never reaches the purchases it funded.
+- **Do not record a withdrawal fee as a wallet event fee.** It is already deducted from sale proceeds by `calculateNetProceeds`; `fee_usd` is acquisition-side only.
+- A balance the replay cannot support is clamped at zero with a neutral factor and flagged — never carried negative.
+
 ### Sell Tracking
 Full reference: `docs/local-db-schema.md` §2.1. Rationale: `docs/wallet-cost-basis-plan.md`.
 - **A sale consumes purchase rows, it never rewrites them.** Allocations live in `sale_allocations`; the remaining holding is derived (`quantity` minus consumed), never stored. `applySoldQuantities` (`desktopDataMerge.js`) does that on the desktop and drops rows that reach zero — a closed position is not a holding worth zero.

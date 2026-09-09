@@ -295,5 +295,32 @@
     "totalLabel_other": "{{count}} Verkäufe",
     "summary_one": "{{count}} Verkauf · geschlossene Positionen",
     "summary_other": "{{count}} Verkäufe · geschlossene Positionen"
+  },
+  "wallet": {
+    "title": "Wallet-Bewegungen",
+    "hint": "Ein- und Auszahlungen je Marktplatz. Sie bestimmen, was deine Käufe tatsächlich gekostet haben — eine Einzahlungsgebühr gehört zum Preis dessen, was sie finanziert hat.",
+    "platform": "Plattform",
+    "direction": "Richtung",
+    "deposit": "Einzahlung",
+    "withdrawal": "Auszahlung",
+    "reconciliation": "Abgleich",
+    "amount": "Betrag ({{currency}})",
+    "amountShort": "Betrag",
+    "fee": "Gebühr ({{currency}})",
+    "feeSuffix": "+{{value}} Gebühr",
+    "feeWithdrawalHint": "Die Auszahlungsgebühr wird bereits vom Verkaufserlös abgezogen.",
+    "balanceAfter": "Guthaben danach ({{currency}})",
+    "balanceShort": "Guthaben",
+    "optional": "optional",
+    "occurredAt": "Datum",
+    "submit": "Bewegung erfassen",
+    "saving": "Speichere…",
+    "empty": "Noch keine Wallet-Bewegungen erfasst.",
+    "balance": "Guthaben {{value}}",
+    "missingDeposit": "Einzahlung fehlt",
+    "errorAmount": "Betrag muss 0 oder größer sein.",
+    "errorZeroNeedsBalance": "Ein Betrag von 0 ergibt nur als Abgleich Sinn — bitte das Guthaben eintragen.",
+    "errorBalance": "Guthaben muss 0 oder größer sein.",
+    "errorSaveFailed": "Die Bewegung konnte nicht gespeichert werden. Starte die App neu, falls sie gerade aktualisiert wurde."
   }
 }

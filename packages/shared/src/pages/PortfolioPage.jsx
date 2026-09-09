@@ -37,6 +37,8 @@ import {
   fetchFeeSettings,
 } from "../lib/apiClient";
 import { unwrapLocalStoreResult } from "@shared/lib/localStoreResult.js";
+import { buildWalletTimeline, replayWalletTimeline } from "@shared/lib/walletFactor.js";
+import { calculateNetProceeds } from "@shared/lib/saleCalculations.js";
 import { useCsUpdatesFeed } from "@shared/hooks";
 import {
   buildPortfolioAllocationByType,
@@ -1585,6 +1587,83 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
       cancelled = true;
     };
   }, []);
+
+  // Wallet events and the factor they imply. Desktop-only: the events live in
+  // the local store and the server does not carry the entity yet.
+  const [walletEvents, setWalletEvents] = useState([]);
+
+  const refreshWalletEvents = useCallback(async () => {
+    const localStore = window.electronAPI?.localStore;
+    if (typeof localStore?.listWalletEvents !== "function") {
+      return;
+    }
+    try {
+      const currentUser = await getCurrentUser();
+      const rows = unwrapLocalStoreResult(
+        await localStore.listWalletEvents(resolveDesktopRuntimeUserId(currentUser)),
+        "local-store-list-wallet-events",
+      );
+      setWalletEvents(Array.isArray(rows) ? rows : []);
+    } catch (walletError) {
+      console.warn("[portfolio] wallet events load failed", walletError);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshWalletEvents();
+  }, [refreshWalletEvents]);
+
+  const handleRecordWalletEvent = async (input) => {
+    const localStore = window.electronAPI?.localStore;
+    if (typeof localStore?.recordWalletEvent !== "function") {
+      return;
+    }
+    const currentUser = await getCurrentUser();
+    await localStore.recordWalletEvent({
+      ...input,
+      userId: resolveDesktopRuntimeUserId(currentUser),
+    });
+    await refreshWalletEvents();
+  };
+
+  const handleDeleteWalletEvent = async (id) => {
+    const localStore = window.electronAPI?.localStore;
+    if (typeof localStore?.deleteWalletEvent !== "function") {
+      return;
+    }
+    const currentUser = await getCurrentUser();
+    await localStore.deleteWalletEvent(id, resolveDesktopRuntimeUserId(currentUser));
+    await refreshWalletEvents();
+  };
+
+  /**
+   * The cost factor per marketplace.
+   *
+   * Purchases take part in the replay because a purchase is what removes credit
+   * — deposits and sales alone were the flaw in the superseded model. Sales
+   * contribute their *net* proceeds: the marketplace's cut never reaches the
+   * wallet.
+   */
+  const walletFactors = useMemo(() => {
+    const purchases = (Array.isArray(enrichedInvestments) ? enrichedInvestments : []).map((row) => ({
+      id: row.id,
+      platform: row.platform || row.source,
+      purchasedAt: row.purchasedAt,
+      totalUsd: Number(row.buyPriceUsd ?? row.buyPrice ?? 0) * Number(row.quantity || 0),
+    }));
+    const saleRows = (Array.isArray(sales) ? sales : []).map((sale) => ({
+      id: sale.id,
+      platform: sale.platform,
+      soldAt: sale.soldAt,
+      netProceedsUsd: calculateNetProceeds(
+        Number(sale.sellPriceUsd || 0) * Number(sale.quantity || 0),
+        saleFeeSettings,
+      ),
+    }));
+    return replayWalletTimeline(
+      buildWalletTimeline({ walletEvents, sales: saleRows, purchases }),
+    );
+  }, [walletEvents, sales, saleFeeSettings, enrichedInvestments]);
 
   /**
    * Record a sale of the selected position.
@@ -5394,6 +5473,10 @@ export function PortfolioPage({ initialTab = "overview", useExternalDesktopSideb
           {isDesktopRuntime ? (
           <TabsContent value="management" forceMount={visitedTabs.has("management") || undefined}>
           <PortfolioManagementSection
+            walletEvents={walletEvents}
+            walletFactors={walletFactors}
+            onRecordWalletEvent={handleRecordWalletEvent}
+            onDeleteWalletEvent={handleDeleteWalletEvent}
             forceMount={visitedTabs.has("management")}
             syncNotification={syncNotification}
             autoSyncEnabled={autoSyncEnabled}
