@@ -44,7 +44,7 @@ function formatDate(value) {
  */
 export function WalletEventsSection({ events = [], factors = {}, onRecord, onDelete }) {
   const { t } = useTranslation(["inventory", "common"]);
-  const { currency, convertToUsd, formatPrice } = useCurrency();
+  const { currency, convertToUsd, formatPrice, ratesLoading } = useCurrency();
 
   const [platform, setPlatform] = useState("csfloat");
   const [direction, setDirection] = useState("deposit");
@@ -83,6 +83,15 @@ export function WalletEventsSection({ events = [], factors = {}, onRecord, onDel
     }
     if (parsedBalance !== null && (!Number.isFinite(parsedBalance) || parsedBalance < 0)) {
       setError(t("wallet.errorBalance"));
+      return;
+    }
+
+    // Amounts persist as USD, so a write before the live rate has arrived is
+    // stored against the placeholder (USD 1.08) and read back at the real one —
+    // the user types 500 and sees 464.55, as if the app lost their money. Worse
+    // here than elsewhere: the factor is built from these numbers.
+    if (ratesLoading) {
+      setError(t("wallet.errorRatesLoading"));
       return;
     }
 
@@ -230,7 +239,7 @@ export function WalletEventsSection({ events = [], factors = {}, onRecord, onDel
         </Callout>
       ) : null}
 
-      <Button size="sm" onClick={() => void handleSubmit()} disabled={saving}>
+      <Button size="sm" onClick={() => void handleSubmit()} disabled={saving || ratesLoading}>
         {saving ? t("wallet.saving") : t("wallet.submit")}
       </Button>
 

@@ -321,6 +321,7 @@
     "errorAmount": "Enter an amount of 0 or more.",
     "errorZeroNeedsBalance": "A zero amount only makes sense as a balance check — enter the balance.",
     "errorBalance": "Enter a balance of 0 or more.",
-    "errorSaveFailed": "The event could not be saved. Restart the desktop app if it was just updated."
+    "errorSaveFailed": "The event could not be saved. Restart the desktop app if it was just updated.",
+    "errorRatesLoading": "Exchange rates are still loading — the amount would be stored against a placeholder rate."
   }
 }

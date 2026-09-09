@@ -321,6 +321,7 @@
     "errorAmount": "Betrag muss 0 oder größer sein.",
     "errorZeroNeedsBalance": "Ein Betrag von 0 ergibt nur als Abgleich Sinn — bitte das Guthaben eintragen.",
     "errorBalance": "Guthaben muss 0 oder größer sein.",
-    "errorSaveFailed": "Die Bewegung konnte nicht gespeichert werden. Starte die App neu, falls sie gerade aktualisiert wurde."
+    "errorSaveFailed": "Die Bewegung konnte nicht gespeichert werden. Starte die App neu, falls sie gerade aktualisiert wurde.",
+    "errorRatesLoading": "Wechselkurse werden noch geladen — der Betrag würde gegen einen Platzhalter-Kurs gespeichert."
   }
 }
