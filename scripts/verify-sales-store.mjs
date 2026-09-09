@@ -187,6 +187,35 @@ const opsBeforeBackfill = opsForPushed();
 store.enqueueDirtySaleOperations(U);
 check("backfill adds no second op for a pushed sale", [opsBeforeBackfill, opsForPushed()], [1, 1]);
 
+// 11c. Name matching survives formatting differences between importers, but
+//      must not collapse genuinely different items.
+const buyNamed = (id, name, qty, price, date) =>
+  raw.prepare(`INSERT INTO investments (id,item_id,user_id,name,quantity,buy_price_usd,payload,created_at,updated_at)
+               VALUES (?,NULL,?,?,?,?,?,?,?)`)
+     .run(id, U, name, qty, price, JSON.stringify({ purchasedAt: date }), date, date);
+buyNamed("fmt", "★ StatTrak™ Karambit | Doppler (Factory New)", 1, 900, "2026-01-05T00:00:00Z");
+buyNamed("wear-bs", "AK-47 | Redline (Battle-Scarred)", 1, 10, "2026-01-06T00:00:00Z");
+
+const formatted = store.recordSale({
+  userId: U, name: "StatTrak Karambit | Doppler (Factory New)", quantity: 1,
+  sellPriceUsd: 1000, soldAt: "2026-09-05T00:00:00Z", platform: "steam",
+});
+check("normalised name still matches", [formatted.allocated, formatted.unallocated], [1, 0]);
+check("it matched the right row", store.listSaleAllocations(formatted.sale.id)[0].investmentId, "fmt");
+
+const wrongWear = store.recordSale({
+  userId: U, name: "AK-47 | Redline (Factory New)", quantity: 1,
+  sellPriceUsd: 50, soldAt: "2026-09-06T00:00:00Z", platform: "steam",
+});
+check("a different wear does not match", [wrongWear.allocated, wrongWear.unallocated], [0, 1]);
+
+// deleteSale honours the scope its signature advertises.
+const foreign = store.recordSale({ userId: U, name: "Fever Case", itemId: "item-1", quantity: 1,
+                                   sellPriceUsd: 2, soldAt: "2026-09-07T00:00:00Z", platform: "manual" });
+check("delete under a foreign scope is refused", store.deleteSale(foreign.sale.id, "steam-76561198000000000").deleted, false);
+check("the sale survives that attempt", Boolean(store.getSale(foreign.sale.id)) && store.getSale(foreign.sale.id).id === foreign.sale.id, true);
+check("delete under the owning scope works", store.deleteSale(foreign.sale.id, U).deleted, true);
+
 // 12. Holdings are derived from allocations. `applySoldQuantities` is pure, but
 //     lives in desktopDataMerge.js, which imports browser-only modules — so it
 //     is extracted from source rather than imported.

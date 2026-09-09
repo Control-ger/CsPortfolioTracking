@@ -4,6 +4,7 @@ import {
   serialize,
   deserialize,
   normalizeLocalUserId,
+  normalizeSaleMatchName,
   appendOperation as appendOperationToLog,
 } from "./utils.js";
 
@@ -101,9 +102,9 @@ export function createSalesStore(db, deps = {}) {
    * something, oldest acquisition first.
    */
   function fifoCandidates(userId, itemId, name) {
-    // Match on item_id where the catalogue gave us one, else on the name the
-    // importer wrote — a manual sale for a Steam item may have no item_id.
-    const rows = itemId
+    // Match on item_id where the catalogue gave us one — a CSFloat sale carries
+    // no item id, and a Steam-imported purchase row may carry none either.
+    let rows = itemId
       ? db
           .prepare(
             "SELECT * FROM investments WHERE user_id = ? AND deleted = 0 AND item_id = ?",
@@ -112,6 +113,21 @@ export function createSalesStore(db, deps = {}) {
       : db
           .prepare("SELECT * FROM investments WHERE user_id = ? AND deleted = 0 AND name = ?")
           .all(userId, String(name));
+
+    // Exact SQL equality is the fast path and covers rows written by the same
+    // importer. It misses an item bought through Steam and sold on CSFloat when
+    // the two write the name differently — the sale then allocates nothing and
+    // is silently recorded as fully uncovered. Falling back to a normalised
+    // comparison costs one extra read, and only when the exact match failed.
+    if (rows.length === 0 && name) {
+      const wanted = normalizeSaleMatchName(name);
+      if (wanted) {
+        rows = db
+          .prepare("SELECT * FROM investments WHERE user_id = ? AND deleted = 0")
+          .all(userId)
+          .filter((row) => normalizeSaleMatchName(row.name) === wanted);
+      }
+    }
 
     return rows
       .map((row) => ({ row, remaining: remainingQuantity(row.id), date: purchaseDateOf(row) }))
@@ -496,15 +512,25 @@ export function createSalesStore(db, deps = {}) {
       const scope = normalizeLocalUserId(userId);
       const now = nowIso();
       const remove = db.transaction(() => {
-        db.prepare(
-          "UPDATE sales SET deleted = 1, dirty = 1, revision = revision + 1, updated_at = ? WHERE id = ?",
-        ).run(now, String(id));
+        // Scoped by user: the signature takes a userId, and without it in the
+        // predicate a mismatched scope — the legacy "1" rows merged on first
+        // access, or an id carried across an account switch — would soft-delete
+        // another scope's sale and queue the delete under this one.
+        const result = db
+          .prepare(
+            `UPDATE sales SET deleted = 1, dirty = 1, revision = revision + 1, updated_at = ?
+              WHERE id = ? AND user_id = ?`,
+          )
+          .run(now, String(id), scope);
+        if (result.changes === 0) {
+          return false;
+        }
         if (SALE_SYNC_ENABLED) {
           appendOperationToLog(db, "delete", "sale", String(id), { id: String(id), userId: scope }, scope);
         }
+        return true;
       });
-      remove();
-      return { id: String(id) };
+      return { id: String(id), deleted: remove() };
     },
   };
 }

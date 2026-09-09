@@ -285,6 +285,27 @@ export function normalizeNameForMatching(value) {
   return normalized;
 }
 
+/**
+ * Name key for matching a sale to the purchase rows it consumes.
+ *
+ * Deliberately lighter than `normalizeNameForMatching`, which strips the wear
+ * grade and the StatTrak marker: those distinguish genuinely different items at
+ * genuinely different prices, so collapsing them would let a Factory New sale
+ * allocate against a Battle-Scarred purchase. This only removes what is pure
+ * presentation — unicode form, the ★ prefix, the trademark glyph, casing and
+ * whitespace — so two importers writing the same item differently still meet.
+ */
+export function normalizeSaleMatchName(value) {
+  return String(value || "")
+    // Glyphs first, then NFKC: the normal form maps ™ to the letters "TM", so
+    // stripping afterwards would leave "StatTrakTM" against a plain "StatTrak".
+    .replace(/[\u2605\u2122]/g, " ")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 export function extractWearKey(value) {
   const normalized = normalizeMarketName(value);
   if (normalized.includes("factory new")) return "fn";

@@ -166,6 +166,16 @@ unreported skip would leave the server's realised figure quietly short with
 nothing to notice it by. Not yet handled: such an allocation is not
 automatically retried.
 
+**A sale finds its lots by id, then by a presentation-only name key.** Exact
+equality is the fast path; when it finds nothing, `normalizeSaleMatchName` drops
+the ★ prefix, the ™ glyph, casing and whitespace and retries, so an item bought
+through Steam and sold on CSFloat still meets its purchase rows. It deliberately
+keeps the wear grade and StatTrak — unlike `normalizeNameForMatching`, which
+strips both — because a Factory New sale must not allocate against a
+Battle-Scarred lot at a fraction of the price. Glyph stripping runs *before*
+NFKC: the normal form maps ™ to the letters "TM", so the reverse order leaves
+"StatTrakTM" facing a plain "StatTrak".
+
 **The sold scope renders its own table.** `SoldPositionsTable` is reached through
 the inventory scope rail but is not a filter over investments: a closed position
 has no live price and no unrealised ROI, and showing those columns empty would

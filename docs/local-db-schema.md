@@ -48,7 +48,14 @@ lot-level — a Steam sync writes one row per physical item with its own price a
 purchase date — so FIFO is a sort and a walk, not a split. Rationale and the
 measurements behind the choice: `docs/wallet-cost-basis-plan.md` §4.
 
-Two behaviours worth knowing:
+Three behaviours worth knowing:
+
+- **Matching tolerates formatting, not substance.** A sale finds its purchase
+  rows by `item_id` where one exists, else by name. Exact equality is tried
+  first; when it finds nothing, `normalizeSaleMatchName` retries on a key that
+  drops the ★ prefix, the ™ glyph, casing and whitespace — so an item bought
+  through Steam and sold on CSFloat still meets its lot — while keeping the wear
+  grade and StatTrak, which distinguish real items at real price differences.
 
 - **Over-selling is recorded, not refused.** A sale of more units than the
   portfolio holds is stored and reports the unallocated remainder. A user may

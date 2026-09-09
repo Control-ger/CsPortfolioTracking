@@ -170,7 +170,6 @@ export const ItemDetailPanel = ({
   // Recording a sale writes to the local store, so it is desktop-only and the
   // caller supplies the handler. Absent handler = no button, same as exclude.
   onRecordSale,
-  availableQuantity,
   canToggleExclude = true,
   // Groups support the bucket toggle (moves all members) but not exclusion,
   // so the two capabilities are gated separately.
@@ -487,7 +486,11 @@ export const ItemDetailPanel = ({
           isOpen
           onOpenChange={setSaleDialogOpen}
           item={item}
-          availableQuantity={availableQuantity ?? item?.quantity}
+          // The row's quantity is already net of what sales consumed
+          // (`applySoldQuantities`), so it is exactly what FIFO can allocate.
+          // A separate prop for this only invited a caller to pass a raw,
+          // unreduced figure and widen the cap past what can be covered.
+          availableQuantity={item?.quantity}
           isLoading={isSaleLoading}
           onConfirm={async (input) => {
             setIsSaleLoading(true);
