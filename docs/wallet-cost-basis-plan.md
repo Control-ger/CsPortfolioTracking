@@ -48,17 +48,49 @@ would charge the fixed fee ten times. The bug is latent only because no row is
 Stop attributing funding per position. Track what enters the wallet, and derive a
 weighted-average cost factor — the same treatment a broker gives a cash account.
 
-```
-factor(t) = cash actually paid to fund the wallet, up to t
-            ─────────────────────────────────────────────
-            credit that reached the wallet, up to t
-```
+### 2.1 A running balance, not a cumulative ratio
 
-- Deposit 100 € at 3 % + 0.35 € → 103.35 € paid for 100 € credit.
-- Sale proceeds of 80 € add 80 € credit at 80 € cost: the deposit friction was
-  already paid when *that* item was bought, so counting it again would
-  double-count. Sales therefore pull the factor toward 1.0.
-- A purchase's cost basis is `totalInvested × factor(purchased_at)`.
+> **Correction (2026-09-09).** An earlier draft defined the factor as cumulative
+> cash paid over cumulative credit received. That is wrong: cumulative sums only
+> grow, so credit that was *spent* never leaves the denominator. Deposit 103 € for
+> 100 € of credit, buy for 100 €, sell for 120 € net, and the cumulative ratio
+> reads 103 / 220 = **0.47** — a later purchase would get a cost basis under half
+> its price, and the factor could fall below 1.0, which is economically
+> impossible. The model below replaces it.
+
+Carry two running figures **per platform**: the wallet's `balance`, and what that
+balance cost to obtain. `factor = balanceCost / balance`, evaluated at the moment
+a purchase happens.
+
+| Event | balance | balanceCost |
+|---|---|---|
+| Deposit | `+ amount` | `+ amount + fees` |
+| **Purchase** | `− price` | `− price × factor` — this is what becomes the item's cost basis |
+| Sale | `+ net proceeds` | `+ net proceeds` |
+| Withdrawal | `− amount` | `− amount × factor` |
+
+Worked through:
+
+- Deposit 100 € at 3 % + 0.35 € → balance 100, cost 103.35, factor **1.0335**.
+- Buy for 100 € → balance 0, cost 0; the 103.35 € leaves as that item's cost
+  basis. Correct: the deposit friction was a cost of acquiring *that* item.
+- Sell it for 120 € net → balance 120, cost 120, factor **1.0**.
+- Buy again for 120 € → cost basis 120 €, no deposit friction. Correct: this
+  purchase was funded by sale proceeds, and that friction was already paid once.
+
+Three consequences the implementation has to carry:
+
+1. **Purchases participate in the replay**, not only deposits and sales — a
+   purchase is what removes credit. The data exists: `investments` carries price,
+   date and platform.
+2. **A withdrawal's cost contribution is not a stored field but a function of the
+   state at that moment** (`amount × factor` then). It can only be computed
+   during an ordered replay, which makes strict date ordering load-bearing: a
+   back-dated event changes everything after it.
+3. **The balance can go negative** when a deposit was never recorded. Clamp at
+   zero and fall back to factor 1.0 from there, and say so visibly. Silently
+   carrying a negative balance would produce cost bases that are not merely
+   imprecise but nonsensical.
 
 Properties this buys:
 
@@ -66,8 +98,9 @@ Properties this buys:
 |---|---|---|
 | Answerable from facts | no | yes |
 | Automatable | no (no API surface) | yes (deposits are few and importable) |
-| User effort | one decision per position | a handful of deposits per year |
+| User effort | one decision per position | a handful of wallet events per year |
 | Fixed deposit fee | counted once per position | counted once per deposit |
+| Can produce an impossible figure | yes (fee per position) | no (factor ≥ 1.0 by construction) |
 
 ## 3. What the rework touches
 
@@ -197,12 +230,45 @@ So it needs either an ordering guarantee (ensure the sales tables wherever
 investments are ensured) or an existence check, and it needs a live database to
 verify against — `node:sqlite` cannot stand in for MySQL here.
 
-**Phase 2 — deposits as a first-class entity.** Table, sync entity, and a desktop
-entry surface (amount, date, fee, FX rate). Manual entry first; a marketplace
-transaction import can follow where an API exposes one.
+**Phase 2 — wallet events as a first-class entity.**
 
-**Phase 3 — the factor.** A service that replays deposits and sales in date order
-and answers `factor(t)`. Wire it into `PortfolioService.php:147` in place of
+**One entity, signed amount** — `wallet_events`, deposit positive, withdrawal
+negative. Not two tables: one form, one sync entity, one migration, and it is
+*more* accurate than deposits alone. Withdrawals are not optional. A withdrawal
+at the current factor leaves the factor unchanged (like selling at average cost),
+so the naive reading is that they can be skipped — but draining a wallet and
+refilling it at a **different fee rate** breaks that:
+
+| | withdrawal recorded | not recorded |
+|---|---|---|
+| Deposit 1000 € at 0 % | balance 1000, cost 1000 | same |
+| Buy for 900 € | balance 100, cost 100 | same |
+| Withdraw 100 € | balance 0, cost 0 | *invisible* |
+| Deposit 100 € at 10 % | balance 100, cost 110 → factor **1.10** | balance 200, cost 210 → factor **1.05** |
+| Next purchase's basis | 110 € ✓ | 105 € ✗ |
+
+Fields: `platform`, `amount` (signed), `feeUsd`, `occurredAt`, and an **optional
+`balanceAfter`**.
+
+**The balance rides on the event form, and does not get its own flow.** When a
+user records a deposit they are already looking at the marketplace's transaction
+page — the balance is on that screen. A separate "record your balance" step is a
+second visit for information available during the first, so it would not happen.
+It makes the replay self-correcting: if the events say 120 € and the user says
+80 €, 40 € is unexplained — a forgotten withdrawal or a forgotten purchase — and
+the app can name that instead of quietly folding it into a cost basis. An event
+with **amount 0 and a balance** is a pure reconciliation entry, needing no
+separate entity.
+
+Per-platform (see §6) makes this worth more, not less: three pools are three
+places a gap can hide.
+
+Manual entry first; a marketplace transaction import can follow where an API
+exposes one — CSFloat's client has no such endpoint today.
+
+**Phase 3 — the factor.** A service that replays wallet events, sales *and
+purchases* in date order per platform, carrying `balance` / `balanceCost`, and
+answers `factor(platform, t)`. Wire it into `PortfolioService.php:147` in place of
 `resolveAcquisitionFees()`. Keep gross and net side by side, as the fee plan
 already requires.
 
