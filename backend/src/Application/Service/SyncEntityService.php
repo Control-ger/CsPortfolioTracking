@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Application\Service;
 
+use App\Shared\Logger;
 use PDO;
 
 final class SyncEntityService
@@ -366,12 +367,19 @@ final class SyncEntityService
         $saleRow = $this->findSaleByExternalTrade($userId, $platform, $externalTradeId);
         $serverId = $saleRow !== null ? (int) $saleRow['id'] : null;
 
+        $allocationReport = ['projected' => 0, 'unresolved' => 0];
         if ($serverId !== null) {
-            $this->projectSaleAllocations($userId, $serverId, $mergedPayload);
+            $allocationReport = $this->projectSaleAllocations($userId, $serverId, $mergedPayload);
         }
 
         return [
             ...$mergedPayload,
+            // Skipping an allocation is silent by design (the purchase row may
+            // not have synced yet), which would make a server-side realised
+            // figure quietly too low with nothing to notice it by. The count
+            // rides along in the payload and is logged, so the gap is visible.
+            'allocationsProjected' => $allocationReport['projected'],
+            'allocationsUnresolved' => $allocationReport['unresolved'],
             'id' => $entityId,
             'userId' => (string) $userId,
             'itemId' => (string) $itemId,
@@ -393,12 +401,15 @@ final class SyncEntityService
      * The desktop allocates FIFO and ships the result, so both sides agree by
      * construction rather than by both re-deriving it. Allocations are replaced
      * wholesale because a re-push carries the complete set.
+     *
+     * @return array{projected:int, unresolved:int} how many landed, and how many
+     *         referenced a purchase row this server cannot resolve yet.
      */
-    private function projectSaleAllocations(int $userId, int $saleServerId, array $payload): void
+    private function projectSaleAllocations(int $userId, int $saleServerId, array $payload): array
     {
         $allocations = $payload['allocations'] ?? null;
         if (!is_array($allocations)) {
-            return;
+            return ['projected' => 0, 'unresolved' => 0];
         }
 
         $this->pdo->prepare('DELETE FROM sale_allocations WHERE sale_id = ?')->execute([$saleServerId]);
@@ -407,6 +418,10 @@ final class SyncEntityService
             'INSERT INTO sale_allocations (sale_id, investment_id, quantity, buy_price_usd)
              VALUES (?, ?, ?, ?)'
         );
+
+        $projected = 0;
+        $unresolved = 0;
+        $unresolvedIds = [];
 
         foreach ($allocations as $allocation) {
             if (!is_array($allocation)) {
@@ -420,14 +435,30 @@ final class SyncEntityService
             $investmentServerId = $this->resolveServerInvestmentId($userId, $localInvestmentId);
             if ($investmentServerId === null) {
                 // Purchase row not synced yet — skip rather than fail the push.
-                // The payload keeps the allocation, so nothing is lost.
+                // The payload keeps the allocation, so nothing is lost, but the
+                // server's own realised figure is short until a re-push lands.
+                $unresolved++;
+                $unresolvedIds[] = $localInvestmentId;
                 continue;
             }
             $buyPriceUsd = isset($allocation['buyPriceUsd']) && is_numeric($allocation['buyPriceUsd'])
                 ? (float) $allocation['buyPriceUsd']
                 : null;
             $insert->execute([$saleServerId, $investmentServerId, $quantity, $buyPriceUsd]);
+            $projected++;
         }
+
+        if ($unresolved > 0) {
+            Logger::warning('sync.sale.allocations_unresolved', [
+                'saleServerId' => $saleServerId,
+                'projected' => $projected,
+                'unresolved' => $unresolved,
+                // Local ids only: they are opaque client identifiers, not user data.
+                'investmentIds' => array_slice($unresolvedIds, 0, 10),
+            ]);
+        }
+
+        return ['projected' => $projected, 'unresolved' => $unresolved];
     }
 
     /**

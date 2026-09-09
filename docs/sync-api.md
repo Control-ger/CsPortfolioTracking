@@ -96,6 +96,17 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
 - Identität: wie bei `investments` über `(platform, external_trade_id)`, wobei die
   lokale UUID einspringt, wenn der Verkauf keine echte Marktplatz-Trade-ID trägt.
   Ein erneuter Push aktualisiert damit, statt zu duplizieren.
+- Übersprungene Zuordnungen werden **gezählt und gemeldet**, nicht verschwiegen:
+  `applySaleChange` schreibt `allocationsProjected` und `allocationsUnresolved`
+  in den Payload (persistiert in `sync_entities`, kommt beim nächsten Pull
+  zurück), und bei `unresolved > 0` protokolliert
+  `Logger::warning('sync.sale.allocations_unresolved', …)` mit den betroffenen
+  lokalen IDs. Ohne das wäre ein serverseitig zu niedriger realisierter Gewinn
+  unsichtbar — es gibt keinen Lesepfad für Verkäufe auf dem Server.
+  **Offen:** eine nicht auflösbare Zuordnung wird derzeit nicht automatisch
+  erneut versucht. Der Fall ist eng (Push läuft ältest-zuerst, die Kaufzeile
+  wird vor dem Verkauf geschrieben), tritt aber auf, wenn beide in einem Lauf
+  entstehen und der Verkauf in einem früheren 200er-Fenster landet.
 - Die Projektion der Zuordnungen in die Domänentabelle ist **best effort**:
   `sale_allocations.investment_id` ist ein INT-Fremdschlüssel, das Desktop
   adressiert Kaufzeilen aber per UUID. Die Brücke ist `sync_entities`

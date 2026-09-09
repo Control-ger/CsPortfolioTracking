@@ -157,6 +157,15 @@ addresses purchase rows by UUID, and the bridge is `sync_entities`
 skipped rather than failing the push — the payload keeps it, so the authoritative
 record is intact.
 
+**A skip is counted, not swallowed.** `applySaleChange` returns
+`allocationsProjected` / `allocationsUnresolved` in the payload (persisted, and
+returned on the next pull) and logs `sync.sale.allocations_unresolved` with the
+local ids. This matters because there is no server-side read path for sales at
+all — `SaleRepository::findByUserId` exists but is routed nowhere — so an
+unreported skip would leave the server's realised figure quietly short with
+nothing to notice it by. Not yet handled: such an allocation is not
+automatically retried.
+
 **A push tolerates a server older than the client.** The desktop app updates
 itself; the server is redeployed separately. An unknown table makes the server
 reject the *entire* batch (`SYNC_PUSH_INVALID_REQUEST`), which would block every
