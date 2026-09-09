@@ -124,6 +124,12 @@ Run before every push, alongside `npm run lint`:
   re-import; push without a following pull) — a code review found bugs in
   exactly those sequences while every single-operation check passed.
   Not part of CI: it needs `node:sqlite`, which is still flagged experimental.
+- `npm run verify:wallet` — the wallet cost factor. Pure arithmetic, so it runs
+  directly under node. The cases mirror the worked examples in
+  `docs/wallet-cost-basis-plan.md` §2.1, including the two the superseded
+  cumulative formula got wrong — a deposit fee reaching the item's basis, and a
+  drain-and-refill at a changed fee rate — which are pinned so the correction
+  cannot silently regress.
 - `npm run i18n:guard` — catalogue integrity. Two things neither ESLint nor the
   build can see, because a missing translation key is not a syntax error — it
   renders as the raw key path in the UI:

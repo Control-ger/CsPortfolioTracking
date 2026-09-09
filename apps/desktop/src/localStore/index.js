@@ -17,6 +17,7 @@ import { createSnapshotStore } from "./snapshots.js";
 import { createNotificationStore } from "./notifications.js";
 import { createSyncStore } from "./sync.js";
 import { createSalesStore } from "./sales.js";
+import { createWalletStore } from "./wallet.js";
 
 function runMigrations(db) {
   db.pragma("journal_mode = WAL");
@@ -148,6 +149,35 @@ function runMigrations(db) {
       FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
     );
 
+    -- Money entering or leaving a marketplace wallet. One table for both
+    -- directions: a deposit is a positive amount, a withdrawal a negative one.
+    -- Two tables would have meant two forms and two sync entities for what is
+    -- one concept. See docs/wallet-cost-basis-plan.md Phase 2.
+    --
+    -- balance_after is optional and is the user's own reading of the wallet at
+    -- that moment. It makes the replay self-correcting: a gap between what the
+    -- events imply and what the wallet actually holds is a forgotten event, and
+    -- is worth naming rather than folding into a cost basis. An entry with
+    -- amount 0 and a balance is a pure reconciliation point.
+    CREATE TABLE IF NOT EXISTS wallet_events (
+      id TEXT PRIMARY KEY,
+      server_id INTEGER,
+      user_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      amount_usd REAL NOT NULL,
+      fee_usd REAL NOT NULL DEFAULT 0,
+      balance_after_usd REAL,
+      note TEXT,
+      occurred_at TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      revision INTEGER NOT NULL DEFAULT 1,
+      dirty INTEGER NOT NULL DEFAULT 1,
+      deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(server_id)
+    );
+
     CREATE TABLE IF NOT EXISTS operations_log (
       id TEXT PRIMARY KEY,
       op_type TEXT NOT NULL,
@@ -210,6 +240,10 @@ function runMigrations(db) {
       ON watchlist_items(user_id, deleted, updated_at);
     CREATE INDEX IF NOT EXISTS idx_operations_pending
       ON operations_log(applied_at, created_at);
+    -- The replay reads events per platform in date order, which is exactly
+    -- this index.
+    CREATE INDEX IF NOT EXISTS idx_wallet_events_replay
+      ON wallet_events(user_id, platform, occurred_at);
     CREATE INDEX IF NOT EXISTS idx_sales_user
       ON sales(user_id, deleted, sold_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sales_external
@@ -323,6 +357,7 @@ export function createLocalStore(userDataPath) {
   const priceStore = createPriceStore(db);
   const snapshotStore = createSnapshotStore(db);
   const salesStore = createSalesStore(db);
+  const walletStore = createWalletStore(db);
 
   // Sync store needs dependencies from investments and settings
   const syncStore = createSyncStore(db, {
@@ -345,6 +380,7 @@ export function createLocalStore(userDataPath) {
     ...priceStore,
     ...snapshotStore,
     ...salesStore,
+    ...walletStore,
     ...syncStore,
     ...notificationStore,
   };

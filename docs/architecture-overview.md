@@ -111,6 +111,7 @@ This document tracks:
 |---|---|---|---|
 | Investments + watchlist | Desktop | local SQLite + synced server DB | Desktop + Web |
 | Sales (sell tracking) | Desktop | local SQLite + synced server DB (`sales`, `sale_allocations`) | Desktop |
+| Wallet events (deposits/withdrawals) | Desktop | local SQLite **only, for now** (`wallet_events`) | Desktop |
 | Prices | Server workers | server DB | Web + Desktop (via sidecar/upstream) |
 | Import execution (Steam/CSFloat) | Desktop-initiated | Desktop + server processing path | Desktop |
 | Steam/CSFloat secrets | Desktop only | Local Secret Vault (app-password wrapped, main-memory unlock session) | Desktop only |
@@ -134,7 +135,36 @@ omits it, on both the save and the load/merge path. Fields the server does know 
 win; only a *missing* colour falls back to the local value. This guard stays correct
 once the backend ships and can be removed then.
 
-### 4.2 Sell tracking
+### 4.2 The wallet cost factor
+
+`wallet_events` (schema 6) records money entering or leaving a marketplace
+wallet, one table for both directions — a deposit is a positive amount, a
+withdrawal a negative one. It replaces the per-position `funding_mode` model;
+`docs/wallet-cost-basis-plan.md` carries the reasoning and the arithmetic.
+
+The factor itself is **pure and lives in the shared layer**
+(`packages/shared/src/lib/walletFactor.js`), not in the store: it is arithmetic
+over an event stream, and keeping it free of store access is what lets it be
+verified directly under node.
+
+Three properties that shape everything downstream:
+
+- **It is a running balance, not a cumulative ratio.** Carry the wallet's
+  `balance` and what that balance cost; `factor = balanceCost / balance`. A
+  cumulative sum never lets spent credit leave the denominator and can drive the
+  factor below 1.0, which cannot happen.
+- **Purchases participate in the replay**, because a purchase is what removes
+  credit. Deposits and sales alone are not enough.
+- **One pool per platform.** A purchase draws from the wallet it happened on and
+  a sale credits the wallet it happened on, and those are not always the same —
+  an item bought on CSFloat and sold on SkinBaron takes its basis from one and
+  credits the other.
+
+A balance the replay cannot support (a missing deposit) is clamped at zero with
+a neutral factor and flagged, rather than carried negative into figures that
+would be nonsensical rather than merely incomplete.
+
+### 4.3 Sell tracking
 
 `sales` / `sale_allocations` (schema version 5, `apps/desktop/src/localStore/sales.js`)
 record a sale and which purchase rows it consumed. A sale **never rewrites the

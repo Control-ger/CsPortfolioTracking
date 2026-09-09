@@ -27,6 +27,7 @@ Implemented in `apps/desktop/src/localStore/index.js`:
 - `sync_notifications`
 - `sales`
 - `sale_allocations`
+- `wallet_events`
 
 ### 2.1 Sell tracking (`sales`, `sale_allocations`)
 
@@ -82,6 +83,37 @@ Pull applies sales through `importSales`, which is **silent**: it writes no
 operation, because a pull that re-logged what it just received would push the
 same rows straight back. Allocations come from the payload rather than being
 re-derived, so a pulled sale reproduces the originating device's split exactly.
+
+### 2.2 Wallet events (`wallet_events`)
+
+Schema version 6. Written by `apps/desktop/src/localStore/wallet.js`.
+
+Money entering or leaving a marketplace wallet, **one table for both
+directions**: a deposit is a positive `amount_usd`, a withdrawal a negative one.
+Two tables would have meant two forms and two sync entities for one concept.
+
+Withdrawals are not optional. One taken at the current factor leaves the factor
+unchanged — like selling at average cost — so they look skippable. Draining a
+wallet and refilling it at a *different fee rate* is what breaks that, and it
+produces a cost basis of 105 where 110 is correct. `npm run verify:wallet` pins
+both figures.
+
+`balance_after_usd` is optional and is the user's own reading of the wallet at
+that moment. It rides on the same form because a user recording a deposit is
+already looking at the marketplace's transaction page; a separate flow would be
+a second visit for information available during the first. It makes the replay
+self-correcting: a gap between what the events imply and what the wallet holds
+is a forgotten event, and the replay reports it rather than folding it into a
+cost basis. An entry with amount 0 and a balance is a pure reconciliation point
+— the store rejects a zero amount without one, since it would say nothing.
+
+**Do not record a withdrawal fee here.** It is already taken off the proceeds
+side by `calculateNetProceeds`; `fee_usd` is for acquisition-side cost only.
+
+`WALLET_SYNC_ENABLED` is **off** until the server carries the entity, for the
+same reason sell tracking's flag was: `desktopSync` retires an entity type it
+cannot map, so queueing these now would discard them. `dirty` carries the
+pending state, `enqueueDirtyWalletOperations` picks it up later.
 
 ## 3. Notification Persistence
 

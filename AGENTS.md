@@ -16,7 +16,8 @@ npm run fetch:php     # download bundled static PHP runtime + CA bundle → reso
 npm run lint          # ESLint 9 flat config (JS/JSX only)
 npm run docs:guard    # Documentation governance check
 npm run i18n:guard    # Translation catalogue integrity (see docs/devops.md)
-npm run verify:sales  # Sell-tracking store checks against node:sqlite (16 checks)
+npm run verify:sales  # Sell-tracking store checks against node:sqlite
+npm run verify:wallet # Wallet cost factor replay (pure arithmetic)
 npm run preview       # Vite preview
 ```
 No test suite is configured (Playwright exists as devDep but no `test` script).

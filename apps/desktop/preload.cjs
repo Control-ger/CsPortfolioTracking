@@ -112,6 +112,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-mark-sale-pushed", id, pushedAt),
     listDirtySales: (userId) =>
       ipcRenderer.invoke("local-store-list-dirty-sales", userId),
+    recordWalletEvent: (payload) =>
+      ipcRenderer.invoke("local-store-record-wallet-event", payload),
+    listWalletEvents: (userId, platform) =>
+      ipcRenderer.invoke("local-store-list-wallet-events", userId, platform),
+    deleteWalletEvent: (id, userId) =>
+      ipcRenderer.invoke("local-store-delete-wallet-event", id, userId),
     listWatchlist: (userId) =>
       ipcRenderer.invoke("local-store-list-watchlist", userId),
     importWatchlist: (rows, userId) =>
