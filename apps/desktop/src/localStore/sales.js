@@ -146,16 +146,29 @@ export function createSalesStore(db, deps = {}) {
       }
 
       // Importers re-read the same pages, so the same trade must not land twice.
+      //
+      // Deleted rows count as known. Filtering them out here would let the
+      // INSERT's `ON CONFLICT(id) DO UPDATE ... deleted = 0` revive a sale the
+      // user deliberately removed, on every subsequent import, while reporting
+      // it as newly recorded. A user who deletes an imported sale means it.
       if (externalTradeId) {
-        const duplicate = db
+        const known = db
           .prepare(
-            `SELECT id FROM sales
-              WHERE user_id = ? AND platform = ? AND external_trade_id = ? AND deleted = 0
+            `SELECT id, deleted FROM sales
+              WHERE user_id = ? AND platform = ? AND external_trade_id = ?
               LIMIT 1`,
           )
           .get(userId, platform, externalTradeId);
-        if (duplicate) {
-          return { sale: mapSale(db.prepare("SELECT * FROM sales WHERE id = ?").get(duplicate.id)), duplicate: true, allocated: 0, unallocated: 0 };
+        if (known) {
+          return {
+            sale: mapSale(db.prepare("SELECT * FROM sales WHERE id = ?").get(known.id)),
+            duplicate: true,
+            // Lets the caller distinguish "already imported" from "the user
+            // removed this and we are honouring that".
+            deletedByUser: Boolean(known.deleted),
+            allocated: 0,
+            unallocated: 0,
+          };
         }
       }
 
@@ -400,6 +413,23 @@ export function createSalesStore(db, deps = {}) {
         return imported;
       });
       return { imported: write() };
+    },
+
+    /**
+     * Clear the pending marker once the server has accepted the sale.
+     *
+     * Without this `dirty` would stay 1 forever — `markOperationApplied` only
+     * touches `operations_log` — and `enqueueDirtySaleOperations` would re-queue
+     * the row on the next cycle whenever the pull that used to clear it as a
+     * side effect did not arrive. Guarded on `updated_at` so a change made
+     * *after* the push was assembled keeps its pending state.
+     */
+    markSalePushed(id, pushedAt = null) {
+      const stamp = String(pushedAt || nowIso());
+      db.prepare(
+        "UPDATE sales SET dirty = 0 WHERE id = ? AND dirty = 1 AND updated_at <= ?",
+      ).run(String(id), stamp);
+      return { id: String(id) };
     },
 
     /** Delete without logging an operation — for the pull path. */

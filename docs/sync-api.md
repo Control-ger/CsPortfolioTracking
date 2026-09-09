@@ -93,9 +93,16 @@ Nimmt lokale Aenderungen vom Desktop entgegen.
   FIFO und schickt das Ergebnis; das ziehende Gerät übernimmt es unverändert,
   statt es neu abzuleiten. So stimmen beide Seiten beim realisierten Gewinn per
   Konstruktion überein und nicht, weil zwei Ableitungen zufällig gleich ausgehen.
-- Identität: wie bei `investments` über `(platform, external_trade_id)`, wobei die
-  lokale UUID einspringt, wenn der Verkauf keine echte Marktplatz-Trade-ID trägt.
-  Ein erneuter Push aktualisiert damit, statt zu duplizieren.
+- Identität: über `(user_id, platform, external_trade_id)` — anders als bei
+  `investments`, wo `user_id` im Schlüssel fehlt. Ohne den Scope kollidieren zwei
+  Konten mit gleichem Paar auf einer Zeile, und `ON DUPLICATE KEY UPDATE` würde
+  den Verkauf des anderen Kontos überschreiben. Server, die die Tabelle vor
+  dieser Änderung angelegt haben, werden von `ensureUserScopedTradeKey()`
+  nachgezogen; schlägt das fehl (etwa wegen einer Dublette unter dem engeren
+  Schlüssel), bleibt der alte Schlüssel bestehen und der Sync läuft weiter.
+  Die lokale UUID springt als `external_trade_id` ein, wenn der Verkauf keine
+  echte Marktplatz-Trade-ID trägt; ein erneuter Push aktualisiert damit, statt zu
+  duplizieren.
 - Übersprungene Zuordnungen werden **gezählt und gemeldet**, nicht verschwiegen:
   `applySaleChange` schreibt `allocationsProjected` und `allocationsUnresolved`
   in den Payload (persistiert in `sync_entities`, kommt beim nächsten Pull

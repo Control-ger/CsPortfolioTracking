@@ -158,6 +158,34 @@ const imported = store.recordSale(importerShaped);
 check("importer shape records a sale", [imported.sale.name, imported.sale.sellPriceUsd, imported.sale.platform], ["Fever Case", 7.5, "csfloat"]);
 check("importer re-run deduplicates", store.recordSale(importerShaped).duplicate, true);
 
+// 11b. State transitions, not just single operations — the review found both of
+//      these classes missing: import → delete → re-import, and push without a
+//      following pull.
+const revive = { userId: U, itemId: "item-1", name: "Fever Case", quantity: 1, sellPriceUsd: 4,
+                 soldAt: "2026-08-01T00:00:00Z", platform: "csfloat", externalTradeId: "T-REVIVE" };
+const firstImport = store.recordSale(revive);
+store.deleteSale(firstImport.sale.id, U);
+const reImport = store.recordSale(revive);
+check("re-import does not revive a deleted sale", [reImport.duplicate, reImport.deletedByUser], [true, true]);
+check("deleted sale stays deleted", store.listSales(U).some((s) => s.id === firstImport.sale.id), false);
+check("its allocations stay released", store.listSaleAllocations(firstImport.sale.id).length > 0 && store.getSale(firstImport.sale.id).dirty !== undefined, true);
+check("the deleted sale contributes no consumption", raw.prepare("SELECT COUNT(*) AS n FROM sale_allocations a JOIN sales s ON s.id = a.sale_id WHERE a.sale_id = ? AND s.deleted = 0").get(firstImport.sale.id).n, 0);
+
+// A push that is never followed by a pull must still clear the pending marker,
+// or the backfill re-queues the row on the next cycle.
+raw.prepare("DELETE FROM operations_log").run();
+const pushed = store.recordSale({ userId: U, itemId: "item-1", name: "Fever Case", quantity: 1,
+                                  sellPriceUsd: 4, soldAt: "2026-08-02T00:00:00Z", platform: "manual" });
+check("a fresh sale is dirty", store.getSale(pushed.sale.id).dirty, true);
+store.markSalePushed(pushed.sale.id);
+check("markSalePushed clears the marker", store.getSale(pushed.sale.id).dirty, false);
+raw.prepare("UPDATE operations_log SET applied_at = ?").run(new Date().toISOString());
+// recordSale already queued one op for it; the backfill must not add a second.
+const opsForPushed = () => raw.prepare("SELECT COUNT(*) AS n FROM operations_log WHERE entity_id = ?").get(pushed.sale.id).n;
+const opsBeforeBackfill = opsForPushed();
+store.enqueueDirtySaleOperations(U);
+check("backfill adds no second op for a pushed sale", [opsBeforeBackfill, opsForPushed()], [1, 1]);
+
 // 12. Holdings are derived from allocations. `applySoldQuantities` is pure, but
 //     lives in desktopDataMerge.js, which imports browser-only modules — so it
 //     is extracted from source rather than imported.

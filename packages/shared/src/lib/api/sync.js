@@ -58,6 +58,7 @@ export async function executeCsFloatSalesSync(payload = {}) {
 
   let recorded = 0;
   let duplicates = 0;
+  let skippedDeleted = 0;
   let unallocated = 0;
   const unmatched = [];
 
@@ -74,6 +75,11 @@ export async function executeCsFloatSalesSync(payload = {}) {
 
     if (result?.duplicate) {
       duplicates += 1;
+      // The store refuses to revive a sale the user deleted; count it apart so
+      // "nothing happened" does not read as "already imported".
+      if (result.deletedByUser) {
+        skippedDeleted += 1;
+      }
       continue;
     }
     recorded += 1;
@@ -92,7 +98,7 @@ export async function executeCsFloatSalesSync(payload = {}) {
     console.warn("[desktop-sync] csfloat sales execute sync failed", syncError);
   }
 
-  return { success: true, recorded, duplicates, unallocated, unmatched };
+  return { success: true, recorded, duplicates, skippedDeleted, unallocated, unmatched };
 }
 
 export async function executeCsFloatTradeSync(payload = {}) {

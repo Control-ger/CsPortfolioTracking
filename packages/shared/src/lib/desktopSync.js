@@ -721,6 +721,16 @@ async function pushPendingOperations(serverBaseUrl, syncIdentity, token, localSt
         await localStore.markOperationApplied(op.localOperationId),
         "local-store-mark-operation-applied",
       );
+      // `markOperationApplied` only closes the queue entry. A sale additionally
+      // carries its own `dirty` marker, which the backfill reads — leaving it
+      // set would re-queue the row on the next cycle whenever the pull that
+      // used to clear it as a side effect failed to arrive.
+      if (op.table === "sales" && typeof localStore.markSalePushed === "function") {
+        unwrapLocalStoreResult(
+          await localStore.markSalePushed(op.id),
+          "local-store-mark-sale-pushed",
+        );
+      }
     }
   }
 }

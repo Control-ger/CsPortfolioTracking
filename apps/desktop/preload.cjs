@@ -108,6 +108,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("local-store-delete-sale-silent", id),
     enqueueDirtySaleOperations: (userId) =>
       ipcRenderer.invoke("local-store-enqueue-dirty-sales", userId),
+    markSalePushed: (id, pushedAt) =>
+      ipcRenderer.invoke("local-store-mark-sale-pushed", id, pushedAt),
+    listDirtySales: (userId) =>
+      ipcRenderer.invoke("local-store-list-dirty-sales", userId),
     listWatchlist: (userId) =>
       ipcRenderer.invoke("local-store-list-watchlist", userId),
     importWatchlist: (rows, userId) =>

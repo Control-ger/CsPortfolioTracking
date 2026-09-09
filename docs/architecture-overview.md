@@ -166,6 +166,14 @@ unreported skip would leave the server's realised figure quietly short with
 nothing to notice it by. Not yet handled: such an allocation is not
 automatically retried.
 
+**A pushed sale is marked as pushed, not merely dequeued.** `markOperationApplied`
+closes the `operations_log` entry; a sale additionally carries its own `dirty`
+marker that `enqueueDirtySaleOperations` reads, so the push success path calls
+`markSalePushed` as well. Relying on the pull to clear it as a side effect — as
+it happened to do — breaks the moment a pull fails after a successful push:
+the backfill would then re-queue the row every cycle, each time with a fresh
+idempotency key, climbing `server_revision` indefinitely.
+
 **A push tolerates a server older than the client.** The desktop app updates
 itself; the server is redeployed separately. An unknown table makes the server
 reject the *entire* batch (`SYNC_PUSH_INVALID_REQUEST`), which would block every

@@ -28,10 +28,15 @@ final class SaleRepository
             FOREIGN KEY (item_id) REFERENCES items(id),
             INDEX idx_user_item (user_id, item_id),
             INDEX idx_sold_at (sold_at),
-            -- Identity bridge for the sync entity, mirroring `investments`:
-            -- the desktop's local UUID lands here when a sale carries no real
-            -- marketplace trade id, so a re-push updates instead of duplicating.
-            UNIQUE KEY uq_sale_external_trade (platform, external_trade_id)
+            -- Identity bridge for the sync entity: the desktop's local UUID
+            -- lands here when a sale carries no real marketplace trade id, so a
+            -- re-push updates instead of duplicating.
+            --
+            -- Scoped by user_id, unlike `investments`' equivalent key. Without
+            -- the scope two accounts sharing a (platform, trade id) pair collide
+            -- on one row, and `ON DUPLICATE KEY UPDATE` would overwrite the
+            -- other account's sale.
+            UNIQUE KEY uq_sale_external_trade (user_id, platform, external_trade_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         try {
@@ -49,6 +54,49 @@ final class SaleRepository
         }
 
         $this->ensureSaleAllocationsTable();
+        $this->ensureUserScopedTradeKey();
+    }
+
+    /**
+     * Re-scope the identity key on tables created before it carried `user_id`.
+     *
+     * `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so a server
+     * that already received a sale keeps the unscoped key until this runs.
+     */
+    private function ensureUserScopedTradeKey(): void
+    {
+        try {
+            $stmt = $this->pdo->query(
+                "SELECT COUNT(*) AS c
+                   FROM information_schema.STATISTICS
+                  WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'sales'
+                    AND INDEX_NAME = 'uq_sale_external_trade'
+                    AND COLUMN_NAME = 'user_id'"
+            );
+            $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : false;
+            if ($row !== false && (int) ($row['c'] ?? 0) > 0) {
+                return;
+            }
+
+            $this->pdo->exec('ALTER TABLE sales DROP INDEX uq_sale_external_trade');
+            $this->pdo->exec(
+                'ALTER TABLE sales
+                    ADD UNIQUE KEY uq_sale_external_trade (user_id, platform, external_trade_id)'
+            );
+            RepositoryObservability::schemaEnsured(self::class, 'sales.uq_sale_external_trade');
+        } catch (Throwable $exception) {
+            // A duplicate row under the new, narrower key would fail the ADD.
+            // Do not let that take the sync path down: the unscoped key still
+            // enforces uniqueness, just too broadly.
+            RepositoryObservability::queryFailed(
+                self::class,
+                __FUNCTION__,
+                'ALTER TABLE sales ... uq_sale_external_trade',
+                $exception,
+                ['table' => 'sales']
+            );
+        }
     }
 
     private function ensureSaleAllocationsTable(): void
